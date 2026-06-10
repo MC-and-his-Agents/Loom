@@ -1,4 +1,4 @@
-.PHONY: loom-check check py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check npm-package-check loom-check-runtime-regression loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-sync loom-self-plugin-check
+.PHONY: loom-check check py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check npm-package-check loom-check-runtime-regression loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-sync loom-self-plugin-check daily-execution-cli-fast daily-execution-cli-full
 .PHONY: repo-local-cli-fast repo-local-cli-full repo-local-cli-setup-demo-bootstrap repo-local-cli-init-runtime repo-local-cli-fact-chain repo-local-cli-flow-gates repo-local-cli-workspace-locate repo-local-cli-purity-check repo-local-cli-runtime-state-scene-conflict-negative
 
 REPO_LOCAL_CLI_GROUPS := setup-demo-bootstrap init-runtime fact-chain flow-gates workspace-locate purity-check runtime-state-scene-conflict-negative
@@ -30,6 +30,12 @@ npm-package-check:
 
 loom-check-runtime-regression:
 	python3 tools/check_loom_check_runtime_regressions.py
+
+daily-execution-cli-fast:
+	python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .
+
+daily-execution-cli-full:
+	python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .
 
 check: py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check npm-package-check loom-check
 

@@ -232,6 +232,17 @@ The command matrix is checked by:
 python3 tools/check_cli_contract.py
 ```
 
+Daily execution CLI bucket validation exposes explicit local fast / full entrypoints outside the `loom` command matrix:
+
+```bash
+make daily-execution-cli-fast
+make daily-execution-cli-full
+python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .
+python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .
+```
+
+The fast entry is a local smoke surface only. Merge-ready, release readiness, and source full self-checks must continue to consume `daily-execution-cli-full`, `merge-gate`, `source-self-fixture`, `full`, or equivalent full aggregate evidence, plus current PR head, review, fact-chain, hosted checks, PR metadata, release/no-release, and scheduler-owned gate inputs.
+
 This covers #899 and #901 by asserting that required names appear in `loom help --json`, version output is structured, and installed-state positive and negative fixtures behave consistently.
 
 For #906-#909 it also checks:

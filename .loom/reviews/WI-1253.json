@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1253",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler current-head semantic review for PR #1414 at 319f40deba39af25f20ba57f685835b91519d092: WI-1253 fast/full daily-execution-cli entrypoints remain scoped to validation orchestration; full merge-ready/release coverage remains bound to daily-execution-cli-full, merge-gate, source-self-fixture, and full surfaces; PR metadata, visible Branch/Head SHA, not_applicable suite rationale, native dependency cleanup, and merge checkpoint carrier are aligned; no release behavior or #1254/#1247 scope is introduced. No code semantic blocker found.",
+  "reviewer": "scheduler-thread-019eaf94-f0bd-79a3-a396-83d6428b2777",
+  "authored_at": "2026-06-10T15:19:55Z",
+  "reviewed_head": "319f40deba39af25f20ba57f685835b91519d092",
+  "reviewed_validation_summary": "Local validation passed for WI-1253: git diff --check; make py-compile; make daily-execution-cli-fast; make daily-execution-cli-full; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; suite inspect passed; suite validate returned result=not_applicable with blocking_gaps=[]; PR metadata preflight passed for PR #1414 head 319f40deba39af25f20ba57f685835b91519d092; upstream native dependency blockedBy edges for #1250/#1251/#1252 were removed after closed-state readback.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1253.md",
+    "recovery_entry": ".loom/progress/WI-1253.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
