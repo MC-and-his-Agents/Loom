@@ -3,6 +3,42 @@
   "delegations": [
     {
       "id": "T5-read-only-cli-entrypoint-inventory",
+      "task_goal": "Inventory existing daily CLI validation commands, docs, CI/PR gate surfaces, PR metadata, and loom_check source-surface entrypoints before implementing WI-1253.",
+      "context_locators": [
+        "Makefile",
+        "src/skills/shared/scripts/loom_check.py",
+        "skills/shared/scripts/loom_check.py",
+        "docs/methodology/harness/repo-local-gate-starter.md",
+        "docs/methodology/harness/regression-surface-contract.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        ".github/workflows/loom-check.yml",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        ".loom/companion/repo-interface.json"
+      ],
+      "read_scope": [
+        "Read-only inventory of current CLI validation entrypoints and hosted check surfaces",
+        "Read-only inventory of PR metadata and repo-local gate documentation"
+      ],
+      "write_ownership": [
+        "read-only/no-write"
+      ],
+      "non_goals": [
+        "No implementation edits by the inventory pass",
+        "No scheduler-owned review, gate, merge, release, closeout, or downstream #1254/#1247 work"
+      ],
+      "validation_expectation": "Main executor integrates findings into the fast/full source-surface implementation, docs, generated runtime copies, carriers, and local/hosted validation evidence.",
+      "output_format": "Summary with relevant paths, existing command surfaces, gate ownership boundaries, and implementation implications.",
+      "integration_target": [
+        "src/skills/shared/scripts/loom_check.py",
+        "Makefile",
+        "docs/methodology/harness/repo-local-gate-starter.md",
+        "docs/methodology/harness/regression-surface-contract.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        ".loom/work-items/WI-1253.md",
+        ".loom/progress/WI-1253.md",
+        ".loom/specs/WI-1253/spec.md",
+        ".loom/specs/WI-1253/plan.md"
+      ],
       "status": "integrated",
       "summary": "Read-only explorer inventory confirmed existing Makefile repo-local-cli aliases, loom_check source-surface selectors, CI repo-local-cli and loom-check surfaces, PR metadata fields, and the absence of a dedicated daily-execution-cli fast/full entrypoint before WI-1253.",
       "locators": [

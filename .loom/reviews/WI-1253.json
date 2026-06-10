@@ -1,39 +1,48 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1253",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "c80d93117d343624ffe718a954f18f884a904eec",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler current-head semantic review for PR #1414 head 1177c2ab40de4d10579e001bbc18dec0ee1cb7b2: fast daily CLI entrypoint is limited to the documented runtime-smoke subset, full daily CLI coverage remains consumed by daily-execution-cli-full, merge-gate, source-self-fixture, and full surfaces, docs/Makefile/generated runtime copies are aligned, no release behavior is introduced, and the only cross-item carrier change terminalizes already-closed WI-1251 to remove stale active binding.",
+  "reviewer": "scheduler-thread-019eaf94-f0bd-79a3-a396-83d6428b2777",
+  "authored_at": "2026-06-10T15:03:29Z",
+  "reviewed_head": "1177c2ab40de4d10579e001bbc18dec0ee1cb7b2",
+  "reviewed_validation_summary": "Local validation passed for WI-1253: git diff --check; make py-compile; make daily-execution-cli-fast; make daily-execution-cli-full; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; suite inspect passed; suite validate returned result=not_applicable with blocking_gaps=[]; PR metadata preflight passed for PR #1414 head 1177c2ab40de4d10579e001bbc18dec0ee1cb7b2. Scheduler purity-check passes after terminalizing stale WI-1251 progress carrier; build execution evidence passes with WI-1253 build evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1253.md",
+    "recovery_entry": ".loom/progress/WI-1253.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
