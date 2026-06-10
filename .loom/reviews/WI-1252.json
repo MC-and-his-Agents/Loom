@@ -1,39 +1,48 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1252",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "532991eef7552e67e0720258dd41b92880aaea58",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler review allows PR #1410 at head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e: the #1252 change reduces daily-cli review-run and installed-runtime fixture setup cost with prepared baseline clones while preserving fixture isolation, private host discovery boundaries, synchronized runtime/demo parity, suite not_applicable truth, and adjacent #1249/#1250/#1251/#1253 ownership boundaries.",
+  "reviewer": "scheduler:019eaf94-f0bd-79a3-a396-83d6428b2777",
+  "authored_at": "2026-06-10T09:49:12Z",
+  "reviewed_head": "23d45bae1730bf0f9ae2444b49642bc9162fbd6e",
+  "reviewed_validation_summary": "2026-06-10 #1252 scheduler gate input validation passed on head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e: git diff --check; py_compile_clean for synchronized loom_check.py copies; python3 tools/skills_surface.py check; make loom-demo-new-project-check; make repo-local-cli-fast GROUP=setup-demo-bootstrap; review-run source surface passed real 154.14; installed-runtime source surface passed real 116.28; suite validate returned not_applicable with WI-1252 locator; carrier dry-run passed; PR #1410 metadata preflight passed with fields.head_sha bound to 23d45bae1730bf0f9ae2444b49642bc9162fbd6e; hosted py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-check, node-installer gate, and release-judgment passed on the current head; prior loom-pr-merge-gate failure is stale because it predates scheduler review.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1252.md",
+    "recovery_entry": ".loom/progress/WI-1252.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }

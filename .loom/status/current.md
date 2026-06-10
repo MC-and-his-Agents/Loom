@@ -12,19 +12,19 @@
 - Validation Entry: git diff --check; py_compile_clean touched loom_check.py copies; skills_surface.py check; make loom-demo-new-project-check; make repo-local-cli-fast GROUP=setup-demo-bootstrap; review-run timing evidence; installed-runtime timing evidence; PR metadata preflight/readback; hosted checks
 - Closing Condition: PR #1410 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and #1252 closeout is consumed without weakening fixture isolation or adjacent Round 7 scopes.
 - Current Checkpoint: build
-- Current Stop: #1252 implementation and current-main base sync are complete on PR #1410 head 532991eef7552e67e0720258dd41b92880aaea58; branch-local WI-1252 carriers are being activated for scheduler-owned review/gate consumption.
-- Next Step: Scheduler owns current-head semantic/formal review, PR gate, controlled merge, and closeout consumption for PR #1410; worker must not run those gates.
+- Current Stop: #1252 implementation, current-main base sync, branch-local carrier activation, scheduler gate input repair, and PR #1410 metadata readback are complete on head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e.
+- Next Step: Scheduler owns current-head review record, PR gate, merge-ready, controlled merge, and closeout consumption for PR #1410; worker remains stopped unless a new correction is sent.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-10 #1252 current-main base sync validation passed on head 532991eef7552e67e0720258dd41b92880aaea58: git diff --check; py_compile_clean for touched loom_check.py copies; python3 tools/skills_surface.py check; make loom-demo-new-project-check; make repo-local-cli-fast GROUP=setup-demo-bootstrap; review-run source surface passed real 154.14; installed-runtime source surface passed real 116.28; PR #1410 metadata preflight/readback passed with fields.head_sha bound to 532991eef7552e67e0720258dd41b92880aaea58; hosted py-compile/demo-bootstrap/repo-local-cli/loom-check/gate/release-judgment passed before carrier activation; root-self-governance was classified as branch-local carrier activation drift.
-- Recovery Boundary: WI-1252 / PR #1410 branch-local carrier activation only. Do not change #1249 progress labels, #1250 fixture groups, #1251 fallback boundary, #1253 fast/full policy, or root/main Round 6 carriers.
+- Latest Validation Summary: 2026-06-10 #1252 scheduler gate input validation passed on head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e: git diff --check; py_compile_clean for synchronized loom_check.py copies; python3 tools/skills_surface.py check; make loom-demo-new-project-check; make repo-local-cli-fast GROUP=setup-demo-bootstrap; review-run source surface passed real 154.14; installed-runtime source surface passed real 116.28; suite validate returned not_applicable with WI-1252 locator; carrier dry-run passed; PR #1410 metadata preflight passed with fields.head_sha bound to 23d45bae1730bf0f9ae2444b49642bc9162fbd6e; hosted py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-check, node-installer gate, and release-judgment passed on the current head; prior loom-pr-merge-gate failure is stale because it predates scheduler review.
+- Recovery Boundary: WI-1252 / PR #1410 scheduler gate and closeout only. Do not change #1249 progress labels, #1250 fixture groups, #1251 fallback boundary, #1253 fast/full policy, or root/main Round 6 carriers.
 - Current Lane: daily-cli-snapshot-bootstrap-cost
 
 ## Runtime Evidence
 
-- Run Entry: PR #1410 implementation/current-main head 532991eef7552e67e0720258dd41b92880aaea58 passed local scoped validation before branch-local carrier activation; PR metadata must bind the pushed repaired carrier head before scheduler gate.
+- Run Entry: PR #1410 current head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e has synchronized WI-1252 implementation, carrier activation, PR metadata repair, scheduler review record input, and hosted worker-relevant checks consumed for scheduler gate.
 - Logs Entry: worker thread 019eafa2-66d1-7923-ba94-4654bdd1c50e and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command/readback evidence for WI-1252.
 - Diagnostics Entry: WI-1252 reduces repeated source snapshot/bootstrap cost via prepared fixture baseline reuse while preserving fixture isolation; no #1249 progress label rename, no #1250 fixture group split, no #1251 fallback boundary change, no #1253 fast/full policy.
-- Verification Entry: local and hosted worker-relevant validation passed for #1252 implementation/current-main head before carrier activation; branch-local carrier validation and PR metadata readback must bind the pushed repaired carrier head before scheduler gate.
+- Verification Entry: local and hosted worker-relevant validation passed for #1252 current head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e; carrier dry-run, shadow parity, PR metadata preflight, and scheduler review record are bound before final PR gate.
 - Lane Entry: daily-cli-snapshot-bootstrap-cost
 
 ## Sources
