@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1249",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1249 minimal spec/plan covers daily-execution-cli progress/timing/failure evidence, preserves #1248 command membership, keeps adjacent Round 7 scopes out of scope, and suite validate/evidence/carrier plus PR metadata preflight passed on head ea62ce1077693476772e65fa87779387ffd9bffa.",
+  "reviewer": "scheduler-thread-019eaf94-f0bd-79a3-a396-83d6428b2777",
+  "authored_at": "2026-06-10T05:49:00Z",
+  "reviewed_head": "ea62ce1077693476772e65fa87779387ffd9bffa",
+  "reviewed_validation_summary": "2026-06-10 #1249 worker validation passed before carrier activation on PR #1409 head 06b8676ddd8cb9b055c39327abd9e2de5e84c522: git diff --check; focused py_compile_clean for touched loom_check.py copies; make skills-check; tools/loom_check.py --profile source --source-surface merge-gate . passed with per-scenario event=start/progress/end for all 30 command inventory labels and fixture groups; synthetic failure metadata harness passed; authorized demo fixture sync passed make loom-demo-new-project-check and demo runtime py_compile_clean; hosted py-compile/demo-bootstrap/repo-local-cli/loom-check/gate/release-judgment passed; live PR metadata preflight passed. Branch-local carrier activation validation passed for WI-1249: git diff --check; fact-chain; suite validate; suite evidence validate; suite carrier validate. Flow review preflight now reads WI-1249 and only falls back on out-of-scope WI-1259 active carrier conflict plus scheduler-owned spec review artifact absence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1249.md",
+    "recovery_entry": ".loom/progress/WI-1249.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/24a2/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1249/spec.md",
+    "suite_plan": ".loom/specs/WI-1249/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1249/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1249/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

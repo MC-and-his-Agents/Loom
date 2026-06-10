@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -386,10 +387,31 @@ CODE_FENCE_RE = re.compile(r"^(```|~~~)")
 EXTERNAL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
 
+DAILY_EXECUTION_CLI_CATEGORY = "daily-execution-cli"
+
+
 @dataclass(frozen=True)
 class Failure:
     category: str
     detail: str
+
+    def __post_init__(self) -> None:
+        scenario = globals().get("_CURRENT_DAILY_EXECUTION_CLI_SCENARIO")
+        if (
+            self.category == DAILY_EXECUTION_CLI_CATEGORY
+            and scenario is not None
+            and not self.detail.startswith("scenario `")
+        ):
+            object.__setattr__(
+                self,
+                "detail",
+                daily_execution_cli_failure_detail(
+                    scenario.label,
+                    scenario.command,
+                    self.detail,
+                    scenario.metadata,
+                ),
+            )
 
 
 def remove_temp_tree(path: Path, *, attempts: int = 5, delay_seconds: float = 0.2) -> bool:
@@ -1367,6 +1389,256 @@ def load_command_json(
     if not isinstance(payload, dict):
         return None, "command output must be a JSON object"
     return payload, None
+
+
+def format_cli_command(args: list[str] | None) -> str:
+    if not args:
+        return "N/A"
+    return shlex.join(str(arg) for arg in args)
+
+
+def daily_execution_cli_progress_value(value: object) -> str:
+    if value is None:
+        return "N/A"
+    if isinstance(value, (set, list, tuple)):
+        return ",".join(str(item) for item in sorted(value, key=str))
+    return str(value).replace("\n", "\\n")
+
+
+def daily_execution_cli_metadata_text(metadata: Mapping[str, object] | None) -> str:
+    if not metadata:
+        return "N/A"
+    return ",".join(
+        f"{key}={daily_execution_cli_progress_value(metadata[key])}"
+        for key in sorted(metadata)
+    )
+
+
+def emit_daily_execution_cli_progress(
+    event: str,
+    label: str,
+    *,
+    command: list[str] | None = None,
+    elapsed: float | None = None,
+    outcome: str | None = None,
+    command_result: object | None = None,
+    failures: int | None = None,
+    metadata: Mapping[str, object] | None = None,
+    summary: str | None = None,
+) -> None:
+    parts = [
+        "loom_check:",
+        DAILY_EXECUTION_CLI_CATEGORY,
+        f"event={event}",
+        f"scenario={label}",
+    ]
+    if command is not None:
+        parts.append(f"command={format_cli_command(command)}")
+    if elapsed is not None:
+        parts.append(f"elapsed={elapsed:.2f}s")
+    if outcome is not None:
+        parts.append(f"outcome={outcome}")
+    if command_result is not None:
+        parts.append(f"command_result={daily_execution_cli_progress_value(command_result)}")
+    if failures is not None:
+        parts.append(f"failures={failures}")
+    if metadata:
+        parts.append(f"metadata={daily_execution_cli_metadata_text(metadata)}")
+    if summary:
+        parts.append(f"summary={summary.replace(chr(10), ' ')}")
+    print(" ".join(parts), file=sys.stderr, flush=True)
+
+
+def daily_execution_cli_failure_detail(
+    label: str,
+    command: list[str] | None,
+    summary: str,
+    metadata: Mapping[str, object] | None,
+) -> str:
+    return (
+        f"scenario `{label}` failed; "
+        f"command: `{format_cli_command(command)}`; "
+        f"summary: {summary}; "
+        f"metadata: {daily_execution_cli_metadata_text(metadata)}"
+    )
+
+
+class DailyExecutionCliScenario:
+    def __init__(
+        self,
+        failures: list[Failure],
+        label: str,
+        *,
+        command: list[str] | None = None,
+        metadata: Mapping[str, object] | None = None,
+    ) -> None:
+        self.failures = failures
+        self.label = label
+        self.command = command
+        self.metadata: dict[str, object] = dict(metadata or {})
+        self.command_result: object | None = None
+        self.started = 0.0
+        self.failure_start = 0
+
+    def __enter__(self) -> "DailyExecutionCliScenario":
+        global _CURRENT_DAILY_EXECUTION_CLI_SCENARIO
+        self.started = time.monotonic()
+        self.failure_start = len(self.failures)
+        _CURRENT_DAILY_EXECUTION_CLI_SCENARIO = self
+        emit_daily_execution_cli_progress(
+            "start",
+            self.label,
+            command=self.command,
+            metadata=self.metadata,
+        )
+        return self
+
+    def set_command_result(self, command_result: object) -> None:
+        self.command_result = command_result
+
+    def add_metadata(self, key: str, value: object) -> None:
+        self.metadata[key] = value
+
+    def progress(self, summary: str, **metadata: object) -> None:
+        if metadata:
+            self.metadata.update(metadata)
+        emit_daily_execution_cli_progress(
+            "progress",
+            self.label,
+            command=self.command,
+            metadata=self.metadata,
+            summary=summary,
+        )
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+        global _CURRENT_DAILY_EXECUTION_CLI_SCENARIO
+        if exc_type is not None:
+            exc_name = getattr(exc_type, "__name__", str(exc_type))
+            self.failures.append(
+                Failure(
+                    DAILY_EXECUTION_CLI_CATEGORY,
+                    f"unexpected {exc_name}: {exc}",
+                )
+            )
+        new_failures = self.failures[self.failure_start:]
+        if new_failures:
+            self.failures[self.failure_start:] = [
+                Failure(
+                    failure.category,
+                    failure.detail
+                    if failure.detail.startswith("scenario `")
+                    else daily_execution_cli_failure_detail(
+                        self.label,
+                        self.command,
+                        failure.detail,
+                        self.metadata,
+                    ),
+                )
+                for failure in new_failures
+            ]
+        elapsed = time.monotonic() - self.started
+        outcome = "fail" if new_failures else "pass"
+        emit_daily_execution_cli_progress(
+            "end",
+            self.label,
+            command=self.command,
+            elapsed=elapsed,
+            outcome=outcome,
+            command_result=self.command_result,
+            failures=len(new_failures),
+            metadata=self.metadata,
+        )
+        if _CURRENT_DAILY_EXECUTION_CLI_SCENARIO is self:
+            _CURRENT_DAILY_EXECUTION_CLI_SCENARIO = None
+        return False
+
+
+_CURRENT_DAILY_EXECUTION_CLI_SCENARIO: DailyExecutionCliScenario | None = None
+
+
+def end_daily_execution_cli_scenario() -> None:
+    scenario = _CURRENT_DAILY_EXECUTION_CLI_SCENARIO
+    if scenario is not None:
+        scenario.__exit__(None, None, None)
+
+
+def start_daily_execution_cli_scenario(
+    failures: list[Failure],
+    label: str,
+    *,
+    command: list[str] | None = None,
+    metadata: Mapping[str, object] | None = None,
+) -> DailyExecutionCliScenario:
+    end_daily_execution_cli_scenario()
+    scenario = DailyExecutionCliScenario(
+        failures,
+        label,
+        command=command,
+        metadata=metadata,
+    )
+    return scenario.__enter__()
+
+
+def current_daily_execution_cli_scenario() -> DailyExecutionCliScenario | None:
+    return _CURRENT_DAILY_EXECUTION_CLI_SCENARIO
+
+
+def set_daily_execution_cli_command_result(command_result: object) -> None:
+    scenario = current_daily_execution_cli_scenario()
+    if scenario is not None:
+        scenario.set_command_result(command_result)
+
+
+def add_daily_execution_cli_metadata(key: str, value: object) -> None:
+    scenario = current_daily_execution_cli_scenario()
+    if scenario is not None:
+        scenario.add_metadata(key, value)
+
+
+def daily_execution_cli_progress(summary: str, **metadata: object) -> None:
+    scenario = current_daily_execution_cli_scenario()
+    if scenario is not None:
+        scenario.progress(summary, **metadata)
+
+
+def load_daily_execution_cli_json(
+    failures: list[Failure],
+    root: Path,
+    label: str,
+    args: list[str],
+    *,
+    metadata: Mapping[str, object] | None = None,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout_seconds: float | None = None,
+) -> tuple[dict[str, object] | None, str | None]:
+    start_daily_execution_cli_scenario(
+        failures,
+        label,
+        command=args,
+        metadata=metadata,
+    )
+    payload, error = load_command_json(
+        root,
+        args,
+        cwd=cwd,
+        env=env,
+        timeout_seconds=timeout_seconds,
+    )
+    if error:
+        daily_execution_cli_progress("command failed", error=error)
+        return payload, error
+    result = payload.get("result") if isinstance(payload, dict) else None
+    if result is None and isinstance(payload, dict) and "ok" in payload:
+        result = payload.get("ok")
+    set_daily_execution_cli_command_result(result)
+    add_daily_execution_cli_metadata("result", result)
+    daily_execution_cli_progress(
+        "command returned JSON",
+        result=result,
+        payload_keys=len(payload) if isinstance(payload, dict) else "N/A",
+    )
+    return payload, error
 
 
 def host_read_unavailable(payload: dict[str, object]) -> bool:
@@ -11739,23 +12011,57 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
     ]
-    for label, args, allowed_results in demo_commands:
+    for command_index, (label, args, allowed_results) in enumerate(demo_commands, start=1):
+        start_daily_execution_cli_scenario(
+            failures,
+            label,
+            command=args,
+            metadata={
+                "group": "demo_commands",
+                "index": f"{command_index}/{len(demo_commands)}",
+                "allowed_results": allowed_results,
+            },
+        )
         payload, error = load_command_json(root, args)
         if error:
-            failures.append(Failure("daily-execution-cli", f"`{label}` command failed: {error}"))
+            daily_execution_cli_progress("command failed", error=error)
+            failures.append(Failure(DAILY_EXECUTION_CLI_CATEGORY, f"`{label}` command failed: {error}"))
             continue
+        set_daily_execution_cli_command_result(payload.get("result"))
+        daily_execution_cli_progress(
+            "command returned JSON",
+            result=payload.get("result"),
+            payload_keys=len(payload),
+        )
         if label == "host-binding-validate":
             branch = payload.get("branch")
             branch_present = isinstance(branch, dict) and branch.get("status") == "present"
             if payload.get("result") == "block" and not branch_present and not host_read_unavailable(payload):
+                daily_execution_cli_progress(
+                    "retrying host-binding validate after non-authoritative block",
+                    first_result=payload.get("result"),
+                    branch_present=branch_present,
+                )
                 retry_payload, retry_error = load_command_json(root, args)
                 if retry_error is None and retry_payload is not None:
                     payload = retry_payload
+                    set_daily_execution_cli_command_result(payload.get("result"))
+                    daily_execution_cli_progress(
+                        "host-binding retry returned JSON",
+                        result=payload.get("result"),
+                        payload_keys=len(payload),
+                    )
+                else:
+                    daily_execution_cli_progress(
+                        "host-binding retry did not replace original result",
+                        retry_error=retry_error,
+                    )
         result = payload.get("result")
+        add_daily_execution_cli_metadata("result", result)
         if result not in allowed_results:
             failures.append(
                 Failure(
-                    "daily-execution-cli",
+                    DAILY_EXECUTION_CLI_CATEGORY,
                     f"`{label}` returned unexpected result `{result}`",
                 )
             )
@@ -12614,6 +12920,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if isinstance(payload.get("merge_checkpoint"), dict) and payload["merge_checkpoint"].get("fallback_to") != "admission":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` merge checkpoint must fall back to `admission` for the bootstrap demo"))
 
+    end_daily_execution_cli_scenario()
+
     with loom_check_temporary_directory(prefix="loom-check-fact-chain-provenance-") as tmp:
         missing_ledger_target = Path(tmp) / "missing-ledger"
         shutil.copytree(example_target, missing_ledger_target)
@@ -12623,9 +12931,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             re.sub(r"\n## Execution Ledger\n\n.*\Z", "\n", progress_text, flags=re.S),
             encoding="utf-8",
         )
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "fact-chain-provenance:missing-execution-ledger",
             ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(missing_ledger_target), "--item", "INIT-0001"],
+            metadata={"group": "fact-chain-provenance", "fixture": "missing-ledger"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`missing execution ledger` failed: {error}"))
@@ -12641,9 +12952,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             progress_path.read_text(encoding="utf-8").replace("- Evidence Freshness: current", "- Evidence Freshness: stale"),
             encoding="utf-8",
         )
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "fact-chain-provenance:stale-execution-ledger",
             ["python3", "tools/loom_flow.py", "flow", "merge-ready", "--target", str(stale_ledger_target), "--item", "INIT-0001"],
+            metadata={"group": "fact-chain-provenance", "fixture": "stale-ledger"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`stale execution ledger` failed: {error}"))
@@ -12662,9 +12976,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             ),
             encoding="utf-8",
         )
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "fact-chain-provenance:forbidden-execution-ledger-field",
             ["python3", "tools/loom_flow.py", "flow", "handoff", "--target", str(forbidden_ledger_target), "--item", "INIT-0001"],
+            metadata={"group": "fact-chain-provenance", "fixture": "forbidden-ledger-fields"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`forbidden execution ledger field` failed: {error}"))
@@ -12679,9 +12996,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         init_payload = json.loads(init_path.read_text(encoding="utf-8"))
         init_payload.setdefault("fact_chain", {}).setdefault("entry_points", {})["execution_ledger"] = ".loom/status/current.md"
         init_path.write_text(json.dumps(init_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "fact-chain-provenance:dual-execution-ledger",
             ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(dual_ledger_target), "--item", "INIT-0001"],
+            metadata={"group": "fact-chain-provenance", "fixture": "dual-ledger"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`dual execution ledger` failed: {error}"))
@@ -12726,7 +13046,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 ["python3", "tools/loom_status.py", "--target", str(stale_target), "--item", "INIT-0001"],
             ),
         ):
-            payload, error = load_command_json(root, args)
+            payload, error = load_daily_execution_cli_json(
+                failures,
+                root,
+                f"fact-chain-provenance:{label.replace(' ', '-')}",
+                args,
+                metadata={"group": "fact-chain-provenance", "fixture": "stale-status"},
+            )
             if error:
                 failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
                 continue
@@ -12784,9 +13110,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             "latest_validation_summary": "Retained result attempted to override recovery.",
         }
         init_path.write_text(json.dumps(init_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "fact-chain-provenance:host-mirror-overwrite",
             ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(mirror_target), "--item", "INIT-0001"],
+            metadata={"group": "fact-chain-provenance", "fixture": "host-mirror-overwrite"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`host mirror overwrite` failed: {error}"))
@@ -12808,8 +13137,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         authoring_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, authoring_target)
 
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:recovery-writeback",
             [
                 "python3",
                 "tools/loom_flow.py",
@@ -12826,14 +13157,17 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "--latest-validation-summary",
                 "Bootstrap artifacts verified and ready for semantic review.",
             ],
+            metadata={"group": "authoring", "fixture": "new-project"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`recovery writeback` failed: {error}"))
         elif payload.get("result") != "pass":
             failures.append(Failure("daily-execution-cli", "`recovery writeback` must pass on a clean temp copy"))
 
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:work-item-create-activate",
             [
                 "python3",
                 "tools/loom_flow.py",
@@ -12858,14 +13192,17 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "--init-recovery",
                 "--activate",
             ],
+            metadata={"group": "authoring", "fixture": "new-project"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`work-item create` failed: {error}"))
         elif payload.get("result") != "pass":
             failures.append(Failure("daily-execution-cli", "`work-item create --activate` must pass on a clean temp copy"))
 
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:work-item-update",
             [
                 "python3",
                 "tools/loom_flow.py",
@@ -12880,6 +13217,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "--add-artifact",
                 ".loom/reviews/NEXT-0001.json",
             ],
+            metadata={"group": "authoring", "fixture": "new-project"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`work-item update` failed: {error}"))
@@ -12896,8 +13234,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         poisoned_work_item.write_text(poisoned_before, encoding="utf-8")
         poisoned_init = poisoned_authoring_target / ".loom/bootstrap/init-result.json"
         poisoned_init_before = load_json_file(poisoned_init)
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:work-item-update-activate-poisoned-workspace",
             [
                 "python3",
                 "tools/loom_flow.py",
@@ -12911,6 +13251,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "This update must not persist because the workspace locator is unsafe",
                 "--activate",
             ],
+            metadata={"group": "authoring", "fixture": "authoring-poisoned-workspace"},
         )
         poisoned_init_after = load_json_file(poisoned_init)
         if error:
@@ -12922,8 +13263,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         elif poisoned_init_after.get("fact_chain", {}).get("entry_points") != poisoned_init_before.get("fact_chain", {}).get("entry_points"):
             failures.append(Failure("daily-execution-cli", "`work-item update --activate` must not mutate active fact-chain locators when locator validation blocks"))
 
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:loom-init-verify-active-item-rollover",
             [
                 "python3",
                 "tools/loom_init.py",
@@ -12931,14 +13274,17 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "--target",
                 str(authoring_target),
             ],
+            metadata={"group": "authoring", "fixture": "new-project"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`loom-init verify` active item rollover failed: {error}"))
         elif payload.get("ok") is not True:
             failures.append(Failure("daily-execution-cli", "`loom-init verify` must pass after active item rollover"))
 
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:loom-status-active-item-rollover",
             [
                 "python3",
                 "tools/loom_status.py",
@@ -12947,6 +13293,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "--item",
                 "NEXT-0001",
             ],
+            metadata={"group": "authoring", "fixture": "new-project"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`loom-status` active item rollover failed: {error}"))
@@ -12968,8 +13315,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 if "--item NEXT-0001" not in execution_entry:
                     failures.append(Failure("daily-execution-cli", "`loom-status` execution entry must resume the active Work Item"))
 
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:flow-spec-review-active-item-rollover",
             [
                 "python3",
                 "tools/loom_flow.py",
@@ -12980,6 +13329,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "--item",
                 "NEXT-0001",
             ],
+            metadata={"group": "authoring", "fixture": "new-project"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`flow spec-review` active item rollover failed: {error}"))
@@ -13021,8 +13371,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             encoding="utf-8",
         )
 
-        payload, error = load_command_json(
+        payload, error = load_daily_execution_cli_json(
+            failures,
             root,
+            "authoring:review-record-authored-fallback",
             [
                 "python3",
                 "tools/loom_flow.py",
@@ -13045,6 +13397,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "--findings-file",
                 ".loom/review-findings.json",
             ],
+            metadata={"group": "authoring", "fixture": "new-project"},
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`review record` failed: {error}"))
@@ -13070,8 +13423,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             run_command(root, ["git", "add", "."], cwd=dirty_target)
             run_command(root, ["git", "commit", "-m", "baseline"], cwd=dirty_target)
             (dirty_target / "untriaged.txt").write_text("pending\n", encoding="utf-8")
-            payload, error = load_command_json(
+            payload, error = load_daily_execution_cli_json(
+                failures,
                 root,
+                "purity:dirty-workspace-purity-check",
                 [
                     "python3",
                     "tools/loom_flow.py",
@@ -13081,6 +13436,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "--item",
                     "INIT-0001",
                 ],
+                metadata={"group": "purity", "fixture": "dirty-target"},
             )
             if error:
                 failures.append(Failure("daily-execution-cli", f"`purity-check` negative sample failed: {error}"))
@@ -13091,8 +13447,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         f"`purity-check` negative sample must block, got `{payload.get('result')}`",
                     )
                 )
-            state_payload, error = load_command_json(
+            state_payload, error = load_daily_execution_cli_json(
+                failures,
                 root,
+                "purity:dirty-workspace-state-check",
                 [
                     "python3",
                     "tools/loom_flow.py",
@@ -13102,6 +13460,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "--item",
                     "INIT-0001",
                 ],
+                metadata={"group": "purity", "fixture": "dirty-target"},
             )
             if error:
                 failures.append(Failure("daily-execution-cli", f"`state-check` negative sample failed: {error}"))
@@ -13121,6 +13480,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             ("parent escape", "../outside.md"),
             ("absolute locator", str(outside)),
         ):
+            start_daily_execution_cli_scenario(
+                failures,
+                f"governance-surface-boundary:{label.replace(' ', '-')}",
+                metadata={
+                    "group": "governance-surface-boundary",
+                    "unsafe_locator": unsafe_locator,
+                },
+            )
             poisoned_target = tmp_root / f"governance-{label.replace(' ', '-')}"
             shutil.copytree(example_target, poisoned_target)
             init_result_path = poisoned_target / ".loom/bootstrap/init-result.json"
@@ -13142,6 +13509,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 if isinstance(entry, dict) and entry.get("status") == "present":
                     failures.append(Failure("daily-execution-cli", f"`governance surface` must not report unsafe {label} `{carrier}` fact-chain locators as present"))
 
+    end_daily_execution_cli_scenario()
     return failures
 
 
@@ -21859,6 +22227,8 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
             failures.extend(callback())
         except Exception as exc:
             failures.append(Failure("source-fixture-setup", f"{name} raised {type(exc).__name__}: {exc}"))
+        finally:
+            end_daily_execution_cli_scenario()
         elapsed = time.monotonic() - started
         print(
             f"loom_check: end source surface={surface} step={name} elapsed={elapsed:.2f}s failures={len(failures) - before}",
