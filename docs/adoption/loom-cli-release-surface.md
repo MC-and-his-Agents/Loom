@@ -68,14 +68,14 @@ When publishing is allowed or explicitly requested, the workflow must fail close
 
 This section freezes the minimal evidence contract that release-required work may consume before the full #1260 release/package checker split is implemented.
 
-The labels below are stable evidence labels, not new CLI commands. Until the implementation is split, an existing aggregate command can satisfy more than one label only when the retained validation summary names the label, the command, the current head or merge commit, and the result.
+The labels below are stable evidence labels. Named release-surface checks are targetable through `tools/check_release_surface.py`; the aggregate command remains compatible when the retained validation summary names the label, the command, the current head or merge commit, and the result.
 
 | Evidence label | Current compatible check | Required role |
 | --- | --- | --- |
-| `release-doc-contract` | `python3 tools/check_release_surface.py` | Proves release authority docs keep the `loom` CLI line, GitHub `v*` tag/Release, npm package, and deprecated installer boundary separated. |
-| `release-workflow-contract` | `python3 tools/check_release_surface.py` | Proves `loom-cli-release` keeps PR judgment read-only, main-push publishing, `workflow_dispatch` repair, fail-closed duplicate version handling, and `NPM_TOKEN` checks. |
-| `installer-sunset-guard` | `python3 tools/check_release_surface.py` | Proves `loom-installer` remains deprecated legacy evidence and does not regain npm publish, installer tag, installer GitHub Release, or active CLI release authority. |
-| `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
+| `release-doc-contract` | `python3 tools/check_release_surface.py --surface release-doc-contract` | Proves release authority docs keep the `loom` CLI line, GitHub `v*` tag/Release, npm package, and deprecated installer boundary separated. |
+| `release-workflow-contract` | `python3 tools/check_release_surface.py --surface release-workflow-contract` | Proves `loom-cli-release` keeps PR judgment read-only, main-push publishing, `workflow_dispatch` repair, fail-closed duplicate version handling, and `NPM_TOKEN` checks. |
+| `installer-sunset-guard` | `python3 tools/check_release_surface.py --surface installer-sunset-guard` | Proves `loom-installer` remains deprecated legacy evidence and does not regain npm publish, installer tag, installer GitHub Release, or active CLI release authority. |
+| `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
 | `npm-package-manifest` | `python3 tools/check_npm_package.py` and package test aliases that consume it | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
 | `npm-pack-payload` | `python3 tools/check_npm_package.py`, `npm pack --dry-run --json --ignore-scripts`, or `npm run test:package` when it consumes the same payload proof | Proves the dry-run package payload contains required CLI/runtime/docs/skills/plugin files and excludes repository-internal or deprecated installer surfaces. |
 | `installed-global-cli-smoke` | Post-merge release smoke or later #1395 checker | Proves the published package can be installed or invoked as the global/installed `loom` CLI and can run the release-required behavior smoke from the package, not only from the source checkout. |
