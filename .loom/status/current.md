@@ -4,7 +4,7 @@
 
 - Item ID: WI-1252
 - Goal: Reduce repeated source snapshot and bootstrap cost in daily-execution-cli review-run and installed-runtime fixture setup while preserving fixture isolation and truth boundaries.
-- Scope: Issue #1252 / PR #1410 only: safe prepared fixture baseline reuse, synchronized loom_check runtime copies, demo metadata, and timing evidence; no #1249 progress label rename, no #1250 fixture group split, no #1251 fallback boundary change, no #1253 fast/full policy.
+- Scope: Issue #1252 / PR #1410 only: safe prepared fixture baseline reuse, synchronized loom_check runtime copies, demo metadata, and timing evidence. Ownership constraints: WI-1252 owns only snapshot/bootstrap cost reduction, hostless fixture isolation, synchronized runtime/demo parity, branch-local WI-1252 carriers, and validation evidence; it does not own #1249 progress labels, #1250 fixture group split, #1251 fallback boundary, or #1253 fast/full policy.
 - Execution Path: issue #1252 -> branch work/1252-daily-cli-snapshot-bootstrap-cost -> PR #1410 -> scheduler-owned review/pr-gate/controlled merge/closeout
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1252.md
@@ -14,7 +14,7 @@
 - Current Checkpoint: build
 - Current Stop: #1252 implementation and current-main base sync are complete on PR #1410 head 532991eef7552e67e0720258dd41b92880aaea58; branch-local WI-1252 carriers are being activated for scheduler-owned review/gate consumption.
 - Next Step: Scheduler owns current-head semantic/formal review, PR gate, controlled merge, and closeout consumption for PR #1410; worker must not run those gates.
-- Blockers: Scheduler-owned review/gate remains pending; scaffold review artifact is intentionally fallback/blocking until scheduler review is recorded.
+- Blockers: None recorded.
 - Latest Validation Summary: 2026-06-10 #1252 current-main base sync validation passed on head 532991eef7552e67e0720258dd41b92880aaea58: git diff --check; py_compile_clean for touched loom_check.py copies; python3 tools/skills_surface.py check; make loom-demo-new-project-check; make repo-local-cli-fast GROUP=setup-demo-bootstrap; review-run source surface passed real 154.14; installed-runtime source surface passed real 116.28; PR #1410 metadata preflight/readback passed with fields.head_sha bound to 532991eef7552e67e0720258dd41b92880aaea58; hosted py-compile/demo-bootstrap/repo-local-cli/loom-check/gate/release-judgment passed before carrier activation; root-self-governance was classified as branch-local carrier activation drift.
 - Recovery Boundary: WI-1252 / PR #1410 branch-local carrier activation only. Do not change #1249 progress labels, #1250 fixture groups, #1251 fallback boundary, #1253 fast/full policy, or root/main Round 6 carriers.
 - Current Lane: daily-cli-snapshot-bootstrap-cost
