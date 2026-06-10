@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1284
-- Goal: Validate and record repo-local-cli CI evidence and closeout expectations after the #1282 workflow split, using actual hosted output from PR #1385 and PR #1387.
-- Scope: Own issue #1284 only: record WI-1284 evidence and closeout expectation carriers that consume the frozen #1282 repo-local-cli command group contract and actual post-merge/readback hosted output from PR #1385 and PR #1387. Preserve existing loom-check required checks and no-release classification. Excluded: .github/workflows/loom-check.yml changes, #1283 local validation aliases/docs, #1259 closeout, Round 5, Round 7+, Deferred roadmap, release/package behavior, generated runtime, high-cost scheduler gates, controlled merge, and issue closeout.
-- Execution Path: issue #1284 -> branch work/1284-repo-local-cli-evidence-closeout -> activate WI-1284 -> consume WI-1282 command group contract and #1385/#1387 hosted output -> write evidence/closeout carriers -> local validation -> PR metadata/head binding -> hosted check readback -> scheduler-owned gate.
+- Item ID: WI-1259
+- Goal: Close out parent FR #1259 after repo-local-cli command surfaces #1282/#1283/#1284 are terminal, recording child completion, no-release evidence, and parent convergence without changing workflow semantics.
+- Scope: Parent #1259 closeout only: consume already-merged child facts for #1282, #1283, and #1284; record no-release evidence; preserve the frozen repo-local-cli group names/order; keep parent #1255 open; do not modify workflow/runtime/release/package behavior, Round 5, Round 7+, Deferred roadmap, or child implementation surfaces.
+- Execution Path: issue #1259 -> branch work/1259-repo-local-cli-surfaces-closeout -> activate WI-1259 -> consume #1282/#1283/#1284 terminal carrier facts and GitHub readback -> record parent closeout carriers -> scheduler-owned review/gate -> controlled merge -> issue #1259 closeout/readback -> terminal carrier sync if required
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1284.md
-- Review Entry: .loom/reviews/WI-1284.json
-- Validation Entry: git diff --check; repo-local-cli workflow command group readback; #1385/#1387 hosted run/job/log readback; python3 tools/loom.py suite inspect/validate/evidence validate/carrier validate --target . --item WI-1284 --json; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1284; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1284; PR metadata preflight/readback; hosted checks.
-- Closing Condition: PR for #1284 is reviewed and gated by scheduler, merged through scheduler-owned controlled merge, issue #1284 is closed only by scheduler closeout, and post-merge closeout consumes PR, issue, target branch, no-release judgment, hosted checks, and WI-1284 evidence without changing repo-local-cli workflow semantics.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1284 is closed out: PR #1388 merged through the controlled merge wrapper at 2026-06-09T17:21:20Z with merge commit 259c6e24a2f9430c1dff272eafd93449a560e2eb; issue #1284 closed at 2026-06-09T17:28:24Z; stale blocked-by edge to closed #1282 was removed; terminal carrier metadata is recorded; parent #1259 closeout remains separate.
-- Next Step: None for WI-1284. Start #1259 parent closeout only after consuming #1283 and #1284 terminal closeout facts.
+- Recovery Entry: .loom/progress/WI-1259.md
+- Review Entry: .loom/reviews/WI-1259.json
+- Validation Entry: git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py reconciliation audit --target . --issue 1259 --dry-run; python3 tools/loom.py suite inspect/validate/evidence validate/carrier validate --target . --item WI-1259 --json; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PR metadata preflight/readback; hosted checks; controlled merge; post-merge closeout readback
+- Closing Condition: Parent #1259 is closed only after #1282/#1283/#1284 are closed and their repo carriers are consumed, no-release evidence is recorded, stale child dependency edges are gone, this closeout PR is reviewed/gated/merged through controlled merge, and final main readback confirms issue state plus Loom carrier/shadow closeout truth.
+- Current Checkpoint: merge
+- Current Stop: Parent #1259 closeout is active after #1282/#1283/#1284 terminal facts were consumed from main. GitHub native blocked-by edges from closed #1282/#1283/#1284 were removed via removeBlockedBy and reconciliation audit now passes. Repo carrier closeout evidence is being authored on branch work/1259-repo-local-cli-surfaces-closeout; issue #1259 remains open until scheduler-owned review/gate/controlled merge and final closeout readback.
+- Next Step: Finish WI-1259 closeout carriers, run local validation and shadow refresh, record current-head scheduler review, create/update PR metadata, run hosted checks and controlled merge; then close/read back #1259 and terminalize repo carriers if required.
 - Blockers: None
-- Latest Validation Summary: 2026-06-09 scheduler closeout for WI-1284: PR #1388 merged via controlled-merge at 259c6e24a2f9430c1dff272eafd93449a560e2eb; hosted required checks and loom-pr-merge-gate passed at head 00b29b4b39cd7fddb89d24c05e7a90812ae322e1; issue #1284 closed at 2026-06-09T17:28:24Z; stale native blocked-by edge to closed #1282 removed; carrier closeout-sync wrote terminal metadata with no release expected. Closeout check is expected to report only parent #1259 convergence until parent closeout runs.
-- Recovery Boundary: Terminal closeout carrier only for WI-1284. Do not modify #1283 alias/docs, #1259 parent closeout, workflow semantics, generated runtime, release/package behavior, Round 5, Round 7+, Deferred roadmap, or unrelated surfaces.
-- Current Lane: post-merge-closeout-consumed
+- Latest Validation Summary: 2026-06-10 parent closeout carrier validation: git diff --check pass; fact-chain and verify pass for current_item_id WI-1259; suite inspect pass and suite validate returns expected not_applicable with no blocking gaps; suite evidence validate pass; suite carrier validate pass; reconciliation audit for #1259 pass after stale closed-child native blocked-by edges were removed; carrier refresh --write updated closeout/merge-ready shadow evidence and follow-up dry-run reports refresh_needed empty; shadow-parity --surface all --blocking pass. Issue #1259 remains open until scheduler-owned review/gate/controlled merge and final closeout readback; no release expected unless scope expands.
+- Recovery Boundary: WI-1259 parent closeout only. Do not change .github workflows, repo-local-cli group names/order, runtime behavior, package/release surfaces, child implementation docs/carriers except as read-only evidence, Round 5, Round 7+, Deferred roadmap, or parent #1255 state.
+- Current Lane: repo-local-cli-surfaces-parent-closeout
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
-- Logs Entry: local command outputs in worker thread 019eacce-75b3-7c83-85a8-549fe578cb7f
-- Diagnostics Entry: WI-1284 is an evidence-only repo-local-cli closeout carrier update; no runtime, workflow semantics, package, release, permission, or external-visible behavior change is expected.
-- Verification Entry: suite evidence/carrier passed; suite validate returned expected `not_applicable` with no blocking gaps; fact-chain, verify, purity, shadow-parity, adopt verify, and `git diff --check` passed; scheduler-owned review and gate remain pending.
-- Lane Entry: repo-local-cli-surfaces
+- Logs Entry: scheduler thread 019eabaf-92dc-7a52-a238-838f4c0bf4ac local command readbacks for WI-1259 parent closeout.
+- Diagnostics Entry: WI-1259 is a parent closeout carrier update that consumes closed child issues #1281/#1282/#1283/#1284, no-release evidence, and GitHub dependency reconciliation; no workflow/runtime/package/release behavior change is expected.
+- Verification Entry: fact-chain and verify passed after WI-1259 activation; reconciliation audit for #1259 passes after stale closed-child native blocked-by edges were removed; suite validate is not_applicable with no blocking gaps; suite evidence/carrier validation is being kept current before PR gate.
+- Lane Entry: repo-local-cli-surfaces-parent-closeout
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1284.md
-- Dynamic Truth: .loom/progress/WI-1284.md
+- Static Truth: .loom/work-items/WI-1259.md
+- Dynamic Truth: .loom/progress/WI-1259.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
