@@ -1,0 +1,5 @@
+# Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1405 | Issue OPEN / branch work/1405-runtime-locking-validation-surfaces / PR #1418 OPEN | in_progress | primary | .loom/work-items/WI-1405.md | .loom/specs/WI-1405/implementation-contract.md#implementation-scope | .loom/specs/WI-1405/spec.md#scenarios | .loom/specs/WI-1405/plan.md#implementation | .loom/specs/WI-1405/evidence-map.md | scheduler_thread_id=019eb28d-ac3b-7623-8955-12542fa2e08d; worker thread 019eb299-1028-7cb0-a6fe-a2d12a7d53de; branch work/1405-runtime-locking-validation-surfaces; PR #1418 | Recheck issue state, PR state, branch, head SHA, PR body machine carrier, hosted checks, scheduler review, controlled merge, and closeout before terminalizing; carrier state is tracking-only and does not satisfy evidence or closeout truth. |
