@@ -1,4 +1,4 @@
-.PHONY: loom-check check py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check npm-package-check loom-check-runtime-regression loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-sync loom-self-plugin-check daily-execution-cli-fast daily-execution-cli-full
+.PHONY: loom-check check py-compile skills-check skills-doc-reference-sync-check skills-generated-tree-drift-check host-adapter-check version-surface-check release-surface-check cli-contract-check npm-package-check loom-check-runtime-regression loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-sync loom-self-plugin-check daily-execution-cli-fast daily-execution-cli-full
 .PHONY: repo-local-cli-fast repo-local-cli-full repo-local-cli-setup-demo-bootstrap repo-local-cli-init-runtime repo-local-cli-fact-chain repo-local-cli-flow-gates repo-local-cli-workspace-locate repo-local-cli-purity-check repo-local-cli-runtime-state-scene-conflict-negative
 
 REPO_LOCAL_CLI_GROUPS := setup-demo-bootstrap init-runtime fact-chain flow-gates workspace-locate purity-check runtime-state-scene-conflict-negative
@@ -11,6 +11,12 @@ py-compile:
 
 skills-check:
 	python3 tools/skills_surface.py check
+
+skills-doc-reference-sync-check:
+	python3 tools/skills_surface.py check --surface docs-reference-sync
+
+skills-generated-tree-drift-check:
+	python3 tools/skills_surface.py check --surface generated-tree-drift
 
 host-adapter-check:
 	python3 tools/host_adapter_check.py

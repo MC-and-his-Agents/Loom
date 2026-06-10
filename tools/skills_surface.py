@@ -13,8 +13,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +44,43 @@ DOC_REFERENCE_SYNC = {
     "docs/methodology/templates/scaffold/contracts.md": "shared/references/templates/scaffold/contracts.md",
     "docs/methodology/templates/scaffold/readiness-checklist.md": "shared/references/templates/scaffold/readiness-checklist.md",
 }
+
+DOC_REFERENCE_SYNC_SURFACE = "docs-reference-sync"
+GENERATED_TREE_DRIFT_SURFACE = "generated-tree-drift"
+
+
+@dataclass(frozen=True)
+class SurfaceDefinition:
+    label: str
+    failure_name: str
+    evidence_locator: str
+    run: Callable[[], None]
+
+
+class SurfaceFailure(RuntimeError):
+    def __init__(
+        self,
+        *,
+        surface_label: str,
+        failure_name: str,
+        evidence_locator: str,
+        details: list[str],
+    ) -> None:
+        self.surface_label = surface_label
+        self.failure_name = failure_name
+        self.evidence_locator = evidence_locator
+        self.details = details
+        super().__init__(
+            "\n".join(
+                [
+                    f"surface_label={surface_label}",
+                    f"failure_name={failure_name}",
+                    f"evidence_locator={evidence_locator}",
+                    "details:",
+                    *[f"- {detail}" for detail in details[:80]],
+                ]
+            )
+        )
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -342,6 +381,17 @@ def compare_doc_reference_sync() -> list[str]:
     return errors
 
 
+def check_doc_reference_sync_surface() -> None:
+    reference_drift = compare_doc_reference_sync()
+    if reference_drift:
+        raise SurfaceFailure(
+            surface_label=DOC_REFERENCE_SYNC_SURFACE,
+            failure_name="skills_docs_reference_sync_drift",
+            evidence_locator="tools/skills_surface.py:DOC_REFERENCE_SYNC",
+            details=reference_drift,
+        )
+
+
 def python_cache_artifacts(root: Path) -> list[str]:
     if not root.exists():
         return []
@@ -468,19 +518,82 @@ def verify_surface(root: Path = TARGET_ROOT, *, run_launchers: bool = True) -> l
     return errors
 
 
-def check_surface() -> None:
-    reference_drift = compare_doc_reference_sync()
-    if reference_drift:
-        raise RuntimeError("source skills reference drift detected:\n" + "\n".join(reference_drift[:80]))
-    cache_artifacts = python_cache_artifacts(TARGET_ROOT)
-    if cache_artifacts:
-        raise RuntimeError("skills surface contains Python cache artifacts:\n" + "\n".join(cache_artifacts[:80]))
+def check_generated_tree_drift_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-skills-check-") as tmp:
         expected = Path(tmp) / "skills"
         generate_surface(SOURCE_ROOT, expected)
         drift = compare_trees(expected, TARGET_ROOT)
         if drift:
-            raise RuntimeError("skills surface drift detected:\n" + "\n".join(drift[:80]))
+            raise SurfaceFailure(
+                surface_label=GENERATED_TREE_DRIFT_SURFACE,
+                failure_name="skills_generated_tree_drift",
+                evidence_locator="src/skills -> skills",
+                details=drift,
+            )
+
+
+def available_surface_definitions() -> tuple[SurfaceDefinition, ...]:
+    return (
+        SurfaceDefinition(
+            label=DOC_REFERENCE_SYNC_SURFACE,
+            failure_name="skills_docs_reference_sync_drift",
+            evidence_locator="tools/skills_surface.py:DOC_REFERENCE_SYNC",
+            run=check_doc_reference_sync_surface,
+        ),
+        SurfaceDefinition(
+            label=GENERATED_TREE_DRIFT_SURFACE,
+            failure_name="skills_generated_tree_drift",
+            evidence_locator="src/skills -> skills",
+            run=check_generated_tree_drift_surface,
+        ),
+    )
+
+
+def selected_surface_definitions(surface_labels: list[str]) -> tuple[SurfaceDefinition, ...]:
+    surfaces = {surface.label: surface for surface in available_surface_definitions()}
+    missing = sorted(set(surface_labels) - set(surfaces))
+    if missing:
+        raise RuntimeError("unknown skills surface(s): " + ", ".join(missing))
+    return tuple(surfaces[label] for label in surface_labels)
+
+
+def run_surface_definition(surface: SurfaceDefinition, *, emit_success: bool) -> None:
+    start = time.perf_counter()
+    try:
+        surface.run()
+    except SurfaceFailure:
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        print(
+            f"skills surface {surface.label}: BLOCK "
+            f"failure_name={surface.failure_name} "
+            f"evidence_locator={surface.evidence_locator} "
+            f"elapsed_ms={elapsed_ms}",
+            file=sys.stderr,
+        )
+        raise
+    if emit_success:
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        print(
+            f"skills surface {surface.label}: OK "
+            f"evidence_locator={surface.evidence_locator} "
+            f"elapsed_ms={elapsed_ms}"
+        )
+
+
+def check_selected_surfaces(surface_labels: list[str], *, emit_success: bool) -> None:
+    for surface in selected_surface_definitions(surface_labels):
+        run_surface_definition(surface, emit_success=emit_success)
+
+
+def check_surface(selected_surfaces: list[str] | None = None) -> None:
+    if selected_surfaces:
+        check_selected_surfaces(selected_surfaces, emit_success=True)
+        return
+    check_selected_surfaces([DOC_REFERENCE_SYNC_SURFACE], emit_success=False)
+    cache_artifacts = python_cache_artifacts(TARGET_ROOT)
+    if cache_artifacts:
+        raise RuntimeError("skills surface contains Python cache artifacts:\n" + "\n".join(cache_artifacts[:80]))
+    check_selected_surfaces([GENERATED_TREE_DRIFT_SURFACE], emit_success=False)
     errors = verify_surface(TARGET_ROOT)
     if errors:
         raise RuntimeError("skills surface validation failed:\n" + "\n".join(errors[:80]))
@@ -490,7 +603,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("generate", help="rebuild root skills/ from src/skills/")
-    subparsers.add_parser("check", help="verify generated skills/ has no drift and is self-contained")
+    check_parser = subparsers.add_parser("check", help="verify generated skills/ has no drift and is self-contained")
+    check_parser.add_argument(
+        "--surface",
+        action="append",
+        choices=(DOC_REFERENCE_SYNC_SURFACE, GENERATED_TREE_DRIFT_SURFACE),
+        help="Run only the named read-only skills validation surface. May be passed more than once.",
+    )
+    check_parser.add_argument(
+        "--list-surfaces",
+        action="store_true",
+        help="List targetable skills validation surfaces without running checks.",
+    )
     return parser.parse_args()
 
 
@@ -501,8 +625,19 @@ def main() -> int:
             generate_surface()
             print("skills surface generated from src/skills")
         elif args.command == "check":
-            check_surface()
-            print("skills surface check: OK")
+            if args.list_surfaces:
+                for surface in available_surface_definitions():
+                    print(
+                        f"{surface.label}\t"
+                        f"failure_name={surface.failure_name}\t"
+                        f"evidence_locator={surface.evidence_locator}"
+                    )
+            else:
+                check_surface(args.surface)
+                if args.surface:
+                    print("skills surface targeted check: OK")
+                else:
+                    print("skills surface check: OK")
     except Exception as exc:
         print(f"skills surface {args.command} failed: {exc}", file=sys.stderr)
         return 1
