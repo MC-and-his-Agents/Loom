@@ -34,6 +34,28 @@ make repo-local-cli-full
 
 Full local replay 是本地诊断证据，不是 merge-ready 放行证据。merge-ready 仍必须消费当前 PR head、review、fact-chain、CI/hosted checks、PR metadata、release/no-release 判断和 scheduler-owned gates。
 
+## Daily Execution CLI Local Validation
+
+Loom source repo 也暴露 daily-execution-cli bucket 的显式 fast / full 入口：
+
+```bash
+make daily-execution-cli-fast
+make daily-execution-cli-full
+```
+
+它们分别包装：
+
+```bash
+python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .
+python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .
+```
+
+`daily-execution-cli-fast` 只运行常用 `runtime-smoke` 子集：runtime-state、fact-chain、state-check、pre-review、admission、workspace locate 和 purity-check。它用于本地迭代和 focused proof。
+
+`daily-execution-cli-full` 运行 daily-execution-cli bucket 的完整命令 set、fact-chain/provenance 负向 fixture、authoring fixture 和 merge-ready 相关检查。既有 `--source-surface merge-gate`、`--source-surface source-self-fixture` 和默认 `--source-surface full` 继续消费 full daily-execution-cli coverage。
+
+Fast daily CLI proof 不替代 full validation、hosted `repo-local-cli` / `loom-check` checks、current-head review、PR gate、merge-ready、controlled merge、release/no-release 判断或 closeout。
+
 | Order | Frozen group name | CI step name | Local alias | Execution surface |
 | --- | --- | --- | --- | --- |
 | 0 | `setup-demo-bootstrap` | `repo-local-cli: setup-demo-bootstrap` | `make repo-local-cli-fast GROUP=setup-demo-bootstrap` or `make repo-local-cli-setup-demo-bootstrap` | `make loom-demo-new-project-check` from repo root. |

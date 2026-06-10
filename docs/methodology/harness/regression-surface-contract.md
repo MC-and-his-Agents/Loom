@@ -204,6 +204,8 @@ full validation remains required even when fast surfaces all pass.
 | Surface selector | Policy role |
 | --- | --- |
 | `contract-only` | fast validation / closeout-friendly contract proof |
+| `daily-execution-cli-fast` | fast validation，面向 daily-execution-cli bucket 的常用本地 runtime smoke；不得作为 merge-ready / release proof |
+| `daily-execution-cli-full` | authoritative bucket validation，面向 daily-execution-cli bucket 的完整命令与负向 fixture set |
 | `bootstrap-regression` | targeted heavier validation，面向 demo/bootstrap regression |
 | `distribution-regression` | targeted heavier validation，面向 installer / distribution / release-adjacent regression |
 | `review-run` | targeted source-self fixture validation，面向 review-run fixture diagnostics |
@@ -215,6 +217,7 @@ full validation remains required even when fast surfaces all pass.
 其中：
 
 - `contract-only` 默认不是 release proof
+- `daily-execution-cli-fast` 只运行 `runtime-smoke` 子集，用于本地迭代；`daily-execution-cli-full` 和既有 `merge-gate` surface 必须继续覆盖 daily-execution-cli 的完整命令 set、fact-chain/provenance 负向 fixture、authoring fixture 与 merge-ready 相关检查
 - `review-run`、`merge-gate`、`closeout-reconciliation` 是 `source-self-fixture` 的可聚合 child surfaces
 - `source-self-fixture`、`bootstrap-regression`、`distribution-regression` 是可选 targeted heavy surfaces，不自动等于 full
 - `full` 仍是 source profile 默认 authoritative aggregate validation

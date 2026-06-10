@@ -54,6 +54,8 @@ PROFILE_CHOICES = (AUTO_PROFILE, SOURCE_PROFILE, CONSUMER_PROFILE)
 SOURCE_SURFACE_FULL = "full"
 SOURCE_SURFACE_CONTRACT_ONLY = "contract-only"
 SOURCE_SURFACE_SOURCE_SELF_FIXTURE = "source-self-fixture"
+SOURCE_SURFACE_DAILY_EXECUTION_CLI_FAST = "daily-execution-cli-fast"
+SOURCE_SURFACE_DAILY_EXECUTION_CLI_FULL = "daily-execution-cli-full"
 SOURCE_SURFACE_REVIEW_RUN = "review-run"
 SOURCE_SURFACE_MERGE_GATE = "merge-gate"
 SOURCE_SURFACE_CLOSEOUT_RECONCILIATION = "closeout-reconciliation"
@@ -65,6 +67,8 @@ SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_FULL,
     SOURCE_SURFACE_CONTRACT_ONLY,
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
+    SOURCE_SURFACE_DAILY_EXECUTION_CLI_FAST,
+    SOURCE_SURFACE_DAILY_EXECUTION_CLI_FULL,
     SOURCE_SURFACE_REVIEW_RUN,
     SOURCE_SURFACE_MERGE_GATE,
     SOURCE_SURFACE_CLOSEOUT_RECONCILIATION,
@@ -406,6 +410,18 @@ EXTERNAL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
 
 DAILY_EXECUTION_CLI_CATEGORY = "daily-execution-cli"
+DAILY_EXECUTION_CLI_SCOPE_FAST = "fast"
+DAILY_EXECUTION_CLI_SCOPE_FULL = "full"
+DAILY_EXECUTION_CLI_FAST_GROUP = "runtime-smoke"
+DAILY_EXECUTION_CLI_FAST_LABELS = {
+    "runtime-state-flow",
+    "fact-chain",
+    "state-check",
+    "flow-pre-review",
+    "admission",
+    "locate",
+    "purity",
+}
 
 
 @dataclass(frozen=True)
@@ -12143,8 +12159,11 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
     return failures
 
-def check_daily_execution_cli(root: Path) -> list[Failure]:
+def check_daily_execution_cli(root: Path, *, validation_scope: str = DAILY_EXECUTION_CLI_SCOPE_FULL) -> list[Failure]:
     failures: list[Failure] = []
+    if validation_scope not in {DAILY_EXECUTION_CLI_SCOPE_FAST, DAILY_EXECUTION_CLI_SCOPE_FULL}:
+        failures.append(Failure(DAILY_EXECUTION_CLI_CATEGORY, f"unknown validation scope `{validation_scope}`"))
+        return failures
     example_target = root / "examples/new-project"
     tool_path = root / "tools/loom_flow.py"
     if not tool_path.exists() or not example_target.exists():
@@ -12374,14 +12393,21 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
     ]
-    for command_index, (label, args, allowed_results) in enumerate(demo_commands, start=1):
+    selected_demo_commands = [
+        (label, args, allowed_results)
+        for label, args, allowed_results in demo_commands
+        if validation_scope == DAILY_EXECUTION_CLI_SCOPE_FULL or label in DAILY_EXECUTION_CLI_FAST_LABELS
+    ]
+    for command_index, (label, args, allowed_results) in enumerate(selected_demo_commands, start=1):
         start_daily_execution_cli_scenario(
             failures,
             label,
             command=args,
             metadata={
-                "group": "demo_commands",
-                "index": f"{command_index}/{len(demo_commands)}",
+                "bucket": DAILY_EXECUTION_CLI_CATEGORY,
+                "group": DAILY_EXECUTION_CLI_FAST_GROUP if label in DAILY_EXECUTION_CLI_FAST_LABELS else "full-command-set",
+                "index": f"{command_index}/{len(selected_demo_commands)}",
+                "validation_scope": validation_scope,
                 "allowed_results": allowed_results,
             },
         )
@@ -13284,6 +13310,9 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` merge checkpoint must fall back to `admission` for the bootstrap demo"))
 
     end_daily_execution_cli_scenario()
+
+    if validation_scope == DAILY_EXECUTION_CLI_SCOPE_FAST:
+        return failures
 
     with loom_check_temporary_directory(prefix="loom-check-fact-chain-provenance-") as tmp:
         missing_ledger_target = Path(tmp) / "missing-ledger"
@@ -22515,6 +22544,11 @@ def source_surface_includes(requested_surface: str, step_surface: str) -> bool:
 
 
 def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FULL) -> list[Failure]:
+    if source_surface == SOURCE_SURFACE_DAILY_EXECUTION_CLI_FAST:
+        return check_daily_execution_cli(root, validation_scope=DAILY_EXECUTION_CLI_SCOPE_FAST)
+    if source_surface == SOURCE_SURFACE_DAILY_EXECUTION_CLI_FULL:
+        return check_daily_execution_cli(root, validation_scope=DAILY_EXECUTION_CLI_SCOPE_FULL)
+
     failures: list[Failure] = []
     steps: list[tuple[str, str, object]] = [
         (SOURCE_SURFACE_CONTRACT_ONLY, "top-level-dirs", lambda: check_required_paths(root, "top-level-dirs", TOP_LEVEL_DIRS)),
@@ -22538,7 +22572,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_REVIEW_RUN, "review-run", lambda: check_review_run_fixture(root)),
-        (SOURCE_SURFACE_MERGE_GATE, "merge-gate", lambda: check_daily_execution_cli(root)),
+        (SOURCE_SURFACE_MERGE_GATE, "merge-gate", lambda: check_daily_execution_cli(root, validation_scope=DAILY_EXECUTION_CLI_SCOPE_FULL)),
         (SOURCE_SURFACE_CLOSEOUT_RECONCILIATION, "closeout-reconciliation", lambda: check_closeout_reconciliation_fixture(root)),
         (SOURCE_SURFACE_RETIRE_WORKSPACE, "retire-workspace", lambda: check_retire_workspace_fixture(root)),
         (SOURCE_SURFACE_INSTALLED_RUNTIME, "installed-runtime", lambda: check_installed_runtime_fixture(root)),
@@ -22663,9 +22697,26 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     source_text = (root / "src/skills/shared/scripts/loom_check.py").read_text(encoding="utf-8")
     if "source/distribution" not in source_text or "--profile" not in source_text:
         failures.append(Failure(category, "`loom_check.py` must document source/distribution scope and expose `--profile`"))
-    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "closeout-reconciliation", "retire-workspace", "installed-runtime", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
+    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "daily-execution-cli-fast", "daily-execution-cli-full", "review-run", "merge-gate", "closeout-reconciliation", "retire-workspace", "installed-runtime", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
+    makefile_text = (root / "Makefile").read_text(encoding="utf-8")
+    for anchor in (
+        "daily-execution-cli-fast",
+        "daily-execution-cli-full",
+        "--source-surface daily-execution-cli-fast",
+        "--source-surface daily-execution-cli-full",
+    ):
+        if anchor not in makefile_text:
+            failures.append(Failure(category, f"`Makefile` must expose daily execution CLI validation anchor `{anchor}`"))
+    repo_local_gate_text = (root / "docs/methodology/harness/repo-local-gate-starter.md").read_text(encoding="utf-8")
+    for anchor in (
+        "make daily-execution-cli-fast",
+        "make daily-execution-cli-full",
+        "Fast daily CLI proof 不替代 full validation",
+    ):
+        if anchor not in repo_local_gate_text:
+            failures.append(Failure(category, f"`repo-local-gate-starter.md` must document daily execution CLI validation anchor `{anchor}`"))
     for group in REVIEW_RUN_FIXTURE_GROUPS:
         if group not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must retain review-run fixture group `{group}`"))

@@ -1,0 +1,70 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "T5-read-only-cli-entrypoint-inventory",
+      "status": "integrated",
+      "summary": "Read-only explorer inventory confirmed existing Makefile repo-local-cli aliases, loom_check source-surface selectors, CI repo-local-cli and loom-check surfaces, PR metadata fields, and the absence of a dedicated daily-execution-cli fast/full entrypoint before WI-1253.",
+      "locators": [
+        "Makefile",
+        "skills/shared/scripts/loom_check.py",
+        "docs/methodology/harness/repo-local-gate-starter.md",
+        "docs/methodology/harness/regression-surface-contract.md",
+        ".github/workflows/loom-check.yml",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        ".loom/companion/repo-interface.json"
+      ]
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1253-daily-cli-fast-full-entrypoints",
+      "status": "integrated",
+      "summary": "Added explicit daily-execution-cli fast and full source-surface selectors plus Makefile aliases. Fast runs only the runtime-smoke subset for local iteration; full runs the existing complete daily-execution-cli bucket, including full command set and negative fixtures. Existing merge-gate, source-self-fixture, and full source surfaces continue to consume full daily CLI coverage.",
+      "locators": [
+        "src/skills/shared/scripts/loom_check.py",
+        "skills/shared/scripts/loom_check.py",
+        "skills/loom-init/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-adopt/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-resume/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-pre-review/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-review/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-spec-review/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-handoff/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-retire/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-build/.loom-runtime/shared/scripts/loom_check.py",
+        "skills/loom-story/.loom-runtime/shared/scripts/loom_check.py",
+        "examples/new-project/.loom/bin/loom_check.py",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "WI-1253-docs-and-carriers",
+      "status": "integrated",
+      "summary": "Documented fast/full daily CLI validation boundaries, preserved full merge-ready/release authority, and activated WI-1253 repo-local carriers with not_applicable suite rationale and default no_release closeout boundary.",
+      "locators": [
+        "docs/methodology/harness/repo-local-gate-starter.md",
+        "docs/methodology/harness/regression-surface-contract.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        ".loom/work-items/WI-1253.md",
+        ".loom/progress/WI-1253.md",
+        ".loom/progress/WI-1253-build-evidence.json",
+        ".loom/specs/WI-1253/spec.md",
+        ".loom/specs/WI-1253/plan.md",
+        ".loom/specs/WI-1253/task-carrier.md",
+        ".loom/status/current.md"
+      ]
+    },
+    {
+      "id": "WI-1253-local-validation",
+      "status": "integrated",
+      "summary": "Local validation passed: git diff --check; make py-compile; make daily-execution-cli-fast; make daily-execution-cli-full; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; suite inspect passed; suite validate returned result not_applicable with blocking_gaps empty.",
+      "locators": [
+        ".loom/progress/WI-1253.md",
+        ".loom/specs/WI-1253/plan.md",
+        ".loom/specs/WI-1253/spec.md"
+      ]
+    }
+  ]
+}

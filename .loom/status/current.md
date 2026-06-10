@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1251
-- Goal: Make Codex App fallback fixtures deterministic by isolating them from workstation/session discovery drift unless a scenario explicitly opts into that dependency.
-- Scope: Issue #1251 / PR #1413 only: Codex App fallback fixture environment isolation, synchronized loom_check runtime copies, demo metadata hash refresh, and focused validation evidence; no #1249 label ownership, no #1250 fixture group rename, no #1252 snapshot/bootstrap reuse, no #1253 fast/full validation policy.
-- Execution Path: issue #1251 -> branch work/1251-codex-app-fallback-fixtures -> PR #1413 -> scheduler-owned review/pr-gate/controlled merge/closeout
+- Item ID: WI-1253
+- Goal: Establish explicit fast and full validation entrypoints for daily CLI regressions so local iteration is narrower while merge-ready/release coverage remains complete.
+- Scope: Issue #1253 / PR TBD only: daily-execution-cli fast/full source-surface entrypoints, Makefile aliases, mechanical self-check anchors, documentation alignment, WI-1253 carriers, validation evidence, and PR metadata; no #1254/#1247 work and no weakening of full merge-ready/release coverage.
+- Execution Path: issue #1253 -> branch work/1253-fast-full-validation-entrypoints -> PR TBD -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1251.md
-- Review Entry: .loom/reviews/WI-1251.json
-- Validation Entry: git diff --check; py_compile_clean touched loom_check.py copies; skills_surface.py check; check_loom_check_runtime_regressions.py; focused #1251 fallback env validation; PR metadata preflight/readback; hosted checks readback
-- Closing Condition: PR #1413 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and #1251 closeout is consumed without weakening fallback isolation, repository truth boundaries, fail-closed behavior, or required coverage.
-- Current Checkpoint: merge
-- Current Stop: Scheduler current-head review has been recorded for PR #1413 and consumed as carrier-only head binding after review/shadow carrier commit; carrier refresh dry-run and shadow-parity --surface all --blocking pass on the scheduler gate branch.
-- Next Step: Push the refreshed branch, update PR #1413 metadata to the pushed head, run PR metadata preflight, merge-ready / PR gate / controlled merge after hosted checks are green or classified, then perform no_release closeout.
+- Recovery Entry: .loom/progress/WI-1253.md
+- Review Entry: .loom/reviews/WI-1253.json
+- Validation Entry: git diff --check; make daily-execution-cli-fast; make daily-execution-cli-full; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py; suite inspect/validate for WI-1253; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR for #1253 is reviewed/gated by the scheduler on the current head, merged through controlled path, and no_release closeout is consumed without weakening full validation, repository truth boundaries, fail-closed behavior, or scheduler-owned gate semantics.
+- Current Checkpoint: build
+- Current Stop: WI-1253 implementation and local validation are complete in the worker worktree; PR creation, metadata readback, push, and hosted checks remain before scheduler gate handoff.
+- Next Step: Create/update PR metadata on the current branch head, push the branch, read hosted checks, then stop at waiting-scheduler-gate.
 - Blockers: None
-- Latest Validation Summary: After rebase onto origin/main dba1f55690150336211c767069c9189df90c000a and the review_run_fixture_env helper fix, focused validation passed: git diff --check; git diff --check origin/main...HEAD; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py over canonical/generated/runtime/demo loom_check.py copies plus tools/check_loom_check_runtime_regressions.py; python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_loom_check_runtime_regressions.py; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface review-run .; suite inspect passed with Suite path: not_applicable at .loom/specs/WI-1251/spec.md; suite validate exits 1 with result=not_applicable and blocking_gaps=[]; fact-chain and verify pass. carrier refresh --dry-run and shadow-parity remain blocked by scheduler-owned stale review scaffold/shadow drift.
-- Recovery Boundary: WI-1251 only: Codex App fallback fixture isolation, synchronized loom_check runtime copies, demo metadata hash refresh, focused fallback validation, PR metadata/head binding, and minimal WI-1251 Loom carriers. No #1249 label ownership, #1250 fixture group rename, #1252 implementation ownership, #1253 fast/full entrypoint policy, merge, release, or closeout.
-- Current Lane: daily-cli-codex-app-fallback-fixtures
+- Latest Validation Summary: Local validation passed for WI-1253: git diff --check; make py-compile; make daily-execution-cli-fast; make daily-execution-cli-full; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; suite inspect passed; suite validate returned result=not_applicable with blocking_gaps=[].
+- Recovery Boundary: WI-1253 only: daily-execution-cli fast/full validation entrypoints, Makefile aliases, mechanical self-check anchors, docs alignment, generated runtime copies, WI-1253 carriers, PR metadata, and validation evidence. No #1254/#1247 work, no full coverage weakening, no scheduler-owned review/PR gate/merge/release/closeout.
+- Current Lane: daily-cli-fast-full-validation-entrypoints
 
 ## Runtime Evidence
 
-- Run Entry: PR #1413 implementation head a9d6dfdb2c84e7761f457657a004283a48dfa00c passed scoped #1251 local validation and PR metadata readback before scheduler-owned review/gate.
-- Logs Entry: worker thread 019eb12d-aba6-7392-8dd1-26bb4d81b393 and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command readbacks for WI-1251.
-- Diagnostics Entry: WI-1251 isolates Codex App fallback fixtures from ambient workstation/session discovery by using controlled fake HOME/CODEX_HOME/temp roots and explicit fake app-server fallback inputs; no #1249 label ownership, #1250 group rename, #1252 snapshot/bootstrap reuse, or #1253 fast/full policy is included.
-- Verification Entry: local validation passed for #1251 implementation and carrier activation: git diff --check, py_compile_clean for touched loom_check.py copies, skills_surface.py check, check_loom_check_runtime_regressions.py, focused fallback env probe, fact-chain readback, verify, and PR metadata readback; full review-run/current-head review/pr-gate remain scheduler-owned.
-- Lane Entry: daily-cli-codex-app-fallback-fixtures
+- Run Entry: WI-1253 worker thread 019eb1da-9d0e-7790-aae8-18654bf035b6 activated branch work/1253-fast-full-validation-entrypoints and added fast/full daily-execution-cli validation entrypoints; PR is pending.
+- Logs Entry: scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 dispatch T5-initial-202606102207-fast-full-validation-entrypoints; worker startup report T5-report-202606102207-instruction-ack-startup; local fast smoke command `make daily-execution-cli-fast`.
+- Diagnostics Entry: WI-1253 separates local fast daily CLI smoke from full daily CLI bucket validation while preserving merge-ready/release authority, hosted checks, PR metadata, fact-chain, and scheduler-owned gates.
+- Verification Entry: Local validation passed for WI-1253: git diff --check; make py-compile; make daily-execution-cli-fast; make daily-execution-cli-full; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; suite inspect passed; suite validate returned result=not_applicable with blocking_gaps=[].
+- Lane Entry: daily-cli-fast-full-validation-entrypoints
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1251.md
-- Dynamic Truth: .loom/progress/WI-1251.md
+- Static Truth: .loom/work-items/WI-1253.md
+- Dynamic Truth: .loom/progress/WI-1253.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
