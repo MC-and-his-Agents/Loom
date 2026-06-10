@@ -3,11 +3,11 @@
   "item_id": "WI-1284",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Scheduler current-head review for PR #1388 after merging origin/main 1d6527f8906cc9b96553078dcf325871958380a8: PR diff against current main remains limited to WI-1284 evidence/closeout carriers, review/status/shadow/bootstrap metadata, and not_applicable suite carriers; #1283 implementation and terminal closeout truth are consumed from main rather than re-authored by #1284; repo-local-cli frozen group order evidence remains explicit for PR #1385/#1387 and current PR #1388; no workflow semantics, #1283 alias/docs ownership expansion, #1259 parent closeout, release/package, generated runtime, permission, or external-visible behavior change found.",
+  "summary": "Closeout-only scheduler review for PR #1391: the diff terminalizes WI-1284 repo truth after PR #1388 controlled merge and #1284 issue closure, updating only WI-1284 terminal progress/status, this review record, and shadow carrier evidence. No workflow runtime release package #1283 implementation or #1259 parent closeout scope is included; #1259 closeout remains a separate scheduler step after this PR is merged and consumed from main.",
   "reviewer": "scheduler:019eabaf-92dc-7a52-a238-838f4c0bf4ac",
-  "authored_at": "2026-06-09T17:05:19Z",
-  "reviewed_head": "ac81b475e84babd7007609db50dadaf041f2ef3f",
-  "reviewed_validation_summary": "2026-06-09 scheduler merge-main repair for WI-1284: merged origin/main 1d6527f8906cc9b96553078dcf325871958380a8 into work/1284-repo-local-cli-evidence-closeout after #1283 implementation and closeout landed; resolved bootstrap/status/shadow conflicts by preserving WI-1284 as current item and retaining #1283 terminal files from main. Validation passed: git diff --check; loom_init fact-chain with current_item WI-1284, checkpoint merge, Blockers None, no status stale/drift; loom_init verify; checkpoint build; shadow-parity --blocking; carrier refresh dry-run refresh_needed []. Scheduler current-head semantic review records no findings and confirms the PR diff remains limited to WI-1284 evidence/closeout carriers with no workflow semantics, #1283 alias/docs, #1259 closeout, release/package, generated runtime, permission, or external-visible behavior change.",
+  "authored_at": "2026-06-10T01:55:49Z",
+  "reviewed_head": "55d3cc5189d5302ac0e72b9c7c745f29eb643c0e",
+  "reviewed_validation_summary": "2026-06-09 scheduler closeout for WI-1284: PR #1388 merged via controlled-merge at 259c6e24a2f9430c1dff272eafd93449a560e2eb; hosted required checks and loom-pr-merge-gate passed at head 00b29b4b39cd7fddb89d24c05e7a90812ae322e1; issue #1284 closed at 2026-06-09T17:28:24Z; stale native blocked-by edge to closed #1282 removed; carrier closeout-sync wrote terminal metadata with no release expected. Closeout check is expected to report only parent #1259 convergence until parent closeout runs.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -43,6 +43,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored scheduler closeout review approved the current terminal carrier head for PR #1391 closeout consumption."
   }
 }
