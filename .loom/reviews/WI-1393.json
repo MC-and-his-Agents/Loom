@@ -3,11 +3,11 @@
   "item_id": "WI-1393",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Scheduler semantic review allows WI-1393 merge gate. The implementation splits tools/check_release_surface.py into targetable release-doc-contract, release-workflow-contract, installer-sunset-guard, and forbidden-release-surface-patterns surfaces with stable evidence/failure labels, preserves default aggregate release surface behavior and OK output, updates #1383 release evidence locators only, and does not change release/no-release semantics, package/runtime behavior, publishing workflows, #1394/#1395/#1396, parent #1260 closeout, or umbrella #1255 closeout.",
+  "summary": "Closeout review allow: WI-1393 closeout branch records terminal carrier/status/shadow sync after PR #1423 merged and issue #1393 closed. Diff is limited to WI-1393 Loom progress, status, review, and shadow evidence; no release validator, package validator, Makefile, docs locator, workflow, release, npm publish, package/runtime behavior, or follow-up issue scope changes. Reconciliation audit passes after native dependency edge #1260 blocked by #1393 was manually synced because the tool apply path reported unsupported add_blocked_by; release judgment remains no_release; #1394/#1395/#1396 and parent #1260/#1255 remain follow-up scope.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-10T22:04:23Z",
-  "reviewed_head": "3840f46522fc584c971a099e1cbb2c89d07e8cec",
-  "reviewed_validation_summary": "2026-06-10 local worker validation passed for the release surface split: `git diff --check`; `python3 tools/check_release_surface.py --help`; `python3 tools/check_release_surface.py --list-surfaces`; targeted `python3 tools/check_release_surface.py --surface release-doc-contract`, `--surface release-workflow-contract`, `--surface installer-sunset-guard`, and `--surface forbidden-release-surface-patterns`; aggregate `python3 tools/check_release_surface.py`; `python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence`; Makefile aliases for the four named release surfaces; `python3 tools/py_compile_clean.py tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; and `python3 tools/loom.py suite inspect --target . --item WI-1393 --json`. `python3 tools/loom.py suite validate --target . --item WI-1393 --json` returned `result=not_applicable`, `blocking_gaps=[]`, and `findings=[]` with the expected not_applicable exit classification for this suite path decision.",
+  "authored_at": "2026-06-10T22:23:09Z",
+  "reviewed_head": "b0aa5b6e7341cbf76afc55be864d50e70fec9b74",
+  "reviewed_validation_summary": "Terminal closeout readback for WI-1393: PR #1423 merged at 2026-06-10T22:11:32Z with merge commit `d459cc1488d2f6140925164fc4ab94fe54256e83`; issue #1393 closed at 2026-06-10T22:12:37Z; hosted required checks passed on head `b5f1f466aa04c59f1fbb5aed45c1cc49c9bcc46a`; local `pr gate`, `controlled merge check/run`, `fact-chain`, `state-check`, `carrier refresh --dry-run`, `shadow-parity` closeout and merge_ready surfaces, and `git diff --check` passed or are being revalidated on the closeout-only carrier branch; terminal no_release metadata is recorded.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,34 +16,33 @@
     "work_item": ".loom/work-items/WI-1393.md",
     "recovery_entry": ".loom/progress/WI-1393.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "terminal_closeout_not_applicable",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "scheduler_closeout_review"
       }
     },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "not_applicable",
-    "suite_carrier_validation": "not_applicable",
+    "engine_adapter": "scheduler_manual_review",
+    "engine_evidence": "PR #1423 merged at 2026-06-10T22:11:32Z; issue #1393 closed at 2026-06-10T22:12:37Z; closeout branch head b0aa5b6e7341cbf76afc55be864d50e70fec9b74; local validation and GitHub readback recorded in reviewed_validation_summary",
+    "normalized_findings": [],
+    "suite_evidence_validation": "python3 tools/loom.py suite validate --target . --item WI-1393 --json (not_applicable)",
+    "suite_carrier_validation": "not_applicable_for_suite_path_decision",
     "suite_evidence_map": null,
-    "suite_consistency_analysis": null,
+    "suite_consistency_analysis": "not_applicable_for_closeout_only_pr",
     "suite_task_carriers": [],
     "suite_evidence_consumed_contracts": [],
     "suite_carrier_consumed_contracts": []
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Scheduler-authored closeout review approved closeout branch head b0aa5b6e7341cbf76afc55be864d50e70fec9b74 for closeout gate consumption. The only subsequent acceptable head drift is the review carrier commit itself."
   }
 }
