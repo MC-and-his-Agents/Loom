@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1254
-- Goal: Update CLI/check matrix documentation and closeout expectations to match the optimized daily-execution-cli surfaces.
-- Scope: Issue #1254 only: document daily-execution-cli fast/full surface names, troubleshooting signals, expected evidence, merge-ready evidence requirements, closeout evidence links, remaining risks, scheduler-owned gate semantics, repo truth boundaries, and default no_release. No #1247 parent closeout and no implementation behavior changes unless docs cannot be truthful.
-- Execution Path: issue #1254 -> branch work/1254-docs-merge-ready-evidence -> PR #1415 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1383
+- Goal: Freeze the minimal release validation and release closeout evidence contract that downstream release-required work (#1296/#1246/#1293) and #1260 can consume.
+- Scope: Issue #1383 only: docs-only release validation evidence contract, WI-1383 Loom carriers, and scheduler-owned stale terminal carrier sync for already-merged/closed WI-1254 required to clear active-state purity. No release/package checker split, no release/package tooling edits, no package/version/workflow/runtime behavior changes, no npm publish, no tags, no GitHub Release, and no downstream issue implementation.
+- Execution Path: issue #1383 -> branch work/1383-release-validation-evidence-contract -> PR #1416 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1254.md
-- Review Entry: .loom/reviews/WI-1254.json
-- Validation Entry: git diff --check; focused docs rg/readback; python3 tools/loom.py help --json; python3 tools/loom_check.py --help; python3 tools/check_cli_contract.py; suite inspect/validate for WI-1254; fact-chain/verify; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR for #1254 is reviewed/gated by the scheduler on the current head, merged through controlled path, and no_release closeout consumes fast/full validation evidence expectations without weakening full merge-ready coverage, repo truth boundaries, fail-closed behavior, or scheduler-owned gate semantics.
+- Recovery Entry: .loom/progress/WI-1383.md
+- Review Entry: .loom/reviews/WI-1383.json
+- Validation Entry: git diff --check; focused release contract readback; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; suite inspect/validate for WI-1383; fact-chain/verify; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1416 for #1383 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and no_release closeout consumes the release validation evidence contract without implementing #1260 release/package checker splits or changing CLI/package runtime behavior.
 - Current Checkpoint: merge
-- Current Stop: Docs/evidence alignment is committed and pushed on PR #1415; worker-owned local validation and PR metadata readback are complete. The PR body machine block and worker scheduler report are the head-bound sources for the current commit SHA. Hosted checks that require current-head review are blocked on the scheduler-owned review artifact.
-- Next Step: Scheduler performs current-head semantic review for WI-1254, writes/commits the authorized review artifact if approved, reruns/consumes PR gate and hosted checks, then owns controlled merge, no_release closeout, issue closure, and #1247 parent closeout.
-- Blockers: None
-- Latest Validation Summary: Local validation passed for WI-1254: git diff --check; focused rg/readback for daily-execution-cli-fast/full, troubleshooting signals, expected evidence, no_release, remaining risk, and scheduler-owned gate wording; python3 tools/loom.py help --json returned pass command_count=81; python3 tools/loom_check.py --help exposes daily-execution-cli-fast and daily-execution-cli-full source surfaces; python3 tools/check_cli_contract.py passed all 6 surfaces in 240.87s; python3 .loom/bin/loom_init.py fact-chain --target . passed for current_item_id WI-1254; python3 .loom/bin/loom_init.py verify --target . passed; suite inspect passed with path_decision_locator .loom/specs/WI-1254/spec.md; suite validate returned expected result=not_applicable with blocking_gaps=[] and no findings for docs-only scope. PR #1415 metadata preflight/readback passed for branch work/1254-docs-merge-ready-evidence with the current PR body machine block. Hosted py-compile/demo-bootstrap/repo-local-cli passed on the current PR head; hosted loom-check failed only at root-self-adoption because adopt verify blocks on missing .loom/reviews/WI-1254.json; root-self-governance failed for the same review-carrier gap; shadow parity passed. Hosted PR gate passed metadata parsing and failed at authored semantic review approval, also because .loom/reviews/WI-1254.json is missing.
-- Recovery Boundary: WI-1254 only: docs/evidence alignment in regression surface contract, repo-local gate starter, CLI command matrix, closeout gate, WI-1254 Loom carriers/spec path decision, and scheduler-owned stale terminal carrier sync for already-closed WI-1253 required to unblock current-head review purity. No #1247 parent closeout, no #1253 implementation changes, no runtime behavior changes, no hosted required check changes, no generated runtime/skills changes, no release behavior, and no worker-authored review artifact.
-- Current Lane: docs-merge-ready-evidence
+- Current Stop: Scheduler current-head code review was recorded for WI-1383 at reviewed_head 9609bcf9a471b4d5c5720a830ea4748219ebffc6 with decision allow and no findings.
+- Next Step: Commit and push the WI-1383 review artifact, update PR metadata to the review-carrier head, rerun PR gate and hosted checks, then proceed to controlled merge and no_release closeout if gates pass.
+- Blockers: None recorded.
+- Latest Validation Summary: Scheduler local validation passed for WI-1383 after carrier activation and evidence-record refresh: git diff --check origin/main...HEAD; git diff --check; focused release evidence label/readback review; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite inspect --target . --item WI-1383 --json; python3 tools/loom.py suite validate --target . --item WI-1383 --json returned expected result=not_applicable with blocking_gaps=[]; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1383; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1383; python3 .loom/bin/loom_flow.py flow review --target . --item WI-1383 --issue 1383 --pr 1416 --branch work/1383-release-validation-evidence-contract; python3 .loom/bin/loom_flow.py pr-metadata preflight --target . --surface merge_ready --pr 1416 --head-sha <current PR head>. Exact head binding is carried by the PR metadata machine carrier and the Loom review record reviewed_head field.
+- Recovery Boundary: WI-1383 only: docs-only release validation evidence contract, WI-1383 carriers, scheduler-owned current-head review, PR gate, controlled merge, and no_release closeout. No full #1260 release/npm checker split, no release/package tooling edits, no package/version/workflow/runtime behavior changes, no npm publish, no tags, no GitHub Release, no Round 9+ work, and no downstream issue implementation.
+- Current Lane: release-validation-evidence-contract
 
 ## Runtime Evidence
 
-- Run Entry: WI-1254 worker thread 019eb23a-08eb-7982-836a-d5c172b0b936 activated branch work/1254-docs-merge-ready-evidence, updated docs/evidence alignment for daily-execution-cli fast/full surfaces, and opened PR #1415.
-- Logs Entry: scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 dispatch T6-initial-202606110002-docs-merge-ready-evidence; worker startup report T6-report-202606110005-startup; PR metadata readback/preflight passed for PR #1415; hosted checks and PR gate classify remaining failures as scheduler-owned missing current-head review artifact.
-- Diagnostics Entry: WI-1254 documents fast/full daily CLI evidence boundaries, troubleshooting signals, merge-ready evidence requirements, closeout evidence links, remaining risk handling, scheduler-owned gates, and default no_release without runtime behavior changes.
-- Verification Entry: Local validation passed for WI-1254: git diff --check; focused rg/readback; python3 tools/loom.py help --json pass command_count=81; python3 tools/loom_check.py --help exposes daily-execution-cli-fast/full; python3 tools/check_cli_contract.py passed in 240.87s; fact-chain and verify passed; suite inspect passed; suite validate returned expected result=not_applicable with blocking_gaps=[]; PR metadata preflight/readback passed. Hosted py-compile/demo-bootstrap/repo-local-cli passed; hosted loom-check/root-self-governance/loom-pr-merge-gate failed because current-head review artifact .loom/reviews/WI-1254.json is intentionally absent pending scheduler-owned review.
-- Lane Entry: docs-merge-ready-evidence
+- Run Entry: T1383 worker thread 019eb295-1fa8-7f40-9bed-f10bda644f94 implemented the WI-1383 docs-only release validation evidence contract on branch work/1383-release-validation-evidence-contract and PR #1416.
+- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d consumed T1383 waiting-scheduler-gate report T1383-report-20260610175243 and completion audit T1383-report-202606101755-completion-audit; hosted failures were classified as scheduler-owned fact-chain and current-head review drift.
+- Diagnostics Entry: WI-1383 freezes release-surface labels, release-required closeout fields, and no_release rationale semantics for #1260 and downstream release-required work without release/package tooling, package, workflow, VERSION, tag, GitHub Release, npm publish, or runtime behavior changes.
+- Verification Entry: Scheduler local validation for WI-1383 passed on PR #1416 carrier activation: git diff --check; focused release evidence label readback; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite inspect --target . --item WI-1383 --json; python3 tools/loom.py suite validate --target . --item WI-1383 --json returned expected result=not_applicable with blocking_gaps=[]; python3 .loom/bin/loom_init.py fact-chain --target . and verify --target . passed after WI-1383 activation.
+- Lane Entry: release-validation-evidence-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1254.md
-- Dynamic Truth: .loom/progress/WI-1254.md
+- Static Truth: .loom/work-items/WI-1383.md
+- Dynamic Truth: .loom/progress/WI-1383.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1383",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler review refreshed after WI-1383 shadow evidence reconciliation. The added shadow updates only align merge-ready and closeout Loom shadow source hashes with .loom/status/current.md; shadow parity, carrier refresh dry-run, adopt verify, fact-chain, and init verify passed. No release/package tooling, package/version/workflow, npm publish, tag, GitHub Release, downstream implementation, or user-visible CLI/runtime behavior changes were introduced.",
+  "reviewer": "scheduler-round-8",
+  "authored_at": "2026-06-10T18:33:02Z",
+  "reviewed_head": "af9684c2994d6613ed15290e7a0d7001db5c8912",
+  "reviewed_validation_summary": "Scheduler local validation passed for WI-1383 after carrier activation and evidence-record refresh: git diff --check origin/main...HEAD; git diff --check; focused release evidence label/readback review; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite inspect --target . --item WI-1383 --json; python3 tools/loom.py suite validate --target . --item WI-1383 --json returned expected result=not_applicable with blocking_gaps=[]; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1383; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1383; python3 .loom/bin/loom_flow.py flow review --target . --item WI-1383 --issue 1383 --pr 1416 --branch work/1383-release-validation-evidence-contract; python3 .loom/bin/loom_flow.py pr-metadata preflight --target . --surface merge_ready --pr 1416 --head-sha <current PR head>. Exact head binding is carried by the PR metadata machine carrier and the Loom review record reviewed_head field.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1383.md",
+    "recovery_entry": ".loom/progress/WI-1383.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

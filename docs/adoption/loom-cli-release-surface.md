@@ -64,6 +64,69 @@ For pull requests, the workflow records judgment and runs npm package dry-run ch
 
 When publishing is allowed or explicitly requested, the workflow must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit, when `package.json` does not match `VERSION`, or when the `NPM_TOKEN` secret is missing for an npm publish. It must never overwrite an existing tag, npm version, or release. Installer npm state is never publish evidence for this judgment.
 
+## Release Validation Evidence Contract
+
+This section freezes the minimal evidence contract that release-required work may consume before the full #1260 release/package checker split is implemented.
+
+The labels below are stable evidence labels, not new CLI commands. Until the implementation is split, an existing aggregate command can satisfy more than one label only when the retained validation summary names the label, the command, the current head or merge commit, and the result.
+
+| Evidence label | Current compatible check | Required role |
+| --- | --- | --- |
+| `release-doc-contract` | `python3 tools/check_release_surface.py` | Proves release authority docs keep the `loom` CLI line, GitHub `v*` tag/Release, npm package, and deprecated installer boundary separated. |
+| `release-workflow-contract` | `python3 tools/check_release_surface.py` | Proves `loom-cli-release` keeps PR judgment read-only, main-push publishing, `workflow_dispatch` repair, fail-closed duplicate version handling, and `NPM_TOKEN` checks. |
+| `installer-sunset-guard` | `python3 tools/check_release_surface.py` | Proves `loom-installer` remains deprecated legacy evidence and does not regain npm publish, installer tag, installer GitHub Release, or active CLI release authority. |
+| `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
+| `npm-package-manifest` | `python3 tools/check_npm_package.py` and package test aliases that consume it | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
+| `npm-pack-payload` | `python3 tools/check_npm_package.py`, `npm pack --dry-run --json --ignore-scripts`, or `npm run test:package` when it consumes the same payload proof | Proves the dry-run package payload contains required CLI/runtime/docs/skills/plugin files and excludes repository-internal or deprecated installer surfaces. |
+| `installed-global-cli-smoke` | Post-merge release smoke or later #1395 checker | Proves the published package can be installed or invoked as the global/installed `loom` CLI and can run the release-required behavior smoke from the package, not only from the source checkout. |
+
+All release validation evidence must retain:
+
+- evidence label;
+- command or hosted workflow step;
+- result: `pass`, `block`, `not_applicable`, or explicit pending/failure classification;
+- current PR head for pre-merge evidence, or merge commit for post-merge evidence;
+- release version or `VERSION` value when the label is version-bound;
+- run locator, transcript locator, or registry/API readback locator;
+- failure summary and fallback when result is not `pass`.
+
+Release-required downstream work may cite these labels without waiting for #1260 to split the scripts. #1260 may refine implementation and output shape, but it must preserve these labels or provide an explicit compatibility alias before downstream release closeout consumes the split.
+
+## Release-Required Closeout Evidence
+
+When release-required work publishes a Loom CLI release, pre-merge evidence must show:
+
+- the Work Item, branch, PR, current head, base, and parent release-required issue;
+- the chosen `VERSION` and matching `package.json` npm version;
+- generated `skills/*/loom-package.json` repo version surfaces synchronized when the release ships generated skills/runtime payloads;
+- target GitHub `v*` tag and npm `@mc-and-his-agents/loom` version are unoccupied before publish;
+- `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
+- PR-event `release-judgment-only`, if present, is recorded only as pre-merge judgment evidence and not as final release evidence.
+
+Post-merge release closeout evidence must show:
+
+- PR number, PR head, merge commit, target branch, and target branch readback;
+- `loom-cli-release` run id or URL, event `push`, ref `main`, conclusion, and checked-out SHA bound to the merge commit;
+- GitHub `vX.Y.Z` tag resolves to the merge commit;
+- GitHub Release URL/state for the same tag;
+- npm registry readback for `@mc-and-his-agents/loom@X.Y.Z`, including relevant dist-tag state;
+- `installed-global-cli-smoke` command, package source, observed `loom` version output, behavior smoke result, and failure summary when blocked;
+- installer non-advancement evidence when relevant: `@mc-and-his-agents/loom-installer` remains at the legacy baseline or only carries explicit deprecation metadata.
+
+If release execution is unavailable, blocked, or partially complete, closeout must classify the gap as release evidence. It must not fold it into generic CI, PR, or host drift.
+
+## No-Release Rationale Evidence
+
+When a Work Item does not publish a release, closeout must record an explicit `no_release` rationale. The rationale is valid only when it states:
+
+- the changed scope does not ship user-visible CLI, skills, package, workflow, release validation, npm payload, runtime provider, or external-visible behavior;
+- `VERSION`, `package.json`, generated `skills/*/loom-package.json`, release workflows, npm publish behavior, and package payload semantics were not changed, or any touched release-control docs/checks are contract-only and do not publish by themselves;
+- release-surface validation that is relevant to the touched docs/checks passed or was intentionally not required with a recheck condition;
+- PR-event `release-judgment-only` is not being used as final no-release proof;
+- current head, PR, merge commit or target branch readback, review/gate status, and closeout evidence locator remain bound to the same Work Item.
+
+No-release evidence does not replace review, fact-chain, PR metadata preflight, hosted checks, controlled merge, target branch readback, reconciliation audit, or closeout.
+
 ## Installer Sunset
 
 `loom-installer` is a deprecated legacy artifact. It is not the `loom` CLI, not a recommended install path, and not the primary `loom` CLI release signal.

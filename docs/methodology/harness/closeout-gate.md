@@ -27,7 +27,7 @@ closeout gate 用来回答两件事：
 
 - closeout contract gate source、profile、subchecks 与 trigger reason
 - 同范围 `reconciliation audit` 结果
-- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence
+- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence；Loom 自身 CLI release 还必须消费 [Loom CLI Release Surface](../../adoption/loom-cli-release-surface.md) 中冻结的 release validation evidence contract
 - issue 状态
 - PR 是否已 merged
 - 事项对应实现是否已达到 `absorbed`
@@ -118,6 +118,11 @@ closeout 消费 behavior/test evidence 的语义如下：
 - merge-ready evidence 优先来自同一 Work Item 的 successful `merge-ready` execution attempt，且 `head_sha` 与 PR head 一致；若 retained execution_attempt 存在但 stale、invalid 或 head mismatch，不得回退到 host checks
 - 当 validation summary 引用 `daily-execution-cli-fast` / `daily-execution-cli-full` 时，closeout 必须保留两者的消费边界：fast run 只能作为 focused troubleshooting 或本地迭代证据；full run 或等价 full aggregate 才能作为默认 daily-execution-cli retained validation basis。若 closeout 只能找到 fast locator，必须返回 `block` 或记录拥有方明确的 narrow-scope rationale、remaining risk、recheck condition 与 scheduler-owned gate disposition。
 - 默认 `no_release` closeout 仍必须消费 release/no-release 判断本身。`daily-execution-cli-full` pass 可以支持 no-release 的验证依据，但不能替代 PR metadata、review、fact-chain、hosted checks、controlled merge、target branch readback、reconciliation audit 或 release judgment。
+- Loom CLI release closeout 必须把三类 release evidence 分开保留：
+  - release-surface validation evidence：例如 `release-doc-contract`、`release-workflow-contract`、`installer-sunset-guard`、`forbidden-release-surface-patterns`、`npm-package-manifest`、`npm-pack-payload`，证明 release/package 机制和 payload 合同在当前 head 上仍成立。
+  - release-required closeout evidence：发布发生后绑定 PR head、merge commit、`loom-cli-release` main-push run、GitHub `v*` tag、GitHub Release、npm package registry readback、dist-tag state、installed/global CLI smoke 和 installer non-advancement。
+  - `no_release` rationale evidence：未发布时说明没有用户可见 CLI / skills / package / workflow / runtime behavior 被交付，并证明该结论不依赖 PR-event `release-judgment-only`。
+- 下游 release-required Work Item 可以消费这些 evidence label，不必等待 release/package 检查脚本完成物理拆分；但 closeout 必须记录当前实际命令或 hosted run 如何覆盖对应 label。若只能看到 aggregate command pass 而没有 label、head/merge commit、run locator 和 consumer boundary，结果必须返回 `block` 或要求 release evidence repair。
 - 若证据只覆盖 merge 前 `HEAD`，必须能通过 PR / merge commit / main 包含关系证明该证据仍覆盖当前主干结果
 - 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
 - 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
