@@ -1153,6 +1153,24 @@ def run_command(
     )
 
 
+def clone_prepared_fixture_repo(root: Path, source: Path, target: Path) -> list[str]:
+    errors: list[str] = []
+    clone = run_command(root, ["git", "clone", "--quiet", "--no-hardlinks", str(source), str(target)])
+    if clone.returncode != 0:
+        errors.append(clone.stderr.strip() or clone.stdout.strip() or "git clone failed")
+        return errors
+    for args in (
+        ["git", "remote", "remove", "origin"],
+        ["git", "config", "user.email", "loom-check@example.com"],
+        ["git", "config", "user.name", "loom-check"],
+    ):
+        result = run_command(root, args, cwd=target)
+        if result.returncode != 0:
+            errors.append(result.stderr.strip() or result.stdout.strip() or "git clone setup failed")
+            return errors
+    return errors
+
+
 def clean_subprocess_env(source_env: Mapping[str, str]) -> dict[str, str]:
     exact_denylist = {
         "CI",
@@ -7680,7 +7698,20 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "members": "positive-chain",
             },
         )
-        prepare_review_target(review_target, "review run positive chain")
+        review_baseline = Path(tmp) / "review-run-baseline"
+        review_baseline_ready = prepare_review_target(review_baseline, "review run reusable baseline")
+
+        def copy_review_target(target: Path, label: str) -> bool:
+            if not review_baseline_ready:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` setup skipped because reusable baseline failed"))
+                return False
+            clone_errors = clone_prepared_fixture_repo(root, review_baseline, target)
+            if clone_errors:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` setup failed: {'; '.join(clone_errors)}"))
+                return False
+            return True
+
+        copy_review_target(review_target, "review run positive chain")
         write_fake_codex(fake_bin / "codex", mode="success")
         success_env = prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": ""})
 
@@ -7766,7 +7797,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         shadow_target = Path(tmp) / "review-run-shadow"
-        prepare_review_target(shadow_target, "review run shadow adapter")
+        copy_review_target(shadow_target, "review run shadow adapter")
         shadow_raw = shadow_target / ".loom/runtime/tmp/codex-app-review-raw.json"
         shadow_raw.parent.mkdir(parents=True, exist_ok=True)
         shadow_raw.write_text(
@@ -7838,7 +7869,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow adapter must stay non-authoritative and non-blocking"))
 
         shadow_unavailable_target = Path(tmp) / "review-run-shadow-unavailable"
-        prepare_review_target(shadow_unavailable_target, "review run shadow unavailable")
+        copy_review_target(shadow_unavailable_target, "review run shadow unavailable")
         write_fake_codex(fake_bin / "codex", mode="success")
         payload, error = load_command_json(
             root,
@@ -7908,7 +7939,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must recover schema-valid Codex App results embedded in app-server text fields"))
 
         app_default_target = Path(tmp) / "review-run-codex-app-default"
-        prepare_review_target(app_default_target, "review run Codex App host default")
+        copy_review_target(app_default_target, "review run Codex App host default")
         app_default_raw = app_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
         app_default_raw.parent.mkdir(parents=True, exist_ok=True)
         app_default_raw.write_text(
@@ -7997,7 +8028,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
 
         app_ci_default_target = Path(tmp) / "review-run-codex-app-ci-default"
-        prepare_review_target(app_ci_default_target, "review run Codex App CI host default")
+        copy_review_target(app_ci_default_target, "review run Codex App CI host default")
         app_ci_raw = app_ci_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
         app_ci_raw.parent.mkdir(parents=True, exist_ok=True)
         app_ci_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
@@ -8050,7 +8081,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
-        prepare_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
+        copy_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
         write_fake_codex(fake_bin / "codex", mode="success")
         payload, error = load_command_json(
             root,
@@ -8085,7 +8116,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
 
         app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
-        prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
+        copy_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
         write_fake_codex(fake_bin / "codex", mode="success")
         payload, error = load_command_json(
             root,
@@ -8131,7 +8162,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         app_conflict_target = Path(tmp) / "review-run-codex-app-proof-conflict"
-        prepare_review_target(app_conflict_target, "review run Codex App proof conflict")
+        copy_review_target(app_conflict_target, "review run Codex App proof conflict")
         app_conflict_raw = app_conflict_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
         app_conflict_raw.parent.mkdir(parents=True, exist_ok=True)
         app_conflict_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
@@ -8180,7 +8211,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         app_authoritative_target = Path(tmp) / "review-run-codex-app-authoritative"
-        prepare_review_target(app_authoritative_target, "review run Codex App authoritative")
+        copy_review_target(app_authoritative_target, "review run Codex App authoritative")
         app_raw = app_authoritative_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
         app_raw.parent.mkdir(parents=True, exist_ok=True)
         app_raw.write_text(
@@ -8284,7 +8315,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         app_unverified_high_risk_target = Path(tmp) / "review-run-codex-app-unverified-high-risk"
-        prepare_review_target(app_unverified_high_risk_target, "review run Codex App high-risk unverified model proof")
+        copy_review_target(app_unverified_high_risk_target, "review run Codex App high-risk unverified model proof")
         app_unverified_raw = app_unverified_high_risk_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
         app_unverified_raw.parent.mkdir(parents=True, exist_ok=True)
         app_unverified_raw.write_text(
@@ -8336,7 +8367,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App high-risk unverified proof must expose the proof failure reason"))
 
         app_missing_target = Path(tmp) / "review-run-codex-app-missing-proof"
-        prepare_review_target(app_missing_target, "review run Codex App missing proof")
+        copy_review_target(app_missing_target, "review run Codex App missing proof")
         payload, error = load_command_json(
             root,
             [
@@ -8359,7 +8390,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App missing proof must fail closed"))
 
         app_invalid_target = Path(tmp) / "review-run-codex-app-invalid-raw"
-        prepare_review_target(app_invalid_target, "review run Codex App invalid raw")
+        copy_review_target(app_invalid_target, "review run Codex App invalid raw")
         invalid_raw = app_invalid_target / ".loom/runtime/tmp/codex-app-review-invalid.txt"
         invalid_raw.parent.mkdir(parents=True, exist_ok=True)
         invalid_raw.write_text("plain review text is not authoritative schema\n", encoding="utf-8")
@@ -8401,7 +8432,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         repeated_target = Path(tmp) / "repeated-blocker-context"
-        prepare_review_target(repeated_target, "review run repeated blocker context")
+        copy_review_target(repeated_target, "review run repeated blocker context")
         history_root = repeated_target / ".loom/runtime/review/INIT-0001"
         for attempt in ("attempt-a", "attempt-b"):
             attempt_root = history_root / attempt
@@ -8479,7 +8510,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         override_target = Path(tmp) / "profile-override"
-        prepare_review_target(override_target, "review run profile override")
+        copy_review_target(override_target, "review run profile override")
         write_fake_codex(fake_bin / "codex", mode="success")
         payload, error = load_command_json(
             root,
@@ -8523,7 +8554,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` profile override must preserve the override reason"))
 
         missing_reason_target = Path(tmp) / "profile-override-missing-reason"
-        prepare_review_target(missing_reason_target, "review run profile override missing reason")
+        copy_review_target(missing_reason_target, "review run profile override missing reason")
         payload, error = load_command_json(
             root,
             [
@@ -8548,7 +8579,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` profile override missing reason must expose the missing reason"))
 
         repo_policy_target = Path(tmp) / "repo-owned-profile"
-        prepare_review_target(repo_policy_target, "review run repo-owned profile")
+        copy_review_target(repo_policy_target, "review run repo-owned profile")
         repo_policy_path = repo_policy_target / ".loom/review-profiles.json"
         repo_policy_path.write_text(
             json.dumps(
@@ -8594,7 +8625,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repo-owned profile must record repo policy as the profile source"))
 
         invalid_repo_policy_target = Path(tmp) / "repo-owned-profile-invalid"
-        prepare_review_target(invalid_repo_policy_target, "review run invalid repo-owned profile")
+        copy_review_target(invalid_repo_policy_target, "review run invalid repo-owned profile")
         invalid_repo_policy_path = invalid_repo_policy_target / ".loom/review-profiles.json"
         invalid_repo_policy_path.write_text(
             json.dumps(
@@ -8636,7 +8667,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` invalid repo-owned profile must expose stable validation failure"))
 
         local_default_target = Path(tmp) / "local-config-default-ignored"
-        prepare_review_target(local_default_target, "review run local config default ignored")
+        copy_review_target(local_default_target, "review run local config default ignored")
         (local_default_target / ".loom/review-profiles.json").unlink(missing_ok=True)
         local_codex_home = Path(tmp) / "codex-home"
         local_codex_home.mkdir(parents=True, exist_ok=True)
@@ -8667,7 +8698,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must not read local Codex config without explicit opt-in"))
 
         local_opt_in_target = Path(tmp) / "local-config-opt-in"
-        prepare_review_target(local_opt_in_target, "review run local config opt-in")
+        copy_review_target(local_opt_in_target, "review run local config opt-in")
         (local_opt_in_target / ".loom/review-profiles.json").write_text(
             json.dumps(
                 {
@@ -8710,7 +8741,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config opt-in must record override evidence and source"))
 
         local_headless_target = Path(tmp) / "local-config-headless-rejected"
-        prepare_review_target(local_headless_target, "review run local config headless rejected")
+        copy_review_target(local_headless_target, "review run local config headless rejected")
         (local_headless_target / ".loom/review-profiles.json").unlink(missing_ok=True)
         payload, error = load_command_json(
             root,
@@ -8737,7 +8768,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config headless rejection must expose stable failure reason"))
 
         local_ci_target = Path(tmp) / "local-config-ci-rejected"
-        prepare_review_target(local_ci_target, "review run local config CI rejected")
+        copy_review_target(local_ci_target, "review run local config CI rejected")
         (local_ci_target / ".loom/review-profiles.json").unlink(missing_ok=True)
         payload, error = load_command_json(
             root,
@@ -8772,7 +8803,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             },
         )
         engine_missing_target = Path(tmp) / "engine-missing"
-        prepare_review_target(engine_missing_target, "review run engine unavailable")
+        copy_review_target(engine_missing_target, "review run engine unavailable")
         payload, error = load_command_json(
             root,
             [
@@ -8806,7 +8837,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must not convert engine failure into checkpoint fallback"))
 
         schema_target = Path(tmp) / "schema-drift"
-        prepare_review_target(schema_target, "review run schema drift")
+        copy_review_target(schema_target, "review run schema drift")
         write_fake_codex(fake_bin / "codex", mode="schema_drift")
         payload, error = load_command_json(
             root,
@@ -8839,7 +8870,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must report `schema_drift` for invalid engine output"))
 
         dirty_target = Path(tmp) / "tracked-edit"
-        prepare_review_target(dirty_target, "review run tracked edit")
+        copy_review_target(dirty_target, "review run tracked edit")
         write_fake_codex(fake_bin / "codex", mode="tracked_edit", tracked_edit_target=".loom/status/current.md")
         payload, error = load_command_json(
             root,
@@ -10140,7 +10171,18 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                     return None, errors
                 return summary, errors
 
-            positive_summary, positive_setup_errors = prepare_target(positive_target)
+            pre_merge_baseline = tmp_root / "pre-merge-baseline"
+            pre_merge_summary, pre_merge_setup_errors = prepare_target(pre_merge_baseline)
+
+            def copy_pre_merge_target(target: Path, label: str) -> tuple[str | None, list[str]]:
+                if pre_merge_setup_errors:
+                    return None, [f"`{label}` reusable baseline failed: {'; '.join(pre_merge_setup_errors)}"]
+                clone_errors = clone_prepared_fixture_repo(root, pre_merge_baseline, target)
+                if clone_errors:
+                    return None, clone_errors
+                return pre_merge_summary, []
+
+            positive_summary, positive_setup_errors = copy_pre_merge_target(positive_target, "installed pre-merge chain")
             if positive_setup_errors:
                 failures.append(
                     Failure(
@@ -11616,7 +11658,10 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                         allowed_results={"block"},
                     )
 
-                review_fallback_summary, review_fallback_errors = prepare_target(review_fallback_target)
+                review_fallback_summary, review_fallback_errors = copy_pre_merge_target(
+                    review_fallback_target,
+                    "installed review baseline fallback",
+                )
                 if review_fallback_errors:
                     failures.append(
                         Failure(
