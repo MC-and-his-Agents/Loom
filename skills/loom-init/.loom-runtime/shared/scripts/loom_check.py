@@ -1155,7 +1155,7 @@ def run_command(
 
 def clone_prepared_fixture_repo(root: Path, source: Path, target: Path) -> list[str]:
     errors: list[str] = []
-    clone = run_command(root, ["git", "clone", "--quiet", "--no-hardlinks", str(source), str(target)])
+    clone = run_command(root, ["git", "clone", "--quiet", "--no-local", str(source), str(target)])
     if clone.returncode != 0:
         errors.append(clone.stderr.strip() or clone.stdout.strip() or "git clone failed")
         return errors
@@ -1163,10 +1163,11 @@ def clone_prepared_fixture_repo(root: Path, source: Path, target: Path) -> list[
         ["git", "remote", "remove", "origin"],
         ["git", "config", "user.email", "loom-check@example.com"],
         ["git", "config", "user.name", "loom-check"],
+        ["git", "rev-parse", "--verify", "HEAD"],
     ):
         result = run_command(root, args, cwd=target)
         if result.returncode != 0:
-            errors.append(result.stderr.strip() or result.stdout.strip() or "git clone setup failed")
+            errors.append(result.stderr.strip() or result.stdout.strip() or "prepared fixture clone setup failed")
             return errors
     return errors
 
@@ -1898,6 +1899,7 @@ import pathlib
 import sys
 
 args = sys.argv[1:]
+sys.stdin.read()
 output_path = pathlib.Path(args[args.index("-o") + 1])
 payload = {
     "decision": "allow",
@@ -1927,13 +1929,10 @@ import pathlib
 import sys
 
 args = sys.argv[1:]
+sys.stdin.read()
 output_path = pathlib.Path(args[args.index("-o") + 1])
-payload = {
-    "decision": "allow",
-    "findings": []
-}
 output_path.parent.mkdir(parents=True, exist_ok=True)
-output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+output_path.write_text("{invalid review engine json\\n", encoding="utf-8")
 sys.exit(0)
 """
     elif mode == "tracked_edit":
@@ -1944,6 +1943,7 @@ import pathlib
 import sys
 
 args = sys.argv[1:]
+sys.stdin.read()
 cwd = pathlib.Path(args[args.index("-C") + 1])
 output_path = pathlib.Path(args[args.index("-o") + 1])
 target = cwd / {target!r}
@@ -7435,8 +7435,21 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         source_snapshot = Path(tmp) / "source-snapshot"
         review_target = Path(tmp) / "new-project"
         fake_bin = Path(tmp) / "bin"
+        fixture_home = Path(tmp) / "hostless-home"
+        fixture_tmp = Path(tmp) / "hostless-tmp"
         fake_bin.mkdir(parents=True, exist_ok=True)
+        fixture_home.mkdir(parents=True, exist_ok=True)
+        fixture_tmp.mkdir(parents=True, exist_ok=True)
         shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
+
+        def review_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+            env = {
+                "HOME": str(fixture_home),
+                "TMPDIR": str(fixture_tmp),
+            }
+            if extra:
+                env.update(extra)
+            return prepend_path_env(fake_bin, env)
 
         def ensure_source_snapshot() -> bool:
             if source_snapshot.exists():
@@ -7713,7 +7726,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
 
         copy_review_target(review_target, "review run positive chain")
         write_fake_codex(fake_bin / "codex", mode="success")
-        success_env = prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": ""})
+        success_env = review_env({"CI": "", "CODEX_CI": ""})
 
         payload, error = load_command_json(
             root,
@@ -8053,7 +8066,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--codex-app-review-raw-file",
                 ".loom/runtime/tmp/codex-app-review-normalized.json",
             ],
-            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+            env=review_env({"CODEX_CI": "1"}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App CI host default failed: {error}"))
@@ -8095,7 +8108,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--item",
                 "INIT-0001",
             ],
-            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+            env=review_env({"CODEX_CI": "1"}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App CI missing proof fallback failed: {error}"))
@@ -8687,7 +8700,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--item",
                 "INIT-0001",
             ],
-            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_env({"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config default ignored failed: {error}"))
@@ -8727,7 +8740,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--engine-override-reason",
                 "fixture explicitly opts into local Codex defaults",
             ],
-            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_env({"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config opt-in failed: {error}"))
@@ -8758,7 +8771,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--engine-override-reason",
                 "fixture proves headless rejects local Codex defaults by default",
             ],
-            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_env({"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config headless rejected failed: {error}"))
@@ -8785,7 +8798,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--engine-override-reason",
                 "fixture proves CI rejects local Codex defaults by default",
             ],
-            env=prepend_path_env(fake_bin, {"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_env({"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config CI rejected failed: {error}"))
