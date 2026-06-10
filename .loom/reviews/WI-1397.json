@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1397",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler semantic review for WI-1397 at head 707e8892782230bbc9a3a81147fffca862d56617 found no blocking issues. The change exposes targetable docs-reference-sync and generated-tree-drift skills validation surfaces with stable failure names/evidence locators, preserves the aggregate skills check behavior, keeps Makefile aliases read-only, and records scheduler-owned WI-1397 carrier activation plus WI-1383 terminal carrier sync without expanding into #1398/#1399/#1400/release/demo/runtime scope.",
+  "reviewer": "round-8-scheduler",
+  "authored_at": "2026-06-10T19:04:52Z",
+  "reviewed_head": "707e8892782230bbc9a3a81147fffca862d56617",
+  "reviewed_validation_summary": "Worker local validation passed for the #1397 targetable skills surfaces and aggregate skills check; scheduler rebased PR #1419 onto origin/main 8bc21da22f317c5cd7b3f34c32bd02de02a21d51, activated WI-1397 carriers, and terminalized stale WI-1383 progress after #1383 PR #1416 merge/closeout so active-state purity can evaluate the current gate subject.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1397.md",
+    "recovery_entry": ".loom/progress/WI-1397.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
