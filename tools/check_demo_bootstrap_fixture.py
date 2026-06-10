@@ -19,17 +19,25 @@ from pathlib import Path
 BUCKET_LABEL = "demo-bootstrap"
 AGGREGATE_SURFACE_LABEL = "demo-bootstrap-fixture"
 GENERATION_SURFACE_LABEL = "demo-bootstrap-generation"
+CANONICALIZATION_SURFACE_LABEL = "demo-bootstrap-canonicalization"
 DRIFT_SURFACE_LABEL = "demo-bootstrap-fixture-drift"
 GENERATION_SCENARIO_LABEL = "new-project-bootstrap-command"
+CANONICALIZATION_SCENARIO_LABEL = "init-result-host-dynamic-canonicalization"
 DRIFT_SCENARIO_LABEL = "stable-fixture-comparison"
 AGGREGATE_SCENARIO_LABEL = "new-project-fixture-check"
 GENERATION_FAILURE_LABEL = "demo-bootstrap-generation-command-failed"
 GENERATION_TIMEOUT_LABEL = "demo-bootstrap-generation-timeout"
 FIXTURE_MISSING_LABEL = "demo-bootstrap-fixture-missing"
+CANONICALIZATION_INVALID_JSON_LABEL = "demo-bootstrap-canonicalization-invalid-json"
+CANONICALIZATION_INVALID_SHAPE_LABEL = "demo-bootstrap-canonicalization-invalid-shape"
+CANONICALIZATION_INCOMPLETE_LABEL = "demo-bootstrap-canonicalization-incomplete"
 DRIFT_FAILURE_LABEL = "demo-bootstrap-fixture-drift"
 GENERATION_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface generation"
+CANONICALIZATION_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface canonicalization"
 DRIFT_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface fixture-drift"
 AGGREGATE_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface aggregate"
+INIT_RESULT_RELATIVE = ".loom/bootstrap/init-result.json"
+CANONICAL_DYNAMIC_SENTINEL = {"comparison": "ignored-host-dynamic"}
 
 DEFAULT_IGNORES = {
     ".loom/runtime",
@@ -54,6 +62,22 @@ class BootstrapRun:
     returncode: int
     elapsed_ms: int
     timed_out: bool = False
+
+
+@dataclass
+class CanonicalizationDiagnostic:
+    target_label: str
+    init_result_locator: str
+    failure_label: str
+    failure_summary: str
+
+
+@dataclass
+class CanonicalizationReport:
+    elapsed_ms: int
+    canonicalized_sections: tuple[str, ...]
+    init_result_locators: tuple[str, ...]
+    diagnostics: list[CanonicalizationDiagnostic]
 
 
 def relative_to_root(path: Path, root: Path) -> str:
@@ -105,7 +129,7 @@ def compare_trees(expected: Path, actual: Path, ignored_relatives: set[str]) -> 
 
 
 def comparable_bytes(path: Path, relative: str) -> bytes:
-    if relative == ".loom/bootstrap/init-result.json":
+    if relative == INIT_RESULT_RELATIVE:
         return canonical_init_result(path)
     return path.read_bytes()
 
@@ -118,8 +142,97 @@ def canonical_init_result(path: Path) -> bytes:
         # live GitHub, CI, checkout, or runtime path proof.
         for section in HOST_DYNAMIC_INIT_RESULT_SECTIONS:
             if section in payload:
-                payload[section] = {"comparison": "ignored-host-dynamic"}
+                payload[section] = dict(CANONICAL_DYNAMIC_SENTINEL)
     return (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def init_result_locator(root: Path, repo_root: Path) -> str:
+    return relative_to_root(root / INIT_RESULT_RELATIVE, repo_root)
+
+
+def inspect_init_result_canonicalization(
+    *,
+    root: Path,
+    repo_root: Path,
+    target_label: str,
+) -> tuple[tuple[str, ...], CanonicalizationDiagnostic | None]:
+    locator = init_result_locator(root, repo_root)
+    path = root / INIT_RESULT_RELATIVE
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return (), CanonicalizationDiagnostic(
+            target_label=target_label,
+            init_result_locator=locator,
+            failure_label=CANONICALIZATION_INVALID_JSON_LABEL,
+            failure_summary=f"invalid JSON at line {exc.lineno} column {exc.colno}: {exc.msg}",
+        )
+    except OSError as exc:
+        return (), CanonicalizationDiagnostic(
+            target_label=target_label,
+            init_result_locator=locator,
+            failure_label=CANONICALIZATION_INCOMPLETE_LABEL,
+            failure_summary=f"cannot read init-result JSON: {exc}",
+        )
+
+    if not isinstance(payload, dict):
+        return (), CanonicalizationDiagnostic(
+            target_label=target_label,
+            init_result_locator=locator,
+            failure_label=CANONICALIZATION_INVALID_SHAPE_LABEL,
+            failure_summary="init-result JSON root must be an object",
+        )
+
+    present_sections = tuple(sorted(section for section in HOST_DYNAMIC_INIT_RESULT_SECTIONS if section in payload))
+    missing_sections = tuple(sorted(HOST_DYNAMIC_INIT_RESULT_SECTIONS - set(present_sections)))
+    if missing_sections:
+        return present_sections, CanonicalizationDiagnostic(
+            target_label=target_label,
+            init_result_locator=locator,
+            failure_label=CANONICALIZATION_INCOMPLETE_LABEL,
+            failure_summary=f"missing host-dynamic section(s): {', '.join(missing_sections)}",
+        )
+
+    for section in present_sections:
+        payload[section] = dict(CANONICAL_DYNAMIC_SENTINEL)
+    incomplete_sections = tuple(
+        section for section in present_sections if payload.get(section) != CANONICAL_DYNAMIC_SENTINEL
+    )
+    if incomplete_sections:
+        return present_sections, CanonicalizationDiagnostic(
+            target_label=target_label,
+            init_result_locator=locator,
+            failure_label=CANONICALIZATION_INCOMPLETE_LABEL,
+            failure_summary=f"host-dynamic section(s) remained uncanonicalized: {', '.join(incomplete_sections)}",
+        )
+
+    return present_sections, None
+
+
+def check_canonicalization(fixture: Path, generated: Path, repo_root: Path) -> CanonicalizationReport:
+    started = time.perf_counter()
+    diagnostics: list[CanonicalizationDiagnostic] = []
+    canonicalized_sections: set[str] = set()
+    init_result_locators = (
+        init_result_locator(fixture, repo_root),
+        init_result_locator(generated, repo_root),
+    )
+    for root, target_label in ((fixture, "stable-fixture"), (generated, "generated-fixture")):
+        sections, diagnostic = inspect_init_result_canonicalization(
+            root=root,
+            repo_root=repo_root,
+            target_label=target_label,
+        )
+        canonicalized_sections.update(sections)
+        if diagnostic is not None:
+            diagnostics.append(diagnostic)
+
+    return CanonicalizationReport(
+        elapsed_ms=int((time.perf_counter() - started) * 1000),
+        canonicalized_sections=tuple(sorted(canonicalized_sections)),
+        init_result_locators=init_result_locators,
+        diagnostics=diagnostics,
+    )
 
 
 def bootstrap_command(repo_root: Path, generated: Path) -> list[str]:
@@ -236,6 +349,54 @@ def print_generation_failure(run_result: BootstrapRun, fixture: Path, repo_root:
     print(run_result.stderr, end="", file=sys.stderr)
 
 
+def canonicalization_evidence(report: CanonicalizationReport, fixture: Path, repo_root: Path) -> dict[str, object]:
+    return {
+        "bucket_label": BUCKET_LABEL,
+        "surface_label": CANONICALIZATION_SURFACE_LABEL,
+        "surface_kind": "named_surface",
+        "scenario_label": CANONICALIZATION_SCENARIO_LABEL,
+        "command": CANONICALIZATION_EVIDENCE_LOCATOR,
+        "result": "pass",
+        "elapsed_ms": report.elapsed_ms,
+        "source_locator": relative_to_root(fixture, repo_root),
+        "evidence_locator": CANONICALIZATION_EVIDENCE_LOCATOR,
+        "validator_mode": "demo-bootstrap-canonicalization",
+        "is_aggregate": "false",
+        "canonicalized_sections": ",".join(report.canonicalized_sections),
+        "init_result_locators": ",".join(report.init_result_locators),
+    }
+
+
+def print_canonicalization_failure(report: CanonicalizationReport, fixture: Path, repo_root: Path) -> None:
+    first_diagnostic = report.diagnostics[0]
+    print("demo bootstrap canonicalization diagnostics failed:", file=sys.stderr)
+    for diagnostic in report.diagnostics:
+        print(
+            f"- {diagnostic.target_label}: {diagnostic.failure_label}: "
+            f"{diagnostic.failure_summary} ({diagnostic.init_result_locator})",
+            file=sys.stderr,
+        )
+    print_surface_evidence(
+        stream=sys.stderr,
+        bucket_label=BUCKET_LABEL,
+        surface_label=CANONICALIZATION_SURFACE_LABEL,
+        surface_kind="named_surface",
+        scenario_label=CANONICALIZATION_SCENARIO_LABEL,
+        command=CANONICALIZATION_EVIDENCE_LOCATOR,
+        result="block",
+        elapsed_ms=report.elapsed_ms,
+        failure_label=first_diagnostic.failure_label,
+        failure_taxonomy=first_diagnostic.failure_label,
+        failure_summary=f"{len(report.diagnostics)} canonicalization diagnostic(s)",
+        source_locator=relative_to_root(fixture, repo_root),
+        evidence_locator=CANONICALIZATION_EVIDENCE_LOCATOR,
+        validator_mode="demo-bootstrap-canonicalization",
+        is_aggregate="false",
+        canonicalized_sections=",".join(report.canonicalized_sections),
+        diagnostic_locators=",".join(diagnostic.init_result_locator for diagnostic in report.diagnostics),
+    )
+
+
 def run(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).resolve()
     fixture = (repo_root / args.fixture).resolve()
@@ -289,6 +450,17 @@ def run(args: argparse.Namespace) -> int:
             print(f"demo bootstrap generation: OK ({fixture.relative_to(repo_root)})")
             return 0
 
+        canonicalization = check_canonicalization(fixture, generated, repo_root)
+        if canonicalization.diagnostics:
+            print_canonicalization_failure(canonicalization, fixture, repo_root)
+            return 1
+
+        canonicalization_pass_evidence = canonicalization_evidence(canonicalization, fixture, repo_root)
+        if args.surface == "canonicalization":
+            print_surface_evidence(stream=sys.stdout, **canonicalization_pass_evidence)
+            print(f"demo bootstrap canonicalization: OK ({fixture.relative_to(repo_root)})")
+            return 0
+
         drift_started = time.perf_counter()
         differences = compare_trees(fixture, generated, ignored_relatives)
         drift_elapsed_ms = int((time.perf_counter() - drift_started) * 1000)
@@ -320,6 +492,7 @@ def run(args: argparse.Namespace) -> int:
 
         if args.show_surface_evidence:
             print_surface_evidence(stream=sys.stdout, **generation_evidence)
+            print_surface_evidence(stream=sys.stdout, **canonicalization_pass_evidence)
             print_surface_evidence(
                 stream=sys.stdout,
                 bucket_label=BUCKET_LABEL,
@@ -348,8 +521,12 @@ def run(args: argparse.Namespace) -> int:
                     evidence_locator=AGGREGATE_EVIDENCE_LOCATOR,
                     validator_mode="demo-bootstrap-fixture",
                     is_aggregate="true",
-                    subsurface_count=2,
-                    subsurface_results=f"{GENERATION_SURFACE_LABEL}:pass,{DRIFT_SURFACE_LABEL}:pass",
+                    subsurface_count=3,
+                    subsurface_results=(
+                        f"{GENERATION_SURFACE_LABEL}:pass,"
+                        f"{CANONICALIZATION_SURFACE_LABEL}:pass,"
+                        f"{DRIFT_SURFACE_LABEL}:pass"
+                    ),
                 )
 
     print(f"demo bootstrap fixture: OK ({fixture.relative_to(repo_root)})")
@@ -365,7 +542,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--max-differences", type=int, default=40, help="Maximum drift entries to print.")
     parser.add_argument(
         "--surface",
-        choices=("aggregate", "generation", "fixture-drift"),
+        choices=("aggregate", "generation", "canonicalization", "fixture-drift"),
         default="aggregate",
         help="Validation surface to run. aggregate preserves the existing fixture check contract.",
     )
