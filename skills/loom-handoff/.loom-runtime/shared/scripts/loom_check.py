@@ -85,6 +85,24 @@ SOURCE_SURFACE_GROUPS = {
     },
 }
 REVIEW_RUN_FIXTURE_CATEGORY = "review-run-fixture"
+REVIEW_RUN_FIXTURE_GROUP_POSITIVE_DEFAULT = "positive-default-review"
+REVIEW_RUN_FIXTURE_GROUP_SHADOW_ADAPTER = "shadow-adapter"
+REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_HOST_DEFAULT = "codex-app-host-default"
+REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_FALLBACKS = "codex-app-fallbacks"
+REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_FAIL_CLOSED = "codex-app-fail-closed"
+REVIEW_RUN_FIXTURE_GROUP_REPEATED_BLOCKER = "repeated-blocker-context"
+REVIEW_RUN_FIXTURE_GROUP_PROFILE_POLICY = "profile-policy"
+REVIEW_RUN_FIXTURE_GROUP_ENGINE_OUTPUT_FAIL_CLOSED = "engine-output-fail-closed"
+REVIEW_RUN_FIXTURE_GROUPS = (
+    REVIEW_RUN_FIXTURE_GROUP_POSITIVE_DEFAULT,
+    REVIEW_RUN_FIXTURE_GROUP_SHADOW_ADAPTER,
+    REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_HOST_DEFAULT,
+    REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_FALLBACKS,
+    REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_FAIL_CLOSED,
+    REVIEW_RUN_FIXTURE_GROUP_REPEATED_BLOCKER,
+    REVIEW_RUN_FIXTURE_GROUP_PROFILE_POLICY,
+    REVIEW_RUN_FIXTURE_GROUP_ENGINE_OUTPUT_FAIL_CLOSED,
+)
 CLOSEOUT_RECONCILIATION_FIXTURE_CATEGORY = "closeout-reconciliation-fixture"
 RETIRE_WORKSPACE_FIXTURE_CATEGORY = "retire-workspace-fixture"
 INSTALLED_RUNTIME_FIXTURE_CATEGORY = "installed-runtime-fixture"
@@ -410,6 +428,21 @@ class Failure:
                     scenario.command,
                     self.detail,
                     scenario.metadata,
+                ),
+            )
+        review_run_group = globals().get("_CURRENT_REVIEW_RUN_FIXTURE_GROUP")
+        if (
+            self.category == REVIEW_RUN_FIXTURE_CATEGORY
+            and review_run_group is not None
+            and not self.detail.startswith("review-run fixture group `")
+        ):
+            object.__setattr__(
+                self,
+                "detail",
+                review_run_fixture_group_failure_detail(
+                    review_run_group.label,
+                    self.detail,
+                    review_run_group.metadata,
                 ),
             )
 
@@ -1599,6 +1632,130 @@ def daily_execution_cli_progress(summary: str, **metadata: object) -> None:
     scenario = current_daily_execution_cli_scenario()
     if scenario is not None:
         scenario.progress(summary, **metadata)
+
+
+def review_run_fixture_group_failure_detail(
+    label: str,
+    summary: str,
+    metadata: Mapping[str, object] | None,
+) -> str:
+    return (
+        f"review-run fixture group `{label}` failed; "
+        f"summary: {summary}; "
+        f"metadata: {daily_execution_cli_metadata_text(metadata)}"
+    )
+
+
+def emit_review_run_fixture_group_progress(
+    event: str,
+    label: str,
+    *,
+    elapsed: float | None = None,
+    failures: int | None = None,
+    metadata: Mapping[str, object] | None = None,
+    summary: str | None = None,
+) -> None:
+    parts = [
+        "loom_check:",
+        REVIEW_RUN_FIXTURE_CATEGORY,
+        f"event={event}",
+        f"group={label}",
+    ]
+    if elapsed is not None:
+        parts.append(f"elapsed={elapsed:.2f}s")
+    if failures is not None:
+        parts.append(f"failures={failures}")
+    if metadata:
+        parts.append(f"metadata={daily_execution_cli_metadata_text(metadata)}")
+    if summary:
+        parts.append(f"summary={summary.replace(chr(10), ' ')}")
+    print(" ".join(parts), file=sys.stderr, flush=True)
+
+
+class ReviewRunFixtureGroup:
+    def __init__(
+        self,
+        failures: list[Failure],
+        label: str,
+        *,
+        metadata: Mapping[str, object] | None = None,
+    ) -> None:
+        self.failures = failures
+        self.label = label
+        self.metadata: dict[str, object] = dict(metadata or {})
+        self.started = 0.0
+        self.failure_start = 0
+
+    def __enter__(self) -> "ReviewRunFixtureGroup":
+        global _CURRENT_REVIEW_RUN_FIXTURE_GROUP
+        self.started = time.monotonic()
+        self.failure_start = len(self.failures)
+        _CURRENT_REVIEW_RUN_FIXTURE_GROUP = self
+        emit_review_run_fixture_group_progress("start", self.label, metadata=self.metadata)
+        return self
+
+    def progress(self, summary: str, **metadata: object) -> None:
+        if metadata:
+            self.metadata.update(metadata)
+        emit_review_run_fixture_group_progress(
+            "progress",
+            self.label,
+            metadata=self.metadata,
+            summary=summary,
+        )
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+        global _CURRENT_REVIEW_RUN_FIXTURE_GROUP
+        if exc_type is not None:
+            exc_name = getattr(exc_type, "__name__", str(exc_type))
+            self.failures.append(
+                Failure(
+                    REVIEW_RUN_FIXTURE_CATEGORY,
+                    f"unexpected {exc_name}: {exc}",
+                )
+            )
+        new_failures = self.failures[self.failure_start:]
+        elapsed = time.monotonic() - self.started
+        emit_review_run_fixture_group_progress(
+            "end",
+            self.label,
+            elapsed=elapsed,
+            failures=len(new_failures),
+            metadata=self.metadata,
+        )
+        if _CURRENT_REVIEW_RUN_FIXTURE_GROUP is self:
+            _CURRENT_REVIEW_RUN_FIXTURE_GROUP = None
+        return False
+
+
+_CURRENT_REVIEW_RUN_FIXTURE_GROUP: ReviewRunFixtureGroup | None = None
+
+
+def end_review_run_fixture_group() -> None:
+    group = _CURRENT_REVIEW_RUN_FIXTURE_GROUP
+    if group is not None:
+        group.__exit__(None, None, None)
+
+
+def start_review_run_fixture_group(
+    failures: list[Failure],
+    label: str,
+    *,
+    metadata: Mapping[str, object] | None = None,
+) -> ReviewRunFixtureGroup:
+    end_review_run_fixture_group()
+    group = ReviewRunFixtureGroup(failures, label, metadata=metadata)
+    return group.__enter__()
+
+
+def current_review_run_fixture_group() -> ReviewRunFixtureGroup | None:
+    return _CURRENT_REVIEW_RUN_FIXTURE_GROUP
+
+
+def review_run_fixture_group_progress(summary: str, **metadata: object) -> None:
+    group = current_review_run_fixture_group()
+    if group is not None:
+        group.progress(summary, **metadata)
 
 
 def load_daily_execution_cli_json(
@@ -7515,6 +7672,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                     return False
             return True
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_POSITIVE_DEFAULT,
+            metadata={
+                "purpose": "default codex exec positive path plus suite/setup contract",
+                "members": "positive-chain",
+            },
+        )
         prepare_review_target(review_target, "review run positive chain")
         write_fake_codex(fake_bin / "codex", mode="success")
         success_env = prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": ""})
@@ -7592,6 +7757,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 if not any("engine profile" in failure.detail for failure in profile_probe_failures):
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` contract check must fail when resolved profile metadata is missing"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_SHADOW_ADAPTER,
+            metadata={
+                "purpose": "shadow review adapter remains non-authoritative",
+                "members": "shadow-adapter,shadow-unavailable",
+            },
+        )
         shadow_target = Path(tmp) / "review-run-shadow"
         prepare_review_target(shadow_target, "review run shadow adapter")
         shadow_raw = shadow_target / ".loom/runtime/tmp/codex-app-review-raw.json"
@@ -7700,6 +7873,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow unavailable must preserve the default review record input"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_HOST_DEFAULT,
+            metadata={
+                "purpose": "Codex App host proof selects the app adapter when proof is valid",
+                "members": "embedded-json,host-default,ci-host-default",
+            },
+        )
         app_embedded_result = {
             "decision": "allow",
             "summary": "Codex App turn/start embedded a structured review result in an app-server text field.",
@@ -7860,6 +8041,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             if metadata.get("ci_env_present") is not True:
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI host default must record that CI env was present"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_FALLBACKS,
+            metadata={
+                "purpose": "Codex App fallback preserves default codex exec when host proof is absent or unavailable",
+                "members": "ci-missing-proof-fallback,app-unavailable-fallback",
+            },
+        )
         app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
         prepare_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
         write_fake_codex(fake_bin / "codex", mode="success")
@@ -7933,6 +8122,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "app-server-unavailable":
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App unavailable fallback must record default adapter fallback"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_FAIL_CLOSED,
+            metadata={
+                "purpose": "Codex App proof conflicts and invalid raw evidence fail closed",
+                "members": "proof-conflict",
+            },
+        )
         app_conflict_target = Path(tmp) / "review-run-codex-app-proof-conflict"
         prepare_review_target(app_conflict_target, "review run Codex App proof conflict")
         app_conflict_raw = app_conflict_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
@@ -7974,6 +8171,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict):
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App proof conflict must not emit review_record_input"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_HOST_DEFAULT,
+            metadata={
+                "purpose": "Codex App authoritative path selects the app adapter when proof is valid",
+                "members": "authoritative",
+            },
+        )
         app_authoritative_target = Path(tmp) / "review-run-codex-app-authoritative"
         prepare_review_target(app_authoritative_target, "review run Codex App authoritative")
         app_raw = app_authoritative_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
@@ -8070,6 +8275,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 elif merge_payload.get("result") == "pass":
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`merge-ready` must not consume raw Codex App authoritative evidence before review record is authored"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_CODEX_APP_FAIL_CLOSED,
+            metadata={
+                "purpose": "Codex App high-risk proof gaps and invalid raw evidence fail closed",
+                "members": "high-risk-unverified,missing-proof,invalid-raw",
+            },
+        )
         app_unverified_high_risk_target = Path(tmp) / "review-run-codex-app-unverified-high-risk"
         prepare_review_target(app_unverified_high_risk_target, "review run Codex App high-risk unverified model proof")
         app_unverified_raw = app_unverified_high_risk_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
@@ -8179,6 +8392,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         elif payload.get("result") != "block":
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App invalid raw must fail closed on schema drift"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_REPEATED_BLOCKER,
+            metadata={
+                "purpose": "review context pack surfaces repeated blocker candidates",
+                "members": "repeated-blocker-context",
+            },
+        )
         repeated_target = Path(tmp) / "repeated-blocker-context"
         prepare_review_target(repeated_target, "review run repeated blocker context")
         history_root = repeated_target / ".loom/runtime/review/INIT-0001"
@@ -8249,6 +8470,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 if not isinstance(candidates, list) or not candidates:
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must include candidate details"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_PROFILE_POLICY,
+            metadata={
+                "purpose": "engine profile selection, repo policy, and local Codex config boundaries",
+                "members": "profile-override,missing-reason,repo-policy,invalid-repo-policy,local-config",
+            },
+        )
         override_target = Path(tmp) / "profile-override"
         prepare_review_target(override_target, "review run profile override")
         write_fake_codex(fake_bin / "codex", mode="success")
@@ -8534,6 +8763,14 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config CI rejection must expose stable failure reason"))
 
+        start_review_run_fixture_group(
+            failures,
+            REVIEW_RUN_FIXTURE_GROUP_ENGINE_OUTPUT_FAIL_CLOSED,
+            metadata={
+                "purpose": "engine unavailable, schema drift, and tracked edits fail closed",
+                "members": "engine-missing,schema-drift,tracked-edit",
+            },
+        )
         engine_missing_target = Path(tmp) / "engine-missing"
         prepare_review_target(engine_missing_target, "review run engine unavailable")
         payload, error = load_command_json(
@@ -8634,6 +8871,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             if isinstance(engine, dict) and engine.get("failure_reason") != "repo_diff_detected":
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must report `repo_diff_detected` when tracked files change"))
 
+        end_review_run_fixture_group()
     return failures
 
 
@@ -22229,6 +22467,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
             failures.append(Failure("source-fixture-setup", f"{name} raised {type(exc).__name__}: {exc}"))
         finally:
             end_daily_execution_cli_scenario()
+            end_review_run_fixture_group()
         elapsed = time.monotonic() - started
         print(
             f"loom_check: end source surface={surface} step={name} elapsed={elapsed:.2f}s failures={len(failures) - before}",
@@ -22302,6 +22541,9 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "closeout-reconciliation", "retire-workspace", "installed-runtime", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
+    for group in REVIEW_RUN_FIXTURE_GROUPS:
+        if group not in source_text:
+            failures.append(Failure(category, f"`loom_check.py` must retain review-run fixture group `{group}`"))
     init_text = (root / "src/skills/shared/scripts/loom_init.py").read_text(encoding="utf-8")
     if "Gate CLI: `.loom/bin/loom_check.py`" in init_text:
         failures.append(Failure(category, "generated `.loom/README.md` must not present `.loom/bin/loom_check.py` as a generic Gate CLI"))
