@@ -25,6 +25,7 @@
 ## Ownership Constraints
 
 - WI-1253 owns only daily-execution-cli fast/full entrypoints, docs alignment, mechanical checks, generated runtime sync, WI-1253 carriers, PR metadata, and validation evidence.
+- Scheduler gate cleanup may terminalize `.loom/progress/WI-1251.md` only to consume the already merged and closed #1251 state and prevent stale active workspace binding; it does not reopen #1251 ownership or alter #1251 implementation behavior.
 - WI-1253 does not start #1254 or #1247.
 - WI-1253 does not weaken full merge-ready/release coverage or fail-closed behavior.
 - WI-1253 does not run scheduler-owned semantic review, PR gate, controlled merge, release, no-release closeout, or parent closeout.
