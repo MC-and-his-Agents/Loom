@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1252
-- Goal: Reduce repeated source snapshot and bootstrap cost in daily-execution-cli review-run and installed-runtime fixture setup while preserving fixture isolation and truth boundaries.
-- Scope: Issue #1252 / PR #1410 only: safe prepared fixture baseline reuse, synchronized loom_check runtime copies, demo metadata, and timing evidence. Ownership constraints: WI-1252 owns only snapshot/bootstrap cost reduction, hostless fixture isolation, synchronized runtime/demo parity, branch-local WI-1252 carriers, and validation evidence; it does not own #1249 progress labels, #1250 fixture group split, #1251 fallback boundary, or #1253 fast/full policy.
-- Execution Path: issue #1252 -> branch work/1252-daily-cli-snapshot-bootstrap-cost -> PR #1410 -> scheduler-owned review/pr-gate/controlled merge/closeout
+- Item ID: WI-1251
+- Goal: Make Codex App fallback fixtures deterministic by isolating them from workstation/session discovery drift unless a scenario explicitly opts into that dependency.
+- Scope: Issue #1251 / PR #1413 only: Codex App fallback fixture environment isolation, synchronized loom_check runtime copies, demo metadata hash refresh, and focused validation evidence; no #1249 label ownership, no #1250 fixture group rename, no #1252 snapshot/bootstrap reuse, no #1253 fast/full validation policy.
+- Execution Path: issue #1251 -> branch work/1251-codex-app-fallback-fixtures -> PR #1413 -> scheduler-owned review/pr-gate/controlled merge/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1252.md
-- Review Entry: .loom/reviews/WI-1252.json
-- Validation Entry: git diff --check; py_compile_clean touched loom_check.py copies; skills_surface.py check; make loom-demo-new-project-check; make repo-local-cli-fast GROUP=setup-demo-bootstrap; review-run timing evidence; installed-runtime timing evidence; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1410 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and #1252 closeout is consumed without weakening fixture isolation or adjacent Round 7 scopes.
+- Recovery Entry: .loom/progress/WI-1251.md
+- Review Entry: .loom/reviews/WI-1251.json
+- Validation Entry: git diff --check; py_compile_clean touched loom_check.py copies; skills_surface.py check; check_loom_check_runtime_regressions.py; focused #1251 fallback env validation; PR metadata preflight/readback; hosted checks readback
+- Closing Condition: PR #1413 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and #1251 closeout is consumed without weakening fallback isolation, repository truth boundaries, fail-closed behavior, or required coverage.
 - Current Checkpoint: merge
-- Current Stop: Scheduler gate prerequisites are ready on PR #1410 head 5268f65516fa0540f56e40e4336bc673f177df3f after rebase onto main b0287bc3515403ef85dbc17cc537e300572bfb4a and carrier/status cleanup; current-head review and PR gate rerun remain scheduler-owned.
-- Next Step: Record scheduler current-head review for 5268f65516fa0540f56e40e4336bc673f177df3f, rerun PR gate, then perform controlled merge and closeout if gates pass.
+- Current Stop: Scheduler current-head review has been recorded for PR #1413 and consumed as carrier-only head binding after review/shadow carrier commit; carrier refresh dry-run and shadow-parity --surface all --blocking pass on the scheduler gate branch.
+- Next Step: Push the refreshed branch, update PR #1413 metadata to the pushed head, run PR metadata preflight, merge-ready / PR gate / controlled merge after hosted checks are green or classified, then perform no_release closeout.
 - Blockers: None
-- Latest Validation Summary: 2026-06-10 #1252 current-main validation passed on head b20701b8ead68eb2cab026a8875edd9f0cf0a222 plus scheduler carrier refresh commit 5268f65516fa0540f56e40e4336bc673f177df3f: git diff --check; py_compile_clean for 14 synchronized loom_check.py copies; skills_surface.py check; make loom-demo-new-project-check; suite inspect/validate not_applicable via .loom/specs/WI-1252/spec.md; state-check pass after carrier cleanup; shadow-parity pass; review-run source surface passed real 112.30; installed-runtime source surface passed real 136.62; PR #1410 metadata preflight/readback passed on worker head b20701b8ead68eb2cab026a8875edd9f0cf0a222; hosted py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-check, node-installer gate, and release-judgment passed on b20701b8ead68eb2cab026a8875edd9f0cf0a222. Existing loom-pr-merge-gate failure is stale/current-head-review-gate input failure before refreshed review.
-- Recovery Boundary: WI-1252 only: snapshot/bootstrap fixture setup cost reduction, hostless fixture isolation preservation, synchronized loom_check runtime/demo parity, branch-local WI-1252 carrier/spec not_applicable metadata, scheduler current-head review, PR gate, controlled merge, and closeout. No #1249 progress label rename, no #1250 fixture group split, no #1251 fallback boundary change, no #1253 fast/full policy.
-- Current Lane: daily-cli-snapshot-bootstrap-cost
+- Latest Validation Summary: After rebase onto origin/main dba1f55690150336211c767069c9189df90c000a and the review_run_fixture_env helper fix, focused validation passed: git diff --check; git diff --check origin/main...HEAD; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py over canonical/generated/runtime/demo loom_check.py copies plus tools/check_loom_check_runtime_regressions.py; python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_loom_check_runtime_regressions.py; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface review-run .; suite inspect passed with Suite path: not_applicable at .loom/specs/WI-1251/spec.md; suite validate exits 1 with result=not_applicable and blocking_gaps=[]; fact-chain and verify pass. carrier refresh --dry-run and shadow-parity remain blocked by scheduler-owned stale review scaffold/shadow drift.
+- Recovery Boundary: WI-1251 only: Codex App fallback fixture isolation, synchronized loom_check runtime copies, demo metadata hash refresh, focused fallback validation, PR metadata/head binding, and minimal WI-1251 Loom carriers. No #1249 label ownership, #1250 fixture group rename, #1252 implementation ownership, #1253 fast/full entrypoint policy, merge, release, or closeout.
+- Current Lane: daily-cli-codex-app-fallback-fixtures
 
 ## Runtime Evidence
 
-- Run Entry: PR #1410 current head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e has synchronized WI-1252 implementation, carrier activation, PR metadata repair, scheduler review record input, and hosted worker-relevant checks consumed for scheduler gate.
-- Logs Entry: worker thread 019eafa2-66d1-7923-ba94-4654bdd1c50e and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command/readback evidence for WI-1252.
-- Diagnostics Entry: WI-1252 reduces repeated source snapshot/bootstrap cost via prepared fixture baseline reuse while preserving fixture isolation; no #1249 progress label rename, no #1250 fixture group split, no #1251 fallback boundary change, no #1253 fast/full policy.
-- Verification Entry: local and hosted worker-relevant validation passed for #1252 current head 23d45bae1730bf0f9ae2444b49642bc9162fbd6e; carrier dry-run, shadow parity, PR metadata preflight, and scheduler review record are bound before final PR gate.
-- Lane Entry: daily-cli-snapshot-bootstrap-cost
+- Run Entry: PR #1413 implementation head a9d6dfdb2c84e7761f457657a004283a48dfa00c passed scoped #1251 local validation and PR metadata readback before scheduler-owned review/gate.
+- Logs Entry: worker thread 019eb12d-aba6-7392-8dd1-26bb4d81b393 and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command readbacks for WI-1251.
+- Diagnostics Entry: WI-1251 isolates Codex App fallback fixtures from ambient workstation/session discovery by using controlled fake HOME/CODEX_HOME/temp roots and explicit fake app-server fallback inputs; no #1249 label ownership, #1250 group rename, #1252 snapshot/bootstrap reuse, or #1253 fast/full policy is included.
+- Verification Entry: local validation passed for #1251 implementation and carrier activation: git diff --check, py_compile_clean for touched loom_check.py copies, skills_surface.py check, check_loom_check_runtime_regressions.py, focused fallback env probe, fact-chain readback, verify, and PR metadata readback; full review-run/current-head review/pr-gate remain scheduler-owned.
+- Lane Entry: daily-cli-codex-app-fallback-fixtures
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1252.md
-- Dynamic Truth: .loom/progress/WI-1252.md
+- Static Truth: .loom/work-items/WI-1251.md
+- Dynamic Truth: .loom/progress/WI-1251.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

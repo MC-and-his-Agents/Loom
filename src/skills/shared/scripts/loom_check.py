@@ -1886,6 +1886,27 @@ def prepend_path_env(bin_dir: Path, extra: dict[str, str] | None = None) -> dict
     return env
 
 
+def review_run_fixture_env(bin_dir: Path, env_root: Path, extra: dict[str, str] | None = None) -> dict[str, str]:
+    env_root.mkdir(parents=True, exist_ok=True)
+    home = env_root / "home"
+    temp_root = env_root / "tmp"
+    home.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    env = prepend_path_env(
+        bin_dir,
+        {
+            "HOME": str(home),
+            "CODEX_HOME": str(home / ".codex"),
+            "TMPDIR": str(temp_root),
+            "TEMP": str(temp_root),
+            "TMP": str(temp_root),
+        },
+    )
+    if extra:
+        env.update(extra)
+    return env
+
+
 def write_fake_codex(
     path: Path,
     *,
@@ -7435,21 +7456,54 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         source_snapshot = Path(tmp) / "source-snapshot"
         review_target = Path(tmp) / "new-project"
         fake_bin = Path(tmp) / "bin"
-        fixture_home = Path(tmp) / "hostless-home"
-        fixture_tmp = Path(tmp) / "hostless-tmp"
         fake_bin.mkdir(parents=True, exist_ok=True)
-        fixture_home.mkdir(parents=True, exist_ok=True)
-        fixture_tmp.mkdir(parents=True, exist_ok=True)
+        fixture_env_root = Path(tmp) / "review-run-env"
         shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
 
-        def review_env(extra: dict[str, str] | None = None) -> dict[str, str]:
-            env = {
-                "HOME": str(fixture_home),
-                "TMPDIR": str(fixture_tmp),
-            }
-            if extra:
-                env.update(extra)
-            return prepend_path_env(fake_bin, env)
+        def review_run_env(label: str, extra: dict[str, str] | None = None) -> dict[str, str]:
+            return review_run_fixture_env(fake_bin, fixture_env_root / label, extra)
+
+        def require_missing_proof_discovery_isolated(context: str, payload: dict[str, object], env: dict[str, str]) -> None:
+            metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
+            host_discovery = metadata.get("host_discovery") if isinstance(metadata.get("host_discovery"), dict) else {}
+            app_discovery = host_discovery.get("app_server") if isinstance(host_discovery.get("app_server"), dict) else {}
+            searched = [item for item in app_discovery.get("searched", []) if isinstance(item, str)]
+            expected_home_socket = str(Path(env["HOME"]) / ".codex/app-server-control/app-server-control.sock")
+            expected_temp_socket = None
+            if hasattr(os, "getuid"):
+                expected_temp_socket = str(Path(env["TMPDIR"]) / "codex-ipc" / f"ipc-{os.getuid()}.sock")
+            if metadata.get("app_server") is not None:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} must not discover a real or fake app-server endpoint by default"))
+            if app_discovery.get("result") != "missing":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} app-server discovery must use a controlled missing fixture"))
+            if expected_home_socket not in searched:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} app-server discovery must search isolated HOME"))
+            if expected_temp_socket is not None and expected_temp_socket not in searched:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} app-server discovery must search isolated TMPDIR"))
+            forbidden_searched: list[str] = []
+            real_home_socket = str(Path.home() / ".codex/app-server-control/app-server-control.sock")
+            if real_home_socket != expected_home_socket:
+                forbidden_searched.append(real_home_socket)
+            if hasattr(os, "getuid"):
+                real_temp_socket = str(Path(tempfile.gettempdir()) / "codex-ipc" / f"ipc-{os.getuid()}.sock")
+                if real_temp_socket != expected_temp_socket:
+                    forbidden_searched.append(real_temp_socket)
+            for forbidden in forbidden_searched:
+                if forbidden in searched:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} must not search workstation host proof path `{forbidden}`"))
+
+        def require_explicit_fallback_proof_isolated(context: str, payload: dict[str, object], expected_app_server: str) -> None:
+            metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
+            host_discovery = metadata.get("host_discovery") if isinstance(metadata.get("host_discovery"), dict) else {}
+            proof_sources = metadata.get("proof_sources") if isinstance(metadata.get("proof_sources"), dict) else {}
+            if host_discovery:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} must not run implicit workstation host discovery when explicit fallback proof is provided"))
+            if metadata.get("app_server") != expected_app_server:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} must use the explicit fake app-server locator"))
+            expected_sources = {"app_server": "cli", "thread_id": "cli", "thread_cwd": "cli"}
+            for key, value in expected_sources.items():
+                if proof_sources.get(key) != value:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"{context} must source `{key}` from the controlled CLI fixture"))
 
         def ensure_source_snapshot() -> bool:
             if source_snapshot.exists():
@@ -7726,7 +7780,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
 
         copy_review_target(review_target, "review run positive chain")
         write_fake_codex(fake_bin / "codex", mode="success")
-        success_env = review_env({"CI": "", "CODEX_CI": ""})
+        success_env = review_run_env("default", {"CI": "", "CODEX_CI": ""})
 
         payload, error = load_command_json(
             root,
@@ -8066,7 +8120,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--codex-app-review-raw-file",
                 ".loom/runtime/tmp/codex-app-review-normalized.json",
             ],
-            env=review_env({"CODEX_CI": "1"}),
+            env=review_run_env("codex-app-ci-default", {"CODEX_CI": "1"}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App CI host default failed: {error}"))
@@ -8096,6 +8150,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
         copy_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
         write_fake_codex(fake_bin / "codex", mode="success")
+        app_ci_fallback_env = review_run_env("codex-app-ci-missing-proof-fallback", {"CODEX_CI": "1"})
         payload, error = load_command_json(
             root,
             [
@@ -8108,7 +8163,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--item",
                 "INIT-0001",
             ],
-            env=review_env({"CODEX_CI": "1"}),
+            env=app_ci_fallback_env,
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App CI missing proof fallback failed: {error}"))
@@ -8127,10 +8182,17 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI missing proof fallback must keep the default codex exec adapter"))
             if not missing_host_proof:
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
+            require_missing_proof_discovery_isolated(
+                "`review run` Codex App CI missing proof fallback",
+                payload,
+                app_ci_fallback_env,
+            )
 
         app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
         copy_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
         write_fake_codex(fake_bin / "codex", mode="success")
+        app_unavailable_endpoint = f"unix://{tmp}/missing-codex-app.sock"
+        app_unavailable_fallback_env = review_run_env("codex-app-unavailable-fallback", {"CI": "", "CODEX_CI": ""})
         payload, error = load_command_json(
             root,
             [
@@ -8143,13 +8205,13 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--item",
                 "INIT-0001",
                 "--codex-app-review-app-server",
-                f"unix://{tmp}/missing-codex-app.sock",
+                app_unavailable_endpoint,
                 "--codex-app-review-thread-id",
                 "thread-stage3-missing-endpoint",
                 "--codex-app-review-cwd",
                 str(app_unavailable_fallback_target),
             ],
-            env=success_env,
+            env=app_unavailable_fallback_env,
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App unavailable fallback failed: {error}"))
@@ -8165,6 +8227,11 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
             if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "app-server-unavailable":
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App unavailable fallback must record default adapter fallback"))
+            require_explicit_fallback_proof_isolated(
+                "`review run` Codex App unavailable fallback",
+                payload,
+                app_unavailable_endpoint,
+            )
 
         start_review_run_fixture_group(
             failures,
@@ -8700,7 +8767,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--item",
                 "INIT-0001",
             ],
-            env=review_env({"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_run_env("local-config-default-ignored", {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config default ignored failed: {error}"))
@@ -8740,7 +8807,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--engine-override-reason",
                 "fixture explicitly opts into local Codex defaults",
             ],
-            env=review_env({"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_run_env("local-config-opt-in", {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config opt-in failed: {error}"))
@@ -8771,7 +8838,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--engine-override-reason",
                 "fixture proves headless rejects local Codex defaults by default",
             ],
-            env=review_env({"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_run_env("local-config-headless-rejected", {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config headless rejected failed: {error}"))
@@ -8798,7 +8865,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 "--engine-override-reason",
                 "fixture proves CI rejects local Codex defaults by default",
             ],
-            env=review_env({"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+            env=review_run_env("local-config-ci-rejected", {"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
         )
         if error:
             failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config CI rejected failed: {error}"))
