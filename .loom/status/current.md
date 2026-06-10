@@ -21,11 +21,11 @@
 
 ## Runtime Evidence
 
-- Run Entry: PR #1409 implementation head 06b8676ddd8cb9b055c39327abd9e2de5e84c522 passed before branch-local carrier activation; PR metadata must bind the pushed carrier head before scheduler gate.
-- Logs Entry: worker thread 019eafa1-ac76-7122-a077-0ab35adf2485 and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command readbacks for WI-1249.
-- Diagnostics Entry: WI-1249 adds daily-execution-cli sub-scenario progress/timing/failure evidence and authorized demo fixture/runtime parity only; no #1250/#1251/#1252/#1253/#1254/#1247 scope is included.
-- Verification Entry: local and hosted validation passed for #1249 implementation and authorized demo sync before branch-local carrier activation; branch-local carrier validation passed after activation, and PR metadata readback must bind the pushed carrier head before scheduler gate.
-- Lane Entry: daily-execution-cli-observability-pr-readiness
+- Run Entry: PR #1410 implementation/current-main head 532991eef7552e67e0720258dd41b92880aaea58 passed local scoped validation before branch-local carrier activation; PR metadata must bind the pushed repaired carrier head before scheduler gate.
+- Logs Entry: worker thread 019eafa2-66d1-7923-ba94-4654bdd1c50e and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command/readback evidence for WI-1252.
+- Diagnostics Entry: WI-1252 reduces repeated source snapshot/bootstrap cost via prepared fixture baseline reuse while preserving fixture isolation; no #1249 progress label rename, no #1250 fixture group split, no #1251 fallback boundary change, no #1253 fast/full policy.
+- Verification Entry: local and hosted worker-relevant validation passed for #1252 implementation/current-main head before carrier activation; branch-local carrier validation and PR metadata readback must bind the pushed repaired carrier head before scheduler gate.
+- Lane Entry: daily-cli-snapshot-bootstrap-cost
 
 ## Sources
 
