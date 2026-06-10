@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1249
-- Goal: Make `daily-execution-cli` observable while it runs so operators can identify the active scenario and failure location without waiting for the entire step.
-- Scope: Issue #1249 only: add stable per-sub-scenario start/end/progress labels, elapsed timing, result evidence, and failure metadata for `daily-execution-cli`; preserve #1248 command membership and do not change #1250/#1251/#1252/#1253/#1254/#1247 scope.
-- Execution Path: issue #1249 -> branch work/1249-daily-cli-progress-timing -> PR #1409 -> scheduler-owned review/pr-gate/controlled merge/closeout
+- Item ID: WI-1250
+- Goal: Split review-run fixtures into stable named regression groups for daily-execution-cli diagnostics while preserving full review-run coverage.
+- Scope: Issue #1250 / PR #1411 only: review-run fixture grouping labels, diagnostics, synchronized loom_check runtime copies, demo metadata, and regression-surface inventory evidence; no #1249 label rename, no #1252 snapshot/bootstrap reuse, no #1251 fallback boundary change, no #1253 fast/full policy.
+- Execution Path: issue #1250 -> branch work/1250-review-run-fixture-groups -> PR #1411 -> scheduler-owned review/pr-gate/controlled merge/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1249.md
-- Review Entry: .loom/reviews/WI-1249.json
-- Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py touched loom_check.py copies; make skills-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface merge-gate .; synthetic failure metadata harness; make loom-demo-new-project-check; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1409 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and #1249 closeout is consumed without changing command membership or adjacent Round 7 scopes.
-- Current Checkpoint: closed
-- Current Stop: #1249 completed: PR #1409 merged into main as cd6a6760fd348648c8b9372ac21c5fe4029686b4; #1249 is closed on GitHub.
-- Next Step: None for WI-1249; terminal carrier retained for Round 7 downstream gating and closeout evidence.
-- Blockers: None
-- Latest Validation Summary: 2026-06-10 #1249 worker validation passed before carrier activation on PR #1409 head 06b8676ddd8cb9b055c39327abd9e2de5e84c522: git diff --check; focused py_compile_clean for touched loom_check.py copies; make skills-check; tools/loom_check.py --profile source --source-surface merge-gate . passed with per-scenario event=start/progress/end for all 30 command inventory labels and fixture groups; synthetic failure metadata harness passed; authorized demo fixture sync passed make loom-demo-new-project-check and demo runtime py_compile_clean; hosted py-compile/demo-bootstrap/repo-local-cli/loom-check/gate/release-judgment passed; live PR metadata preflight passed. Branch-local carrier activation validation passed for WI-1249: git diff --check; fact-chain; suite validate; suite evidence validate; suite carrier validate. Flow review preflight now reads WI-1249 and only falls back on out-of-scope WI-1259 active carrier conflict plus scheduler-owned spec review artifact absence.
-- Recovery Boundary: Terminal; WI-1249 daily-cli observability work is merged and closed and must not remain an active workspace binding for later Round 7 Work Items.
-- Current Lane: terminal
+- Recovery Entry: .loom/progress/WI-1250.md
+- Review Entry: .loom/reviews/WI-1250.json
+- Validation Entry: git diff --check; py_compile_clean touched loom_check.py copies; skills_surface.py check; focused review-run group diagnostics probe; demo manifest json validation; examples/new-project loom_check source/consumer/contract-only checks; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1411 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and #1250 closeout is consumed without changing adjacent Round 7 scopes.
+- Current Checkpoint: build
+- Current Stop: #1250 review-run fixture grouping implementation is pushed in PR #1411; branch-local WI-1250 carrier activation is in progress.
+- Next Step: Scheduler owns current-head WI-1250 review and PR gate after carrier activation, metadata repair, push, and readback.
+- Blockers: Scheduler-owned review/gate still pending; full review-run surface remains scheduler-owned/high-cost.
+- Latest Validation Summary: Passed: git diff --check; py_compile_clean for touched loom_check.py copies; skills_surface.py check; focused review-run group diagnostics probe; demo manifest json validation; examples/new-project loom_check source/consumer/contract-only checks; PR metadata preflight/readback on old head; hosted py-compile/demo-bootstrap/repo-local-cli/loom-check/node-installer-gate/release-judgment passed on old head. Not run locally: full --source-surface review-run because high-cost/scheduler-owned.
+- Recovery Boundary: WI-1250 only: review-run fixture grouping labels, diagnostics, synchronized loom_check runtime copies, demo metadata, regression-surface inventory evidence, branch-local carrier activation, and PR #1411 metadata repair.
+- Current Lane: daily-cli-review-run-fixture-groups
 
 ## Runtime Evidence
 
-- Run Entry: PR #1409 implementation head 06b8676ddd8cb9b055c39327abd9e2de5e84c522 passed before branch-local carrier activation; PR metadata must bind the pushed carrier head before scheduler gate.
-- Logs Entry: worker thread 019eafa1-ac76-7122-a077-0ab35adf2485 and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command readbacks for WI-1249.
-- Diagnostics Entry: WI-1249 adds daily-execution-cli sub-scenario progress/timing/failure evidence and authorized demo fixture/runtime parity only; no #1250/#1251/#1252/#1253/#1254/#1247 scope is included.
-- Verification Entry: local and hosted validation passed for #1249 implementation and authorized demo sync before branch-local carrier activation; branch-local carrier validation passed after activation, and PR metadata readback must bind the pushed carrier head before scheduler gate.
-- Lane Entry: daily-execution-cli-observability-pr-readiness
+- Run Entry: PR #1411 implementation head 79d2115c86b264fca409aca9462b58139aa259a8 passed local scoped validation before branch-local carrier activation; PR metadata must bind the pushed carrier head before scheduler gate.
+- Logs Entry: worker thread 019eb04d-2478-7013-a751-03b1062ad36b and scheduler thread 019eaf94-f0bd-79a3-a396-83d6428b2777 command readbacks for WI-1250.
+- Diagnostics Entry: WI-1250 splits review-run fixtures into stable named regression groups and synchronized runtime copies only; no #1249 label rename, #1252 snapshot/bootstrap reuse, #1251 fallback boundary change, or #1253 fast/full policy is included.
+- Verification Entry: local validation passed for #1250 implementation before carrier activation; carrier activation validation includes git diff --check, carrier refresh dry-run, shadow parity, and PR metadata readback, while full review-run and current-head review/gate remain scheduler-owned.
+- Lane Entry: daily-cli-review-run-fixture-groups
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1249.md
-- Dynamic Truth: .loom/progress/WI-1249.md
+- Static Truth: .loom/work-items/WI-1250.md
+- Dynamic Truth: .loom/progress/WI-1250.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
