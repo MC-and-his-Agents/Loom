@@ -1,39 +1,49 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1393",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "f71830b39ed7dc8c9cfd915fa6402b94960f9c58",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler semantic review allows WI-1393 merge gate. The implementation splits tools/check_release_surface.py into targetable release-doc-contract, release-workflow-contract, installer-sunset-guard, and forbidden-release-surface-patterns surfaces with stable evidence/failure labels, preserves default aggregate release surface behavior and OK output, updates #1383 release evidence locators only, and does not change release/no-release semantics, package/runtime behavior, publishing workflows, #1394/#1395/#1396, parent #1260 closeout, or umbrella #1255 closeout.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-10T22:04:23Z",
+  "reviewed_head": "3840f46522fc584c971a099e1cbb2c89d07e8cec",
+  "reviewed_validation_summary": "2026-06-10 local worker validation passed for the release surface split: `git diff --check`; `python3 tools/check_release_surface.py --help`; `python3 tools/check_release_surface.py --list-surfaces`; targeted `python3 tools/check_release_surface.py --surface release-doc-contract`, `--surface release-workflow-contract`, `--surface installer-sunset-guard`, and `--surface forbidden-release-surface-patterns`; aggregate `python3 tools/check_release_surface.py`; `python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence`; Makefile aliases for the four named release surfaces; `python3 tools/py_compile_clean.py tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; and `python3 tools/loom.py suite inspect --target . --item WI-1393 --json`. `python3 tools/loom.py suite validate --target . --item WI-1393 --json` returned `result=not_applicable`, `blocking_gaps=[]`, and `findings=[]` with the expected not_applicable exit classification for this suite path decision.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1393.md",
+    "recovery_entry": ".loom/progress/WI-1393.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
