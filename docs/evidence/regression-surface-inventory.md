@@ -83,6 +83,19 @@ Current fixture groups inside the same bucket:
 
 Boundary decision: keep the current aggregate bucket as full coverage until a later implementation PR emits child surface evidence and proves aggregation preserves every group above.
 
+Review-run fixture group mapping for #1250:
+
+| Stable group name | Current locator | Coverage boundary |
+| --- | --- | --- |
+| `positive-default-review` | `check_review_run_fixture()` positive chain | Default Codex exec adapter, default profile, review record input, context pack, prompt guidance, and source suite/setup contract remain covered. |
+| `shadow-adapter` | `check_review_run_fixture()` shadow adapter and shadow unavailable cases | Shadow review evidence must remain non-authoritative, non-blocking, and unable to replace the default review record input. |
+| `codex-app-host-default` | `check_review_run_fixture()` embedded JSON, host default, CI host default, and authoritative Codex App cases | Valid Codex App host proof can select the app adapter and expose thread/model proof metadata without authoring merge-ready truth before a review record exists. |
+| `codex-app-fallbacks` | `check_review_run_fixture()` CI missing proof and app-server unavailable fallback cases | Missing or unavailable Codex App proof falls back to default Codex exec with explicit diagnostics, without treating workstation/session state as repo truth. |
+| `codex-app-fail-closed` | `check_review_run_fixture()` proof conflict, high-risk unverified proof, missing proof, and invalid raw cases | Runtime conflicts, missing proof, unverified high-risk model proof, and invalid raw evidence must block rather than fallback silently. |
+| `repeated-blocker-context` | `check_review_run_fixture()` repeated blocker context pack fixture | Prior normalized findings are summarized as repeated blocker candidates in the review context pack. |
+| `profile-policy` | `check_review_run_fixture()` profile override, repo-owned profile, invalid repo profile, and local config cases | Profile selection must preserve override evidence, repo-owned policy precedence, and local Codex config opt-in boundaries. |
+| `engine-output-fail-closed` | `check_review_run_fixture()` engine unavailable, schema drift, and tracked edit cases | Missing engine, invalid engine output, and tracked repository edits must fail closed with stable failure reasons. |
+
 Unknowns:
 
 - Exact runtime cost of each candidate group is not measured here.
