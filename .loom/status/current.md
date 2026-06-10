@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1254.json
 - Validation Entry: git diff --check; focused docs rg/readback; python3 tools/loom.py help --json; python3 tools/loom_check.py --help; python3 tools/check_cli_contract.py; suite inspect/validate for WI-1254; fact-chain/verify; PR metadata preflight/readback; hosted checks
 - Closing Condition: PR for #1254 is reviewed/gated by the scheduler on the current head, merged through controlled path, and no_release closeout consumes fast/full validation evidence expectations without weakening full merge-ready coverage, repo truth boundaries, fail-closed behavior, or scheduler-owned gate semantics.
-- Current Checkpoint: merge preparation
+- Current Checkpoint: merge
 - Current Stop: Docs/evidence alignment is committed and pushed on PR #1415; worker-owned local validation and PR metadata readback are complete. The PR body machine block and worker scheduler report are the head-bound sources for the current commit SHA. Hosted checks that require current-head review are blocked on the scheduler-owned review artifact.
 - Next Step: Scheduler performs current-head semantic review for WI-1254, writes/commits the authorized review artifact if approved, reruns/consumes PR gate and hosted checks, then owns controlled merge, no_release closeout, issue closure, and #1247 parent closeout.
 - Blockers: None worker-owned. Scheduler-owned gate blockers remain: missing authored review artifact .loom/reviews/WI-1254.json, PR gate fallback, root-self-adoption/root-self-governance review-carrier gap, controlled merge, no_release closeout, issue closure, and #1247 parent closeout.
