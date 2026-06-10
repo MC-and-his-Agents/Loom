@@ -39,7 +39,7 @@ Local validation for the WI-1383 docs-only contract surface:
 - `npm run test:package`: pass.
 - `python3 tools/loom.py suite inspect --target . --item WI-1383 --json`: pass, with path decision `.loom/specs/WI-1383/spec.md`.
 - `python3 tools/loom.py suite validate --target . --item WI-1383 --json`: expected `result=not_applicable`, `blocking_gaps=[]`, and no findings for docs-only scope.
-- `python3 .loom/bin/loom_init.py fact-chain --target .`: pass for the unchanged repo bootstrap current item, which remains `WI-1254`.
-- `python3 .loom/bin/loom_init.py verify --target .`: pass for the unchanged repo bootstrap current item, which remains `WI-1254`.
+- `python3 .loom/bin/loom_init.py fact-chain --target .`: pass after scheduler-owned WI-1383 carrier activation.
+- `python3 .loom/bin/loom_init.py verify --target .`: pass after scheduler-owned WI-1383 carrier activation.
 
-Carrier boundary: WI-1383 is issue-scoped in `.loom/progress/WI-1383.md` and `.loom/specs/WI-1383/spec.md`. The global `.loom/bootstrap/init-result.json` and `.loom/work-items/**` carriers still point to WI-1254 and are outside the WI-1383 worker write scope. This record does not claim a global fact-chain switch to WI-1383.
+Carrier boundary: the worker-scoped implementation originally stopped before global fact-chain activation. Scheduler gate subsequently activated WI-1383 in `.loom/bootstrap/init-result.json`, added `.loom/work-items/WI-1383.md`, refreshed `.loom/status/current.md`, and terminalized the already-merged WI-1254 progress carrier using live PR #1415 and issue #1254 readback. That scheduler-owned carrier sync is part of PR #1416 gate readiness; it does not implement #1260, cut a release, or change release/package runtime behavior.
