@@ -154,6 +154,20 @@ Delivery commands therefore freeze the following provider boundary:
 
 `skills list` and `skills package` read checked-in generated package metadata. `skills check`, `skills doctor`, and `skills release-check` delegate to the existing surface, host adapter, and version checks. `skills generate` and `skills sync` mutate `skills/`, so they fail closed unless `--apply` is supplied.
 
+`loom skills check --target <repo> --json` remains the aggregate merge-ready and release-readiness entrypoint for generated SKILLS validation. The aggregate must continue to consume the script-level skills surface check instead of promoting separate package semantics into the CLI.
+
+The generated SKILLS validation surface is diagnosable through these stable named surfaces:
+
+| Named surface | Targeted command | Evidence boundary |
+| --- | --- | --- |
+| `docs-reference-sync` | `python3 tools/skills_surface.py check --surface docs-reference-sync` | docs/reference locators in `DOC_REFERENCE_SYNC` match their generated skill runtime copies. |
+| `generated-tree-drift` | `python3 tools/skills_surface.py check --surface generated-tree-drift` | checked-in `skills/` remains generated from `src/skills/`. |
+| `package-metadata` | `python3 tools/skills_surface.py check --surface package-metadata` | generated skill package metadata and contracts are present and internally consistent. |
+| `cache-artifacts` | `python3 tools/skills_surface.py check --surface cache-artifacts` | generated skill packages do not retain Python bytecode/cache artifacts. |
+| `launcher-smoke` | `python3 tools/skills_surface.py check --surface launcher-smoke [--skill <id>]` | generated skill launchers resolve their package runtime without collapsing failures into drift or metadata buckets. |
+
+`python3 tools/skills_surface.py check` is the compatible aggregate script command. `make skills-check` and `loom skills check --target . --json` consume that aggregate path; targeted `make skills-*-check` aliases are diagnostic surfaces for triage and closeout evidence, not new packaging modes.
+
 ## Adoption And Profile Commands
 
 `loom init`, `loom adopt verify`, `loom route`, and `loom profile status|upgrade-plan|upgrade` implement the #890 adoption/profile surface.
