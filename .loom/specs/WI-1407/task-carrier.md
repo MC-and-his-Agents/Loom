@@ -1,0 +1,5 @@
+# Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1407 | Issue OPEN / PR pending / branch work/1407-tempdir-cleanup-fixture-cleanliness / worker local implementation in progress | in_progress | primary | .loom/progress/WI-1407.md | .loom/specs/WI-1407/spec.md#scope | .loom/specs/WI-1407/spec.md#scenarios | .loom/specs/WI-1407/plan.md#implementation | .loom/specs/WI-1407/evidence-map.md | scheduler_thread_id=019eb28d-ac3b-7623-8955-12542fa2e08d; worker_thread_id=019eb5e9-614f-7d70-afa4-b95899a20282; branch work/1407-tempdir-cleanup-fixture-cleanliness; instruction_id=T1407-initial-202606111657 | Recheck current head SHA, PR metadata, hosted checks, no_release judgment, and scheduler-owned gates before merge-ready consumption. |

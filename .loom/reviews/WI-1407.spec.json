@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1407",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review approves WI-1407 minimal suite at current carrier head 00218abea8661b7e43a28617f6729e1efff34924: spec/plan mappings cover tempdir cleanup, demo fixture cleanliness, and preservation of existing locking/subprocess/aggregate runtime surfaces; suite validate/evidence/carrier checks pass; parent #1263 and #1408 remain out of scope.",
+  "reviewer": "Round 8 scheduler",
+  "authored_at": "2026-06-11T17:41:32Z",
+  "reviewed_head": "00218abea8661b7e43a28617f6729e1efff34924",
+  "reviewed_validation_summary": "Current-head scheduler readback at 00218abea8661b7e43a28617f6729e1efff34924: PR #1444 open/non-draft/mergeable, base 1f760cce1ac48e334800a94f513b3a7173e94d7d; PR body metadata preflight PASS; git diff --check PASS; fact-chain PASS; build checkpoint PASS; suite inspect/validate/evidence/carrier PASS; build evidence integrated; spec review and implementation review are being refreshed for current carrier head; changed files remain limited to WI-1407 runtime regression implementation/docs/carrier/review/shadow/status scope; issue #1407 and parent #1263 remain open.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1407.md",
+    "recovery_entry": ".loom/progress/WI-1407.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/eeff/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1407/spec.md",
+    "suite_plan": ".loom/specs/WI-1407/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1407/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1407/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

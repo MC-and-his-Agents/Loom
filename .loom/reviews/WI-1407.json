@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1407",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review approves PR #1444 at current carrier head 00218abea8661b7e43a28617f6729e1efff34924: temp-dir-cleanup and demo-fixture-cleanliness are selectable with scoped fixture groups and stable failure_label/evidence_locator diagnostics; existing locking, subprocess-env-purity, and aggregate runtime regression surfaces are preserved; Makefile aliases map to the new selectors; WI-1407 carriers, build evidence, status, shadow, and PR metadata are current. No blockers found.",
+  "reviewer": "Round 8 scheduler",
+  "authored_at": "2026-06-11T17:41:31Z",
+  "reviewed_head": "00218abea8661b7e43a28617f6729e1efff34924",
+  "reviewed_validation_summary": "Current-head scheduler readback at 00218abea8661b7e43a28617f6729e1efff34924: PR #1444 open/non-draft/mergeable, base 1f760cce1ac48e334800a94f513b3a7173e94d7d; PR body metadata preflight PASS; git diff --check PASS; fact-chain PASS; build checkpoint PASS; suite inspect/validate/evidence/carrier PASS; build evidence integrated; spec review and implementation review are being refreshed for current carrier head; changed files remain limited to WI-1407 runtime regression implementation/docs/carrier/review/shadow/status scope; issue #1407 and parent #1263 remain open.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1407.md",
+    "recovery_entry": ".loom/progress/WI-1407.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/eeff/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/eeff/Loom --item WI-1407 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/eeff/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/eeff/Loom --item WI-1407 --json",
+    "suite_evidence_map": ".loom/specs/WI-1407/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1407/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
