@@ -49,6 +49,7 @@ DOC_REFERENCE_SYNC_SURFACE = "docs-reference-sync"
 GENERATED_TREE_DRIFT_SURFACE = "generated-tree-drift"
 PACKAGE_METADATA_SURFACE = "package-metadata"
 CACHE_ARTIFACTS_SURFACE = "cache-artifacts"
+LAUNCHER_SMOKE_SURFACE = "launcher-smoke"
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ class SurfaceDefinition:
     label: str
     failure_name: str
     evidence_locator: str
-    run: Callable[[], None]
+    run: Callable[[tuple[str, ...] | None], None]
 
 
 class SurfaceFailure(RuntimeError):
@@ -493,7 +494,13 @@ def validate_skill_package(package_root: Path, skill_id: str) -> list[str]:
 
 def run_launcher_smoke(package_root: Path, skill_id: str) -> list[str]:
     metadata = read_json(package_root / "loom-package.json")
-    launcher = package_root / metadata["launcher"]
+    package_id = metadata.get("package_id", skill_id)
+    launcher_value = metadata.get("launcher")
+    launcher = package_root / str(launcher_value)
+    evidence_locator = f"{package_root.relative_to(REPO_ROOT).as_posix()}/loom-package.json"
+    if isinstance(launcher_value, str) and launcher_value:
+        evidence_locator += f"; {(package_root / launcher_value).relative_to(REPO_ROOT).as_posix()}"
+    detail_prefix = f"skill={skill_id} package={package_id} evidence_locator={evidence_locator}"
     args = [sys.executable, str(launcher), "runtime-state", "--target", str(REPO_ROOT)]
     if skill_id not in {"loom-init", "loom-adopt"}:
         args.extend(["--item", "INIT-0001"])
@@ -508,14 +515,17 @@ def run_launcher_smoke(package_root: Path, skill_id: str) -> list[str]:
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     result = subprocess.run(args, cwd=REPO_ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
-        return [f"{skill_id}: launcher runtime-state failed: {(result.stderr or result.stdout).strip()}"]
+        return [
+            f"{detail_prefix} command={' '.join(args)} failure=runtime-state-failed "
+            f"output={(result.stderr or result.stdout).strip()}"
+        ]
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        return [f"{skill_id}: launcher did not emit JSON runtime-state: {exc.msg}"]
+        return [f"{detail_prefix} command={' '.join(args)} failure=invalid-json output={exc.msg}"]
     runtime_state = payload.get("runtime_state")
     if not isinstance(runtime_state, dict) or runtime_state.get("scene") != "installed-runtime":
-        return [f"{skill_id}: launcher did not report installed-runtime"]
+        return [f"{detail_prefix} command={' '.join(args)} failure=unexpected-runtime-scene"]
     return []
 
 
@@ -545,6 +555,55 @@ def check_package_metadata_surface() -> None:
         )
 
 
+def selected_skill_ids(root: Path, requested_skill_ids: tuple[str, ...] | None) -> list[str]:
+    registry = read_json(root / "registry.json")
+    skill_ids = [
+        entry["id"]
+        for entry in registry.get("entries", [])
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    ]
+    if not requested_skill_ids:
+        return skill_ids
+    missing = sorted(set(requested_skill_ids) - set(skill_ids))
+    if missing:
+        raise SurfaceFailure(
+            surface_label=LAUNCHER_SMOKE_SURFACE,
+            failure_name="skills_launcher_smoke_unknown_skill",
+            evidence_locator="skills/registry.json",
+            details=[f"unknown launcher smoke skill target: {skill_id}" for skill_id in missing],
+        )
+    requested = set(requested_skill_ids)
+    return [skill_id for skill_id in skill_ids if skill_id in requested]
+
+
+def check_launcher_smoke_surface(requested_skill_ids: tuple[str, ...] | None = None) -> None:
+    errors: list[str] = []
+    try:
+        skill_ids = selected_skill_ids(TARGET_ROOT, requested_skill_ids)
+    except SurfaceFailure:
+        raise
+    except Exception as exc:
+        errors = [str(exc)]
+        skill_ids = []
+    for skill_id in skill_ids:
+        package_root = TARGET_ROOT / skill_id
+        try:
+            errors.extend(run_launcher_smoke(package_root, skill_id))
+        except Exception as exc:
+            errors.append(
+                f"skill={skill_id} package={skill_id} "
+                f"evidence_locator={package_root.relative_to(REPO_ROOT).as_posix()}/loom-package.json "
+                f"failure=launcher-smoke-exception output={exc}"
+            )
+    if errors:
+        raise SurfaceFailure(
+            surface_label=LAUNCHER_SMOKE_SURFACE,
+            failure_name="skills_launcher_smoke_failed",
+            evidence_locator="skills/<skill-id>/loom-package.json; skills/<skill-id>/<launcher>",
+            details=errors,
+        )
+
+
 def check_generated_tree_drift_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-skills-check-") as tmp:
         expected = Path(tmp) / "skills"
@@ -565,25 +624,31 @@ def available_surface_definitions() -> tuple[SurfaceDefinition, ...]:
             label=DOC_REFERENCE_SYNC_SURFACE,
             failure_name="skills_docs_reference_sync_drift",
             evidence_locator="tools/skills_surface.py:DOC_REFERENCE_SYNC",
-            run=check_doc_reference_sync_surface,
+            run=lambda _skill_ids: check_doc_reference_sync_surface(),
         ),
         SurfaceDefinition(
             label=GENERATED_TREE_DRIFT_SURFACE,
             failure_name="skills_generated_tree_drift",
             evidence_locator="src/skills -> skills",
-            run=check_generated_tree_drift_surface,
+            run=lambda _skill_ids: check_generated_tree_drift_surface(),
         ),
         SurfaceDefinition(
             label=PACKAGE_METADATA_SURFACE,
             failure_name="skills_package_metadata_invalid",
             evidence_locator="skills/*/loom-package.json; skills/*/contract.json; skills/*/.loom-runtime",
-            run=check_package_metadata_surface,
+            run=lambda _skill_ids: check_package_metadata_surface(),
         ),
         SurfaceDefinition(
             label=CACHE_ARTIFACTS_SURFACE,
             failure_name="skills_cache_artifacts_present",
             evidence_locator="skills/**/__pycache__; skills/**/*.py[cod]",
-            run=check_cache_artifacts_surface,
+            run=lambda _skill_ids: check_cache_artifacts_surface(),
+        ),
+        SurfaceDefinition(
+            label=LAUNCHER_SMOKE_SURFACE,
+            failure_name="skills_launcher_smoke_failed",
+            evidence_locator="skills/<skill-id>/loom-package.json; skills/<skill-id>/<launcher>",
+            run=check_launcher_smoke_surface,
         ),
     )
 
@@ -596,16 +661,16 @@ def selected_surface_definitions(surface_labels: list[str]) -> tuple[SurfaceDefi
     return tuple(surfaces[label] for label in surface_labels)
 
 
-def run_surface_definition(surface: SurfaceDefinition, *, emit_success: bool) -> None:
+def run_surface_definition(surface: SurfaceDefinition, *, emit_success: bool, skill_ids: tuple[str, ...] | None) -> None:
     start = time.perf_counter()
     try:
-        surface.run()
-    except SurfaceFailure:
+        surface.run(skill_ids)
+    except SurfaceFailure as exc:
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         print(
             f"skills surface {surface.label}: BLOCK "
-            f"failure_name={surface.failure_name} "
-            f"evidence_locator={surface.evidence_locator} "
+            f"failure_name={exc.failure_name} "
+            f"evidence_locator={exc.evidence_locator} "
             f"elapsed_ms={elapsed_ms}",
             file=sys.stderr,
         )
@@ -619,22 +684,22 @@ def run_surface_definition(surface: SurfaceDefinition, *, emit_success: bool) ->
         )
 
 
-def check_selected_surfaces(surface_labels: list[str], *, emit_success: bool) -> None:
+def check_selected_surfaces(surface_labels: list[str], *, emit_success: bool, skill_ids: tuple[str, ...] | None = None) -> None:
     for surface in selected_surface_definitions(surface_labels):
-        run_surface_definition(surface, emit_success=emit_success)
+        run_surface_definition(surface, emit_success=emit_success, skill_ids=skill_ids)
 
 
-def check_surface(selected_surfaces: list[str] | None = None) -> None:
+def check_surface(selected_surfaces: list[str] | None = None, *, skill_ids: tuple[str, ...] | None = None) -> None:
+    if skill_ids and selected_surfaces != [LAUNCHER_SMOKE_SURFACE]:
+        raise RuntimeError("--skill may only be used with --surface launcher-smoke")
     if selected_surfaces:
-        check_selected_surfaces(selected_surfaces, emit_success=True)
+        check_selected_surfaces(selected_surfaces, emit_success=True, skill_ids=skill_ids)
         return
     check_selected_surfaces([DOC_REFERENCE_SYNC_SURFACE], emit_success=False)
     check_selected_surfaces([CACHE_ARTIFACTS_SURFACE], emit_success=False)
     check_selected_surfaces([GENERATED_TREE_DRIFT_SURFACE], emit_success=False)
     check_selected_surfaces([PACKAGE_METADATA_SURFACE], emit_success=False)
-    errors = verify_surface(TARGET_ROOT)
-    if errors:
-        raise RuntimeError("skills surface validation failed:\n" + "\n".join(errors[:80]))
+    check_selected_surfaces([LAUNCHER_SMOKE_SURFACE], emit_success=False)
 
 
 def parse_args() -> argparse.Namespace:
@@ -647,6 +712,11 @@ def parse_args() -> argparse.Namespace:
         action="append",
         choices=tuple(surface.label for surface in available_surface_definitions()),
         help="Run only the named read-only skills validation surface. May be passed more than once.",
+    )
+    check_parser.add_argument(
+        "--skill",
+        action="append",
+        help="Run launcher-smoke only for the named generated skill package. May be passed more than once.",
     )
     check_parser.add_argument(
         "--list-surfaces",
@@ -671,7 +741,7 @@ def main() -> int:
                         f"evidence_locator={surface.evidence_locator}"
                     )
             else:
-                check_surface(args.surface)
+                check_surface(args.surface, skill_ids=tuple(args.skill) if args.skill else None)
                 if args.surface:
                     print("skills surface targeted check: OK")
                 else:
