@@ -66,9 +66,9 @@ When publishing is allowed or explicitly requested, the workflow must fail close
 
 ## Release Validation Evidence Contract
 
-This section freezes the minimal evidence contract that release-required work may consume before the full #1260 release/package checker split is implemented.
+This section records the release/package validation evidence contract that release-required work may consume after the #1383 evidence freeze and the #1393/#1394/#1395 checker surface split.
 
-The labels below are stable evidence labels. Named release-surface checks are targetable through `tools/check_release_surface.py`; the aggregate command remains compatible when the retained validation summary names the label, the command, the current head or merge commit, and the result.
+The labels below are stable evidence labels. Named release/package checks are targetable through `tools/check_release_surface.py` and `tools/check_npm_package.py`; the aggregate commands remain compatible when the retained validation summary names the label, the command, the current head or merge commit, and the result.
 
 | Evidence label | Current compatible check | Required role |
 | --- | --- | --- |
@@ -76,9 +76,15 @@ The labels below are stable evidence labels. Named release-surface checks are ta
 | `release-workflow-contract` | `python3 tools/check_release_surface.py --surface release-workflow-contract` | Proves `loom-cli-release` keeps PR judgment read-only, main-push publishing, `workflow_dispatch` repair, fail-closed duplicate version handling, and `NPM_TOKEN` checks. |
 | `installer-sunset-guard` | `python3 tools/check_release_surface.py --surface installer-sunset-guard` | Proves `loom-installer` remains deprecated legacy evidence and does not regain npm publish, installer tag, installer GitHub Release, or active CLI release authority. |
 | `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
-| `npm-package-manifest` | `python3 tools/check_npm_package.py` and package test aliases that consume it | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
-| `npm-pack-payload` | `python3 tools/check_npm_package.py`, `npm pack --dry-run --json --ignore-scripts`, or `npm run test:package` when it consumes the same payload proof | Proves the dry-run package payload contains required CLI/runtime/docs/skills/plugin files and excludes repository-internal or deprecated installer surfaces. |
+| `npm-package-manifest` | `python3 tools/check_npm_package.py --surface npm-package-manifest` | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
+| `npm-pack-payload` | `python3 tools/check_npm_package.py --surface npm-pack-payload`, `npm pack --dry-run --json --ignore-scripts`, or `npm run test:package` when it consumes the same payload proof | Proves the dry-run package payload contains required CLI/runtime/docs/skills/plugin files and excludes repository-internal or deprecated installer surfaces. |
 | `installed-global-cli-smoke` | `python3 tools/check_release_surface.py --surface installed-global-cli-smoke` | Proves the packed package can be installed into a temporary global prefix, exposes the `loom` bin, and runs release-required version/help smoke from the installed package instead of only the source checkout. |
+
+Aggregate release/package validation remains available through:
+
+- `python3 tools/check_release_surface.py` or explicit `python3 tools/check_release_surface.py --surface aggregate-release-surface`, which runs the named release contract, workflow, installer sunset, forbidden-pattern, and installed/global CLI smoke surfaces.
+- `python3 tools/check_npm_package.py` or explicit `python3 tools/check_npm_package.py --surface aggregate`, which runs the named `npm-package-manifest` and `npm-pack-payload` surfaces.
+- `npm run test:package`, when a release/package validation summary needs the packaged npm payload proof as well as the raw checker output.
 
 All release validation evidence must retain:
 
@@ -90,7 +96,7 @@ All release validation evidence must retain:
 - run locator, transcript locator, or registry/API readback locator;
 - failure summary and fallback when result is not `pass`.
 
-Release-required downstream work may cite these labels without waiting for #1260 to split the scripts. #1260 may refine implementation and output shape, but it must preserve these labels or provide an explicit compatibility alias before downstream release closeout consumes the split.
+Release-required downstream work may cite these labels without treating release/package validation as a single black-box bucket. Future #1260 closeout may refine output shape, but it must preserve these labels or provide an explicit compatibility alias before downstream release closeout consumes the split.
 
 ## Release-Required Closeout Evidence
 
@@ -100,7 +106,7 @@ When release-required work publishes a Loom CLI release, pre-merge evidence must
 - the chosen `VERSION` and matching `package.json` npm version;
 - generated `skills/*/loom-package.json` repo version surfaces synchronized when the release ships generated skills/runtime payloads;
 - target GitHub `v*` tag and npm `@mc-and-his-agents/loom` version are unoccupied before publish;
-- `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
+- `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, `installed-global-cli-smoke`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
 - PR-event `release-judgment-only`, if present, is recorded only as pre-merge judgment evidence and not as final release evidence.
 
 Post-merge release closeout evidence must show:

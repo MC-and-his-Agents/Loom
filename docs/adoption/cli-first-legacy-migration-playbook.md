@@ -15,8 +15,8 @@ model.
 | --- | --- | --- |
 | 1 | `loom detect --target <repo> --json` | Read installed surfaces and classify `uninstalled`, `legacy`, `mixed-legacy`, `mixed`, or `current`. |
 | 2 | `loom doctor --target <repo> --json` | Fail closed for missing/invalid installed-state or legacy surfaces and fall back to `loom repair plan`. |
-| 3 | `loom repair plan --target <repo> --json` | Emit a non-mutating plan that separates installed-state repair from legacy surface classification. |
-| 4 | `loom upgrade-plan --target <repo> --json` | Emit a non-mutating delivery plan. Legacy or missing metadata keeps upgrade apply blocked. |
+| 3 | `loom repair plan --target <repo> --json` | Emit a non-mutating plan that separates installed-state repair from legacy surface classification. When `runtime_provider=global-cli` retains `.loom/bin`, the plan must emit runtime-carrier migration actions, exact repo-local gate blockers, and proposal-only deletion semantics. |
+| 4 | `loom upgrade-plan --target <repo> --json` | Emit a non-mutating delivery plan. Legacy or missing metadata keeps upgrade apply blocked; retained `.loom/bin` under `global-cli` must stay a runtime-carrier migration lane, not a skills/plugin payload migration. |
 | 5 | `loom verify --target <repo> --json` | Pass only when `doctor` passes. Legacy or mixed surfaces remain blocking. |
 
 `loom repair apply`, `loom install --apply`, `loom upgrade --apply`, and rollback

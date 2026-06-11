@@ -1,10 +1,10 @@
 # Validation: Release Validation Evidence Contract
 
-This record is the WI-1383 contract evidence for the minimal release validation and release closeout evidence labels consumed by #1260 and downstream release-required work (#1296, #1246, #1293).
+This record is the release validation evidence contract for the minimal release validation and release closeout evidence labels consumed by #1260 and downstream release-required work (#1296, #1246, #1293). WI-1383 froze the labels; WI-1393, WI-1394, and WI-1395 made the release/package checker surfaces targetable.
 
 ## Contract Scope
 
-WI-1383 freezes evidence semantics only. It does not implement the full release/npm checker split, cut a release, change workflow behavior, change package/version files, or change user-visible CLI/runtime behavior.
+WI-1383 freezes evidence semantics only. WI-1393, WI-1394, and WI-1395 implement the named checker surface split while preserving aggregate release/package validation. This contract does not cut a release, change workflow behavior, change package/version files, publish npm, create tags, create GitHub Releases, or change user-visible CLI/runtime behavior.
 
 Frozen evidence labels:
 
@@ -16,13 +16,37 @@ Frozen evidence labels:
 - `npm-pack-payload`
 - `installed-global-cli-smoke`
 
-The current compatible aggregate commands remain:
+The current targetable surface commands are:
+
+- `python3 tools/check_release_surface.py --surface release-doc-contract`
+- `python3 tools/check_release_surface.py --surface release-workflow-contract`
+- `python3 tools/check_release_surface.py --surface installer-sunset-guard`
+- `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns`
+- `python3 tools/check_release_surface.py --surface installed-global-cli-smoke`
+- `python3 tools/check_npm_package.py --surface npm-package-manifest`
+- `python3 tools/check_npm_package.py --surface npm-pack-payload`
+
+The compatible aggregate commands remain:
 
 - `python3 tools/check_release_surface.py`
+- `python3 tools/check_release_surface.py --surface aggregate-release-surface`
 - `python3 tools/check_npm_package.py`
+- `python3 tools/check_npm_package.py --surface aggregate`
 - `npm run test:package` when practical and when it consumes the npm package contract
 
-Downstream release-required Work Items may cite these labels for release evidence semantics without waiting for #1260 to split the scripts. They must still record their own release/no-release closeout evidence on their own current heads and merge commits.
+Downstream release-required Work Items may cite these labels for release evidence semantics without treating release/package validation as a single black-box bucket. They must still record their own release/no-release closeout evidence on their own current heads and merge commits.
+
+## Surface Split Readback For WI-1396
+
+WI-1396 is the docs/evidence convergence slice for #1260. It consumes the merged #1393/#1394/#1395 surface names and validates that aggregate release/package entrypoints still exist:
+
+- `python3 tools/check_release_surface.py --list-surfaces` must list `aggregate-release-surface`, `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, and `installed-global-cli-smoke`.
+- `python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence` must pass and print per-surface evidence for the named release surfaces.
+- `python3 tools/check_npm_package.py --list-surfaces` must list `aggregate`, `npm-package-manifest`, and `npm-pack-payload`.
+- `python3 tools/check_npm_package.py` must pass and report both package evidence labels.
+- `npm run test:package` remains the package payload smoke when package files or package evidence references are touched.
+
+This readback is evidence convergence only. It does not redefine release/no-release semantics, close #1260 or #1255, or execute release publishing.
 
 ## No-Release Basis For WI-1383
 

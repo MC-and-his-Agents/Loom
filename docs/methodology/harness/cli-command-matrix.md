@@ -63,6 +63,18 @@ loom skills list|generate|sync|check|doctor|package|release-check
 
 `skills generate` and `skills sync` require `--apply`; check, doctor, package, and release-check are read-only.
 
+#1261 splits the generated SKILLS validation bucket into named diagnostic surfaces without changing the aggregate command contract:
+
+```text
+python3 tools/skills_surface.py check --surface docs-reference-sync
+python3 tools/skills_surface.py check --surface generated-tree-drift
+python3 tools/skills_surface.py check --surface package-metadata
+python3 tools/skills_surface.py check --surface cache-artifacts
+python3 tools/skills_surface.py check --surface launcher-smoke [--skill <id>]
+```
+
+`python3 tools/skills_surface.py check`, `make skills-check`, and `loom skills check --target . --json` remain the aggregate generated SKILLS validation path for merge-ready and release-readiness evidence. The named commands are evidence labels for diagnosis, PR metadata, and closeout consumption; they do not add new skill packaging semantics.
+
 #890 implements the adoption and governance profile command family:
 
 ```text
