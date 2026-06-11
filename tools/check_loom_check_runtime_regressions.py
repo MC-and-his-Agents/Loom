@@ -77,7 +77,13 @@ def current_loom_check_temp_dirs() -> set[Path]:
 def check_temp_dir_cleanup(baseline: set[Path], failures: list[str]) -> None:
     leftovers = sorted(str(path) for path in current_loom_check_temp_dirs() - baseline)
     if leftovers:
-        fail("loom_check temporary directories must be removed after use: " + ", ".join(leftovers), failures)
+        fail(
+            "failure_label=tempdir-cleanup-residue "
+            "evidence_locator=tempdir-cleanup/loom-check-temp-dir-residue: "
+            "loom_check temporary directories must be removed after use: "
+            + ", ".join(leftovers),
+            failures,
+        )
 
 
 def check_cli_single_flight(loom_check, failures: list[str]) -> None:
@@ -203,18 +209,49 @@ def check_installer_busy_output(failures: list[str]) -> None:
 def check_demo_fixture_stays_clean(failures: list[str]) -> None:
     before = run(["git", "status", "--short", "--", "examples/new-project"], timeout=30.0)
     if before.returncode != 0:
-        fail(f"failed to read demo fixture git status: {before.stderr.strip() or before.stdout.strip()}", failures)
+        fail(
+            "failure_label=fixture-cleanliness-status-read "
+            "evidence_locator=demo-fixture-cleanliness/git-status-before: "
+            f"failed to read demo fixture git status: {before.stderr.strip() or before.stdout.strip()}",
+            failures,
+        )
         return
     result = run(["python3", "tools/check_demo_bootstrap_fixture.py"], timeout=180.0)
     if result.returncode != 0:
-        fail(f"demo bootstrap fixture check failed: {result.stderr.strip() or result.stdout.strip()}", failures)
+        fail(
+            "failure_label=fixture-cleanliness-check-failed "
+            "evidence_locator=demo-fixture-cleanliness/check-demo-bootstrap-fixture: "
+            f"demo bootstrap fixture check failed: {result.stderr.strip() or result.stdout.strip()}",
+            failures,
+        )
         return
     after = run(["git", "status", "--short", "--", "examples/new-project"], timeout=30.0)
     if after.returncode != 0:
-        fail(f"failed to re-read demo fixture git status: {after.stderr.strip() or after.stdout.strip()}", failures)
+        fail(
+            "failure_label=fixture-cleanliness-status-read "
+            "evidence_locator=demo-fixture-cleanliness/git-status-after: "
+            f"failed to re-read demo fixture git status: {after.stderr.strip() or after.stdout.strip()}",
+            failures,
+        )
         return
     if before.stdout != after.stdout:
-        fail("demo bootstrap fixture check must not dirty examples/new-project", failures)
+        fail(
+            "failure_label=fixture-cleanliness-tracked-drift "
+            "evidence_locator=demo-fixture-cleanliness/tracked-file-cleanliness: "
+            "demo bootstrap fixture check must not dirty examples/new-project",
+            failures,
+        )
+
+
+def label_surface_failure(surface: RuntimeRegressionSurface, message: str) -> str:
+    parts: list[str] = []
+    if "failure_label=" not in message:
+        parts.append(f"failure_label={surface.name}")
+    if "evidence_locator=" not in message:
+        parts.append(f"evidence_locator=runtime-regression/{surface.name}")
+    if not parts:
+        return message
+    return " ".join(parts + [message])
 
 
 def runtime_regression_surfaces(loom_check, temp_dir_baseline: set[Path]) -> tuple[RuntimeRegressionSurface, ...]:
@@ -250,13 +287,15 @@ def runtime_regression_surfaces(loom_check, temp_dir_baseline: set[Path]) -> tup
         ),
         RuntimeRegressionSurface(
             name="demo-fixture-cleanliness",
-            fixture_group="aggregate-runtime-regression",
+            fixture_group="fixture-cleanliness",
             run=check_demo_fixture_stays_clean,
+            selectable=True,
         ),
         RuntimeRegressionSurface(
             name="temp-dir-cleanup",
-            fixture_group="aggregate-runtime-regression",
+            fixture_group="tempdir-cleanup",
             run=lambda failures: check_temp_dir_cleanup(temp_dir_baseline, failures),
+            selectable=True,
         ),
     )
 
@@ -329,7 +368,7 @@ def run_surfaces(surfaces: tuple[RuntimeRegressionSurface, ...]) -> int:
         elapsed = time.perf_counter() - start
         if surface_failures:
             for message in surface_failures:
-                failures.append((surface, elapsed, message))
+                failures.append((surface, elapsed, label_surface_failure(surface, message)))
             print(
                 f"[{index}/{total}] runtime-regression surface={surface.name} fixture_group={surface.fixture_group} failed in {format_duration(elapsed)} failures={len(surface_failures)}",
                 file=sys.stderr,
