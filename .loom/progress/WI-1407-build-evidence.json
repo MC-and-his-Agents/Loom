@@ -1,0 +1,101 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "T1407-runtime-tempdir-fixture-surface-worker",
+      "task_goal": "Implement the WI-1407 tempdir cleanup and demo fixture cleanliness runtime regression surface split.",
+      "context_locators": [
+        ".loom/specs/WI-1407/spec.md",
+        ".loom/specs/WI-1407/plan.md",
+        ".loom/specs/WI-1407/evidence-map.md",
+        ".loom/specs/WI-1407/task-carrier.md",
+        "tools/check_loom_check_runtime_regressions.py",
+        "Makefile"
+      ],
+      "read_scope": [
+        "Runtime regression surface registry, selector, Makefile aliases, and existing #1405/#1406 runtime regression preservation boundaries"
+      ],
+      "write_ownership": [
+        ".loom/progress/WI-1407.md",
+        ".loom/specs/WI-1407/evidence-map.md",
+        ".loom/specs/WI-1407/implementation-contract.md",
+        ".loom/specs/WI-1407/plan.md",
+        ".loom/specs/WI-1407/spec.md",
+        ".loom/specs/WI-1407/task-carrier.md",
+        ".loom/work-items/WI-1407.md",
+        "Makefile",
+        "tools/check_loom_check_runtime_regressions.py"
+      ],
+      "non_goals": [
+        "No #1408 aggregate runtime closeout",
+        "No parent #1263 or umbrella #1255 closeout",
+        "No release/npm/live/VERSION/tag/GitHub Release/npm publish action",
+        "No locking behavior rewrite or subprocess environment purity rewrite"
+      ],
+      "validation_expectation": "Scheduler consumes current-head local validation, PR metadata readback, hosted checks classification, review, PR gate, merge-ready, and controlled merge separately.",
+      "output_format": "Implementation branch, PR body metadata, suite carriers, validation summary, and scheduler-readable worker report.",
+      "integration_target": [
+        ".loom/progress/WI-1407.md",
+        ".loom/specs/WI-1407/evidence-map.md",
+        ".loom/specs/WI-1407/implementation-contract.md",
+        ".loom/specs/WI-1407/plan.md",
+        ".loom/specs/WI-1407/spec.md",
+        ".loom/specs/WI-1407/task-carrier.md",
+        ".loom/work-items/WI-1407.md",
+        "Makefile",
+        "tools/check_loom_check_runtime_regressions.py",
+        "PR #1444"
+      ],
+      "status": "integrated",
+      "summary": "Worker implementation was integrated into PR #1444 and refreshed to head 35bbf02f0cd427154d8f5ba338a0a38e91d0e115 on base 1f760cce1ac48e334800a94f513b3a7173e94d7d. Scheduler readback confirmed PR body metadata, suite inspect/validate/evidence/carrier validation, changed-file scope, and clean worktree.",
+      "locators": [
+        ".loom/progress/WI-1407.md",
+        ".loom/specs/WI-1407/evidence-map.md",
+        ".loom/specs/WI-1407/implementation-contract.md",
+        ".loom/specs/WI-1407/plan.md",
+        ".loom/specs/WI-1407/spec.md",
+        ".loom/specs/WI-1407/task-carrier.md",
+        ".loom/work-items/WI-1407.md",
+        "Makefile",
+        "tools/check_loom_check_runtime_regressions.py",
+        "https://github.com/MC-and-his-Agents/Loom/pull/1444"
+      ]
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1407-runtime-surface-split",
+      "status": "integrated",
+      "summary": "Added named temp-dir-cleanup and demo-fixture-cleanliness runtime regression surfaces while preserving the existing #1405 locking surfaces, #1406 subprocess-env-purity surface, and aggregate runtime regression entrypoint.",
+      "locators": [
+        "tools/check_loom_check_runtime_regressions.py",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "WI-1407-suite-and-carriers",
+      "status": "integrated",
+      "summary": "Recorded minimal suite, evidence map, task carrier, work item, progress, and PR metadata carriers for WI-1407 at current PR head.",
+      "locators": [
+        ".loom/progress/WI-1407.md",
+        ".loom/specs/WI-1407/evidence-map.md",
+        ".loom/specs/WI-1407/implementation-contract.md",
+        ".loom/specs/WI-1407/plan.md",
+        ".loom/specs/WI-1407/spec.md",
+        ".loom/specs/WI-1407/task-carrier.md",
+        ".loom/work-items/WI-1407.md",
+        "https://github.com/MC-and-his-Agents/Loom/pull/1444"
+      ]
+    },
+    {
+      "id": "WI-1407-current-head-validation",
+      "status": "integrated",
+      "summary": "Scheduler current-head validation passed: git diff --check; PR metadata preflight; suite inspect; suite validate; suite evidence validate; suite carrier validate. Worker validation also covered list-surfaces, targeted tempdir cleanup and demo fixture cleanliness targets, existing #1405 locking targets, #1406 subprocess-env-purity, aggregate runtime regression, py_compile_clean, and residue audit.",
+      "locators": [
+        ".loom/progress/WI-1407.md",
+        ".loom/specs/WI-1407/evidence-map.md",
+        "PR #1444 metadata carrier"
+      ]
+    }
+  ]
+}
