@@ -1396,7 +1396,7 @@ def runtime_carrier_reference_records(path: Path, target: Path) -> list[dict[str
         return []
     matches: list[dict[str, Any]] = []
     for line_number, line in enumerate(lines, start=1):
-        if ".loom/bin" not in line:
+        if "python3 .loom/bin/" not in line:
             continue
         matches.append(
             {

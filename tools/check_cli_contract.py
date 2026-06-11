@@ -1387,8 +1387,19 @@ def global_cli_state(target: Path) -> dict[str, Any]:
 
 def write_global_cli_fact_chain_fixture(target: Path) -> None:
     replacements = {
+        "python3 .loom/bin/loom_init.py bootstrap --target . --write --repair-gitignore": "loom init bootstrap --target . --write --repair-gitignore --json",
         "python3 .loom/bin/loom_init.py verify --target .": "loom verify --target . --json",
         "python3 .loom/bin/loom_init.py fact-chain --target .": "loom fact-chain --target . --json",
+        "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001": "loom resume --target . --item INIT-0001 --json",
+        "python3 .loom/bin/loom_status.py --target . --item INIT-0001": "loom status --target . --item INIT-0001 --json",
+        "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item INIT-0001": "loom merge-ready --target . --item INIT-0001 --json",
+        "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001": "loom checkpoint merge --target . --item INIT-0001 --json",
+        "python3 .loom/bin/loom_flow.py closeout check --target .": "loom closeout --target . --json",
+        "python3 .loom/bin/loom_flow.py reconciliation audit --target .": "loom reconcile --json",
+        "python3 .loom/bin/loom_flow.py adopt verify --target .": "loom adopt verify --target . --json",
+        "python3 .loom/bin/loom_flow.py governance-profile upgrade --target . --to standard --dry-run": "loom profile upgrade --target . --to standard --dry-run --json",
+        "python3 .loom/bin/loom_flow.py governance-profile status --target .": "loom profile status --target . --json",
+        "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target .": "loom profile upgrade-plan --target . --json",
     }
     fixture_files = {
         ".loom/work-items/INIT-0001.md": REPO_ROOT / "examples/new-project/.loom/work-items/INIT-0001.md",
