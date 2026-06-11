@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1398
-- Goal: Split tools/skills_surface.py package metadata and cache artifact validation checks into named, targetable surfaces while preserving aggregate skills check and the #1397 named surfaces.
-- Scope: Issue #1398 only: tools/skills_surface.py package-metadata and cache-artifacts surfaces; aggregate skills validation compatibility; #1397 docs-reference-sync/generated-tree-drift surfaces preserved; Makefile skills aliases; WI-1398 not_applicable suite/progress/review/current carrier; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1399 launcher smoke, #1400 docs/evidence convergence, parent #1261 closeout, umbrella #1255 closeout, release/package/demo/runtime behavior changes, generated skills content change, hosted workflow semantic change, permissions change, external-visible behavior, or Round 9+ scope.
-- Execution Path: issue #1398 -> branch work/1398-skills-package-cache-checks -> PR #1424 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1403
+- Goal: Add demo bootstrap canonicalization diagnostics as a named targetable validation surface while preserving generation, fixture-drift, and aggregate demo bootstrap validation behavior.
+- Scope: Issue #1403 only: tools/check_demo_bootstrap_fixture.py canonicalization diagnostics surface; Makefile alias; WI-1403 suite/progress/review/current carrier; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1401 generation semantic change, #1402 fixture drift/cleanliness split, #1404 docs/evidence convergence, parent #1262 closeout, fixture content change, generated runtime behavior change, release/package behavior, permissions, external-visible behavior, or Round 9+ scope.
+- Execution Path: issue #1403 -> branch work/1403-demo-canonicalization-diagnostics -> PR #1425 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1398.md
-- Review Entry: .loom/reviews/WI-1398.json
-- Validation Entry: git diff --check; tools/skills_surface.py --list-surfaces and targeted docs-reference-sync/generated-tree-drift/package-metadata/cache-artifacts surfaces; Makefile skills aliases; aggregate tools/skills_surface.py check; tools/loom.py skills check; suite inspect/validate for WI-1398; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1424 for #1398 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1398 is closed, and no_release closeout is consumable by #1261/#1255.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1398 terminal closeout facts have been consumed: PR #1424 merged into `main` at 2026-06-11T00:27:58Z with merge commit `8b6d40709e56f92a1b80360d8c77f6cc696d62e8`; issue #1398 closed at 2026-06-11T00:31:07Z; hosted required checks passed on head `d6f438caee77358486f16334dfe884387388482c`; no_release terminal metadata is recorded in `.loom/progress/WI-1398.md`.
-- Next Step: None for WI-1398. Launcher smoke and skills evidence convergence continue in #1399 and #1400; parent #1261 and umbrella #1255 consume this closeout later.
+- Recovery Entry: .loom/progress/WI-1403.md
+- Review Entry: .loom/reviews/WI-1403.json
+- Validation Entry: git diff --check; tools/check_demo_bootstrap_fixture.py --surface canonicalization/generation/fixture-drift/aggregate; make loom-demo-new-project-canonicalization-check; make loom-demo-new-project-check; py_compile_clean; suite inspect/validate; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1425 for #1403 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1403 is closed, and no_release closeout is consumable by #1262/#1255.
+- Current Checkpoint: merge
+- Current Stop: Scheduler review, fact-chain activation, PR metadata readback, and local PR-gate inputs are ready for merge checkpoint consumption on PR #1425.
+- Next Step: Rerun hosted PR gate/checks for the current head, then run controlled merge and post-merge closeout sync if gates pass.
 - Blockers: None
-- Latest Validation Summary: Terminal closeout validation passed for WI-1398: hosted required checks passed on PR #1424 head `d6f438caee77358486f16334dfe884387388482c`; PR #1424 merged at `8b6d40709e56f92a1b80360d8c77f6cc696d62e8`; issue #1398 closed; GitHub native dependency edge #1261 blocked by #1398 was manually reconciled after dry-run proof and read back; reconciliation audit passes; local fact-chain, carrier refresh --dry-run, shadow-parity closeout and merge_ready surfaces, closeout check, suite validate not_applicable with blocking_gaps=[], and git diff --check pass on the closeout-only carrier branch.
-- Recovery Boundary: WI-1398 is terminal. Do not reopen or modify implementation scope here; subsequent skills stream work remains in #1399, #1400, parent #1261, and umbrella #1255.
-- Current Lane: skills-package-cache-surfaces
+- Latest Validation Summary: Refreshed-head validation passed for PR #1425 head `dc9806f5f8eb1675ef9a88872a320967cced525a`: `git diff --check`; `python3 tools/check_demo_bootstrap_fixture.py --help`; `python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization --timeout 180`; `make loom-demo-new-project-canonicalization-check`; `python3 tools/check_demo_bootstrap_fixture.py --surface generation --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift --show-surface-evidence --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface aggregate --show-surface-evidence --timeout 180` with `subsurface_count=3`; `python3 tools/check_demo_bootstrap_fixture.py --surface aggregate --timeout 180`; `make loom-demo-new-project-check`; `python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py`; `python3 tools/loom.py suite inspect --target . --item WI-1403 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1403 --json` returned `result=not_applicable`, `blocking_gaps=[]`, exit 1 per current not_applicable contract; PR metadata preflight/readback passed for `head_sha=dc9806f5f8eb1675ef9a88872a320967cced525a`; hosted worker-relevant checks started on current head and earlier stale PR-gate/root-governance failures were classified as scheduler-owned carrier/review metadata drift.
+- Recovery Boundary: WI-1403 owns only demo bootstrap canonicalization diagnostics in `tools/check_demo_bootstrap_fixture.py`, a narrow Makefile target alias, WI-1403 suite/progress carriers, and PR metadata. It must not change #1401 generation semantics, #1402 fixture drift/cleanliness split, #1404 docs/evidence convergence, parent #1262 closeout, fixture contents, generated runtime behavior, release/package behavior, review artifacts, guardian/formal review, controlled merge, or closeout.
+- Current Lane: demo-bootstrap-canonicalization-diagnostics
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1398.md
-- Dynamic Truth: .loom/progress/WI-1398.md
+- Static Truth: .loom/work-items/WI-1403.md
+- Dynamic Truth: .loom/progress/WI-1403.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
