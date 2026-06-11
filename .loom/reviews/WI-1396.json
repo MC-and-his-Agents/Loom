@@ -1,0 +1,58 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1396",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allow: WI-1396 is a docs/evidence convergence PR for release/package validation surfaces. It documents named release/package validation surfaces, preserves the aggregate release/package command contract, refreshes WI-1396 carrier/status/review evidence for PR #1445 head ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6, and does not change checker behavior, release execution, VERSION, workflows, npm package payload semantics, parent #1260 closeout, umbrella #1255 closeout, or live release actions. Local release/package aggregate, npm package, package tests, suite validate/evidence/carrier, PR metadata preflight, fact-chain, runtime evidence, and build checkpoint passed; no implementation blocker found.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-11T12:42:56Z",
+  "reviewed_head": "ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6",
+  "reviewed_validation_summary": "Rebased validation passed at head ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6: git diff --check origin/main..HEAD; python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite validate --target . --item WI-1396 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1396 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1396 --json; python3 tools/loom.py pr metadata-preflight 1445 --head-sha ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6 --work-item WI-1396 --surface merge_ready --json.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1396.md",
+    "recovery_entry": ".loom/progress/WI-1396.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/8ef3/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/8ef3/Loom --item WI-1396 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/8ef3/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/8ef3/Loom --item WI-1396 --json",
+    "suite_evidence_map": ".loom/specs/WI-1396/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1396/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
