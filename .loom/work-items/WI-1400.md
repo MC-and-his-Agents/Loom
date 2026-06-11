@@ -6,7 +6,7 @@
 - Goal: Close the skills surface split by documenting the named skills validation surfaces, preserving the aggregate command contract, and recording evidence for #1261/#1255 consumption.
 - Scope: Docs/evidence convergence for the merged #1397/#1398/#1399 generated SKILLS validation surfaces; command matrix references; validation evidence; WI-1400 Loom carriers and PR metadata.
 - Execution Path: skills/surface-split-docs-evidence
-- Workspace Entry: /Users/mc/.codex/worktrees/e701/Loom
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1400.md
 - Review Entry: .loom/reviews/WI-1400.json
 - Validation Entry: git diff --check; python3 tools/skills_surface.py check --list-surfaces; targeted skills surfaces; python3 tools/skills_surface.py check; python3 tools/loom.py skills check --target . --json; suite inspect/validate/evidence/carrier for WI-1400; PR metadata preflight/readback.
