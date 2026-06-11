@@ -3,11 +3,11 @@
   "item_id": "WI-1404",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head review allow: PR #1446 documents the demo bootstrap generation, canonicalization, fixture-drift, examples/new-project cleanliness, and aggregate validation surfaces without changing validation script behavior, fixture content, generated runtime behavior, release/package behavior, workflows, shared parser/schema vocabulary, parent #1262/#1255 closeout, or live external state. The reviewed diff is limited to WI-1404 docs/evidence/carrier/spec surfaces, three harness methodology docs, and scheduler-owned current-item/review/status/shadow carrier refresh. Local metadata preflight, suite inspect, expected not_applicable suite validate, suite evidence validate, suite carrier validate, git diff check, and hosted loom-check/py-compile/demo-bootstrap/repo-local-cli passed for this scheduler gate window. Pre-refresh loom-pr-merge-gate and root-self-governance failures were expected shared-lane activation gaps and must be re-read after this current-head review/status/shadow refresh.",
+  "summary": "Terminal closeout review allow: PR #1446 is merged and issue #1404 is closed; this closeout-only carrier update records WI-1404/#1404 terminal progress, task-carrier, status, and shadow facts after the controlled merge. The reviewed closeout-only diff is limited to WI-1404 terminal carrier/status/shadow updates; parent #1262 and umbrella #1255 closeout remain explicitly out of scope. This review does not replace the implementation review consumed for PR #1446, and no release, npm publish, tag, GitHub Release, VERSION, workflow, package payload, runtime behavior, shared parser/schema vocabulary, later Round 8 scope, or live external action is changed.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-11T16:09:41Z",
-  "reviewed_head": "2196f87fde65944a6e3697736dcfe86a06dca428",
-  "reviewed_validation_summary": "Scheduler current-head readback for PR #1446 at head `2196f87fde65944a6e3697736dcfe86a06dca428`: PR #1446 OPEN/non-draft/MERGEABLE/BLOCKED with base `2d67609de1d21f9bf579506670f406125fcef7c0`; issue #1404 OPEN; parent #1262 OPEN; diff limited to WI-1404 docs/evidence/carrier/spec surfaces, harness docs, and scheduler-owned current-item/review/status/shadow carrier refresh; `git diff --check origin/main...HEAD` passed; `python3 tools/loom.py pr metadata-preflight 1446 --head-sha 2196f87fde65944a6e3697736dcfe86a06dca428 --work-item WI-1404 --surface merge_ready --json` passed; suite inspect passed; suite validate returned `result=not_applicable` with `blocking_gaps=[]`; suite evidence validate passed; suite carrier validate passed; hosted py-compile, repo-local-cli, and loom-check passed for the scheduler gate window; hosted loom-pr-merge-gate and root-self-governance failures were classified as expected before shared lane activation and require fresh readback after this current-head review/status/shadow refresh.",
+  "authored_at": "2026-06-11T17:05:11Z",
+  "reviewed_head": "1a73f5619076dc394d7ea288ed0986ffc5eef7c5",
+  "reviewed_validation_summary": "Post-merge terminal closeout readback: PR #1446 merged at 2026-06-11T16:35:07Z with merge commit 2983ecb6f4de109c99c73059b67794d2a617377f; issue #1404 closed/completed at 2026-06-11T16:39:53Z; parent #1262 remains open and was not closed out; reconciliation audit classifies only the parent/native dependency edge as outside this grant; carrier closeout-sync wrote closed_out metadata for issue 1404, PR 1446, target branch main, and evidence locator github:issue/1404#event-closed;github:pr/1446;git:2983ecb6f4de109c99c73059b67794d2a617377f; no release/npm/live action, runtime/workflow/package payload change, shared contract/schema/parser vocabulary change, or later Round 8 processing was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored current-head review approved PR #1446 docs/evidence and scheduler-owned carrier changes for scheduler gate consumption without expanding into parent #1262 or later Round 8 scope."
+    "reason": "Authored terminal closeout review approved the closeout-only carrier updates for WI-1404/#1404 without expanding into parent #1262 or later Round 8 scope."
   }
 }
