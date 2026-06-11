@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1290",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1290 scheduler semantic review allows the docs-only companion/guardian adapter contract at head 24487546959a75cde2915d7c48199b06130db571: it defines guardian_adapters inputs/outputs, allow/block/fallback verdict semantics, structured evidence locator requirements, deterministic merge semantics that preserve semantic_review_disposition and PR head binding, diagnostics taxonomy, and abstract HotCP/WebEnvoy/Syvert examples without copying repo-specific business rules into Loom core. Scope remains limited to docs/adoption/repo-companion-contract.md and WI-1290 carriers; no runtime/parser/checker, #1292 fixture, #1293 release/docs, parent closeout, or external-visible behavior change is included.",
+  "reviewer": "codex-scheduler-019eb4fd-3522-7aa3-880f-f52051b47e54",
+  "authored_at": "2026-06-11T06:12:32Z",
+  "reviewed_head": "24487546959a75cde2915d7c48199b06130db571",
+  "reviewed_validation_summary": "2026-06-11 scheduler validation on head 24487546959a75cde2915d7c48199b06130db571: git diff --check origin/main...HEAD passed; diff is limited to docs/adoption/repo-companion-contract.md, .loom/work-items/WI-1290.md, .loom/progress/WI-1290.md, and .loom/specs/WI-1290/spec.md; focused rg readback confirmed guardian_adapters, allow/block/fallback, structured evidence locator requirements, deterministic merge semantics, diagnostics taxonomy, and HotCP/WebEnvoy/Syvert examples; suite inspect returned result=pass and suite validate returned expected result=not_applicable with no blocking gaps; PR #1439 body readback matches head 24487546959a75cde2915d7c48199b06130db571; python3 tools/loom.py pr metadata-preflight --surface merge_ready --body-file .loom/tmp/WI-1290-pr-body-readback.md --json returned result=pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1290.md",
+    "recovery_entry": ".loom/progress/WI-1290.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
