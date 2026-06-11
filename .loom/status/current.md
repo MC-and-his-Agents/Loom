@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1400
-- Goal: Close the skills surface split by documenting the named skills validation surfaces, preserving the aggregate command contract, and recording evidence for #1261/#1255 consumption.
-- Scope: Docs/evidence convergence for the merged #1397/#1398/#1399 generated SKILLS validation surfaces; command matrix references; validation evidence; WI-1400 Loom carriers and PR metadata.
-- Execution Path: skills/surface-split-docs-evidence
+- Item ID: WI-1404
+- Goal: Close the demo bootstrap validation split by documenting generation, canonicalization, fixture-drift, and examples/new-project cleanliness surfaces and recording parent closeout evidence.
+- Scope: Issue #1404 only: concise demo bootstrap command/evidence references, WI-1404 progress and suite path decision carriers, PR metadata/head readback, and local validation evidence that consumes merged #1401/#1403/#1402 surfaces. No validation script behavior changes, fixture content or generation behavior changes, review/status/shadow writes, parent #1262/#1255 closeout, release/package/runtime implementation, guardian, formal review, controlled merge, or closeout.
+- Execution Path: issue #1404 -> branch `work/1404-demo-docs-evidence` -> PR -> scheduler-owned review/pr-gate/controlled merge/no_release closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1400.md
-- Review Entry: .loom/reviews/WI-1400.json
-- Validation Entry: git diff --check; python3 tools/skills_surface.py check --list-surfaces; targeted skills surfaces; python3 tools/skills_surface.py check; python3 tools/loom.py skills check --target . --json; suite inspect/validate/evidence/carrier for WI-1400; PR metadata preflight/readback.
-- Closing Condition: PR for #1400 is opened or updated with current branch/head metadata, local validation and PR body readback pass, hosted checks are classified, and the worker stops at waiting-scheduler-gate for scheduler-owned review/gate/merge/closeout.
-- Current Checkpoint: closed_out
-- Current Stop: Terminal closeout consumed: PR #1443 merged by Loom controlled merge at exact head d80945fec3017a46d8ef4fe6ffc1d058d5b689bf with merge commit 38b1d1b150b397504174ba18268d3e7169cf75db; issue #1400 closed as completed at 2026-06-11T14:52:14Z via closeout comment https://github.com/MC-and-his-Agents/Loom/issues/1400#issuecomment-4681859829. No parent #1261 closeout, release/npm/live action, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package payload change, or shared contract/schema/parser vocabulary change was performed.
-- Next Step: None for WI-1400/#1400 terminal closeout. Parent #1261 and umbrella #1255 closeout remain separate scheduler-owned scopes.
-- Blockers: None for WI-1400/#1400 terminal closeout.
-- Latest Validation Summary: Terminal closeout validation for PR #1450 at head 6dd67727bc253b6afb9f8248e904e880fc76ba21: issue #1400 CLOSED/COMPLETED at 2026-06-11T14:52:14Z; implementation PR #1443 MERGED at 2026-06-11T14:47:17Z with merge commit 38b1d1b150b397504174ba18268d3e7169cf75db; python3 -m json.tool .loom/reviews/WI-1400.json >/dev/null; git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; CODEX_EXPORT_GH_TOKEN=1 python3 .loom/bin/loom_flow.py closeout check --target . --issue 1400 --pr 1443 --branch work/1400-skills-docs-evidence --skip-gate blocked only on forbidden parent #1261 native dependency sync while retained closeout gate subchecks for review, merge-ready attempt, PR merge backlink, and host PR checks passed; python3 tools/loom.py pr metadata-preflight 1450 --head-sha 6dd67727bc253b6afb9f8248e904e880fc76ba21 --work-item WI-1400 --surface merge_ready --json passed; python3 tools/loom.py pr gate 1450 --head-sha 6dd67727bc253b6afb9f8248e904e880fc76ba21 --work-item WI-1400 --surface merge_ready --json passed. Hosted py-compile, demo-bootstrap, repo-local-cli, and loom-check passed or were pending on the current head at review time; hosted root-self-governance and loom-pr-merge-gate failures were classified as stale pre-review/metadata inputs to be re-read after this review refresh.
-- Recovery Boundary: Terminal WI-1400/#1400 closeout only under watcher decision watcher-closeout-extension-R8-WI-1400-202606111452. Do not process or close parent #1261, #1404/#1407/#1408, #1262/#1263/#1255, Round 9/11/Deferred, #1244/#1245/#1246, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package payload changes, or shared contract/schema/parser/failure vocabulary.
-- Current Lane: terminal-closeout
+- Recovery Entry: .loom/progress/WI-1404.md
+- Review Entry: .loom/reviews/WI-1404.json
+- Validation Entry: `git diff --check`; `python3 tools/check_demo_bootstrap_fixture.py --help`; `python3 tools/check_demo_bootstrap_fixture.py --surface generation --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift --show-surface-evidence --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface cleanliness --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface aggregate --show-surface-evidence --timeout 180`; `make loom-demo-new-project-check`; tracked `examples/new-project` cleanliness readback; WI-1404 suite inspect/validate; PR metadata/head readback; hosted checks classification.
+- Closing Condition: PR for #1404 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1404 is closed, and no_release closeout lets #1262 consume explicit evidence for generation, canonicalization, fixture-drift, examples/new-project cleanliness, and aggregate fail-closed demo bootstrap validation.
+- Current Checkpoint: merge
+- Current Stop: Scheduler accepted watcher lane grant `watcher-lane-grant-R8-WI-1404-202606111557` for PR #1446; refreshed WI-1404 fact-chain/status/review/shadow carriers for current PR head `2196f87fde65944a6e3697736dcfe86a06dca428`; scheduler-owned gate readback is in progress.
+- Next Step: Run scheduler-owned PR gate, merge-ready, and hosted/root-self-governance readback for PR #1446, then request merge_lane if controlled-merge ready.
+- Blockers: None
+- Latest Validation Summary: Scheduler current-head readback for PR #1446 at head `2196f87fde65944a6e3697736dcfe86a06dca428`: PR #1446 OPEN/non-draft/MERGEABLE/BLOCKED with base `2d67609de1d21f9bf579506670f406125fcef7c0`; issue #1404 OPEN; parent #1262 OPEN; diff limited to WI-1404 docs/evidence/carrier/spec surfaces, harness docs, and scheduler-owned current-item/review/status/shadow carrier refresh; `git diff --check origin/main...HEAD` passed; `python3 tools/loom.py pr metadata-preflight 1446 --head-sha 2196f87fde65944a6e3697736dcfe86a06dca428 --work-item WI-1404 --surface merge_ready --json` passed; suite inspect passed; suite validate returned `result=not_applicable` with `blocking_gaps=[]`; suite evidence validate passed; suite carrier validate passed; hosted py-compile, repo-local-cli, and loom-check passed for the scheduler gate window; hosted loom-pr-merge-gate and root-self-governance failures were classified as expected before shared lane activation and require fresh readback after this current-head review/status/shadow refresh.
+- Recovery Boundary: WI-1404/#1446 scheduler review/gate window only under watcher decision `watcher-lane-grant-R8-WI-1404-202606111557`. Do not process #1407, #1408, parent #1262 closeout, #1263, #1255, Round 9/11/Deferred, #1244/#1245/#1246, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package payload changes, or shared contract/schema/parser/failure vocabulary.
+- Current Lane: scheduler-review-gate
 
 ## Runtime Evidence
 
-- Run Entry: Scheduler accepted watcher shared/high-cost lane grant for WI-1400/#1443, consumed worker validation/readback, and is preparing current-head review and merge-ready evidence for PR #1443 without parent #1261 closeout.
-- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns WI-1400 gate/readback and any later merge_lane request.
-- Diagnostics Entry: WI-1400 is docs/evidence convergence for named skills validation surfaces; it preserves aggregate skills validation and does not change generated skill contents, package/release/demo/runtime behavior, workflows, shared parser/schema vocabulary, release execution, or live external state.
-- Verification Entry: Scheduler validation passed at local head d4a5faf038db46430e0beae4a0a79c395eb4847e after hosted workspace carrier drift repair; local runtime-parity/root-self-governance equivalent, carrier refresh dry-run, shadow parity, and PR metadata preflight passed.
+- Run Entry: Scheduler accepted watcher shared/high-cost lane grant for WI-1404/#1446 and is refreshing fact-chain/status/review/shadow for current-head review and merge-ready evidence without parent #1262 closeout.
+- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns WI-1404 gate/readback and any later merge_lane request.
+- Diagnostics Entry: WI-1404 is docs/evidence convergence for demo bootstrap validation surfaces; it preserves aggregate demo bootstrap validation and does not change validation behavior, fixture content, generated runtime behavior, release/package behavior, workflows, shared parser/schema vocabulary, release execution, or live external state.
+- Verification Entry: Scheduler validation passed for PR #1446 current scheduler gate window at head 2196f87fde65944a6e3697736dcfe86a06dca428 on origin/main 2d67609de1d21f9bf579506670f406125fcef7c0; PR metadata preflight, suite inspect, suite evidence validate, suite carrier validate, expected not_applicable suite validate, hosted loom-check, py-compile, demo-bootstrap, and repo-local-cli passed; merge gate and root-self-governance require fresh readback after current-head review/status/shadow refresh.
 - Lane Entry: scheduler-review-gate
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1400.md
-- Dynamic Truth: .loom/progress/WI-1400.md
+- Static Truth: .loom/work-items/WI-1404.md
+- Dynamic Truth: .loom/progress/WI-1404.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1404",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head review allow: PR #1446 documents the demo bootstrap generation, canonicalization, fixture-drift, examples/new-project cleanliness, and aggregate validation surfaces without changing validation script behavior, fixture content, generated runtime behavior, release/package behavior, workflows, shared parser/schema vocabulary, parent #1262/#1255 closeout, or live external state. The reviewed diff is limited to WI-1404 docs/evidence/carrier/spec surfaces, three harness methodology docs, and scheduler-owned current-item/review/status/shadow carrier refresh. Local metadata preflight, suite inspect, expected not_applicable suite validate, suite evidence validate, suite carrier validate, git diff check, and hosted loom-check/py-compile/demo-bootstrap/repo-local-cli passed for this scheduler gate window. Pre-refresh loom-pr-merge-gate and root-self-governance failures were expected shared-lane activation gaps and must be re-read after this current-head review/status/shadow refresh.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-11T16:09:41Z",
+  "reviewed_head": "2196f87fde65944a6e3697736dcfe86a06dca428",
+  "reviewed_validation_summary": "Scheduler current-head readback for PR #1446 at head `2196f87fde65944a6e3697736dcfe86a06dca428`: PR #1446 OPEN/non-draft/MERGEABLE/BLOCKED with base `2d67609de1d21f9bf579506670f406125fcef7c0`; issue #1404 OPEN; parent #1262 OPEN; diff limited to WI-1404 docs/evidence/carrier/spec surfaces, harness docs, and scheduler-owned current-item/review/status/shadow carrier refresh; `git diff --check origin/main...HEAD` passed; `python3 tools/loom.py pr metadata-preflight 1446 --head-sha 2196f87fde65944a6e3697736dcfe86a06dca428 --work-item WI-1404 --surface merge_ready --json` passed; suite inspect passed; suite validate returned `result=not_applicable` with `blocking_gaps=[]`; suite evidence validate passed; suite carrier validate passed; hosted py-compile, repo-local-cli, and loom-check passed for the scheduler gate window; hosted loom-pr-merge-gate and root-self-governance failures were classified as expected before shared lane activation and require fresh readback after this current-head review/status/shadow refresh.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1404.md",
+    "recovery_entry": ".loom/progress/WI-1404.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1404 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1404 --json",
+    "suite_evidence_map": ".loom/specs/WI-1404/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1404/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored current-head review approved PR #1446 docs/evidence and scheduler-owned carrier changes for scheduler gate consumption without expanding into parent #1262 or later Round 8 scope."
+  }
+}

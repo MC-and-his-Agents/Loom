@@ -49,6 +49,7 @@ bucket 的特点：
 - `check-cli-contract`
 - `source-self-fixture`
 - `repo-local-cli`
+- `demo-bootstrap`
 
 这些名字是当前 Loom 已知 bucket label，不代表未来 core 只能有这四类。
 
@@ -263,6 +264,44 @@ Troubleshooting signals should stay surface-specific:
 - PR metadata, fact-chain, review, release/no-release, and scheduler-owned gate
   failures must remain separate findings. They cannot be repaired by rerunning
   `daily-execution-cli-fast` or `daily-execution-cli-full` alone.
+
+### 5.6 Demo bootstrap evidence requirements
+
+`demo-bootstrap` 是 Loom source repo 的 checked-in demo fixture
+validation bucket。它的 aggregate entry remains:
+
+```bash
+python3 tools/check_demo_bootstrap_fixture.py
+make loom-demo-new-project-check
+```
+
+The aggregate command must continue to fail closed and emit child evidence for
+all current named surfaces when `--show-surface-evidence` is requested. The
+targeted local surface entries are:
+
+| Surface | Command | Diagnostic role | Closeout evidence role |
+| --- | --- | --- | --- |
+| `demo-bootstrap-generation` | `python3 tools/check_demo_bootstrap_fixture.py --surface generation` or `make loom-demo-new-project-generation-check` | Rebuilds the demo bootstrap in an isolated target and isolates bootstrap command failure from tree drift. | Focused proof for generation behavior; not a replacement for aggregate demo bootstrap evidence. |
+| `demo-bootstrap-canonicalization` | `python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization` or `make loom-demo-new-project-canonicalization-check` | Verifies host/runtime dynamic `init-result.json` sections are canonicalized before drift comparison. | Focused proof for dynamic-field canonicalization diagnostics. |
+| `demo-bootstrap-fixture-drift` | `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift` or `make loom-demo-new-project-fixture-drift-check` | Compares the isolated generated tree with the stable checked-in `examples/new-project` fixture after canonicalization. | Focused proof for stable fixture drift. |
+| `demo-bootstrap-examples-cleanliness` | `python3 tools/check_demo_bootstrap_fixture.py --surface cleanliness` or `make loom-demo-new-project-cleanliness-check` | Proves the validation run leaves tracked `examples/new-project` status unchanged. | Focused proof for fixture cleanliness and workspace residue. |
+
+Parent closeout for the demo bootstrap split must retain both layers:
+
+- focused evidence for each named surface above, bound to the current PR head;
+- aggregate evidence from `tools/check_demo_bootstrap_fixture.py --surface
+  aggregate` or `make loom-demo-new-project-check`, so generation,
+  canonicalization, fixture drift, and examples cleanliness stay consumed as one
+  fail-closed bucket.
+
+The stable fixture must only be refreshed intentionally through:
+
+```bash
+make loom-demo-new-project-sync
+```
+
+Running a targeted or aggregate demo bootstrap validation command must not dirty
+tracked `examples/new-project` paths.
 
 ## 6. Command Matrix Consumption
 
