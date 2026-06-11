@@ -263,6 +263,36 @@ full validation basis to the PR head, merge commit, target branch, and
 `no_release` judgment or explicitly record a narrower scope rationale and
 remaining risk.
 
+Demo bootstrap fixture validation also exposes explicit local surfaces outside
+the `loom` command matrix:
+
+```bash
+python3 tools/check_demo_bootstrap_fixture.py --surface generation
+python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization
+python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift
+python3 tools/check_demo_bootstrap_fixture.py --surface cleanliness
+python3 tools/check_demo_bootstrap_fixture.py --surface aggregate
+make loom-demo-new-project-generation-check
+make loom-demo-new-project-canonicalization-check
+make loom-demo-new-project-fixture-drift-check
+make loom-demo-new-project-cleanliness-check
+make loom-demo-new-project-check
+```
+
+The named surfaces are `demo-bootstrap-generation`,
+`demo-bootstrap-canonicalization`, `demo-bootstrap-fixture-drift`, and
+`demo-bootstrap-examples-cleanliness`; the aggregate surface is
+`demo-bootstrap-fixture`. Evidence summaries that cite them must preserve the
+exact command, current head / PR head binding, result, elapsed time where
+reported, and whether the evidence is focused proof or aggregate bucket proof.
+
+For parent closeout, the focused surface commands explain which behavior was
+validated, while `make loom-demo-new-project-check` or
+`tools/check_demo_bootstrap_fixture.py --surface aggregate` remains the
+fail-closed aggregate proof. `make loom-demo-new-project-sync` is the only
+intentional stable fixture refresh entry and must not be cited as validation
+evidence for an unchanged fixture.
+
 This covers #899 and #901 by asserting that required names appear in `loom help --json`, version output is structured, and installed-state positive and negative fixtures behave consistently.
 
 For #906-#909 it also checks:
