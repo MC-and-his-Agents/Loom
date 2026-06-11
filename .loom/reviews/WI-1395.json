@@ -1,39 +1,57 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1395",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "f09fc9a1e8284f2245c123362563f19f24035c43",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allow: WI-1395 adds installed-global-cli-smoke as a named tools/check_release_surface.py surface, validates package metadata before smoke, packs the current root package with npm pack --json --ignore-scripts into a temp directory, installs the tarball into a temporary global prefix, invokes the installed loom bin for version/help JSON smoke, and preserves no-argument aggregate release validation with five subsurfaces including installed-global-cli-smoke. The diff is limited to the release checker, Makefile target, release evidence locator documentation, WI-1395 minimal suite/progress carriers, scheduler-owned work item/review/status/bootstrap carrier updates, and does not publish npm, cut tags, create GitHub Releases, mutate the user's real global npm prefix, alter VERSION, change #1393/#1394 release/package semantics, implement #1396 convergence, or close parent #1260/#1255. Local targeted, aggregate, package compatibility, suite, PR metadata, fact-chain, state-check, and spec-review evidence found no implementation blocker.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-11T04:22:03Z",
+  "reviewed_head": "93cbab777b0bdfd04e1acf1d4845e85475e80163",
+  "reviewed_validation_summary": "Scheduler pre-review validation for WI-1395 passed after rebase and PR metadata refresh on head `f09fc9a1e8284f2245c123362563f19f24035c43`: `git diff --check`; `python3 tools/check_release_surface.py --help`; `python3 tools/check_release_surface.py --list-surfaces`; `python3 tools/py_compile_clean.py tools/check_release_surface.py`; `python3 tools/check_release_surface.py --surface installed-global-cli-smoke --show-surface-evidence`; `make release-surface-installed-global-cli-smoke-check`; `python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence` with `subsurface_count=5` and `installed-global-cli-smoke:pass`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `python3 tools/loom.py suite inspect --target . --item WI-1395 --json`; `python3 tools/loom.py suite validate --target . --item WI-1395 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1395 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1395 --json`; PR #1434 metadata preflight/readback passed for WI-1395, branch `work/1395-installed-global-cli-smoke`, head `f09fc9a1e8284f2245c123362563f19f24035c43`, and `closingIssuesReferences=[]`. Hosted `py-compile`, `demo-bootstrap`, `repo-local-cli`, and `release-judgment` passed on the current head; `loom-check`/`node-installer-pr-gate` were still in progress at scheduler readback, while root-governance/pr-merge-gate failures were classified as scheduler-owned carrier/review/metadata timing gaps rather than installed-global-cli-smoke semantic failures.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1395.md",
+    "recovery_entry": ".loom/progress/WI-1395.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/b37d/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/b37d/Loom --item WI-1395 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/b37d/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/b37d/Loom --item WI-1395 --json",
+    "suite_evidence_map": ".loom/specs/WI-1395/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1395/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
