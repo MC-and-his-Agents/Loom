@@ -3,11 +3,11 @@
   "item_id": "WI-1396",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allow: WI-1396 is a docs/evidence convergence PR for release/package validation surfaces. It documents named release/package validation surfaces, preserves the aggregate release/package command contract, refreshes WI-1396 carrier/status/review evidence for PR #1445 head 6e2b23eccc5ffcae9e43e5da56ecc5c9aee6fa6a, and does not change checker behavior, release execution, VERSION, workflows, npm package payload semantics, parent #1260 closeout, umbrella #1255 closeout, or live release actions. Local release/package aggregate, npm package, package tests, suite validate/evidence/carrier, PR metadata preflight, fact-chain, runtime evidence, shadow parity, and build/merge checkpoint evidence found no implementation blocker.",
+  "summary": "Terminal closeout review allow: PR #1449 records post-merge WI-1396/#1260 terminal carrier/status/shadow facts after PR #1445 controlled merge. The reviewed diff is limited to WI-1396 progress, task-carrier, status, and closeout/merge-ready shadow hashes; host readback confirms #1445 merged, #1396 closed, #1260 closed, and #1260 blockedBy includes #1396. Local diff check, suite evidence validate, suite carrier validate, and shadow parity passed. No release, npm publish, tag, GitHub Release, VERSION, workflow, package payload, runtime behavior, shared parser/schema vocabulary, or later Round 8 scope is changed.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-11T12:48:40Z",
-  "reviewed_head": "6e2b23eccc5ffcae9e43e5da56ecc5c9aee6fa6a",
-  "reviewed_validation_summary": "Rebased validation passed at head ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6: git diff --check origin/main..HEAD; python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite validate --target . --item WI-1396 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1396 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1396 --json; python3 tools/loom.py pr metadata-preflight 1445 --head-sha ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6 --work-item WI-1396 --surface merge_ready --json.",
+  "authored_at": "2026-06-11T13:33:52Z",
+  "reviewed_head": "7dc34252e390c82087e3429c67f15fcfa4f9910e",
+  "reviewed_validation_summary": "Terminal closeout validation passed after PR #1445 merge: gh issue/pr readback for #1396/#1260/#1445; CODEX_EXPORT_GH_TOKEN=1 python3 .loom/bin/loom_flow.py reconciliation sync --target . --issue 1396 --pr 1445 --branch main --comment <WI-1396 closeout comment> --apply; GraphQL addBlockedBy readback for #1260 blocked by #1396; CODEX_EXPORT_GH_TOKEN=1 python3 .loom/bin/loom_flow.py reconciliation audit --target . --issue 1396 --pr 1445 --branch main; CODEX_EXPORT_GH_TOKEN=1 python3 .loom/bin/loom_flow.py closeout check --target . --issue 1396 --pr 1445 --branch main with retained branch-protection/ruleset/status-check fixtures; python3 tools/loom.py carrier closeout-sync --target . --item WI-1396 --terminal-state closed_out --issue 1396 --pr 1445 --merge-commit 5276f7ff2452e5b06d72f15372e62dd011099507 --target-branch main --closed-at 2026-06-11T13:16:02Z --apply --json.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the reviewed closeout-only carrier head for PR gate consumption."
   }
 }
