@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1406
-- Goal: Split subprocess environment purity validation into a named, targetable runtime regression surface while preserving the merged #1405 locking surfaces and the aggregate runtime regression entrypoint.
-- Scope: Issue #1406 only: tools/check_loom_check_runtime_regressions.py subprocess-env-purity surface registry/selector and stable environment-purity diagnostics; Makefile loom-check-runtime-subprocess-env-purity alias; WI-1406 minimal suite/progress/work-item/review/status carriers; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1407 tempdir cleanup or fixture cleanliness split, #1408 aggregate runtime closeout, parent #1263 closeout, release/package behavior, broad runtime behavior changes, hosted workflow policy, permissions, or external-visible behavior.
-- Execution Path: issue #1406 -> branch work/1406-runtime-env-purity-surface -> PR #1433 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1404
+- Goal: Close the demo bootstrap validation split by documenting generation, canonicalization, fixture-drift, and examples/new-project cleanliness surfaces and recording parent closeout evidence.
+- Scope: Issue #1404 only: concise demo bootstrap command/evidence references, WI-1404 progress and suite path decision carriers, PR metadata/head readback, and local validation evidence that consumes merged #1401/#1403/#1402 surfaces. No validation script behavior changes, fixture content or generation behavior changes, review/status/shadow writes, parent #1262/#1255 closeout, release/package/runtime implementation, guardian, formal review, controlled merge, or closeout.
+- Execution Path: issue #1404 -> branch `work/1404-demo-docs-evidence` -> PR -> scheduler-owned review/pr-gate/controlled merge/no_release closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1406.md
-- Review Entry: .loom/reviews/WI-1406.json
-- Validation Entry: git diff --check; tools/check_loom_check_runtime_regressions.py --list-surfaces; Makefile subprocess-env-purity/locking/aggregate runtime targets; py_compile_clean; suite inspect/validate/evidence/carrier validation for WI-1406; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1433 for #1406 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1406 is closed, and no_release closeout is consumable by #1263/#1255.
+- Recovery Entry: .loom/progress/WI-1404.md
+- Review Entry: .loom/reviews/WI-1404.json
+- Validation Entry: `git diff --check`; `python3 tools/check_demo_bootstrap_fixture.py --help`; `python3 tools/check_demo_bootstrap_fixture.py --surface generation --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift --show-surface-evidence --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface cleanliness --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface aggregate --show-surface-evidence --timeout 180`; `make loom-demo-new-project-check`; tracked `examples/new-project` cleanliness readback; WI-1404 suite inspect/validate; PR metadata/head readback; hosted checks classification.
+- Closing Condition: PR for #1404 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1404 is closed, and no_release closeout lets #1262 consume explicit evidence for generation, canonicalization, fixture-drift, examples/new-project cleanliness, and aggregate fail-closed demo bootstrap validation.
 - Current Checkpoint: closed_out
-- Current Stop: Terminal closeout consumed: PR #1433 merged at 2026-06-11T08:48:30Z with merge commit 00ab5be1e26700a7633b319bd1ff8697a00f4e52; issue #1406 closed at 2026-06-11T08:48:32Z; controlled merge, reconciliation audit, closeout check, closeout sync, and native #1263 blocked-by #1406 readback passed; no_release terminal metadata recorded.
-- Next Step: None for WI-1406. #1407, #1408, parent #1263, and umbrella #1255 remain separate work items.
-- Blockers: None for WI-1406 terminal closeout.
-- Latest Validation Summary: Local validation passed on 2026-06-11 for the scheduler-rebased branch on `origin/main` `449ba9e672dab6a8c1520806ba2498672cb4c8d8`: `git diff --check`; `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; `python3 tools/py_compile_clean.py tools/check_loom_check_runtime_regressions.py`; `python3 tools/loom.py suite inspect --target . --item WI-1406 --json`; `python3 tools/loom.py suite validate --target . --item WI-1406 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1406 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1406 --json`; `make loom-check-runtime-subprocess-env-purity`; `make loom-check-runtime-locking`; `make loom-check-runtime-regression`; residue audit confirmed `.loom/runtime/loom_check.lock`, `packages/loom-installer/.installer-regression-lock`, and new `loom-check-*` temp dirs were absent; `python3 tools/skills_surface.py check` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed after the local runtime-regression lock owner finished; `python3 tools/check_cli_contract.py` passed all 6 surfaces in 338.74s. PR metadata, review records, PR gate, controlled merge, and hosted checks must be refreshed after this carrier update and any further head push.
-- Recovery Boundary: Terminal WI-1406 carrier sync only. Do not reopen implementation, review, PR gate, controlled merge, #1407, #1408, parent #1263, or umbrella #1255 in this closeout carrier update.
+- Current Stop: WI-1404/#1404 terminal closeout consumed PR #1446 controlled merge, issue #1404 closure, no_release decision, and terminal carrier metadata under watcher closeout extension watcher-closeout-extension-R8-WI-1404-202606111645.
+- Next Step: None for WI-1404/#1404 terminal closeout. Parent #1262 and umbrella #1255 closeout remain separate scheduler-owned scopes.
+- Blockers: None for WI-1404/#1404 terminal closeout.
+- Latest Validation Summary: Post-merge terminal closeout readback: PR #1446 merged at 2026-06-11T16:35:07Z with merge commit 2983ecb6f4de109c99c73059b67794d2a617377f; issue #1404 closed/completed at 2026-06-11T16:39:53Z; parent #1262 remains open and was not closed out; reconciliation audit classifies only the parent/native dependency edge as outside this grant; carrier closeout-sync wrote closed_out metadata for issue 1404, PR 1446, target branch main, and evidence locator github:issue/1404#event-closed;github:pr/1446;git:2983ecb6f4de109c99c73059b67794d2a617377f; no release/npm/live action, runtime/workflow/package payload change, shared contract/schema/parser vocabulary change, or later Round 8 processing was performed.
+- Recovery Boundary: WI-1404/#1404 terminal closeout only under watcher decision watcher-closeout-extension-R8-WI-1404-202606111645. Parent #1262 closeout, #1407, #1408, #1263, #1255, Round 9/11/Deferred, #1244/#1245/#1246, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package payload changes, and shared contract/schema/parser/failure vocabulary remain forbidden.
 - Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
-- Run Entry: Scheduler consumed T1406 waiting-scheduler-gate report for PR #1433, rebased branch `work/1406-runtime-env-purity-surface` onto `origin/main` `449ba9e672dab6a8c1520806ba2498672cb4c8d8`, resolved the current carrier conflict, added the missing WI-1406 implementation contract, and refreshed local validation on 2026-06-11.
-- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns current-head review, PR gate, controlled merge, and closeout for WI-1406.
-- Diagnostics Entry: WI-1406 adds a named subprocess-env-purity runtime regression surface with fixture group `environment-purity` and stable evidence locators while preserving #1405 locking surfaces and aggregate runtime regression validation.
-- Verification Entry: Local validation passed on the rebased branch: git diff --check; surface list readback; py_compile_clean; suite inspect/validate/evidence/carrier; make loom-check-runtime-subprocess-env-purity; make loom-check-runtime-locking; make loom-check-runtime-regression; residue audit; skills_surface aggregate check; source contract-only loom_check; check_cli_contract all 6 surfaces. PR metadata, review record, PR gate, controlled merge, and hosted check readback still need refresh after this carrier update and any further head push.
-- Lane Entry: runtime-subprocess-env-purity-surface
+- Run Entry: Scheduler consumed watcher closeout extension for WI-1404/#1404 terminal carrier sync after PR #1446 controlled merge and issue #1404 closure.
+- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns WI-1404 terminal closeout readback and closeout-only PR request.
+- Diagnostics Entry: WI-1404 is docs/evidence convergence for demo bootstrap validation surfaces; it preserves aggregate demo bootstrap validation and does not change validation behavior, fixture content, generated runtime behavior, release/package behavior, workflows, shared parser/schema vocabulary, release execution, or live external state.
+- Verification Entry: Terminal closeout readback confirms PR #1446 merged at 2026-06-11T16:35:07Z with merge commit 2983ecb6f4de109c99c73059b67794d2a617377f, issue #1404 closed/completed at 2026-06-11T16:39:53Z, parent #1262 remains open, carrier refresh dry-run passes with refresh_needed=[], fact-chain passes, shadow parity passes for closeout and merge_ready, and git diff check passes. Closeout check blocks only on manual reconciliation findings outside the implementation merge path: forbidden parent native-edge sync and post-merge closeout review evidence classification.
+- Lane Entry: terminal-closeout
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1406.md
-- Dynamic Truth: .loom/progress/WI-1406.md
+- Static Truth: .loom/work-items/WI-1404.md
+- Dynamic Truth: .loom/progress/WI-1404.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

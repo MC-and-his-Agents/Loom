@@ -90,6 +90,23 @@ Troubleshooting signals:
 
 The group names and order are intentionally identical to the frozen `repo-local-cli` CI command groups. Do not rename these local group labels or move the runtime-state scene conflict negative check into a positive group; that check must remain fail-closed.
 
+The `setup-demo-bootstrap` group consumes the aggregate demo bootstrap fixture
+check. When a PR needs focused diagnosis, the same bucket exposes these local
+aliases without changing the hosted group name:
+
+| Named surface | Local alias | Script selector |
+| --- | --- | --- |
+| `demo-bootstrap-generation` | `make loom-demo-new-project-generation-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface generation` |
+| `demo-bootstrap-canonicalization` | `make loom-demo-new-project-canonicalization-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization` |
+| `demo-bootstrap-fixture-drift` | `make loom-demo-new-project-fixture-drift-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift` |
+| `demo-bootstrap-examples-cleanliness` | `make loom-demo-new-project-cleanliness-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface cleanliness` |
+| `demo-bootstrap-fixture` | `make loom-demo-new-project-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface aggregate` |
+
+Closeout evidence for the demo bootstrap split must link the focused surface
+proofs and the aggregate `setup-demo-bootstrap` proof. Targeted checks can
+diagnose a surface; they do not rename or replace the hosted
+`repo-local-cli: setup-demo-bootstrap` group.
+
 ## Machine Contract
 
 `governance_surface.gate_starter` 与 `governance_control_plane.gate_starter` 必须使用：
