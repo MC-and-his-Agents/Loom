@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1402
-- Goal: Split demo fixture drift and examples/new-project cleanliness validation into named targetable surfaces while preserving generation, canonicalization, fixture-drift, and aggregate demo bootstrap validation behavior.
-- Scope: Issue #1402 only: tools/check_demo_bootstrap_fixture.py fixture-drift and examples/new-project cleanliness surfaces; Makefile fixture-drift/cleanliness aliases; WI-1402 suite/progress/review/current carrier; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1401 generation semantic change, #1403 canonicalization semantic change, #1404 docs/evidence convergence, parent #1262 closeout, fixture content change, generated runtime behavior change, release/package behavior, permissions, external-visible behavior, or Round 9+ scope.
-- Execution Path: issue #1402 -> branch work/1402-demo-fixture-drift-cleanliness -> PR #1431 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1395
+- Goal: Add installed/global CLI smoke as a named targetable release validation surface while preserving aggregate release/package validation behavior.
+- Scope: Issue #1395 only: tools/check_release_surface.py installed-global-cli-smoke surface; Makefile release-surface-installed-global-cli-smoke alias; release evidence locator documentation; WI-1395 minimal suite/progress/review/current carrier; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1393 release surface semantic change, #1394 npm manifest/payload semantic change, #1396 release/package evidence convergence, parent #1260 closeout, umbrella #1255 closeout, VERSION/tag/GitHub Release/npm publish, workflow release behavior, package payload content change, external-visible release action, or user-global npm prefix mutation.
+- Execution Path: issue #1395 -> branch work/1395-installed-global-cli-smoke -> PR #1434 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1402.md
-- Review Entry: .loom/reviews/WI-1402.json
-- Validation Entry: git diff --check; tools/check_demo_bootstrap_fixture.py --surface generation/canonicalization/fixture-drift/cleanliness/aggregate; make loom-demo-new-project-check; make loom-demo-new-project-fixture-drift-check; make loom-demo-new-project-cleanliness-check; py_compile_clean; suite inspect/validate; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1431 for #1402 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1402 is closed, and no_release closeout is consumable by #1262/#1255.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1402 terminal closeout facts have been consumed: PR #1431 merged into main at 2026-06-11T03:31:54Z with merge commit d35e36d5e1f183fd85606ebd1580df8faaf2ebd7; issue #1402 closed at 2026-06-11T03:31:55Z; hosted required checks passed on head 5e8d959486f31500a9b1451d1d93205b3c07ea21; reconciliation audit passes after adding the native dependency edge #1262 blocked by #1402; no_release terminal metadata is recorded in .loom/progress/WI-1402.md.
-- Next Step: None for WI-1402. Demo bootstrap docs/evidence convergence continues in #1404; parent #1262 and umbrella #1255 consume this closeout later.
+- Recovery Entry: .loom/progress/WI-1395.md
+- Review Entry: .loom/reviews/WI-1395.json
+- Validation Entry: git diff --check; py_compile_clean; check_release_surface.py help/list-surfaces/installed-global-cli-smoke/aggregate; make release-surface-installed-global-cli-smoke-check; check_npm_package.py; npm run test:package; suite inspect/validate/evidence/carrier for WI-1395; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1434 for #1395 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1395 is closed, and no_release closeout is consumable by #1260/#1255.
+- Current Checkpoint: merge
+- Current Stop: PR #1434 head `3d059d89600d60d465db4f10f35312cebce0d4d0` has scheduler-authored spec review, implementation review, current fact-chain/status/shadow carriers, PR metadata readback, and local PR gate evidence consuming the review as carrier-only drift after review/shadow carrier commits. Hosted implementation checks are running or passing on the same head.
+- Next Step: Wait for hosted required checks on PR #1434 head `3d059d89600d60d465db4f10f35312cebce0d4d0`, rerun/consume `loom-pr-merge-gate` after current PR body metadata and carrier state are stable, then merge through the controlled path if all gates pass and consume no_release closeout for #1395 without closing parent #1260/#1255.
 - Blockers: None
-- Latest Validation Summary: Local validation passed for worker T1402 before PR creation: `git diff --check`; `python3 tools/check_demo_bootstrap_fixture.py --help`; Makefile dry-run surface readback for generation, canonicalization, fixture-drift, cleanliness, and aggregate targets; `python3 tools/check_demo_bootstrap_fixture.py --surface generation --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift --show-surface-evidence --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface cleanliness --timeout 180`; `python3 tools/check_demo_bootstrap_fixture.py --surface aggregate --show-surface-evidence --timeout 180` with `subsurface_count=4`; `make loom-demo-new-project-check`; `make loom-demo-new-project-fixture-drift-check`; `make loom-demo-new-project-cleanliness-check`; `python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py`; `python3 tools/loom.py suite inspect --target . --item WI-1402 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1402 --json` returned `result=not_applicable`, `blocking_gaps=[]`, exit 1 per current not_applicable contract; `git status --short --untracked-files=no -- examples/new-project` stayed empty after checks. PR #1431 metadata/body readback passed with the machine carrier aligned to branch `work/1402-demo-fixture-drift-cleanliness`; hosted `py-compile`, `demo-bootstrap`, and `repo-local-cli` passed on the implementation head, while `loom-pr-merge-gate`/`root-self-governance` were classified as scheduler-owned current-head review/gate gaps and long `loom-check` was still in progress at readback time.
-- Recovery Boundary: WI-1402 is terminal. Do not reopen or modify implementation scope here; #1404, parent #1262, and umbrella #1255 remain separate convergence work.
-- Current Lane: demo-bootstrap-fixture-drift-cleanliness
+- Latest Validation Summary: Scheduler pre-review validation for WI-1395 passed after rebase and PR metadata refresh on head `f09fc9a1e8284f2245c123362563f19f24035c43`: `git diff --check`; `python3 tools/check_release_surface.py --help`; `python3 tools/check_release_surface.py --list-surfaces`; `python3 tools/py_compile_clean.py tools/check_release_surface.py`; `python3 tools/check_release_surface.py --surface installed-global-cli-smoke --show-surface-evidence`; `make release-surface-installed-global-cli-smoke-check`; `python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence` with `subsurface_count=5` and `installed-global-cli-smoke:pass`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `python3 tools/loom.py suite inspect --target . --item WI-1395 --json`; `python3 tools/loom.py suite validate --target . --item WI-1395 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1395 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1395 --json`; PR #1434 metadata preflight/readback passed for WI-1395, branch `work/1395-installed-global-cli-smoke`, head `f09fc9a1e8284f2245c123362563f19f24035c43`, and `closingIssuesReferences=[]`. Hosted `py-compile`, `demo-bootstrap`, `repo-local-cli`, and `release-judgment` passed on the current head; `loom-check`/`node-installer-pr-gate` were still in progress at scheduler readback, while root-governance/pr-merge-gate failures were classified as scheduler-owned carrier/review/metadata timing gaps rather than installed-global-cli-smoke semantic failures.
+- Recovery Boundary: Scope is limited to `tools/check_release_surface.py`, `Makefile`, `docs/adoption/loom-cli-release-surface.md`, WI-1395 carriers/specs/review/current truth, and PR #1434 scheduler gate/closeout evidence. Do not cut a release, publish npm, change #1393/#1394 semantics, implement #1396 convergence, close parent #1260/#1255, alter VERSION/tag/GitHub Release state, change release workflow semantics, mutate the user's real global npm prefix, or start Round 9+ scope.
+- Current Lane: installed-global-cli-smoke-release-surface
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1402.md
-- Dynamic Truth: .loom/progress/WI-1402.md
+- Static Truth: .loom/work-items/WI-1395.md
+- Dynamic Truth: .loom/progress/WI-1395.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -78,7 +78,7 @@ The labels below are stable evidence labels. Named release-surface checks are ta
 | `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
 | `npm-package-manifest` | `python3 tools/check_npm_package.py` and package test aliases that consume it | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
 | `npm-pack-payload` | `python3 tools/check_npm_package.py`, `npm pack --dry-run --json --ignore-scripts`, or `npm run test:package` when it consumes the same payload proof | Proves the dry-run package payload contains required CLI/runtime/docs/skills/plugin files and excludes repository-internal or deprecated installer surfaces. |
-| `installed-global-cli-smoke` | Post-merge release smoke or later #1395 checker | Proves the published package can be installed or invoked as the global/installed `loom` CLI and can run the release-required behavior smoke from the package, not only from the source checkout. |
+| `installed-global-cli-smoke` | `python3 tools/check_release_surface.py --surface installed-global-cli-smoke` | Proves the packed package can be installed into a temporary global prefix, exposes the `loom` bin, and runs release-required version/help smoke from the installed package instead of only the source checkout. |
 
 All release validation evidence must retain:
 
