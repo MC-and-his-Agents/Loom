@@ -142,6 +142,7 @@
   "context_schema": {
     "fields": []
   },
+  "guardian_adapters": [],
   "dynamic_tool_locators": [],
   "policy_locators": [],
   "hook_locators": [],
@@ -154,6 +155,7 @@
 - `review_instruction_locators`
 - `metadata_contract`
 - `context_schema`
+- `guardian_adapters`
 - `dynamic_tool_locators`
 - `policy_locators`
 - `hook_locators`
@@ -165,6 +167,7 @@
 
 - `metadata_contract` 与 `context_schema` 只在 `v2` 合法
 - `review_instruction_locators` 只在 `v2` 合法
+- `guardian_adapters` 只在 `v2` 合法
 - `dynamic_tool_locators` 只在 `v2` 合法
 - `policy_locators` 只在 `v2` 合法
 - `hook_locators` 只在 `v2` 合法
@@ -419,6 +422,163 @@
 - `advanced_lint_locators` 只定位 lint result envelope，不承载 lint verdict 本身之外的运行态
 - locator payload 不得承载 `runtime_state`、`review_verdict`、`validation_status`、`merge_result`、`closeout_result`、`guardian_verdict`、`host_action_result` 或 `final_verdict`
 - repo-specific architecture rule name 不得被提升为 Loom core taxonomy；Loom core 只消费 result envelope、provenance、freshness 与 surface enforcement
+
+### 4.7.2 `guardian_adapters`
+
+`guardian_adapters` 用于声明 repo-owned companion / guardian adapter 如何把 repo-native review、
+guardian 或 integration result 接到 Loom 的 review / merge-ready 消费链，而不把 repo-specific
+规则提升为 Loom core 默认规则。
+
+它回答的是：
+
+- Loom 应去哪里读取 adapter declaration、result envelope 与 diagnostics
+- adapter 对当前 PR/head/review disposition 的最小输入是什么
+- adapter 只能返回哪些标准 verdict，以及 fallback 应如何声明
+- adapter result 与 Loom core `semantic_review_disposition`、PR head binding、PR gate 应如何确定性合并
+
+它不回答：
+
+- repo-specific guardian、live evidence、integration rubric 的业务规则是什么
+- Loom core 是否可以跳过当前 PR head 绑定的 review disposition
+- adapter 是否可以替代 Loom review record、PR metadata、controlled merge 或 closeout truth
+- host/native guardian 的底层执行协议如何实现
+
+`guardian_adapters[*]` 固定字段：
+
+- `id`
+- `summary`
+- `surface`
+- `owner`
+- `declaration_locator`
+- `result_locator`
+- `diagnostics_locator`
+- `result_envelope_schema`
+- `fallback`
+
+其中：
+
+- `surface` 只允许 `review | merge_ready`
+- `owner` 只允许 `repo | repo-companion | host-adapter`
+- `declaration_locator`、`result_locator`、`diagnostics_locator` 必须是仓内相对路径；绝对路径、越界或不可读路径必须 fail closed
+- `result_envelope_schema` 固定为 `loom-guardian-adapter-result/v1`
+- `fallback.owner` 只允许 `scheduler | repo | repo-companion | host-adapter | host`
+- `fallback.surface` 只允许 `review | merge_ready | external`
+- `fallback.severity` 只允许 `blocking | advisory | not_applicable`
+
+adapter 运行时的最小输入固定为：
+
+- 当前 PR locator 或等价 host object locator
+- 当前 PR `head_sha`
+- Loom review record 中可消费的 `semantic_review_disposition`
+- repo-owned adapter declaration locator
+- repo-owned result locator 与 diagnostics locator
+
+adapter 输出固定为单个 result envelope，而不是自由文本 verdict。最小 envelope 形状：
+
+```json
+{
+  "schema_version": "loom-guardian-adapter-result/v1",
+  "adapter_id": "webenvoy-guardian",
+  "surface": "merge_ready",
+  "verdict": "block",
+  "blocking": true,
+  "source": {
+    "owner": "repo",
+    "system": "webenvoy-guardian",
+    "result_locator": ".loom/companion/guardian/webenvoy-result.json",
+    "diagnostics_locator": ".loom/companion/guardian/webenvoy-diagnostics.json",
+    "head_sha": "abc123",
+    "run_id": "guardian-run-42",
+    "freshness": "current"
+  },
+  "fallback": null,
+  "diagnostics": {
+    "codes": ["stale_head_mismatch"],
+    "summary": "guardian result bound to old head"
+  }
+}
+```
+
+稳定 verdict 语义：
+
+- `allow`
+  - 只表示 adapter 自己的 repo-specific gate/result 对当前输入没有新增阻断
+  - `allow` 只能附加 repo-specific evidence；不得替代缺失、过期或 head 不匹配的 `semantic_review_disposition`
+- `block`
+  - 表示 adapter 已证明当前 repo-specific gate 不可消费
+  - `block` 必须阻断 Loom PR gate / merge-ready consumption
+- `fallback`
+  - 表示 adapter 本身没有得出最终 allow/block，必须显式指出 fallback owner/surface/severity
+  - `fallback` 不得被解释成隐式 `allow`
+
+structured evidence locator 最小要求：
+
+- `owner`
+- `system`
+- `result_locator`
+- `diagnostics_locator`
+- `head_sha` 或等价 current-head binding
+- `run_id`、`attempt_id` 或等价 freshness binding
+- `schema_version`
+
+如果仓库只能提供 review-scoped result、没有独立 `run_id`，也必须至少提供：
+
+- 当前 `head_sha`
+- 结果生成时间或 monotonic attempt marker
+- 可读的 diagnostics locator
+
+结果合并语义必须确定性，固定规则如下：
+
+1. Loom core `semantic_review_disposition` 与 PR head binding 仍是必需前提。
+2. 任一 adapter `block` 都会让 owning surface fail closed。
+3. adapter `allow` 只有在 Loom core review/head binding 已可消费时才会生效；否则 core block 继续成立。
+4. adapter `fallback` 只转交到声明的 fallback owner/surface/severity，不产生 pass。
+5. 多个 adapter 同时存在时，按 `block > fallback(blocking) > fallback(advisory|not_applicable) > allow` 归并；repo-owned adapter 只能增加更强 repo-specific 约束或 advisory evidence。
+6. adapter result 不能把 repo-native guardian verdict 回写成 Loom-authored `semantic_review_disposition`，也不能解除 stale review/head mismatch block。
+
+diagnostics 必须区分以下 failure classes，不得混成单一 `failed`：
+
+- `missing_locator`
+- `unreadable_locator`
+- `stale_head_mismatch`
+- `adapter_unavailable`
+- `adapter_failure`
+- `unsupported_adapter`
+- `malformed_payload`
+- `verdict_conflict`
+
+这些 diagnostics 只说明 adapter 消费状态；它们不得替代 Loom core review finding、validation summary 或 merge-ready 结论。
+
+示例 1: HotCP lightweight review
+
+- `surface`: `review`
+- adapter 读取 HotCP repo-owned lightweight review result envelope，并验证它绑定当前 PR head
+- 若 result 对当前 head 可读且 repo-specific lightweight review 未报阻断，可返回 `allow`
+- 即使 HotCP adapter 返回 `allow`，Loom 仍要求当前 head 的 `semantic_review_disposition` 可消费；不能只凭 lightweight review 通过 merge
+- 若 HotCP result 缺 locator 或 head 过期，应返回 `fallback` 或 `block`，而不是猜测通过
+
+示例 2: WebEnvoy guardian
+
+- `surface`: `merge_ready`
+- adapter 读取 WebEnvoy guardian result envelope 与 diagnostics locator
+- guardian 若明确阻断当前 head，adapter 返回 `block`
+- guardian 若暂时 unavailable，但仓库声明必须回退到 scheduler-owned manual review，adapter 返回 `fallback`，并写明 `fallback.owner=scheduler`、`fallback.surface=merge_ready`、`fallback.severity=blocking`
+- WebEnvoy live evidence、review rubric、control-plane 实现继续保持 WebEnvoy-owned，不复制进 Loom adapter contract 或 runtime
+
+示例 3: Syvert guardian / integration
+
+- `surface`: `merge_ready`
+- adapter 可以同时消费 guardian result locator 与 integration contract result locator，但输出仍必须收敛成单个 `loom-guardian-adapter-result/v1` envelope
+- 若 guardian 通过、integration contract 只提供 advisory residue，adapter 可以返回 `allow` 并附带 advisory diagnostics
+- 若 guardian 结果与 integration result 对同一 head 给出冲突 verdict，adapter 必须返回 `block` 或 `fallback`，并标记 `verdict_conflict`；不得挑选更宽松的那个结果
+- Syvert repo-owned shadow evidence、guardian residue 与 integration 细节仍保持 repo-owned
+
+稳定约束：
+
+- `guardian_adapters` 只声明 locator、标准 verdict、fallback 语义和 merge discipline，不复制 HotCP、WebEnvoy、Syvert 的 business rule
+- adapter declaration/result/diagnostics 都不得承载 Work Item、review summary、validation status、merge result、closeout result 或 host action result 的 authored truth
+- adapter unavailability 或 payload drift 只能按声明的 fallback/severity 暴露，不能静默降级成 pass
+- `guardian_adapters` 不得把 repo-owned result 写回 `metadata_contract` 或 `review_instruction_locators`
 
 ### 4.8 `release_targets`
 
