@@ -1370,7 +1370,143 @@ def handle_doctor(argv: list[str]) -> int:
     return emit(doctor_payload(target))
 
 
-def repair_actions(detection: dict[str, Any], installed_errors: list[dict[str, str]]) -> list[dict[str, Any]]:
+RUNTIME_CARRIER_BLOCKER_LOCATORS = {
+    ".loom/bootstrap/init-result.json",
+    ".loom/status/current.md",
+    "Makefile",
+}
+
+RUNTIME_CARRIER_SCAN_DIRS = (
+    ".loom/bootstrap",
+    ".loom/status",
+    ".loom/work-items",
+    ".loom/progress",
+    ".loom/specs",
+    ".github/workflows",
+    "docs",
+)
+
+RUNTIME_CARRIER_SCAN_SUFFIXES = {".json", ".md", ".txt", ".yaml", ".yml"}
+
+
+def runtime_carrier_reference_records(path: Path, target: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    matches: list[dict[str, Any]] = []
+    for line_number, line in enumerate(lines, start=1):
+        if "python3 .loom/bin/" not in line:
+            continue
+        matches.append(
+            {
+                "line": line_number,
+                "locator": line.strip(),
+            }
+        )
+    if not matches:
+        return []
+    relative = relative_to_target(path, target)
+    classification = "repo-local-gate-blocker" if relative in RUNTIME_CARRIER_BLOCKER_LOCATORS or relative.startswith(".github/workflows/") else "runtime-carrier-guidance"
+    return [
+        {
+            "path": relative,
+            "classification": classification,
+            "references": matches,
+        }
+    ]
+
+
+def runtime_carrier_reference_scan(target: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    blocker_records: list[dict[str, Any]] = []
+    guidance_records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    explicit_files = [target / locator for locator in sorted(RUNTIME_CARRIER_BLOCKER_LOCATORS) if locator != "Makefile"]
+    explicit_files.append(target / "Makefile")
+    for candidate in explicit_files:
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        relative = relative_to_target(candidate, target)
+        seen.add(relative)
+        for record in runtime_carrier_reference_records(candidate, target):
+            (blocker_records if record["classification"] == "repo-local-gate-blocker" else guidance_records).append(record)
+    for relative_dir in RUNTIME_CARRIER_SCAN_DIRS:
+        root = target / relative_dir
+        if not root.exists():
+            continue
+        candidates = [root] if root.is_file() else sorted(path for path in root.rglob("*") if path.is_file())
+        for candidate in candidates:
+            relative = relative_to_target(candidate, target)
+            if relative in seen:
+                continue
+            if candidate.suffix.lower() not in RUNTIME_CARRIER_SCAN_SUFFIXES:
+                continue
+            seen.add(relative)
+            for record in runtime_carrier_reference_records(candidate, target):
+                (blocker_records if record["classification"] == "repo-local-gate-blocker" else guidance_records).append(record)
+    return blocker_records, guidance_records
+
+
+def global_cli_runtime_carrier_migration_actions(
+    target: Path,
+    detection: dict[str, Any],
+    *,
+    installed_ready: bool,
+    state_path: Path | None,
+) -> list[dict[str, Any]]:
+    if not installed_ready or target_runtime_provider(target) != RUNTIME_PROVIDER_GLOBAL_CLI:
+        return []
+    retained_surfaces = [
+        item for item in detection["surfaces"]
+        if item.get("kind") == "retained-loom-bin" and item.get("migration_status") == "repairable-residue"
+    ]
+    if not retained_surfaces:
+        return []
+    blocker_records, guidance_records = runtime_carrier_reference_scan(target)
+    carrier_update_paths = sorted({record["path"] for record in [*blocker_records, *guidance_records]})
+    tracked_runtime_paths = sorted({item.get("path") for item in retained_surfaces if isinstance(item.get("path"), str) and item.get("path")})
+    action: dict[str, Any] = {
+        "id": "plan-global-cli-runtime-carrier-migration",
+        "kind": "runtime-carrier-migration",
+        "status": "blocked" if blocker_records else "recommended",
+        "reason": (
+            "repo-local gate carriers still reference .loom/bin; rewrite those entrypoints before proposing retained runtime deletion."
+            if blocker_records
+            else "installed-state already declares global-cli as the active runtime provider; retained .loom/bin can only be removed through an explicit apply/confirmation flow."
+        ),
+        "runtime_provider": RUNTIME_PROVIDER_GLOBAL_CLI,
+        "installed_state_path": relative_to_target(state_path, target) if state_path is not None else None,
+        "tracked_runtime_paths": tracked_runtime_paths,
+        "carrier_update_paths": carrier_update_paths,
+        "blocking_references": blocker_records,
+        "guidance_references": guidance_records,
+        "deletes": tracked_runtime_paths,
+        "requires_confirmation": True,
+        "command": (
+            "rewrite listed repo-local gate carriers to `loom ... --json` entrypoints before planning deletion"
+            if blocker_records
+            else "review retained runtime residue and require explicit apply/confirmation language before deleting .loom/bin"
+        ),
+        "mutates": False,
+    }
+    actions = [action]
+    if blocker_records:
+        actions.append(
+            {
+                "id": "block-retained-loom-bin-deletion",
+                "kind": "repo-local-gate-blocker",
+                "status": "required",
+                "blocked_paths": tracked_runtime_paths,
+                "blocking_references": blocker_records,
+                "reason": "retained .loom/bin cannot be proposed for deletion while repo-local gate carriers still point to repo-local runtime wrappers",
+                "command": "rewrite the listed blockers first; keep deletion proposal-only until an explicit apply contract is approved",
+                "mutates": False,
+            }
+        )
+    return actions
+
+
+def repair_actions(target: Path, detection: dict[str, Any], installed_errors: list[dict[str, str]], state_path: Path | None) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     if installed_errors:
         actions.append(
@@ -1402,25 +1538,23 @@ def repair_actions(detection: dict[str, Any], installed_errors: list[dict[str, s
                 "command": "loom doctor --target <repo> --json",
             }
         )
-    for index, item in enumerate(repairable, start=1):
-        actions.append(
-            {
-                "id": f"classify-repairable-runtime-residue-{index}",
-                "kind": "runtime-carrier-residue-judgment",
-                "status": "planned",
-                "surface": item,
-                "reason": "global-cli installed-state treats this repo-local runtime carrier as residue, not current provider proof",
-                "command": "loom doctor --target <repo> --json",
-            }
+    if repairable:
+        actions.extend(
+            global_cli_runtime_carrier_migration_actions(
+                target,
+                detection,
+                installed_ready=not installed_errors,
+                state_path=state_path,
+            )
         )
     return actions
 
 
 def repair_plan_payload(target: Path) -> dict[str, Any]:
     detection = detect_payload(target)
-    _, state, installed_error = load_installed_state(target)
+    state_path, state, installed_error = load_installed_state(target)
     installed_errors = [{"path": "installed-state", "reason": installed_error["fail_closed_reason"]}] if installed_error else validate_installed_state(state)
-    actions = repair_actions(detection, installed_errors)
+    actions = repair_actions(target, detection, installed_errors, state_path)
     migration_action = downstream_top_level_skills_migration_action(target)
     if migration_action:
         actions.append(migration_action)
@@ -2057,10 +2191,18 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     "command": "loom repair plan --target <repo> --json",
                 }
             )
+        actions.extend(
+            global_cli_runtime_carrier_migration_actions(
+                target,
+                detection,
+                installed_ready=installed_ready,
+                state_path=path,
+            )
+        )
         migration_action = downstream_top_level_skills_migration_action(target)
         if migration_action:
             actions.append(migration_action)
-        if installed_ready and not legacy_surfaces:
+        if installed_ready and not legacy_surfaces and not any(action.get("id") == "plan-global-cli-runtime-carrier-migration" for action in actions):
             actions.append(
                 {
                     "id": "installed-state-current",
@@ -2189,6 +2331,7 @@ def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
     detection = detect_payload(target)
     path, state, installed_error = load_installed_state(target)
     validation_errors = validate_installed_state(state) if installed_error is None else []
+    installed_ready = installed_error is None and not validation_errors
     legacy_surfaces = [
         item for item in detection["surfaces"]
         if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")
@@ -2198,6 +2341,14 @@ def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
         actions.append({"id": "repair-installed-state", "status": "required"})
     if legacy_surfaces:
         actions.append({"id": "classify-legacy-surfaces", "status": "required", "surface_count": len(legacy_surfaces)})
+    actions.extend(
+        global_cli_runtime_carrier_migration_actions(
+            target,
+            detection,
+            installed_ready=installed_ready,
+            state_path=path,
+        )
+    )
     registration_action = workstation_registration_action(target)
     if registration_action:
         actions.append(registration_action)
