@@ -21,9 +21,11 @@ AGGREGATE_SURFACE_LABEL = "demo-bootstrap-fixture"
 GENERATION_SURFACE_LABEL = "demo-bootstrap-generation"
 CANONICALIZATION_SURFACE_LABEL = "demo-bootstrap-canonicalization"
 DRIFT_SURFACE_LABEL = "demo-bootstrap-fixture-drift"
+CLEANLINESS_SURFACE_LABEL = "demo-bootstrap-examples-cleanliness"
 GENERATION_SCENARIO_LABEL = "new-project-bootstrap-command"
 CANONICALIZATION_SCENARIO_LABEL = "init-result-host-dynamic-canonicalization"
 DRIFT_SCENARIO_LABEL = "stable-fixture-comparison"
+CLEANLINESS_SCENARIO_LABEL = "examples-new-project-tracked-cleanliness"
 AGGREGATE_SCENARIO_LABEL = "new-project-fixture-check"
 GENERATION_FAILURE_LABEL = "demo-bootstrap-generation-command-failed"
 GENERATION_TIMEOUT_LABEL = "demo-bootstrap-generation-timeout"
@@ -32,9 +34,12 @@ CANONICALIZATION_INVALID_JSON_LABEL = "demo-bootstrap-canonicalization-invalid-j
 CANONICALIZATION_INVALID_SHAPE_LABEL = "demo-bootstrap-canonicalization-invalid-shape"
 CANONICALIZATION_INCOMPLETE_LABEL = "demo-bootstrap-canonicalization-incomplete"
 DRIFT_FAILURE_LABEL = "demo-bootstrap-fixture-drift"
+CLEANLINESS_FAILURE_LABEL = "demo-bootstrap-examples-cleanliness-dirty"
+CLEANLINESS_STATUS_FAILURE_LABEL = "demo-bootstrap-examples-cleanliness-status-failed"
 GENERATION_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface generation"
 CANONICALIZATION_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface canonicalization"
 DRIFT_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface fixture-drift"
+CLEANLINESS_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface cleanliness"
 AGGREGATE_EVIDENCE_LOCATOR = "tools/check_demo_bootstrap_fixture.py --surface aggregate"
 INIT_RESULT_RELATIVE = ".loom/bootstrap/init-result.json"
 CANONICAL_DYNAMIC_SENTINEL = {"comparison": "ignored-host-dynamic"}
@@ -78,6 +83,22 @@ class CanonicalizationReport:
     canonicalized_sections: tuple[str, ...]
     init_result_locators: tuple[str, ...]
     diagnostics: list[CanonicalizationDiagnostic]
+
+
+@dataclass
+class GitStatusSnapshot:
+    command: list[str]
+    stdout: str
+    stderr: str
+    returncode: int
+    elapsed_ms: int
+
+
+@dataclass
+class CleanlinessReport:
+    elapsed_ms: int
+    before: GitStatusSnapshot
+    after: GitStatusSnapshot
 
 
 def relative_to_root(path: Path, root: Path) -> str:
@@ -320,6 +341,126 @@ def run_bootstrap(repo_root: Path, generated: Path, timeout: float) -> Bootstrap
         )
 
 
+def tracked_status_command(repo_root: Path, fixture: Path) -> list[str]:
+    return [
+        "git",
+        "status",
+        "--short",
+        "--untracked-files=no",
+        "--",
+        relative_to_root(fixture, repo_root),
+    ]
+
+
+def read_tracked_status(repo_root: Path, fixture: Path) -> GitStatusSnapshot:
+    command = tracked_status_command(repo_root, fixture)
+    started = time.perf_counter()
+    result = subprocess.run(
+        command,
+        cwd=repo_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    return GitStatusSnapshot(
+        command=command,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        returncode=result.returncode,
+        elapsed_ms=int((time.perf_counter() - started) * 1000),
+    )
+
+
+def check_cleanliness(repo_root: Path, fixture: Path, before: GitStatusSnapshot) -> CleanlinessReport:
+    started = time.perf_counter()
+    after = read_tracked_status(repo_root, fixture)
+    return CleanlinessReport(
+        elapsed_ms=before.elapsed_ms + int((time.perf_counter() - started) * 1000),
+        before=before,
+        after=after,
+    )
+
+
+def status_lines(snapshot: GitStatusSnapshot) -> tuple[str, ...]:
+    return tuple(line for line in snapshot.stdout.splitlines() if line.strip())
+
+
+def cleanliness_failure(report: CleanlinessReport) -> tuple[str, str]:
+    if report.before.returncode != 0:
+        return (
+            CLEANLINESS_STATUS_FAILURE_LABEL,
+            f"git status before validation exited with status {report.before.returncode}",
+        )
+    if report.after.returncode != 0:
+        return (
+            CLEANLINESS_STATUS_FAILURE_LABEL,
+            f"git status after validation exited with status {report.after.returncode}",
+        )
+    before_lines = status_lines(report.before)
+    if before_lines:
+        return (
+            CLEANLINESS_FAILURE_LABEL,
+            f"examples/new-project tracked status was already dirty before validation: {len(before_lines)} path(s)",
+        )
+    after_lines = status_lines(report.after)
+    if after_lines:
+        return (
+            CLEANLINESS_FAILURE_LABEL,
+            f"examples/new-project tracked status changed after validation: {len(after_lines)} path(s)",
+        )
+    return "", ""
+
+
+def cleanliness_evidence(report: CleanlinessReport, fixture: Path, repo_root: Path) -> dict[str, object]:
+    return {
+        "bucket_label": BUCKET_LABEL,
+        "surface_label": CLEANLINESS_SURFACE_LABEL,
+        "surface_kind": "named_surface",
+        "scenario_label": CLEANLINESS_SCENARIO_LABEL,
+        "command": CLEANLINESS_EVIDENCE_LOCATOR,
+        "result": "pass",
+        "elapsed_ms": report.elapsed_ms,
+        "source_locator": relative_to_root(fixture, repo_root),
+        "evidence_locator": CLEANLINESS_EVIDENCE_LOCATOR,
+        "validator_mode": "demo-bootstrap-examples-cleanliness",
+        "is_aggregate": "false",
+        "status_scope": "tracked",
+        "status_command": command_display(report.after.command, repo_root),
+    }
+
+
+def print_cleanliness_failure(report: CleanlinessReport, fixture: Path, repo_root: Path) -> None:
+    failure_label, summary = cleanliness_failure(report)
+    print("demo bootstrap examples/new-project cleanliness failed:", file=sys.stderr)
+    for label, snapshot in (("before", report.before), ("after", report.after)):
+        if snapshot.returncode != 0:
+            print(f"- {label}: git status exited with status {snapshot.returncode}", file=sys.stderr)
+            if snapshot.stderr.strip():
+                print(snapshot.stderr, end="" if snapshot.stderr.endswith("\n") else "\n", file=sys.stderr)
+        for line in status_lines(snapshot):
+            print(f"- {label}: {line}", file=sys.stderr)
+    print_surface_evidence(
+        stream=sys.stderr,
+        bucket_label=BUCKET_LABEL,
+        surface_label=CLEANLINESS_SURFACE_LABEL,
+        surface_kind="named_surface",
+        scenario_label=CLEANLINESS_SCENARIO_LABEL,
+        command=CLEANLINESS_EVIDENCE_LOCATOR,
+        result="block",
+        elapsed_ms=report.elapsed_ms,
+        failure_label=failure_label,
+        failure_taxonomy=failure_label,
+        failure_summary=summary,
+        source_locator=relative_to_root(fixture, repo_root),
+        evidence_locator=CLEANLINESS_EVIDENCE_LOCATOR,
+        validator_mode="demo-bootstrap-examples-cleanliness",
+        is_aggregate="false",
+        status_scope="tracked",
+        status_command=command_display(report.after.command, repo_root),
+    )
+
+
 def print_generation_failure(run_result: BootstrapRun, fixture: Path, repo_root: Path) -> None:
     failure_label = GENERATION_TIMEOUT_LABEL if run_result.timed_out else GENERATION_FAILURE_LABEL
     summary = (
@@ -423,6 +564,8 @@ def run(args: argparse.Namespace) -> int:
 
     ignored_relatives = set(DEFAULT_IGNORES)
     ignored_relatives.update(args.ignore)
+    needs_cleanliness = args.surface in ("aggregate", "cleanliness")
+    cleanliness_before = read_tracked_status(repo_root, fixture) if needs_cleanliness else None
 
     with tempfile.TemporaryDirectory(prefix=".loom-demo-bootstrap-check-", dir=repo_root) as tmp:
         generated = Path(tmp) / fixture.name
@@ -490,6 +633,24 @@ def run(args: argparse.Namespace) -> int:
             )
             return 1
 
+        cleanliness_report = (
+            check_cleanliness(repo_root, fixture, cleanliness_before)
+            if cleanliness_before is not None
+            else None
+        )
+        if cleanliness_report is not None:
+            failure_label, _summary = cleanliness_failure(cleanliness_report)
+            if failure_label:
+                print_cleanliness_failure(cleanliness_report, fixture, repo_root)
+                return 1
+            cleanliness_pass_evidence = cleanliness_evidence(cleanliness_report, fixture, repo_root)
+            if args.surface == "cleanliness":
+                print_surface_evidence(stream=sys.stdout, **cleanliness_pass_evidence)
+                print(f"demo bootstrap examples/new-project cleanliness: OK ({fixture.relative_to(repo_root)})")
+                return 0
+        else:
+            cleanliness_pass_evidence = None
+
         if args.show_surface_evidence:
             print_surface_evidence(stream=sys.stdout, **generation_evidence)
             print_surface_evidence(stream=sys.stdout, **canonicalization_pass_evidence)
@@ -507,6 +668,8 @@ def run(args: argparse.Namespace) -> int:
                 validator_mode="demo-bootstrap-fixture-drift",
                 is_aggregate="false",
             )
+            if cleanliness_pass_evidence is not None:
+                print_surface_evidence(stream=sys.stdout, **cleanliness_pass_evidence)
             if args.surface == "aggregate":
                 print_surface_evidence(
                     stream=sys.stdout,
@@ -521,11 +684,16 @@ def run(args: argparse.Namespace) -> int:
                     evidence_locator=AGGREGATE_EVIDENCE_LOCATOR,
                     validator_mode="demo-bootstrap-fixture",
                     is_aggregate="true",
-                    subsurface_count=3,
+                    subsurface_count=4 if cleanliness_pass_evidence is not None else 3,
                     subsurface_results=(
                         f"{GENERATION_SURFACE_LABEL}:pass,"
                         f"{CANONICALIZATION_SURFACE_LABEL}:pass,"
                         f"{DRIFT_SURFACE_LABEL}:pass"
+                        + (
+                            f",{CLEANLINESS_SURFACE_LABEL}:pass"
+                            if cleanliness_pass_evidence is not None
+                            else ""
+                        )
                     ),
                 )
 
@@ -542,7 +710,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--max-differences", type=int, default=40, help="Maximum drift entries to print.")
     parser.add_argument(
         "--surface",
-        choices=("aggregate", "generation", "canonicalization", "fixture-drift"),
+        choices=("aggregate", "generation", "canonicalization", "fixture-drift", "cleanliness"),
         default="aggregate",
         help="Validation surface to run. aggregate preserves the existing fixture check contract.",
     )
