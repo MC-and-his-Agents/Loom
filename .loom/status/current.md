@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1243
-- Goal: Add a safe, reviewable non-mutating migration plan from retained `.loom/bin` compatibility runtime to the `global-cli` runtime provider.
-- Scope: `tools/loom.py`, `tools/check_cli_contract.py`, `docs/adoption/loom-installed-state-v2.md`, `docs/adoption/cli-first-legacy-migration-playbook.md`, WI-1243 scoped carriers, `.loom/runtime/build/WI-1243.json`, `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/reviews/WI-1243.json`, `.loom/reviews/WI-1243.spec.json`, `.loom/shadow/merge-ready-loom.json`, and `.loom/shadow/closeout-loom.json` refreshes required for PR #1437 merge-ready; ownership constraints are limited to these declared #1243 artifacts. In scope are deterministic runtime-carrier migration actions, exact repo-local gate blockers, explicit deletion-confirmation semantics, fixture coverage, and current-head review/gate evidence. Out of scope are #1244/#1245/#1246, Round 8/9/11/Deferred paths, parent #1238/#1246 closeout carriers, unrelated shared contract/schema/parser vocabulary changes, release/npm/live actions, and any mutating repair apply contract.
-- Execution Path: issue #1243 -> branch `work/1243-global-cli-runtime-migration-plan` -> repo-root workspace `.` -> PR #1437 -> scheduler-owned review and high-cost gate.
+- Item ID: WI-1396
+- Goal: Close the release/package validation surface split by updating concise docs/help/evidence references and proving aggregate release/package validation remains available.
+- Scope: Issue #1396 only: docs/adoption and docs/methodology/evidence references that consume the merged #1383/#1393/#1394/#1395 surface names; WI-1396 minimal suite/progress/work-item carrier; scheduler-owned current item activation in `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/reviews/WI-1396.json`, optional `.loom/reviews/WI-1396.spec.json`, and `.loom/shadow/**` parity carriers; PR metadata/head readback; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No checker behavior changes, Makefile target changes unless required by locator drift, parent #1260 closeout, umbrella #1255 closeout, release cutting, VERSION/tag/GitHub Release/npm publish, workflow behavior change, runtime/package payload change, or external-visible release execution.
+- Execution Path: issue #1396 -> branch work/1396-release-package-docs-evidence -> PR #1445 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1243.md
-- Review Entry: .loom/reviews/WI-1243.json
-- Validation Entry: git diff --check; python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-1243 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1243 --json; python3 tools/loom.py pr metadata-preflight 1437 --head-sha <current-head> --surface merge_ready --json
-- Closing Condition: PR #1437 for `work/1243-global-cli-runtime-migration-plan` is reviewed, gated, and either merged/read back or explicitly terminalized with deterministic runtime-carrier migration planning, blocker reporting, and non-mutating deletion semantics validated.
-- Current Checkpoint: closed_out
-- Current Stop: Terminal closeout consumed: PR #1437 was merged by Loom controlled merge at PR head 4d30c0eb9e76a5488053fd77d28cb4dd5c2ea107 with merge commit 16e35be76063a22ba021306ecbafb04bf64e323d; issue #1243 closed at 2026-06-11T11:09:41Z; reconciliation sync, retained merge-ready attempt, hosted required checks, closeout check, shadow parity, and carrier closeout metadata passed.
-- Next Step: None for WI-1243. #1244, #1245, #1246, and parent #1238 remain separate work items.
-- Blockers: None for WI-1243 terminal closeout.
-- Latest Validation Summary: Carrier correction validation passed: python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1243; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run. The workspace profile now reports single-workspace with workspace_entry `.` and no workspace_escape.
-- Recovery Boundary: Terminal WI-1243 carrier sync only. Do not reopen implementation, review, PR gate, controlled merge, #1244, #1245, #1246, parent #1238, Round 8/9/11, Deferred scopes, release/npm/live actions, or unrelated shared contract/schema/parser lanes in this closeout carrier update.
-- Current Lane: terminal-closeout
+- Recovery Entry: .loom/progress/WI-1396.md
+- Review Entry: .loom/reviews/WI-1396.json
+- Validation Entry: git diff --check; python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite validate --target . --item WI-1396 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1396 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1396 --json; python3 tools/loom.py pr metadata-preflight 1445 --head-sha ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6 --work-item WI-1396 --surface merge_ready --json
+- Closing Condition: PR for #1396 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1396 is closed, and no_release closeout is consumable by #1260/#1255 without closing those parents in this worker scope.
+- Current Checkpoint: merge
+- Current Stop: Scheduler recorded current-head spec and implementation review records for PR #1445 / WI-1396 at head ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6 after build checkpoint passed.
+- Next Step: Run scheduler-owned PR gate and merge-ready for PR #1445 / WI-1396, then request watcher merge_lane before controlled merge.
+- Blockers: None
+- Latest Validation Summary: Rebased validation passed at head ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6: git diff --check origin/main..HEAD; python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite validate --target . --item WI-1396 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1396 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1396 --json; python3 tools/loom.py pr metadata-preflight 1445 --head-sha ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6 --work-item WI-1396 --surface merge_ready --json.
+- Recovery Boundary: WI-1396/#1445 scheduler-owned gate only. Do not process #1400/#1404/#1407 shared lane writes or gates, do not controlled-merge without watcher merge_lane grant, do not alter release/npm/live execution, VERSION, workflows, package payload semantics, shared contract/schema/parser vocabulary, parent #1260 closeout, umbrella #1255 closeout, Round 9/11/Deferred, or #1244/#1245/#1246.
+- Current Lane: release-package-docs-evidence-gate
 
 ## Runtime Evidence
 
-- Run Entry: Scheduler consumed T1406 waiting-scheduler-gate report for PR #1433, rebased branch `work/1406-runtime-env-purity-surface` onto `origin/main` `449ba9e672dab6a8c1520806ba2498672cb4c8d8`, resolved the current carrier conflict, added the missing WI-1406 implementation contract, and refreshed local validation on 2026-06-11.
-- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns current-head review, PR gate, controlled merge, and closeout for WI-1406.
-- Diagnostics Entry: WI-1406 adds a named subprocess-env-purity runtime regression surface with fixture group `environment-purity` and stable evidence locators while preserving #1405 locking surfaces and aggregate runtime regression validation.
-- Verification Entry: Local validation passed on the rebased branch: git diff --check; surface list readback; py_compile_clean; suite inspect/validate/evidence/carrier; make loom-check-runtime-subprocess-env-purity; make loom-check-runtime-locking; make loom-check-runtime-regression; residue audit; skills_surface aggregate check; source contract-only loom_check; check_cli_contract all 6 surfaces. PR metadata, review record, PR gate, controlled merge, and hosted check readback still need refresh after this carrier update and any further head push.
-- Lane Entry: runtime-subprocess-env-purity-surface
+- Run Entry: Scheduler accepted watcher lane grant watcher-lane-grant-R8-WI-1396-202606111224 for PR #1445, rebased branch `work/1396-release-package-docs-evidence` onto `origin/main` `418dea112eaaf8fc5f0fe1968b2e4601328d60ec`, pushed head `ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6`, refreshed PR body metadata, and reran release/package validation.
+- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns current-head review, PR gate, merge-ready, watcher merge_lane request, controlled merge, and closeout for WI-1396.
+- Diagnostics Entry: WI-1396 is a docs/evidence closeout for named release/package validation surfaces; it preserves aggregate release/package validation and does not change release execution, VERSION, workflows, package payload semantics, or live npm/GitHub release behavior.
+- Verification Entry: Rebased validation passed at head ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6: git diff --check origin/main..HEAD; python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite validate --target . --item WI-1396 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1396 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1396 --json; python3 tools/loom.py pr metadata-preflight 1445 --head-sha ff4b742d2dc5cc772fd9231e36cb80a96b48c0a6 --work-item WI-1396 --surface merge_ready --json.
+- Lane Entry: release-package-docs-evidence-gate
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1243.md
-- Dynamic Truth: .loom/progress/WI-1243.md
+- Static Truth: .loom/work-items/WI-1396.md
+- Dynamic Truth: .loom/progress/WI-1396.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
