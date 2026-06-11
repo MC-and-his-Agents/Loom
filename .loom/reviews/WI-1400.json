@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1400",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head review allow: PR #1443 documents the named skills validation surfaces, preserves aggregate skills validation command contracts, records #1261/#1255 consumption evidence, refreshes WI-1400 scheduler gate carriers, and replaces the local absolute workspace entry with the portable repo-root workspace entry `.` so hosted root-self-governance can consume the fact chain. The reviewed diff is limited to WI-1400 docs/evidence/carriers plus current-item status/shadow activation and does not change tools/skills_surface.py behavior, generated skill contents, package/release/demo/runtime behavior, workflows, shared parser/schema vocabulary, release execution, or live external state. Local skills surface checks, aggregate skills check, suite evidence/carrier validation, expected not_applicable suite contract, PR metadata preflight, fact-chain, shadow parity, root-self-governance equivalent checks, and loom_init verify passed; hosted implementation checks passed before carrier activation, with later root failure classified and repaired as hosted workspace carrier drift.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-11T14:32:19Z",
+  "reviewed_head": "d4a5faf038db46430e0beae4a0a79c395eb4847e",
+  "reviewed_validation_summary": "Scheduler validation passed on 2026-06-11T14:32Z for PR #1443 local head `d4a5faf038db46430e0beae4a0a79c395eb4847e` after repairing hosted workspace carrier drift: `git diff --check`; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py governance-profile status --target .`; `python3 .loom/bin/loom_flow.py runtime-parity validate --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1400`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` returned no refresh needed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/loom.py pr metadata-preflight 1443 --head-sha f65e1a8db85879daf8db8282ec3dbf468bf1eba3 --work-item WI-1400 --surface merge_ready --json` passed against the last pushed PR body. `python3 .loom/bin/loom_flow.py flow merge-ready --target . --item WI-1400 --pr 1443 --branch work/1400-skills-docs-evidence` blocked only because the review artifact was stale for head `d4a5faf038db46430e0beae4a0a79c395eb4847e`, which this review refresh resolves. Earlier hosted root-self-governance failed on `fact-chain: workspace entry escapes target root: /Users/mc/.codex/worktrees/e701/Loom`; WI-1400 work item/status carriers now use `Workspace Entry: .`, and local runtime-parity/root-self-governance equivalent checks pass. No #1400 semantic implementation failure, runtime behavior change, package/release/demo/workflow change, shared parser/schema vocabulary change, release execution, or live external action was found.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1400.md",
+    "recovery_entry": ".loom/progress/WI-1400.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

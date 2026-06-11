@@ -1,0 +1,5 @@
+# Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1400 | Issue OPEN / PR #1443 OPEN / branch work/1400-skills-docs-evidence / worker local validation and PR metadata readback passed / scheduler gate pending | in_progress | primary | .loom/work-items/WI-1400.md | .loom/work-items/WI-1400.md#static-facts | .loom/specs/WI-1400/spec.md | .loom/progress/WI-1400.md#dynamic-facts | .loom/specs/WI-1400/evidence-map.md | scheduler_thread_id=019eb28d-ac3b-7623-8955-12542fa2e08d; worker_thread_id=019eb5ea-629c-7581-ab30-34b6443335c8; branch work/1400-skills-docs-evidence; instruction_id=T1400-initial-202606111657; PR #1443 | Recheck issue state, PR URL, current head SHA, PR metadata, hosted checks, no_release judgment, and scheduler-owned gates before merge-ready or parent #1261/#1255 consumption. |
