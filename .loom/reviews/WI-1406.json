@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1406",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler code review allows WI-1406 for PR #1433: subprocess-env-purity is split into a named targetable runtime regression surface with fixture_group environment-purity and stable evidence locators, while #1405 locking surfaces and the aggregate runtime regression entrypoint remain preserved. Reviewed diff is limited to tools/check_loom_check_runtime_regressions.py, Makefile alias, WI-1406 Loom carriers/spec contract, and the minimal WI-1290 terminal carrier repair required to clear a stale active baseline after PR #1439 merged. Validation passed on the current scheduler-rebased head f47ef640989355d14ecf934f31c94fdc6f6fb3ac: git diff --check; surface list readback; py_compile_clean; suite inspect/validate/evidence/carrier; subprocess-env-purity target; locking group; aggregate runtime regression; residue audit; fact-chain; state-check; pre-review; skills_surface aggregate; source contract-only loom_check; check_cli_contract all 6 surfaces. PR metadata must be refreshed again after this review carrier is committed and pushed.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-11T07:23:40Z",
+  "reviewed_head": "f47ef640989355d14ecf934f31c94fdc6f6fb3ac",
+  "reviewed_validation_summary": "Local validation passed on 2026-06-11 for the scheduler-rebased branch on `origin/main` `19452e5a215c4d4c6b7125ef6893fe9e993f3470`: `git diff --check`; `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; `python3 tools/py_compile_clean.py tools/check_loom_check_runtime_regressions.py`; `python3 tools/loom.py suite inspect --target . --item WI-1406 --json`; `python3 tools/loom.py suite validate --target . --item WI-1406 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1406 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1406 --json`; `make loom-check-runtime-subprocess-env-purity`; `make loom-check-runtime-locking`; `make loom-check-runtime-regression`; residue audit confirmed `.loom/runtime/loom_check.lock`, `packages/loom-installer/.installer-regression-lock`, and new `loom-check-*` temp dirs were absent; `python3 .loom/bin/loom_init.py fact-chain --target .` passed for WI-1406; `python3 tools/skills_surface.py check` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed; `python3 tools/check_cli_contract.py` passed all 6 surfaces in 329.15s. PR metadata, review records, PR gate, controlled merge, and hosted checks must be refreshed after the next head push.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1406.md",
+    "recovery_entry": ".loom/progress/WI-1406.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/7069/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/7069/Loom --item WI-1406 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/7069/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/7069/Loom --item WI-1406 --json",
+    "suite_evidence_map": ".loom/specs/WI-1406/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1406/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
