@@ -1405,6 +1405,23 @@ def write_global_cli_fact_chain_fixture(target: Path) -> None:
         destination.write_text(text, encoding="utf-8")
 
 
+def write_global_cli_gate_blocker_fixture(target: Path) -> None:
+    replacements = {
+        "loom fact-chain --target . --json": "python3 .loom/bin/loom_init.py fact-chain --target .",
+    }
+    fixture_files = {
+        ".loom/status/current.md": target / ".loom" / "status" / "current.md",
+        ".loom/bootstrap/init-result.json": target / ".loom" / "bootstrap" / "init-result.json",
+    }
+    for relative, path in fixture_files.items():
+        text = path.read_text(encoding="utf-8")
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        if relative.endswith("init-result.json"):
+            text = text.replace("loom verify --target . --json", "python3 .loom/bin/loom_init.py verify --target .")
+        path.write_text(text, encoding="utf-8")
+
+
 def write_minimal_suite(target: Path, item: str) -> None:
     suite_dir = target / ".loom" / "specs" / item
     suite_dir.mkdir(parents=True)
@@ -5000,8 +5017,35 @@ def run_aggregate_cli_contract() -> None:
             if stale_doctor.get("result") != "pass":
                 raise AssertionError("global-cli stale .loom/bin should not block doctor as current provider proof")
         _, stale_repair = run_json(["repair", "plan", "--target", str(stale_bin_target), "--json"], expect=0)
-        if not any(action.get("id") == "classify-repairable-runtime-residue-1" for action in stale_repair.get("actions", [])):
-            raise AssertionError("global-cli stale .loom/bin did not produce repairable residue plan")
+        stale_actions = {action["id"]: action for action in stale_repair.get("actions", [])}
+        stale_migration = stale_actions.get("plan-global-cli-runtime-carrier-migration")
+        if not stale_migration:
+            raise AssertionError("global-cli stale .loom/bin did not produce a runtime-carrier migration plan")
+        if stale_migration.get("status") != "recommended" or stale_migration.get("deletes") != [".loom/bin"] or stale_migration.get("requires_confirmation") is not True:
+            raise AssertionError("global-cli stale .loom/bin did not keep deletion proposal-only with explicit confirmation")
+        if stale_migration.get("blocking_references") or stale_migration.get("guidance_references"):
+            raise AssertionError("global-cli stale .loom/bin should not report gate blockers when carriers already point to global loom commands")
+        _, stale_upgrade = run_json(["upgrade-plan", "--target", str(stale_bin_target), "--json"], expect=0)
+        if "plan-global-cli-runtime-carrier-migration" not in {action["id"] for action in stale_upgrade.get("actions", [])}:
+            raise AssertionError("global-cli stale .loom/bin upgrade-plan did not expose runtime-carrier migration guidance")
+        blocked_bin_target = tmp / "global-cli-stale-bin-blocked"
+        shutil.copytree(stale_bin_target, blocked_bin_target)
+        write_global_cli_gate_blocker_fixture(blocked_bin_target)
+        _, blocked_repair = run_json(["repair", "plan", "--target", str(blocked_bin_target), "--json"], expect=0)
+        blocked_actions = {action["id"]: action for action in blocked_repair.get("actions", [])}
+        blocked_migration = blocked_actions.get("plan-global-cli-runtime-carrier-migration")
+        deletion_block = blocked_actions.get("block-retained-loom-bin-deletion")
+        if not blocked_migration or not deletion_block or blocked_migration.get("status") != "blocked":
+            raise AssertionError("global-cli blocked stale .loom/bin did not fail closed with a deletion blocker")
+        blocked_paths = {record.get("path") for record in blocked_migration.get("blocking_references", [])}
+        if {".loom/bootstrap/init-result.json", ".loom/status/current.md"} - blocked_paths:
+            raise AssertionError("global-cli blocked stale .loom/bin did not report exact gate blocker paths")
+        if deletion_block.get("blocked_paths") != [".loom/bin"]:
+            raise AssertionError("global-cli blocked stale .loom/bin did not keep retained runtime deletion blocked")
+        _, blocked_upgrade = run_json(["upgrade-plan", "--target", str(blocked_bin_target), "--json"], expect=0)
+        blocked_upgrade_ids = {action["id"] for action in blocked_upgrade.get("actions", [])}
+        if "plan-global-cli-runtime-carrier-migration" not in blocked_upgrade_ids or "block-retained-loom-bin-deletion" not in blocked_upgrade_ids:
+            raise AssertionError("global-cli blocked stale .loom/bin upgrade-plan did not preserve blocker semantics")
         malformed_target = tmp / "global-cli-malformed"
         malformed_target.mkdir()
         malformed_state = global_cli_state(malformed_target)

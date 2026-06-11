@@ -331,6 +331,17 @@ All three commands fail closed when metadata is missing, unreadable, or invalid.
 
 `loom detect --target <repo> --json` may report legacy or mixed surfaces even when installed-state is missing. This is a diagnostic pass, not an install-state pass. `loom doctor` turns missing, invalid, legacy, or mixed surfaces into `result: block` with `fallback_to: ["loom repair plan"]`. `loom repair plan` is non-mutating. `loom repair apply` remains fail-closed until a later Work Item approves write ownership and rollback semantics.
 
+When installed-state declares `runtime_provider: global-cli` but a repository
+still retains `.loom/bin`, repair and upgrade planning must treat that path as
+runtime-carrier residue, not as plugin payload drift or current provider proof.
+The non-mutating plan must:
+
+- keep runtime-carrier migration separate from skills/plugin payload migration;
+- enumerate repo-local gate blockers that still reference `.loom/bin`, including
+  exact carrier locators when deletion is not yet safe to propose;
+- keep retained `.loom/bin` deletion proposal-only until an explicit
+  apply/confirmation contract is approved.
+
 The target-state boundary for migration, `doctor`, and `verify` is therefore:
 
 - repository truth must explicitly model whether a repo-local wrapper is
