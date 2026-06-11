@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1407.json
 - Validation Entry: `git diff --check`; `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; targeted tempdir cleanup and demo fixture cleanliness runtime targets; existing #1405 locking targets; existing #1406 subprocess-env-purity target; aggregate runtime regression target; py_compile_clean; suite inspect/validate/evidence/carrier validation for WI-1407; residue audit; PR metadata preflight/readback; hosted checks
 - Closing Condition: PR for #1407 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1407 is closed, and no_release closeout is consumable by #1263/#1255.
-- Current Checkpoint: build
-- Current Stop: Scheduler lane grant watcher-lane-grant-R8-WI-1407-202606111731 consumed for WI-1407/#1444 at head 35bbf02f0cd427154d8f5ba338a0a38e91d0e115; current item and review locator are activated for scheduler-owned review/gate.
-- Next Step: Author current-head semantic review for PR #1444, refresh shadow/status carriers, run scheduler-owned pr-gate, merge-ready, root-self-governance/high-cost gate path, then request merge_lane if ready.
+- Current Checkpoint: merge
+- Current Stop: WI-1407/#1444 scheduler-owned review, build evidence, fact-chain/status, shadow parity, and PR metadata readback are refreshed. Review approval is consumable with carrier-only drift from reviewed head 00218abea8661b7e43a28617f6729e1efff34924 to PR head d3990309c0e2379b94d927eb20efb3b17fc52a50.
+- Next Step: Run PR gate, merge-ready, hosted check readback, and controlled-merge check for WI-1407/#1444; request merge_lane if ready.
 - Blockers: None
 - Latest Validation Summary: Current-head scheduler readback at 00218abea8661b7e43a28617f6729e1efff34924: PR #1444 open/non-draft/mergeable, base 1f760cce1ac48e334800a94f513b3a7173e94d7d; PR body metadata preflight PASS; git diff --check PASS; fact-chain PASS; build checkpoint PASS; suite inspect/validate/evidence/carrier PASS; build evidence integrated; spec review and implementation review are being refreshed for current carrier head; changed files remain limited to WI-1407 runtime regression implementation/docs/carrier/review/shadow/status scope; issue #1407 and parent #1263 remain open.
 - Recovery Boundary: Issue #1407 / PR #1444 only under watcher-lane-grant-R8-WI-1407-202606111731. Do not process #1408 until #1407 is merged or aggregate runtime evidence dependency is explicitly satisfied. Do not close parent #1263/#1255, process Round 9/Round 11/deferred roadmap/#1244/#1245/#1246, perform release/npm/live/VERSION/tag/GitHub Release/npm publish actions, or alter shared contract/schema/parser/failure vocabulary outside PR #1444 scope.
-- Current Lane: scheduler-review-gate
+- Current Lane: scheduler-merge-ready
 
 ## Runtime Evidence
 
