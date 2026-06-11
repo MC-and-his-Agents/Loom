@@ -563,7 +563,7 @@ diagnostics 必须区分以下 failure classes，不得混成单一 `failed`：
 - adapter 读取 WebEnvoy guardian result envelope 与 diagnostics locator
 - guardian 若明确阻断当前 head，adapter 返回 `block`
 - guardian 若暂时 unavailable，但仓库声明必须回退到 scheduler-owned manual review，adapter 返回 `fallback`，并写明 `fallback.owner=scheduler`、`fallback.surface=merge_ready`、`fallback.severity=blocking`
-- WebEnvoy live evidence、guardian rubric、control-plane 实现继续保持 WebEnvoy-owned，不进入 Loom core 默认规则
+- WebEnvoy live evidence、review rubric、control-plane 实现继续保持 WebEnvoy-owned，不复制进 Loom adapter contract 或 runtime
 
 示例 3: Syvert guardian / integration
 
