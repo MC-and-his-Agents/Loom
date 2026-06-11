@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1398",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler semantic review for WI-1398 at head 10d6a92fe9ae0257bf16971602cdbb835973b0a1 allows the merge checkpoint path. The implementation exposes targetable package-metadata and cache-artifacts skills validation surfaces with stable failure names and evidence locators, preserves the #1397 docs-reference-sync/generated-tree-drift surfaces, preserves aggregate tools/skills_surface.py check behavior and Makefile aliases, keeps Suite path not_applicable truthful, and does not expand into #1399 launcher smoke, #1400 docs/evidence convergence, parent #1261/#1255 closeout, release/package/demo/runtime behavior, generated skills content, hosted workflow semantics, permissions, external-visible behavior, or Round 9+ scope.",
+  "reviewer": "round-8-scheduler",
+  "authored_at": "2026-06-11T00:19:57Z",
+  "reviewed_head": "10d6a92fe9ae0257bf16971602cdbb835973b0a1",
+  "reviewed_validation_summary": "Scheduler pre-review validation passed for WI-1398 current PR #1424 head after carrier activation: git diff --check; python3 tools/skills_surface.py check --list-surfaces; python3 tools/py_compile_clean.py tools/skills_surface.py; targeted skills surfaces docs-reference-sync, generated-tree-drift, package-metadata, and cache-artifacts; aggregate python3 tools/skills_surface.py check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1398; shadow-parity closeout and merge_ready; PR #1424 metadata preflight/readback after body refresh; suite inspect pass; suite validate not_applicable with blocking_gaps=[].",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1398.md",
+    "recovery_entry": ".loom/progress/WI-1398.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

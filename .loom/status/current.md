@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1394
-- Goal: Split tools/check_npm_package.py npm package validation into named, targetable manifest and payload surfaces while preserving aggregate npm package behavior.
-- Scope: Issue #1394 only: tools/check_npm_package.py named npm-package-manifest and npm-pack-payload surfaces; aggregate npm package validation compatibility; Makefile package aliases; WI-1394 minimal suite/progress/review/current carrier; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1393 release validator work, #1395 installed/global CLI smoke, #1396 evidence convergence, parent #1260 closeout, umbrella #1255 closeout, release cutting, VERSION/tag/GitHub Release/npm publish, package payload content change, runtime behavior change, or external-visible release action.
-- Execution Path: issue #1394 -> branch work/1394-npm-package-validation-surfaces -> PR #1426 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1398
+- Goal: Split tools/skills_surface.py package metadata and cache artifact validation checks into named, targetable surfaces while preserving aggregate skills check and the #1397 named surfaces.
+- Scope: Issue #1398 only: tools/skills_surface.py package-metadata and cache-artifacts surfaces; aggregate skills validation compatibility; #1397 docs-reference-sync/generated-tree-drift surfaces preserved; Makefile skills aliases; WI-1398 not_applicable suite/progress/review/current carrier; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1399 launcher smoke, #1400 docs/evidence convergence, parent #1261 closeout, umbrella #1255 closeout, release/package/demo/runtime behavior changes, generated skills content change, hosted workflow semantic change, permissions change, external-visible behavior, or Round 9+ scope.
+- Execution Path: issue #1398 -> branch work/1398-skills-package-cache-checks -> PR #1424 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1394.md
-- Review Entry: .loom/reviews/WI-1394.json
-- Validation Entry: git diff --check; tools/check_npm_package.py --list-surfaces and targeted npm-package-manifest/npm-pack-payload surfaces; Makefile npm package aliases; aggregate check_npm_package.py; npm run test:package; check_release_surface.py compatibility; suite inspect/validate for WI-1394; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1426 for #1394 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1394 is closed, and no_release closeout is consumable by #1260/#1255.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1394 terminal closeout facts have been consumed: PR #1426 merged into `main` at 2026-06-10T23:23:45Z with merge commit `dcefb5df64f9fef1d747faeadf1dfda2d0921fc7`; issue #1394 closed at 2026-06-10T23:29:00Z; hosted required checks passed on head `d34c5beaf8bb87c40b2d9adf1a95419e52cb4230`; no_release terminal metadata is recorded in `.loom/progress/WI-1394.md`.
-- Next Step: None for WI-1394. Installed/global CLI smoke and release/package convergence continue in #1395 and #1396; parent #1260 and umbrella #1255 consume this closeout later.
+- Recovery Entry: .loom/progress/WI-1398.md
+- Review Entry: .loom/reviews/WI-1398.json
+- Validation Entry: git diff --check; tools/skills_surface.py --list-surfaces and targeted docs-reference-sync/generated-tree-drift/package-metadata/cache-artifacts surfaces; Makefile skills aliases; aggregate tools/skills_surface.py check; tools/loom.py skills check; suite inspect/validate for WI-1398; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1424 for #1398 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1398 is closed, and no_release closeout is consumable by #1261/#1255.
+- Current Checkpoint: merge
+- Current Stop: Scheduler current-head code review for WI-1398 is recorded and allows merge checkpoint consumption for PR #1424; package-metadata and cache-artifacts surfaces remain targetable, #1397 surfaces and aggregate skills validation remain preserved, and no out-of-scope release/demo/runtime/parent closeout work is included.
+- Next Step: Run PR gate, consume hosted checks on PR #1424 current head, then controlled merge and post-merge closeout if clean.
 - Blockers: None
-- Latest Validation Summary: Scheduler pre-review validation for WI-1394 passed after rebase and carrier activation: git diff --check; python3 tools/check_npm_package.py --help; python3 tools/check_npm_package.py --list-surfaces; python3 tools/py_compile_clean.py tools/check_npm_package.py; python3 tools/check_npm_package.py --surface npm-package-manifest; python3 tools/check_npm_package.py --surface npm-pack-payload; python3 tools/check_npm_package.py; make npm-package-manifest-check; make npm-pack-payload-check; make npm-package-check including npm run test:package; python3 tools/check_release_surface.py; python3 tools/loom.py suite inspect --target . --item WI-1394 --json; python3 tools/loom.py suite validate --target . --item WI-1394 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1394 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1394 --json; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1394; PR #1426 metadata preflight/readback passed and PR is ready-for-review. Implementation scope remains limited to tools/check_npm_package.py, Makefile package targets, and WI-1394 carriers/evidence.
-- Recovery Boundary: WI-1394 is terminal. Do not reopen or modify implementation scope here; subsequent release/package stream work remains in #1395, #1396, parent #1260, and umbrella #1255.
-- Current Lane: npm-package-validation-surfaces
+- Latest Validation Summary: Scheduler pre-review validation passed for WI-1398 current PR #1424 head after carrier activation: git diff --check; python3 tools/skills_surface.py check --list-surfaces; python3 tools/py_compile_clean.py tools/skills_surface.py; targeted skills surfaces docs-reference-sync, generated-tree-drift, package-metadata, and cache-artifacts; aggregate python3 tools/skills_surface.py check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1398; shadow-parity closeout and merge_ready; PR #1424 metadata preflight/readback after body refresh; suite inspect pass; suite validate not_applicable with blocking_gaps=[].
+- Recovery Boundary: Issue #1398 only. Do not rewrite or regress #1397 docs/reference sync or generated tree drift surfaces; do not implement #1399 launcher smoke, #1400 docs/evidence convergence, parent #1261 closeout, release/package/demo/runtime changes, generated skills content changes, hosted workflow semantics, permissions, external-visible behavior, or Round 9+ scope.
+- Current Lane: skills-package-cache-surfaces
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1394.md
-- Dynamic Truth: .loom/progress/WI-1394.md
+- Static Truth: .loom/work-items/WI-1398.md
+- Dynamic Truth: .loom/progress/WI-1398.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

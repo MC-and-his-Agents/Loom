@@ -47,6 +47,8 @@ DOC_REFERENCE_SYNC = {
 
 DOC_REFERENCE_SYNC_SURFACE = "docs-reference-sync"
 GENERATED_TREE_DRIFT_SURFACE = "generated-tree-drift"
+PACKAGE_METADATA_SURFACE = "package-metadata"
+CACHE_ARTIFACTS_SURFACE = "cache-artifacts"
 
 
 @dataclass(frozen=True)
@@ -402,6 +404,17 @@ def python_cache_artifacts(root: Path) -> list[str]:
     )
 
 
+def check_cache_artifacts_surface() -> None:
+    cache_artifacts = python_cache_artifacts(TARGET_ROOT)
+    if cache_artifacts:
+        raise SurfaceFailure(
+            surface_label=CACHE_ARTIFACTS_SURFACE,
+            failure_name="skills_cache_artifacts_present",
+            evidence_locator="skills/**/__pycache__; skills/**/*.py[cod]",
+            details=cache_artifacts,
+        )
+
+
 def iter_text_files(root: Path) -> list[Path]:
     return [path for path in root.rglob("*") if path.is_file() and path.suffix in TEXT_SUFFIXES]
 
@@ -518,6 +531,20 @@ def verify_surface(root: Path = TARGET_ROOT, *, run_launchers: bool = True) -> l
     return errors
 
 
+def check_package_metadata_surface() -> None:
+    try:
+        errors = verify_surface(TARGET_ROOT, run_launchers=False)
+    except Exception as exc:
+        errors = [str(exc)]
+    if errors:
+        raise SurfaceFailure(
+            surface_label=PACKAGE_METADATA_SURFACE,
+            failure_name="skills_package_metadata_invalid",
+            evidence_locator="skills/*/loom-package.json; skills/*/contract.json; skills/*/.loom-runtime",
+            details=errors,
+        )
+
+
 def check_generated_tree_drift_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-skills-check-") as tmp:
         expected = Path(tmp) / "skills"
@@ -545,6 +572,18 @@ def available_surface_definitions() -> tuple[SurfaceDefinition, ...]:
             failure_name="skills_generated_tree_drift",
             evidence_locator="src/skills -> skills",
             run=check_generated_tree_drift_surface,
+        ),
+        SurfaceDefinition(
+            label=PACKAGE_METADATA_SURFACE,
+            failure_name="skills_package_metadata_invalid",
+            evidence_locator="skills/*/loom-package.json; skills/*/contract.json; skills/*/.loom-runtime",
+            run=check_package_metadata_surface,
+        ),
+        SurfaceDefinition(
+            label=CACHE_ARTIFACTS_SURFACE,
+            failure_name="skills_cache_artifacts_present",
+            evidence_locator="skills/**/__pycache__; skills/**/*.py[cod]",
+            run=check_cache_artifacts_surface,
         ),
     )
 
@@ -590,10 +629,9 @@ def check_surface(selected_surfaces: list[str] | None = None) -> None:
         check_selected_surfaces(selected_surfaces, emit_success=True)
         return
     check_selected_surfaces([DOC_REFERENCE_SYNC_SURFACE], emit_success=False)
-    cache_artifacts = python_cache_artifacts(TARGET_ROOT)
-    if cache_artifacts:
-        raise RuntimeError("skills surface contains Python cache artifacts:\n" + "\n".join(cache_artifacts[:80]))
+    check_selected_surfaces([CACHE_ARTIFACTS_SURFACE], emit_success=False)
     check_selected_surfaces([GENERATED_TREE_DRIFT_SURFACE], emit_success=False)
+    check_selected_surfaces([PACKAGE_METADATA_SURFACE], emit_success=False)
     errors = verify_surface(TARGET_ROOT)
     if errors:
         raise RuntimeError("skills surface validation failed:\n" + "\n".join(errors[:80]))
@@ -607,7 +645,7 @@ def parse_args() -> argparse.Namespace:
     check_parser.add_argument(
         "--surface",
         action="append",
-        choices=(DOC_REFERENCE_SYNC_SURFACE, GENERATED_TREE_DRIFT_SURFACE),
+        choices=tuple(surface.label for surface in available_surface_definitions()),
         help="Run only the named read-only skills validation surface. May be passed more than once.",
     )
     check_parser.add_argument(
