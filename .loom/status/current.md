@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1290
-- Goal: Freeze the repo companion / guardian adapter integration contract that Round 11 fixtures and docs/release convergence can consume without redefining Loom core review/head-binding semantics.
-- Scope: Issue #1290 only: docs/adoption companion/guardian adapter contract wording, WI-1290 Loom carriers, docs-only formal-suite not_applicable carrier, scheduler-owned review artifact, and PR metadata for this branch. No runtime/parser/checker changes, no fixture implementation for #1292, no docs/release convergence for #1293, no Makefile or generated runtime edits beyond consuming already-merged main, and no parent #1285/#1293 closeout carrier.
-- Execution Path: issue #1290 -> branch work/1290-adapter-contract -> PR #1439 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1406
+- Goal: Split subprocess environment purity validation into a named, targetable runtime regression surface while preserving the merged #1405 locking surfaces and the aggregate runtime regression entrypoint.
+- Scope: Issue #1406 only: tools/check_loom_check_runtime_regressions.py subprocess-env-purity surface registry/selector and stable environment-purity diagnostics; Makefile loom-check-runtime-subprocess-env-purity alias; WI-1406 minimal suite/progress/work-item/review/status carriers; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1407 tempdir cleanup or fixture cleanliness split, #1408 aggregate runtime closeout, parent #1263 closeout, release/package behavior, broad runtime behavior changes, hosted workflow policy, permissions, or external-visible behavior.
+- Execution Path: issue #1406 -> branch work/1406-runtime-env-purity-surface -> PR #1433 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1290.md
-- Review Entry: .loom/reviews/WI-1290.json
-- Validation Entry: git diff --check; focused contract/readback scan for allow|block|fallback, evidence locator, merge semantics, diagnostics, and repo examples; python3 tools/loom.py suite inspect --target . --item WI-1290 --json; suite validate for WI-1290 not_applicable; PR metadata preflight/readback; hosted checks readback
-- Closing Condition: PR #1439 for #1290 is reviewed and gated by the scheduler on the current head, merged through the controlled path, issue #1290 is closed by the PR, and #1292/#1293 can consume the frozen adapter contract without redefining Loom core semantic_review_disposition or PR head binding.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1290 terminal closeout consumed: PR #1439 merged into main at 2026-06-11T06:46:29Z with merge commit 19452e5a215c4d4c6b7125ef6893fe9e993f3470; issue #1290 closed as COMPLETED at 2026-06-11T06:46:30Z; controlled merge, closeout check, and carrier closeout-sync passed; no release is required for this docs-only adapter contract freeze.
-- Next Step: No further #1290 action. Watcher may independently consider successor #1292 after verifying #1290 completion.
+- Recovery Entry: .loom/progress/WI-1406.md
+- Review Entry: .loom/reviews/WI-1406.json
+- Validation Entry: git diff --check; tools/check_loom_check_runtime_regressions.py --list-surfaces; Makefile subprocess-env-purity/locking/aggregate runtime targets; py_compile_clean; suite inspect/validate/evidence/carrier validation for WI-1406; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1433 for #1406 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1406 is closed, and no_release closeout is consumable by #1263/#1255.
+- Current Checkpoint: build
+- Current Stop: Scheduler rebased PR #1433 onto current `origin/main` `449ba9e672dab6a8c1520806ba2498672cb4c8d8`, activated the WI-1406 current carrier, added the missing implementation contract, and refreshed local validation for the rebased branch head.
+- Next Step: Commit and push carrier activation, refresh PR metadata/readback, record current-head scheduler spec and implementation reviews, then run PR gate and controlled merge.
 - Blockers: None
-- Latest Validation Summary: 2026-06-11 scheduler validation: git diff --check passed; fact-chain and state-check passed for WI-1290; checkpoint build passed; focused rg readback confirmed guardian_adapters, allow/block/fallback, structured evidence locator requirements, deterministic merge semantics, diagnostics taxonomy, and HotCP/WebEnvoy/Syvert examples; suite inspect returned result=pass and suite validate returned expected result=not_applicable with no blocking gaps; PR #1439 body metadata preflight/readback passed for head 527dfaa4432ee77db8022e7d932ca7bf90f237de, then scheduler refreshed carrier/review evidence through local head 579a0611845283d895b94684646a8ec7f7659874; final PR metadata must be rebound after the merge-checkpoint/review-only commits.
-- Recovery Boundary: Terminal closeout carrier/status sync only for WI-1290. Do not implement #1292/#1293, parent #1285 closeout, runtime/parser/checker changes, release artifacts, or external runtime behavior.
-- Current Lane: terminal-closeout
+- Latest Validation Summary: Local validation passed on 2026-06-11 for the scheduler-rebased branch on `origin/main` `449ba9e672dab6a8c1520806ba2498672cb4c8d8`: `git diff --check`; `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; `python3 tools/py_compile_clean.py tools/check_loom_check_runtime_regressions.py`; `python3 tools/loom.py suite inspect --target . --item WI-1406 --json`; `python3 tools/loom.py suite validate --target . --item WI-1406 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1406 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1406 --json`; `make loom-check-runtime-subprocess-env-purity`; `make loom-check-runtime-locking`; `make loom-check-runtime-regression`; residue audit confirmed `.loom/runtime/loom_check.lock`, `packages/loom-installer/.installer-regression-lock`, and new `loom-check-*` temp dirs were absent; `python3 .loom/bin/loom_init.py fact-chain --target .` passed for WI-1406; `python3 tools/skills_surface.py check` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed; `python3 tools/check_cli_contract.py` passed all 6 surfaces in 329.15s. PR metadata, review records, PR gate, controlled merge, and hosted checks must be refreshed after the next head push.
+- Recovery Boundary: Issue #1406 only. Preserve the merged #1405 locking surfaces and aggregate runtime regression entrypoint. Do not implement #1407 tempdir cleanup/fixture cleanliness, #1408 aggregate closeout, parent #1263 closeout, review artifacts, guardian, controlled merge, or release/closeout actions.
+- Current Lane: runtime-subprocess-env-purity-surface
 
 ## Runtime Evidence
 
-- Run Entry: Scheduler closed out WI-1399 after PR #1432 merged into `main` at 2026-06-11T05:41:50Z with merge commit `13e1280b24ca0a21be0f602b525038fad1fce96f`; issue #1399 closed at 2026-06-11T05:46:25Z.
-- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d consumed T1399 waiting-scheduler-gate report T1399-waiting-scheduler-gate-202606110259, ran current-head review/gate/controlled-merge readback, used Loom reconciliation audit and GraphQL `addBlockedBy` to reconcile the native dependency edge #1261 blocked by #1399 after dry-run proof, and recorded terminal no_release closeout metadata.
-- Diagnostics Entry: WI-1399 adds a named skills launcher-smoke validation surface with per-skill filtering while preserving #1397 docs-reference-sync/generated-tree-drift, #1398 package-metadata/cache-artifacts, and aggregate skills validation behavior; terminal closeout records no_release because no VERSION, tag, release artifact, package publish, hosted workflow semantics, runtime behavior, permissions, or external-visible behavior was changed.
-- Verification Entry: Terminal closeout validation passed for WI-1399: hosted required checks passed on PR #1432 head `60267dc127669a0fc7490976b53310e49e815c02`; PR #1432 merged at `13e1280b24ca0a21be0f602b525038fad1fce96f`; issue #1399 closed; reconciliation audit passes after native dependency readback; local `closeout check`, `fact-chain`, `carrier refresh --dry-run`, `shadow-parity` closeout and merge_ready surfaces, `suite validate` not_applicable with blocking_gaps=[], and `git diff --check` pass on the closeout-only carrier branch.
-- Lane Entry: skills-launcher-smoke-surface
+- Run Entry: Scheduler consumed T1406 waiting-scheduler-gate report for PR #1433, rebased branch `work/1406-runtime-env-purity-surface` onto `origin/main` `449ba9e672dab6a8c1520806ba2498672cb4c8d8`, resolved the current carrier conflict, added the missing WI-1406 implementation contract, and refreshed local validation.
+- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns current-head review, PR gate, controlled merge, and closeout for WI-1406.
+- Diagnostics Entry: WI-1406 adds a named subprocess-env-purity runtime regression surface with fixture group `environment-purity` and stable evidence locators while preserving #1405 locking surfaces and aggregate runtime regression validation.
+- Verification Entry: Local validation passed on the rebased current head: git diff --check; surface list readback; py_compile_clean; suite inspect/validate/evidence/carrier; make loom-check-runtime-subprocess-env-purity; make loom-check-runtime-locking; make loom-check-runtime-regression; residue audit; fact-chain; skills_surface aggregate check; source contract-only loom_check; check_cli_contract all 6 surfaces. PR metadata, review record, PR gate, controlled merge, and hosted check readback still need refresh after the next head push.
+- Lane Entry: runtime-subprocess-env-purity-surface
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1290.md
-- Dynamic Truth: .loom/progress/WI-1290.md
+- Static Truth: .loom/work-items/WI-1406.md
+- Dynamic Truth: .loom/progress/WI-1406.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

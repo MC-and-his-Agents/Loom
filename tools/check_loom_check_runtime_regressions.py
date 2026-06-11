@@ -130,7 +130,41 @@ def check_worktree_local_lock_paths(loom_check, failures: list[str]) -> None:
 
 def check_runtime_purity_helpers(loom_check, failures: list[str]) -> None:
     for failure in loom_check.check_loom_check_runtime_purity():
+        if is_subprocess_env_purity_failure(failure.detail):
+            continue
         fail(f"{failure.category}: {failure.detail}", failures)
+
+
+def is_subprocess_env_purity_failure(detail: str) -> bool:
+    return (
+        detail.startswith("default subprocess env must strip host-only variables")
+        or detail.startswith("default env purity probe ")
+        or detail.startswith("default subprocess env must not inherit ")
+        or detail.startswith("explicit env fixture probe ")
+        or detail.startswith("explicit fixture env must be preserved ")
+    )
+
+
+def subprocess_env_evidence_locator(detail: str) -> str:
+    if detail.startswith("default subprocess env must strip host-only variables"):
+        return "clean_subprocess_env/default-strip-host-only"
+    if detail.startswith("default env purity probe "):
+        return "run_command/default-env-probe"
+    if detail.startswith("default subprocess env must not inherit "):
+        return "run_command/default-env-inheritance"
+    if detail.startswith("explicit env fixture probe "):
+        return "run_command/explicit-env-fixture-probe"
+    if detail.startswith("explicit fixture env must be preserved "):
+        return "run_command/explicit-env-fixture-preservation"
+    return "run_command/subprocess-env-purity"
+
+
+def check_subprocess_env_purity(loom_check, failures: list[str]) -> None:
+    for failure in loom_check.check_loom_check_runtime_purity():
+        if not is_subprocess_env_purity_failure(failure.detail):
+            continue
+        evidence_locator = subprocess_env_evidence_locator(failure.detail)
+        fail(f"{failure.category} evidence_locator={evidence_locator}: {failure.detail}", failures)
 
 
 def check_installer_busy_output(failures: list[str]) -> None:
@@ -201,6 +235,12 @@ def runtime_regression_surfaces(loom_check, temp_dir_baseline: set[Path]) -> tup
             name="runtime-purity-helpers",
             fixture_group="aggregate-runtime-regression",
             run=lambda failures: check_runtime_purity_helpers(loom_check, failures),
+        ),
+        RuntimeRegressionSurface(
+            name="subprocess-env-purity",
+            fixture_group="environment-purity",
+            run=lambda failures: check_subprocess_env_purity(loom_check, failures),
+            selectable=True,
         ),
         RuntimeRegressionSurface(
             name="installer-regression-lock-output",
