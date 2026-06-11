@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -25,6 +28,8 @@ CODEX_INSTALL = ROOT / "docs" / "adoption" / "codex-install.md"
 CLI_ONLY_CONTRACT = ROOT / "docs" / "adoption" / "cli-only-install-contract.md"
 UNIFIED_INSTALL = ROOT / "docs" / "adoption" / "unified-install-experience.md"
 HOST_ADAPTER_MATRIX = ROOT / "docs" / "adoption" / "host-adapter-matrix.md"
+PACKAGE_JSON = ROOT / "package.json"
+VERSION = ROOT / "VERSION"
 
 ACTIVE_SURFACE_DOCS = (
     README,
@@ -41,6 +46,7 @@ RELEASE_DOC_CONTRACT = "release-doc-contract"
 RELEASE_WORKFLOW_CONTRACT = "release-workflow-contract"
 INSTALLER_SUNSET_GUARD = "installer-sunset-guard"
 FORBIDDEN_RELEASE_SURFACE_PATTERNS = "forbidden-release-surface-patterns"
+INSTALLED_GLOBAL_CLI_SMOKE = "installed-global-cli-smoke"
 AGGREGATE_RELEASE_SURFACE = "aggregate-release-surface"
 
 FORBIDDEN_ACTIVE_INSTALLER_PATTERNS = (
@@ -507,6 +513,225 @@ def check_forbidden_release_surface_patterns(errors: list[SurfaceError]) -> None
     assert_pattern_guards(errors, surface_label=surface_label, evidence_locator=locator)
 
 
+def command_locator(command: tuple[str, ...]) -> str:
+    return " ".join(command)
+
+
+def compact_output(stdout: str, stderr: str) -> str:
+    rendered = "\n".join(part.strip() for part in (stdout, stderr) if part.strip())
+    return rendered[:800] if rendered else "<no output>"
+
+
+def run_command(command: tuple[str, ...], *, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def check_installed_global_cli_smoke(errors: list[SurfaceError]) -> None:
+    surface_label = INSTALLED_GLOBAL_CLI_SMOKE
+    locator = evidence_locator(surface_label)
+    starting_error_count = len(errors)
+    package = require_file(PACKAGE_JSON, errors, surface_label=surface_label, evidence_locator=locator)
+    version = require_file(VERSION, errors, surface_label=surface_label, evidence_locator=locator).strip()
+    if not package or not version:
+        return
+
+    try:
+        package_data = json.loads(package)
+    except json.JSONDecodeError as exc:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-invalid-package-json",
+            evidence_locator=locator,
+            source_locator=relative_to_root(PACKAGE_JSON),
+            summary=f"package.json must be valid JSON for installed CLI smoke: {exc}",
+        )
+        return
+
+    expected_version = version.removeprefix("v")
+    if package_data.get("name") != "@mc-and-his-agents/loom":
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-package-name-mismatch",
+            evidence_locator=locator,
+            source_locator="package.json:name",
+            summary="installed CLI smoke requires root package name @mc-and-his-agents/loom",
+        )
+    if package_data.get("version") != expected_version:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-package-version-mismatch",
+            evidence_locator=locator,
+            source_locator="package.json:version",
+            summary=f"package.json version must match VERSION without v prefix: {expected_version}",
+        )
+    if package_data.get("bin", {}).get("loom") != "bin/loom.mjs":
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-bin-contract-mismatch",
+            evidence_locator=locator,
+            source_locator="package.json:bin.loom",
+            summary="installed CLI smoke requires package bin loom -> bin/loom.mjs",
+        )
+    if len(errors) > starting_error_count:
+        return
+
+    with tempfile.TemporaryDirectory(prefix="loom-installed-global-cli-smoke-") as tmp:
+        tmp_path = Path(tmp)
+        pack_dir = tmp_path / "pack"
+        prefix = tmp_path / "global"
+        cache = tmp_path / "npm-cache"
+        pack_dir.mkdir()
+        env = {
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "npm_config_cache": str(cache),
+        }
+        pack_command = ("npm", "pack", "--pack-destination", str(pack_dir), "--json", "--ignore-scripts")
+        pack = run_command(pack_command, cwd=ROOT, env=env)
+        if pack.returncode != 0:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-npm-pack-failed",
+                evidence_locator=locator,
+                source_locator=command_locator(("npm", "pack", "--pack-destination", "<tmp>", "--json", "--ignore-scripts")),
+                summary=f"npm pack failed before installed CLI smoke: {compact_output(pack.stdout, pack.stderr)}",
+            )
+            return
+        try:
+            pack_payload = json.loads(pack.stdout)
+        except json.JSONDecodeError as exc:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-npm-pack-json-invalid",
+                evidence_locator=locator,
+                source_locator=command_locator(("npm", "pack", "--pack-destination", "<tmp>", "--json", "--ignore-scripts")),
+                summary=f"npm pack did not emit JSON for installed CLI smoke: {exc}",
+            )
+            return
+
+        if not isinstance(pack_payload, list) or not pack_payload or not isinstance(pack_payload[0], dict):
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-npm-pack-empty",
+                evidence_locator=locator,
+                source_locator=command_locator(("npm", "pack", "--pack-destination", "<tmp>", "--json", "--ignore-scripts")),
+                summary="npm pack did not return a package payload for installed CLI smoke",
+            )
+            return
+        tarball_name = pack_payload[0].get("filename")
+        tarball = pack_dir / tarball_name if isinstance(tarball_name, str) else None
+        if tarball is None or not tarball.exists():
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-pack-tarball-missing",
+                evidence_locator=locator,
+                source_locator=command_locator(("npm", "pack", "--pack-destination", "<tmp>", "--json", "--ignore-scripts")),
+                summary="npm pack did not create a tarball for installed CLI smoke",
+            )
+            return
+
+        install_command = ("npm", "install", "--global", "--prefix", str(prefix), str(tarball))
+        install = run_command(install_command, cwd=ROOT, env=env)
+        if install.returncode != 0:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-npm-install-global-failed",
+                evidence_locator=locator,
+                source_locator=command_locator(("npm", "install", "--global", "--prefix", "<tmp>/global", "<pack.tgz>")),
+                summary=f"temporary global install failed: {compact_output(install.stdout, install.stderr)}",
+            )
+            return
+
+        bin_dir = prefix / ("Scripts" if sys.platform == "win32" else "bin")
+        loom_bin = bin_dir / ("loom.cmd" if sys.platform == "win32" else "loom")
+        if not loom_bin.exists():
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-loom-bin-missing",
+                evidence_locator=locator,
+                source_locator="<tmp>/global/bin/loom",
+                summary="temporary global install did not expose the loom bin",
+            )
+            return
+
+        for args, failure_suffix in (
+            (("version", "--json"), "version-command-failed"),
+            (("help", "--json"), "help-command-failed"),
+        ):
+            command = (str(loom_bin), *args)
+            completed = run_command(command, cwd=ROOT, env=env)
+            if completed.returncode != 0:
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-{failure_suffix}",
+                    evidence_locator=locator,
+                    source_locator=command_locator(("loom", *args)),
+                    summary=f"installed loom {' '.join(args)} failed: {compact_output(completed.stdout, completed.stderr)}",
+                )
+                return
+            try:
+                payload = json.loads(completed.stdout)
+            except json.JSONDecodeError as exc:
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-{failure_suffix}-invalid-json",
+                    evidence_locator=locator,
+                    source_locator=command_locator(("loom", *args)),
+                    summary=f"installed loom {' '.join(args)} did not emit JSON: {exc}",
+                )
+                return
+            if payload.get("result") != "pass":
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-{failure_suffix}-blocked",
+                    evidence_locator=locator,
+                    source_locator=command_locator(("loom", *args)),
+                    summary=f"installed loom {' '.join(args)} did not pass",
+                )
+                return
+            if args[0] == "version" and payload.get("versions", {}).get("repo_version") != version:
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-version-output-mismatch",
+                    evidence_locator=locator,
+                    source_locator="loom version --json",
+                    summary=f"installed loom version output must report {version}",
+                )
+                return
+            if args[0] == "help" and not any(command.get("command") == "version" for command in payload.get("commands", [])):
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-help-command-matrix-missing-version",
+                    evidence_locator=locator,
+                    source_locator="loom help --json",
+                    summary="installed loom help output must include the version command",
+                )
+                return
+
+
 SURFACES = (
     SurfaceDefinition(
         label=RELEASE_DOC_CONTRACT,
@@ -531,6 +756,12 @@ SURFACES = (
         description="Active install/release docs do not present loom-installer, direct SKILLS, or host plugins as separate primary install or release evidence.",
         evidence_locator=evidence_locator(FORBIDDEN_RELEASE_SURFACE_PATTERNS),
         run=check_forbidden_release_surface_patterns,
+    ),
+    SurfaceDefinition(
+        label=INSTALLED_GLOBAL_CLI_SMOKE,
+        description="Temporary global install of the packed root @mc-and-his-agents/loom package exposes the loom bin and runs version/help JSON smoke from the installed package.",
+        evidence_locator=evidence_locator(INSTALLED_GLOBAL_CLI_SMOKE),
+        run=check_installed_global_cli_smoke,
     ),
 )
 SURFACE_BY_LABEL = {surface.label: surface for surface in SURFACES}
