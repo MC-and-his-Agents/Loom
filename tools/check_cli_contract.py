@@ -1081,10 +1081,69 @@ def materialize_surface(target: Path, relative: str) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def assert_global_cli_runtime_fixture_catalog(fixture_data: dict[str, Any]) -> None:
+    catalog = fixture_data.get("synthetic_regression_fixtures")
+    if not isinstance(catalog, list):
+        raise AssertionError("legacy migration fixture catalog is missing #1244 synthetic regression fixtures")
+    fixtures = {fixture.get("id"): fixture for fixture in catalog if isinstance(fixture, dict)}
+    expected = {
+        "hotcp-style-global-cli-no-loom-bin": {
+            "fixture_type": "global-cli-no-bin",
+            "classification": "current",
+            "runtime_provider": "global-cli",
+        },
+        "repo-local-wrapper-compatibility": {
+            "fixture_type": "repo-local-wrapper-compatibility",
+            "classification": "current",
+            "runtime_provider": "repo-local-wrapper",
+        },
+        "global-cli-retained-loom-bin-residue": {
+            "fixture_type": "global-cli-retained-residue",
+            "classification": "current-with-repairable-residue",
+            "runtime_provider": "global-cli",
+        },
+        "global-cli-retained-loom-bin-carrier-blocker": {
+            "fixture_type": "global-cli-retained-blocker",
+            "repair_plan_status": "blocked",
+        },
+        "global-cli-provider-command-mismatch": {
+            "fixture_type": "global-cli-mismatch",
+            "doctor_result": "block",
+            "failed_layer": "global-cli-runtime-provider",
+        },
+    }
+    missing = sorted(set(expected) - set(fixtures))
+    if missing:
+        raise AssertionError(f"#1244 synthetic fixture catalog missing entries: {missing}")
+    for fixture_id, expected_values in expected.items():
+        fixture = fixtures[fixture_id]
+        if fixture.get("issue") != 1244 or fixture.get("synthetic") is not True:
+            raise AssertionError(f"{fixture_id} must stay a synthetic #1244 fixture")
+        if not fixture.get("summary") or fixture.get("source_path"):
+            raise AssertionError(f"{fixture_id} must document a synthetic summary without copying repository history")
+        expected_payload = fixture.get("expected")
+        if not isinstance(expected_payload, dict):
+            raise AssertionError(f"{fixture_id} is missing expected fixture payload")
+        for key, value in expected_values.items():
+            actual = fixture.get(key) if key == "fixture_type" else expected_payload.get(key)
+            if actual != value:
+                raise AssertionError(f"{fixture_id} expected {key} drifted: {actual!r}")
+    no_bin = fixtures["hotcp-style-global-cli-no-loom-bin"]
+    if ".loom/bin" not in no_bin.get("absent_surfaces", []):
+        raise AssertionError("global-cli no-bin fixture must explicitly forbid .loom/bin")
+    retained = fixtures["global-cli-retained-loom-bin-residue"].get("expected", {})
+    if retained.get("requires_confirmation") is not True or retained.get("deletes") != [".loom/bin"]:
+        raise AssertionError("retained .loom/bin fixture must keep deletion proposal-only")
+    blocker = fixtures["global-cli-retained-loom-bin-carrier-blocker"].get("expected", {})
+    if set(blocker.get("blocking_reference_paths", [])) != {".loom/bootstrap/init-result.json", ".loom/status/current.md"}:
+        raise AssertionError("retained .loom/bin blocker fixture must name stable carrier paths")
+
+
 def assert_legacy_fixture_contract(tmp: Path) -> None:
     fixture_data = json.loads(LEGACY_FIXTURES.read_text(encoding="utf-8"))
     if fixture_data.get("schema_version") != "loom-legacy-migration-validation-fixtures/v1":
         raise AssertionError("legacy migration fixture schema drifted")
+    assert_global_cli_runtime_fixture_catalog(fixture_data)
     for fixture in fixture_data["fixtures"]:
         target = tmp / fixture["id"]
         target.mkdir()
@@ -4958,6 +5017,31 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("verify did not consume doctor success")
         if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
             raise AssertionError("verify should not require suite validation without profile or Work Item demand")
+        repo_local_target = tmp / "repo-local-wrapper-compatibility"
+        repo_local_target.mkdir()
+        write_state(repo_local_target, valid_state(repo_local_target))
+        repo_local_bin = repo_local_target / ".loom" / "bin"
+        repo_local_bin.mkdir(parents=True)
+        (repo_local_bin / "loom_flow.py").write_text("# repo-local wrapper compatibility fixture\n", encoding="utf-8")
+        _, repo_local_detect = run_json(["detect", "--target", str(repo_local_target), "--json"], expect=0)
+        repo_local_runtime = next((surface for surface in repo_local_detect.get("surfaces", []) if surface.get("path") == ".loom/bin"), None)
+        if (
+            repo_local_detect.get("classification") != "current"
+            or not repo_local_runtime
+            or repo_local_runtime.get("kind") != "legacy-loom-bin"
+            or repo_local_runtime.get("migration_status") != "current"
+            or repo_local_runtime.get("authority") != "loom-cli"
+        ):
+            raise AssertionError("repo-local-wrapper .loom/bin compatibility fixture was not classified as current CLI-managed runtime")
+        _, repo_local_doctor = run_json(["doctor", "--target", str(repo_local_target), "--json"], expect=0)
+        if repo_local_doctor.get("result") != "pass":
+            raise AssertionError("repo-local-wrapper compatibility doctor did not pass")
+        _, repo_local_verify = run_json(["verify", "--target", str(repo_local_target), "--json"], expect=0)
+        if repo_local_verify.get("result") != "pass" or repo_local_verify.get("doctor", {}).get("result") != "pass":
+            raise AssertionError("repo-local-wrapper compatibility verify did not consume doctor success")
+        _, repo_local_repair = run_json(["repair", "plan", "--target", str(repo_local_target), "--json"], expect=0)
+        if repo_local_repair.get("actions"):
+            raise AssertionError("repo-local-wrapper compatibility fixture should not produce legacy repair actions")
         global_cli_target = tmp / "global-cli-no-bin"
         global_cli_target.mkdir()
         write_state(global_cli_target, global_cli_state(global_cli_target))
@@ -4970,6 +5054,8 @@ def run_aggregate_cli_contract() -> None:
         _, global_detect = run_json(["detect", "--target", str(global_cli_target), "--json"], expect=0)
         if global_detect["classification"] != "current":
             raise AssertionError("global-cli no-bin fixture was not classified as current")
+        if any(surface.get("path") == ".loom/bin" for surface in global_detect.get("surfaces", [])):
+            raise AssertionError("global-cli no-bin fixture must not detect .loom/bin")
         global_cli_home = tmp / "global-cli-codex-home"
         global_cli_home.mkdir()
         with isolated_codex_workstation(global_cli_home):
@@ -4995,6 +5081,25 @@ def run_aggregate_cli_contract() -> None:
             _, global_verify = run_json(["verify", "--target", str(global_cli_target), "--json"], expect=0)
             if global_verify.get("result") != "pass" or global_verify.get("doctor", {}).get("result") != "pass":
                 raise AssertionError("global-cli no-bin verify did not consume doctor success")
+            command_mismatch_target = tmp / "global-cli-command-mismatch"
+            command_mismatch_target.mkdir()
+            command_mismatch_state = global_cli_state(command_mismatch_target)
+            command_mismatch_state["provider_requirements"]["global_cli"]["required_commands"].append("loom imaginary")
+            write_state(command_mismatch_target, command_mismatch_state)
+            status, command_mismatch_doctor = run_json(["doctor", "--target", str(command_mismatch_target), "--json"])
+            command_mismatch_check = next(
+                (check for check in command_mismatch_doctor.get("checks", []) if check.get("name") == "global-cli-runtime-provider"),
+                None,
+            )
+            if (
+                status == 0
+                or command_mismatch_doctor.get("result") != "block"
+                or command_mismatch_doctor.get("failed_layer") != "global-cli-runtime-provider"
+                or not command_mismatch_check
+                or command_mismatch_check.get("result") != "block"
+                or command_mismatch_check.get("missing_commands") != ["loom imaginary"]
+            ):
+                raise AssertionError("global-cli provider command mismatch did not fail closed with stable diagnostics")
         _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json"], expect=0)
         read_entry = global_fact_chain.get("report", {}).get("fact_chain", {}).get("read_entry")
         if not isinstance(read_entry, str) or ".loom/bin" in read_entry or not read_entry.startswith("loom fact-chain "):
