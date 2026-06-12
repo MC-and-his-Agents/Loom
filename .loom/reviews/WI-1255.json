@@ -3,10 +3,11 @@
   "item_id": "WI-1255",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "WI-1255 post-merge carrier closeout keeps the original inventory-only semantic allow for PR #1326 and consumes merge commit 21f289166fce029fd34ae79dac92587370409d3d as post-merge evidence. This refresh does not reclassify post-merge evidence as pre-merge review and does not authorize runner behavior, suite membership, CI semantics, release behavior, or package/runtime output changes.",
-  "reviewer": "codex-worker-019e9625-a8f4-7c61-af4c-c73938ac2ac1",
-  "reviewed_head": "dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b",
-  "reviewed_validation_summary": "Post-merge closeout evidence, 2026-06-05: PR #1326 merged/closed with head `a05a0a31618f97f7e030481b9b030c1a320aa2e2` and merge commit `21f289166fce029fd34ae79dac92587370409d3d`; `origin/main` readback returned the same merge commit; `controlled-merge check` and `controlled-merge merge --execute` passed through the Loom wrapper after command-scoped GitHub token bridge; `closeout check --gate-profile closeout-contract` consumed retained review, merge-ready attempt, PR merge backlink, required checks, suite not_applicable evidence, and no-release PR body evidence; reconciliation dry-run showed closing parent #1255 would be unsafe because it is the umbrella FR; issues #1248, #1268, #1275, and #1281 were closed with post-merge evidence comments; #1255 summary comment recorded at https://github.com/MC-and-his-Agents/Loom/issues/1255#issuecomment-4629045751.",
+  "summary": "Umbrella closeout review allow: WI-1255/#1255 consumes completed Round 8 evidence for #1260/#1261/#1262/#1263 and #1383/#1393-#1408, explicitly handles #1260 through WI-1396 because `.loom/progress/WI-1260.md` is absent, records a no_release rationale satisfying the #1255 Release / No-Release Closeout Rule, and keeps #1451 plus #1244/#1461/#1464/#1465 out of scope. This review is limited to closeout carrier/status/review/shadow evidence and does not authorize merge_lane, issue closure, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, shared contract/schema/parser/failure vocabulary changes, Round 9/11, or Deferred roadmap scope.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-12T14:55:00Z",
+  "reviewed_head": "e00f589d5670a4464e6543ada6a704615e137285",
+  "reviewed_validation_summary": "Umbrella closeout evidence readback prepared on 2026-06-12: origin/main is `e00f589d5670a4464e6543ada6a704615e137285`; open PR list was empty before this closeout branch; #1255 is OPEN/REOPENED; #1451 is OPEN and out of scope; #1261 CLOSED/COMPLETED at 2026-06-12T08:56:21Z; #1262 CLOSED/COMPLETED at 2026-06-12T10:18:58Z; #1263 CLOSED/COMPLETED at 2026-06-12T11:56:27Z; #1260 CLOSED/COMPLETED at 2026-06-11T13:16:04Z with release/package evidence consumed through `.loom/progress/WI-1396.md` because exact `.loom/progress/WI-1260.md` is absent on origin/main. Parent and child carriers record no_release/no publish evidence; no VERSION/tag/GitHub Release/npm publish/live action, package publication, workflow release execution, shared contract/schema/parser vocabulary change, or forbidden #1451/#1244/Round 9/Round 11/Deferred scope was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -15,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1255.md",
     "recovery_entry": ".loom/progress/WI-1255.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "umbrella_closeout",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -32,12 +33,25 @@
     "engine_adapter": null,
     "engine_evidence": null,
     "normalized_findings": null,
-    "suite_evidence_validation": "not_applicable",
-    "suite_carrier_validation": "not_applicable",
-    "suite_evidence_map": null,
+    "suite_evidence_validation": "pass",
+    "suite_carrier_validation": "pass",
+    "suite_evidence_map": ".loom/specs/WI-1255/evidence-map.md",
     "suite_consistency_analysis": null,
-    "suite_task_carriers": [],
-    "suite_evidence_consumed_contracts": [],
-    "suite_carrier_consumed_contracts": []
+    "suite_task_carriers": [
+      ".loom/specs/WI-1255/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored umbrella closeout review approved the carrier-only WI-1255 evidence sync for PR gate consumption."
   }
 }
