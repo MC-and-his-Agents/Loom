@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1451",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler live-config closeout review allows WI-1451 after authorized host required-check update: main branch protection now requires the existing five contexts plus `node-installer-pr` and `root-self-governance` with strict=true, rulesets remain empty, PR #1468 head 856c89fd04d8c6454d550972dbbf7b24b76d952d has all hosted checks green, rollback was not needed, and no forbidden branch-protection, ruleset, merge, release, or scope action occurred.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-12T18:05:29Z",
+  "reviewed_head": "856c89fd04d8c6454d550972dbbf7b24b76d952d",
+  "reviewed_validation_summary": "Scheduler performed watcher-authorized live-config action on 2026-06-12 under watcher-live-config-grant-R8-WI-1451-required-contexts-202606121758: PATCH /repos/MC-and-his-Agents/Loom/branches/main/protection/required_status_checks only. Before readback: strict=true with required contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, `loom-pr-merge-gate`. After readback: strict=true with required contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, `loom-pr-merge-gate`, `node-installer-pr`, `root-self-governance`; checks array matches those contexts; rulesets remain `[]`; rollback not needed. PR #1468 readback at head `856c89fd04d8c6454d550972dbbf7b24b76d952d`: OPEN non-draft, base `ecf7ab25d6c49fbac4b93854e6ca9a0cd47975ed`, mergeable MERGEABLE, mergeStateStatus CLEAN, changedFiles=9. Hosted checks on that head are all SUCCESS: `loom-pr-merge-gate` rerun job 81088730575 completed 2026-06-12T17:54:05Z; `node-installer-pr` job 81088387717 completed 2026-06-12T17:57:10Z; `loom-check` jobs 81088387798/81088378993 completed 2026-06-12T17:56:13Z/17:56:34Z; `root-self-governance`, `py-compile`, `demo-bootstrap`, and `repo-local-cli` success. Local gate/readback before live-config passed: metadata-preflight for PR #1468 head `856c89fd04d8c6454d550972dbbf7b24b76d952d`; `python3 .loom/bin/loom_flow.py pr-gate check --target . --item WI-1451 --pr 1468 --head-sha 856c89fd04d8c6454d550972dbbf7b24b76d952d`; merge checkpoint; fact-chain; state-check; shadow-parity. No branch protection setting other than required_status_checks was changed; no ruleset/admin enforcement/PR review/force-push/deletion/bypass/merge-protection change, merge, issue closeout, release/npm/live/VERSION/tag/GitHub Release/npm publish, contract/schema/parser/failure vocabulary change, or forbidden issue scope action occurred.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1451.md",
+    "recovery_entry": ".loom/progress/WI-1451.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

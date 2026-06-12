@@ -2,28 +2,10 @@ name: node-installer-pr-gate
 
 on:
   pull_request:
-    paths:
-      - 'packages/loom-installer/**'
-      - 'plugins/loom/.codex-plugin/**'
-      - 'src/skills/**'
-      - 'skills/**'
-      - 'tools/skills_surface.py'
-      - 'tools/host_adapter_check.py'
-      - 'tools/version_surface_check.py'
-      - 'README.md'
-      - 'README.zh-CN.md'
-      - 'docs/adoption/**'
-      - 'skills/README.md'
-      - 'skills/README.zh-CN.md'
-      - 'skills/distribution-and-adapter-contract.md'
-      - 'skills/shared/scripts/loom_check.py'
-      - 'plugins/loom/.codex-plugin/plugin.json'
-      - '.github/workflows/node-installer-pr.yml'
-      - '.github/workflows/node-installer-release.yml'
-      - '.github/workflows/loom-check.yml'
 
 jobs:
-  gate:
+  node-installer-pr:
+    name: node-installer-pr
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,41 +18,82 @@ jobs:
       - name: Fetch base branch
         run: git fetch origin "${{ github.base_ref }}" --depth=1
 
+      - name: Detect node installer surface changes
+        id: relevant
+        shell: bash
+        run: |
+          relevant_changes=false
+          changed_files="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)"
+
+          printf '%s\n' "$changed_files"
+
+          while IFS= read -r path; do
+            case "$path" in
+              packages/loom-installer/*|plugins/loom/.codex-plugin/*|src/skills/*|skills/*|docs/adoption/*|tools/skills_surface.py|tools/host_adapter_check.py|tools/version_surface_check.py|README.md|README.zh-CN.md|.github/workflows/node-installer-pr.yml|.github/workflows/node-installer-release.yml|.github/workflows/loom-check.yml)
+                relevant_changes=true
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "relevant_changes=$relevant_changes" >> "$GITHUB_OUTPUT"
+
+          if [ "$relevant_changes" = true ]; then
+            echo "Relevant node installer paths changed; running the full installer gate."
+          else
+            echo "No relevant node installer paths changed; fast-success path."
+          fi
+
       - name: Setup Node
+        if: steps.relevant.outputs.relevant_changes == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Setup Python
+        if: steps.relevant.outputs.relevant_changes == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Check version bump
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: node packages/loom-installer/scripts/check-version-bump.mjs --base "origin/${{ github.base_ref }}"
 
       - name: Check release surface split
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: python3 tools/check_release_surface.py
 
       - name: Check doc sync
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: npm --prefix packages/loom-installer run check:docs
 
       - name: Check generated skills surface
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: npm --prefix packages/loom-installer run check:distribution
 
       - name: Check host adapter matrix
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: npm --prefix packages/loom-installer run check:hosts
 
       - name: Check version surfaces
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: npm --prefix packages/loom-installer run check:versions
 
       - name: Check payload drift
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: npm --prefix packages/loom-installer run check:payload
 
       - name: Run installer regression
+        if: steps.relevant.outputs.relevant_changes == 'true'
         run: node packages/loom-installer/scripts/run-regression.mjs
 
       - name: Run loom check
+        if: steps.relevant.outputs.relevant_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: make loom-check
+
+      - name: Confirm fast-success path
+        if: steps.relevant.outputs.relevant_changes != 'true'
+        run: echo "node-installer-pr skipped the full gate because no relevant paths changed."
