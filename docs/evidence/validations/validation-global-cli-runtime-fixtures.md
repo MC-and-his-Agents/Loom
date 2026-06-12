@@ -47,9 +47,9 @@ The aggregate check asserts:
 
 ## Release Judgment For #1244
 
-#1244 is a regression fixture and validation batch. It does not change the npm
-package payload, version authority, GitHub release surface, or publish decision
-by itself.
+#1244 is a regression fixture and validation batch with a `no_release`
+readiness judgment. It does not change the npm package payload, version
+authority, GitHub release surface, or publish decision by itself.
 
-Release or no-release consumption remains owned by the parent #1238 closeout or
-the later release carrier that consumes these fixtures.
+Parent #1238 closeout or a later release carrier may consume these fixtures as
+supporting evidence, but this PR does not publish, tag, or modify VERSION.

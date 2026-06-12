@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1263
-- Goal: Close parent #1263 by consuming completed runtime regression validation surface evidence from #1405, #1406, #1407, and #1408 while preserving the aggregate `loom-check-runtime-regression` contract.
-- Scope: WI-1263/#1263 parent closeout only: consume terminal child evidence for runtime locking, subprocess environment purity, tempdir cleanup, demo fixture cleanliness, aggregate runtime regression preservation, and no_release evidence; create parent closeout carriers, review, status, shadow evidence, PR metadata, and no_release evidence. Do not process #1255, #1451, Round 9/11, Deferred roadmap, release/npm/live/VERSION/tag/GitHub Release/npm publish, or shared contract/schema/parser/failure vocabulary changes.
-- Execution Path: issue #1263 -> branch work/1263-runtime-parent-closeout -> PR -> scheduler-owned review/pr-gate -> watcher merge_lane request -> controlled merge/no_release closeout if granted
+- Item ID: WI-1244
+- Goal: Add regression fixtures for HotCP-style repositories that use the global Loom CLI runtime without .loom/bin while preserving retained .loom/bin compatibility behavior.
+- Scope: Issue #1244 / WI-6 only: synthetic regression fixtures and CLI contract validation for no-.loom/bin global CLI runtime, repo-local .loom/bin compatibility runtime, retained .loom/bin repair/upgrade planning, installed-state/detect/doctor/verify/fact-chain/status surfaces, and provider mismatch diagnostics. Do not process #1245/#1246/#1238 closeout, shadow carriers, controlled merge, release/npm/live actions, or shared contract/schema/parser/failure vocabulary changes.
+- Execution Path: issue #1244 -> branch work/1244-global-cli-runtime-fixtures -> PR #1461 -> scheduler-owned current-head review and high-cost PR readiness gate -> watcher merge_lane request if ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1263.md
-- Review Entry: .loom/reviews/WI-1263.json
-- Validation Entry: git diff --check; python3 tools/check_loom_check_runtime_regressions.py --list-surfaces; focused runtime regression surfaces for locking/subprocess-env/tempdir/demo cleanliness; aggregate runtime regression check; suite inspect/validate/evidence/carrier checks; fact-chain/shadow refresh; PR metadata/head readback; hosted checks classification
-- Closing Condition: PR for #1263 parent closeout is reviewed/gated by the scheduler on the current head, merged through the controlled path after watcher merge_lane grant, issue #1263 is closed, and no_release parent closeout evidence is available for #1255 consumption without closing #1255 in this scope.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1263/#1263 terminal closeout facts have been consumed: PR #1462 merged through the scheduler-owned controlled merge path at 2026-06-12T11:51:54Z with merge commit 95223caaffd0e7b5570d01be26145b34657a5923; issue #1263 closed/completed at 2026-06-12T11:56:27Z; terminal closeout metadata records no_release and parent evidence for later #1255 consumption.
-- Next Step: None for WI-1263/#1263 terminal closeout. #1255 remains a separate Round 8 umbrella scope requiring a separate watcher grant.
-- Blockers: None for WI-1263/#1263 terminal closeout.
-- Latest Validation Summary: Post-merge terminal closeout readback: PR #1462 merged at 2026-06-12T11:51:54Z with merge commit 95223caaffd0e7b5570d01be26145b34657a5923; issue #1263 closed/completed at 2026-06-12T11:56:27Z; origin/main before this terminal closeout sync was 95223caaffd0e7b5570d01be26145b34657a5923; carrier closeout-sync wrote closed_out metadata for issue 1263 / PR 1462 / target branch main / no_release evidence; #1255 remains open/reopened and was not closed out; no VERSION/tag/GitHub Release/npm publish/live action, workflow/runtime/package behavior change, fixture content change, generated runtime behavior change, hosted workflow semantic change, or shared contract/schema/parser vocabulary change was performed.
-- Recovery Boundary: WI-1263/#1263 terminal closeout sync only under watcher decision watcher-lane-blocked-accepted-R8-WI-1263-terminal-closeout-sync-202606121159. Do not process #1255 closeout, #1451, Round 9/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior changes, fixture changes, generated runtime behavior changes, hosted workflow semantic changes, or shared contract/schema/parser/failure vocabulary changes.
-- Current Lane: terminal-closeout
+- Recovery Entry: .loom/progress/WI-1244.md
+- Review Entry: .loom/reviews/WI-1244.json
+- Validation Entry: python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py tools/governance_surface.py; python3 tools/check_cli_contract.py --surface aggregate; python3 -m json.tool docs/evidence/fixtures/legacy-migration-validation-fixtures.json >/dev/null; python3 tools/loom.py suite inspect --target . --item WI-1244 --json; python3 tools/loom.py suite validate --target . --item WI-1244 --json; git diff --check origin/main...HEAD; python3 tools/loom.py pr metadata-preflight 1461 --head-sha <current-head> --work-item WI-1244 --surface merge_ready --json; python3 .loom/bin/loom_flow.py review read --target . --item WI-1244; python3 .loom/bin/loom_flow.py pr-gate check --target . --item WI-1244 --pr 1461 --head-sha <current-head>
+- Closing Condition: PR #1461 for work/1244-global-cli-runtime-fixtures is refreshed onto current main, metadata/readback/review/high-cost PR readiness gates pass for current head, watcher grants merge_lane separately if merge-ready, and #1244 closeout is consumed without shadow/merge/closeout/release/scope expansion in this grant.
+- Current Checkpoint: build
+- Current Stop: PR #1461 has been rebased onto origin/main da4c1761d7c16f3ac7212638dae99af941178682. The implementation diff remains scoped to #1244 fixture/code evidence plus granted WI-1244 fact-chain/status/review carriers; local validation now passes with the WI-1244 suite path decision recorded as not_applicable. PR body and hosted checks still need refresh after final head-bound metadata is committed and pushed.
+- Next Step: Commit the current implementation/carrier refresh, author WI-1244 current-head review, update PR #1461 metadata/head binding to the final head, run allowed PR readiness gates, and then report lane_release/lane_blocked_update or request merge_lane if merge-ready.
+- Blockers: None
+- Latest Validation Summary: Local validation passed after rebase onto origin/main da4c1761d7c16f3ac7212638dae99af941178682: python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py tools/governance_surface.py; python3 -m json.tool docs/evidence/fixtures/legacy-migration-validation-fixtures.json; git diff --check origin/main...HEAD; git diff --check; python3 tools/loom.py suite inspect --target . --item WI-1244 --json; python3 tools/loom.py suite validate --target . --item WI-1244 --json returned result=not_applicable with blocking_gaps=[]; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1244; python3 tools/check_cli_contract.py --surface aggregate passed in 158.85s. Current-head review, PR metadata readback, hosted checks, and PR gate remain pending.
+- Recovery Boundary: WI-1244/#1244 PR #1461 readiness only under watcher-lane-grant-R10-WI-1244-pr-readiness-202606121222. Do not write .loom/shadow/**, merge #1461, run controlled merge, perform post-merge closeout sync, release/npm/live/VERSION/tag/GitHub Release/npm publish, process #1245/#1246/#1238 closeout, edit PR #1463/WI-1263, or change shared contract/schema/parser/failure vocabulary.
+- Current Lane: shared_fact_chain_status_lane,current_item_review_lane,high_cost_gate_lane
 
 ## Runtime Evidence
 
-- Run Entry: Scheduler consumed watcher terminal closeout sync authorization watcher-lane-blocked-accepted-R8-WI-1263-terminal-closeout-sync-202606121159 after PR #1462 merged.
-- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns WI-1263 terminal closeout sync, status/progress/review/shadow evidence, and lane_release or lane_blocked_update report.
-- Diagnostics Entry: WI-1263 consumes terminal child evidence from #1405/#1406/#1407/#1408 for runtime regression validation surfaces and preserves the aggregate `python3 tools/check_loom_check_runtime_regressions.py`, `make loom-check-runtime-regression`, and `make loom-check` paths.
-- Verification Entry: Post-merge readback proved PR #1462 merged at 2026-06-12T11:51:54Z with merge commit `95223caaffd0e7b5570d01be26145b34657a5923`, #1263 closed/completed at 2026-06-12T11:56:27Z, #1255 still open/reopened, and no_release/no publish or live action. Terminal closeout updates status/progress/review/shadow and WI-1263 carriers only.
-- Lane Entry: terminal-closeout
+- Run Entry: Scheduler consumed watcher lane grant watcher-lane-grant-R10-WI-1244-pr-readiness-202606121222 after Round 8 WI-1263 terminal release was accepted.
+- Logs Entry: Scheduler thread 019ebb62-095b-7a23-a269-2906cce8e742 owns WI-1244 PR #1461 readiness refresh, current status/progress, current-head review, allowed high-cost gate classification, and lane_release/lane_blocked_update or later merge_lane request.
+- Diagnostics Entry: WI-1244 exercises HotCP-style global CLI runtime repositories without `.loom/bin`, retained `.loom/bin` repo-local compatibility, installed-state/detect/doctor/verify/fact-chain/status surfaces, repair/upgrade planning, and provider mismatch diagnostics.
+- Verification Entry: Local validation passed on the rebased WI-1244 branch against origin/main `da4c1761d7c16f3ac7212638dae99af941178682`, including aggregate CLI contract fixtures and the not_applicable suite path decision; PR body, hosted checks, current-head review, and PR readiness gates still need refresh before lane release or merge_lane request.
+- Lane Entry: shared_fact_chain_status_lane,current_item_review_lane,high_cost_gate_lane
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1263.md
-- Dynamic Truth: .loom/progress/WI-1263.md
+- Static Truth: .loom/work-items/WI-1244.md
+- Dynamic Truth: .loom/progress/WI-1244.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
