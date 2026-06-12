@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1263",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "Parent closeout review allow: WI-1263/#1263 consumes completed #1405/#1406/#1407/#1408 runtime regression validation surface evidence, preserves the aggregate loom-check-runtime-regression entrypoint, records no_release rationale, and keeps #1255 out of scope. This review is limited to closeout carrier/status/review/shadow evidence and does not authorize merge_lane, #1255 umbrella closeout, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior changes, fixture content changes, generated runtime behavior changes, hosted workflow semantic changes, or shared contract/schema/parser/failure vocabulary changes.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-12T10:50:00Z",
+  "reviewed_head": "940442240187be432c7b80c62c7838fe32ef467c",
+  "reviewed_validation_summary": "Parent closeout evidence readback and local validation passed: #1405 closed/completed at 2026-06-10T21:01:09Z; #1406 closed/completed at 2026-06-11T08:48:32Z; #1407 closed/completed at 2026-06-11T17:52:24Z; #1408 closed/completed at 2026-06-12T02:55:46Z; origin/main before this parent closeout was 940442240187be432c7b80c62c7838fe32ef467c; #1263 remains open; #1255 remains open/reopened and was not processed; git diff --check, JSON syntax checks, fact-chain, shadow-parity, review read, state-check, runtime surface list, make loom-check-runtime-regression, suite inspect, suite evidence validate, and suite carrier validate passed; suite validate returned the expected not_applicable result for the authored parent closeout suite path; no VERSION/tag/GitHub Release/npm publish/live action, workflow/runtime/package behavior change, fixture content change, generated runtime behavior change, hosted workflow semantic change, or shared contract/schema/parser vocabulary change was performed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1263.md",
+    "recovery_entry": ".loom/progress/WI-1263.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "parent_closeout",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored parent closeout review approved the carrier-only WI-1263 parent evidence sync for PR gate consumption."
+  }
+}
