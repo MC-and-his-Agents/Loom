@@ -1,27 +1,49 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1451",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Worker prepared WI-1451 required-check hardening and recorded the live-config boundary, but scheduler-owned current-head review must still consume the final PR head plus hosted check readback before merge-ready.",
-  "reviewer": "worker:R8-WI-1451-worker-1",
-  "reviewed_head": "worker-final-head-pending-readback",
-  "reviewed_validation_summary": "Branch `work/1451-required-check-hardening` is scoped to WI-1451 only. The workflow target is an always-run job/check named `node-installer-pr` that fast-succeeds on path misses and preserves the full installer gate on path hits. Live host readback on 2026-06-13 showed main required contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, and `loom-pr-merge-gate`, while repo rulesets read back as empty; `root-self-governance` remains a candidate requiring separate live-config authorization.",
-  "fallback_to": "build",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler current-head review allows WI-1451 PR #1468 head 21c57944e3dc82d6f51fc8fdfa543509abd62952: the workflow now emits the stable always-run check context `node-installer-pr`, preserves full installer validation on relevant path hits, preserves fast success on path misses, records existing required contexts unchanged, keeps `root-self-governance` as a candidate requiring separate live-config authorization, and does not perform branch protection/ruleset mutation, merge, release, npm publish, VERSION, tag, GitHub Release, or other forbidden scope.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-12T17:48:57Z",
+  "reviewed_head": "21c57944e3dc82d6f51fc8fdfa543509abd62952",
+  "reviewed_validation_summary": "Scheduler consumed worker report `R8-WI-1451-worker-1-report-20260613014136` and live-read PR #1468 on 2026-06-13: PR is OPEN non-draft, head `21c57944e3dc82d6f51fc8fdfa543509abd62952`, base `ecf7ab25d6c49fbac4b93854e6ca9a0cd47975ed`, mergeable MERGEABLE, mergeStateStatus BLOCKED only because `loom-pr-merge-gate` failed on stale/fallback review. Worker validation passed: `git diff --check`; JSON syntax checks; workflow YAML parse; workflow path-hit/path-miss smoke; suite inspect pass; suite validate returned not_applicable with no blocking gaps by contract; fact-chain pass for WI-1451; review read pass for fallback artifact; state-check pass; shadow-parity pass; PR metadata preflight pass for head `21c57944e3dc82d6f51fc8fdfa543509abd62952`. Hosted checks on current head: `node-installer-pr` SUCCESS run 27432310260 job 81085467218; `loom-check` SUCCESS run 27432310432 job 81085467494; `root-self-governance` SUCCESS job 81085467495; `repo-local-cli` SUCCESS job 81085467521; `py-compile` SUCCESS job 81085467552; `demo-bootstrap` SUCCESS job 81085467559; `loom-pr-merge-gate` FAILURE run 27432310363 job 81085467426 classified as review stale. Live host baseline remains main required contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, and `loom-pr-merge-gate` with strict=true; repo rulesets read back as empty; no branch protection/ruleset mutation, merge, release, npm publish, VERSION, tag, GitHub Release, or live action occurred.",
+  "fallback_to": null,
   "findings": [],
-  "blocking_issues": [
-    "Scheduler-owned current-head review, PR metadata readback, hosted check readback, and any separately authorized required-context mutation remain pending."
-  ],
-  "follow_ups": [
-    "Refresh the review record on the exact PR head after hosted checks stabilize."
-  ],
+  "blocking_issues": [],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1451.md",
     "recovery_entry": ".loom/progress/WI-1451.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "merge",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
+      }
+    },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
