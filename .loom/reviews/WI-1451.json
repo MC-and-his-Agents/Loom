@@ -3,11 +3,11 @@
   "item_id": "WI-1451",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Scheduler live-config closeout review allows WI-1451 after authorized host required-check update: main branch protection now requires the existing five contexts plus `node-installer-pr` and `root-self-governance` with strict=true, rulesets remain empty, PR #1468 head 856c89fd04d8c6454d550972dbbf7b24b76d952d has all hosted checks green, rollback was not needed, and no forbidden branch-protection, ruleset, merge, release, or scope action occurred.",
+  "summary": "Terminal closeout review allow: PR #1468 is merged and issue #1451 is closed; this closeout-only carrier update records WI-1451/#1451 terminal progress, status, review, and shadow facts after the controlled merge and reconciliation sync. The reviewed closeout-only diff is limited to WI-1451 terminal carrier/status/review/shadow updates; #1244/#1461/#1464/#1465, #1245/#1246/#1238, #1255 rewrites, Round 9/10/11, Deferred roadmap, contract/schema/parser changes, release actions, and additional live config mutation remain explicitly out of scope.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-12T18:05:29Z",
-  "reviewed_head": "856c89fd04d8c6454d550972dbbf7b24b76d952d",
-  "reviewed_validation_summary": "Scheduler performed watcher-authorized live-config action on 2026-06-12 under watcher-live-config-grant-R8-WI-1451-required-contexts-202606121758: PATCH /repos/MC-and-his-Agents/Loom/branches/main/protection/required_status_checks only. Before readback: strict=true with required contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, `loom-pr-merge-gate`. After readback: strict=true with required contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, `loom-pr-merge-gate`, `node-installer-pr`, `root-self-governance`; checks array matches those contexts; rulesets remain `[]`; rollback not needed. PR #1468 readback at head `856c89fd04d8c6454d550972dbbf7b24b76d952d`: OPEN non-draft, base `ecf7ab25d6c49fbac4b93854e6ca9a0cd47975ed`, mergeable MERGEABLE, mergeStateStatus CLEAN, changedFiles=9. Hosted checks on that head are all SUCCESS: `loom-pr-merge-gate` rerun job 81088730575 completed 2026-06-12T17:54:05Z; `node-installer-pr` job 81088387717 completed 2026-06-12T17:57:10Z; `loom-check` jobs 81088387798/81088378993 completed 2026-06-12T17:56:13Z/17:56:34Z; `root-self-governance`, `py-compile`, `demo-bootstrap`, and `repo-local-cli` success. Local gate/readback before live-config passed: metadata-preflight for PR #1468 head `856c89fd04d8c6454d550972dbbf7b24b76d952d`; `python3 .loom/bin/loom_flow.py pr-gate check --target . --item WI-1451 --pr 1468 --head-sha 856c89fd04d8c6454d550972dbbf7b24b76d952d`; merge checkpoint; fact-chain; state-check; shadow-parity. No branch protection setting other than required_status_checks was changed; no ruleset/admin enforcement/PR review/force-push/deletion/bypass/merge-protection change, merge, issue closeout, release/npm/live/VERSION/tag/GitHub Release/npm publish, contract/schema/parser/failure vocabulary change, or forbidden issue scope action occurred.",
+  "authored_at": "2026-06-12T18:27:17Z",
+  "reviewed_head": "b5d925ea0af8b91f5fe296fffa4dbd6361ceff27",
+  "reviewed_validation_summary": "Post-merge terminal closeout readback: PR #1468 merged at 2026-06-12T18:20:21Z with merge commit b5d925ea0af8b91f5fe296fffa4dbd6361ceff27; issue #1451 closed/completed at 2026-06-12T18:24:07Z after reconciliation sync; origin/main read back at b5d925ea0af8b91f5fe296fffa4dbd6361ceff27; main branch protection required_status_checks reads back strict=true with contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, `loom-pr-merge-gate`, `node-installer-pr`, and `root-self-governance`; repo rulesets remain `[]`; carrier closeout-sync wrote closed_out metadata for issue 1451, PR 1468, target branch main, and evidence locator github:issue/1451#event-closed;github:pr/1468;git:b5d925ea0af8b91f5fe296fffa4dbd6361ceff27. No additional branch protection or ruleset mutation, release/npm/live/VERSION/tag/GitHub Release/npm publish, contract/schema/parser/failure vocabulary change, raw host merge, #1244/#1461/#1464/#1465, #1245/#1246/#1238, #1255 rewrite, Round 9/10/11 product scope, or Deferred roadmap action was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,6 +16,7 @@
     "work_item": ".loom/work-items/WI-1451.md",
     "recovery_entry": ".loom/progress/WI-1451.md",
     "status_surface": ".loom/status/current.md",
+    "closeout_pr": "pending",
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
@@ -43,6 +44,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the closeout-only carrier updates for WI-1451/#1451 without expanding into sibling issues, later rounds, release, contract/schema/parser, raw merge, or additional live config scope."
   }
 }
