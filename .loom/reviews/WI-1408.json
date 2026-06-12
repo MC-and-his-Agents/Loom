@@ -3,11 +3,11 @@
   "item_id": "WI-1408",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1408 current-head review allow: head 835291a22ebf3f1580a571f7ae773b14c85535d4 records aggregate runtime regression closeout evidence, current-item fact-chain activation, WI-1408 suite/task carriers, shadow refresh, and a narrow WI-1407 locator correction. The reviewed scope does not change checker behavior, Makefile behavior, shared contract/schema/parser/failure vocabulary, parent #1263/#1255 closeout, release/npm/live surfaces, VERSION/tag/GitHub Release/npm publish, or merge execution.",
+  "summary": "Terminal closeout review allow: PR #1455 is merged and issue #1408 is closed; this closeout-only carrier update records WI-1408/#1408 terminal progress, status, shadow facts, and no_release evidence after the controlled merge. The reviewed closeout-only diff is limited to WI-1408 terminal carrier/status/shadow updates; parent #1263, umbrella #1255, #1261/#1262, #1451, release/npm/live/VERSION/tag/GitHub Release/npm publish, and shared contract/schema/parser/failure vocabulary remain explicitly out of scope. This review does not replace the implementation review consumed for PR #1455.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-12T02:34:17Z",
-  "reviewed_head": "835291a22ebf3f1580a571f7ae773b14c85535d4",
-  "reviewed_validation_summary": "Local validation passed on 2026-06-12T02:24Z before PR creation: `git diff --check`; `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; `make loom-check-runtime-single-flight-locking`; `make loom-check-runtime-worktree-local-lock-paths`; `make loom-check-runtime-installer-regression-lock-output`; `make loom-check-runtime-locking`; `make loom-check-runtime-subprocess-env-purity`; `make loom-check-runtime-temp-dir-cleanup`; `make loom-check-runtime-demo-fixture-cleanliness`; `make loom-check-runtime-regression` passed with 7 aggregate surfaces including aggregate-only `runtime-purity-helpers`; `python3 tools/loom.py suite inspect --target . --item WI-1408 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1408 --json` returned `result=not_applicable`, `blocking_gaps=[]`, exit 1 per current not_applicable contract; `python3 tools/loom.py suite evidence validate --target . --item WI-1408 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1408 --json` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed with current item WI-1408 and fresh status; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1408 --write` refreshed closeout/merge-ready Loom shadow evidence; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed. Dependency readback basis: #1405 closed/completed at 2026-06-10T21:01:09Z; #1406 closed/completed at 2026-06-11T08:48:32Z; #1407 closed/completed at 2026-06-11T17:52:24Z; PR #1454 merged at 2026-06-12T01:51:43Z with merge commit 8252c612ad4d2892199469751d1fe7047c28ecef; parent #1263 remains open; umbrella #1255 remains open/reopened; no parent closeout, release/npm/live action, VERSION/tag/GitHub Release/npm publish, or shared contract/schema/parser/failure vocabulary change was performed.",
+  "authored_at": "2026-06-12T06:27:52Z",
+  "reviewed_head": "4bef1b849238765ce3edc279bc12d6f9af19a49e",
+  "reviewed_validation_summary": "Post-merge terminal closeout readback: PR #1455 merged at 2026-06-12T02:54:50Z with merge commit a78750370c3f7dec6bd21e464d44a933549e4c3d; issue #1408 closed/completed at 2026-06-12T02:55:46Z; origin/main is a78750370c3f7dec6bd21e464d44a933549e4c3d; parent #1263 remains open and umbrella #1255 remains open/reopened and neither was closed out; reconciliation audit reports missing native dependency edge 1263 blocked by 1408 as outside this grant; carrier closeout-sync wrote closed_out metadata for issue 1408, PR 1455, target branch main, and evidence locator github:issue/1408#event-closed;github:pr/1455;git:a78750370c3f7dec6bd21e464d44a933549e4c3d; no parent closeout, release/npm/live action, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior change, or shared contract/schema/parser vocabulary change was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,8 @@
     "work_item": ".loom/work-items/WI-1408.md",
     "recovery_entry": ".loom/progress/WI-1408.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "closeout_pr": "github:pr/1455",
+    "build_checkpoint": "fallback:closed_out",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -43,6 +44,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the closeout-only carrier updates for WI-1408/#1408 without expanding into parent #1263, umbrella #1255, or later Round 8 scope."
   }
 }
