@@ -1,0 +1,27 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1451",
+  "decision": "fallback",
+  "kind": "general_review",
+  "summary": "Worker prepared WI-1451 required-check hardening and recorded the live-config boundary, but scheduler-owned current-head review must still consume the final PR head plus hosted check readback before merge-ready.",
+  "reviewer": "worker:R8-WI-1451-worker-1",
+  "reviewed_head": "worker-final-head-pending-readback",
+  "reviewed_validation_summary": "Branch `work/1451-required-check-hardening` is scoped to WI-1451 only. The workflow target is an always-run job/check named `node-installer-pr` that fast-succeeds on path misses and preserves the full installer gate on path hits. Live host readback on 2026-06-13 showed main required contexts `py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, and `loom-pr-merge-gate`, while repo rulesets read back as empty; `root-self-governance` remains a candidate requiring separate live-config authorization.",
+  "fallback_to": "build",
+  "findings": [],
+  "blocking_issues": [
+    "Scheduler-owned current-head review, PR metadata readback, hosted check readback, and any separately authorized required-context mutation remain pending."
+  ],
+  "follow_ups": [
+    "Refresh the review record on the exact PR head after hosted checks stabilize."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1451.md",
+    "recovery_entry": ".loom/progress/WI-1451.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "merge",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
