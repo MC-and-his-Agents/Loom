@@ -3,11 +3,11 @@
   "item_id": "WI-1261",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "Parent closeout review allow: WI-1261/#1261 consumes terminal skills validation surface evidence from #1397/#1398/#1399/#1400 and preserves the aggregate skills check contract. The reviewed carrier head 55dde283 is limited to WI-1261 parent closeout carriers, status, shadow evidence, suite not_applicable rationale, evidence map, task carrier, scheduler review, and no_release rationale. #1262/#1263/#1255, #1451, Round 9/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior changes, and shared contract/schema/parser/failure vocabulary changes remain explicitly out of scope.",
+  "summary": "Terminal closeout sync review allow: WI-1261/#1261 consumes PR #1457 controlled-merge facts, issue #1261 CLOSED/COMPLETED readback, terminal closed_out carrier metadata, refreshed status/shadow evidence, and no_release rationale. This review is limited to the closeout-only carrier sync after merge commit 69b4c4018f7ce7a7eb53f4fe2c6b6c33bd3d807d. #1262/#1263/#1255, #1451, Round 9/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior changes, and shared contract/schema/parser/failure vocabulary changes remain explicitly out of scope.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-12T07:27:40Z",
-  "reviewed_head": "55dde28363f75ecb8e5e68ab6be0e5603a0d4bd0",
-  "reviewed_validation_summary": "Current-head validation passed on 2026-06-12T07:25Z: git diff --check; skills surface list and targeted surfaces docs-reference-sync, generated-tree-drift, package-metadata, cache-artifacts, launcher-smoke passed; aggregate python3 tools/skills_surface.py check passed; python3 tools/loom.py skills check --target . --json passed; suite inspect passed; suite validate returned result=not_applicable with blocking_gaps=[] and exit 1 per current not_applicable contract; suite evidence validate passed; suite carrier validate passed; fact-chain passed; state-check passed after checkpoint normalized to build then merge; blocking shadow parity passed; scheduler review record wrote decision=allow for reviewed_head 6ec46fbc5018ca28a302aa243c30d153d3f78c96. Live host readback: #1261 open, #1255 open/reopened. No #1262/#1263/#1255 closeout, release/npm/live action, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior change, or shared contract/schema/parser vocabulary change was performed.",
+  "authored_at": "2026-06-12T09:03:32Z",
+  "reviewed_head": "69b4c4018f7ce7a7eb53f4fe2c6b6c33bd3d807d",
+  "reviewed_validation_summary": "Post-merge terminal closeout readback: PR #1457 merged at 2026-06-12T08:49:51Z with merge commit 69b4c4018f7ce7a7eb53f4fe2c6b6c33bd3d807d; issue #1261 closed/completed at 2026-06-12T08:56:21Z; origin/main before this terminal closeout sync was 69b4c4018f7ce7a7eb53f4fe2c6b6c33bd3d807d; carrier closeout-sync wrote closed_out metadata for issue 1261 / PR 1457 / target branch main / no_release evidence; #1262, #1263, and #1255 remain open and were not closed out; no VERSION/tag/GitHub Release/npm publish/live action, workflow/runtime/package behavior change, or shared contract/schema/parser vocabulary change was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1261.md",
     "recovery_entry": ".loom/progress/WI-1261.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "terminal_closeout_sync",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -43,6 +43,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the carrier-only WI-1261 sync for closeout-only PR consumption."
   }
 }
