@@ -3,7 +3,8 @@
   "documented_by": [
     "docs/adoption/cli-first-legacy-migration-playbook.md",
     "docs/evidence/validations/validation-legacy-migration-release-judgment.md",
-    "docs/adoption/loom-installed-state-v2.md"
+    "docs/adoption/loom-installed-state-v2.md",
+    "docs/evidence/validations/validation-global-cli-runtime-fixtures.md"
   ],
   "command_surface": [
     "loom detect",
@@ -11,6 +12,130 @@
     "loom repair plan",
     "loom upgrade-plan",
     "loom verify"
+  ],
+  "synthetic_regression_fixtures": [
+    {
+      "id": "hotcp-style-global-cli-no-loom-bin",
+      "issue": 1244,
+      "synthetic": true,
+      "fixture_type": "global-cli-no-bin",
+      "summary": "HotCP-style repository shape after migration: repository keeps only installed-state metadata plus fact-chain/status carriers and intentionally has no .loom/bin runtime payload.",
+      "surfaces": [
+        ".loom/installed-state.json",
+        ".loom/bootstrap/init-result.json",
+        ".loom/status/current.md",
+        ".loom/work-items/INIT-0001.md",
+        ".loom/progress/INIT-0001.md"
+      ],
+      "absent_surfaces": [
+        ".loom/bin",
+        "plugins/loom/skills",
+        ".agents/skills",
+        "skills"
+      ],
+      "command_surface": [
+        "loom installed-state validate --target <repo> --json",
+        "loom detect --target <repo> --json",
+        "loom doctor --target <repo> --json",
+        "loom verify --target <repo> --json",
+        "loom fact-chain --target <repo> --json",
+        "loom status --target <repo> --json"
+      ],
+      "expected": {
+        "runtime_provider": "global-cli",
+        "classification": "current",
+        "installed_state_result": "pass",
+        "doctor_result": "pass",
+        "verify_result": "pass",
+        "fact_chain_read_entry_prefix": "loom fact-chain ",
+        "status_entrypoint_prefix": "loom status ",
+        "forbidden_entrypoint_fragment": ".loom/bin"
+      }
+    },
+    {
+      "id": "repo-local-wrapper-compatibility",
+      "issue": 1244,
+      "synthetic": true,
+      "fixture_type": "repo-local-wrapper-compatibility",
+      "summary": "Existing-style installed-state that still owns .loom/bin as a CLI-managed repo-local runtime wrapper and must remain current rather than being reclassified as legacy.",
+      "surfaces": [
+        ".loom/installed-state.json",
+        ".loom/bin"
+      ],
+      "expected": {
+        "runtime_provider": "repo-local-wrapper",
+        "classification": "current",
+        "surface_kind": "legacy-loom-bin",
+        "managed_runtime_migration_status": "current",
+        "doctor_result": "pass",
+        "verify_result": "pass"
+      }
+    },
+    {
+      "id": "global-cli-retained-loom-bin-residue",
+      "issue": 1244,
+      "synthetic": true,
+      "fixture_type": "global-cli-retained-residue",
+      "summary": "Global CLI installed-state with a retained .loom/bin payload kept as repairable compatibility residue until an explicit deletion confirmation flow consumes it.",
+      "surfaces": [
+        ".loom/installed-state.json",
+        ".loom/bin"
+      ],
+      "expected": {
+        "runtime_provider": "global-cli",
+        "classification": "current-with-repairable-residue",
+        "surface_kind": "retained-loom-bin",
+        "repair_plan_action": "plan-global-cli-runtime-carrier-migration",
+        "repair_plan_status": "recommended",
+        "requires_confirmation": true,
+        "deletes": [
+          ".loom/bin"
+        ]
+      }
+    },
+    {
+      "id": "global-cli-retained-loom-bin-carrier-blocker",
+      "issue": 1244,
+      "synthetic": true,
+      "fixture_type": "global-cli-retained-blocker",
+      "summary": "Retained .loom/bin compatibility fixture where repo-local gate carriers still point to python3 .loom/bin; deletion must stay blocked and repair/upgrade planning must name the carrier paths.",
+      "surfaces": [
+        ".loom/installed-state.json",
+        ".loom/bin",
+        ".loom/bootstrap/init-result.json",
+        ".loom/status/current.md"
+      ],
+      "expected": {
+        "repair_plan_action": "plan-global-cli-runtime-carrier-migration",
+        "repair_plan_status": "blocked",
+        "deletion_block_action": "block-retained-loom-bin-deletion",
+        "blocking_reference_paths": [
+          ".loom/bootstrap/init-result.json",
+          ".loom/status/current.md"
+        ]
+      }
+    },
+    {
+      "id": "global-cli-provider-command-mismatch",
+      "issue": 1244,
+      "synthetic": true,
+      "fixture_type": "global-cli-mismatch",
+      "summary": "Installed-state declares global-cli but its provider command support drifts from the implemented command matrix; doctor must fail closed with a stable provider diagnostic.",
+      "surfaces": [
+        ".loom/installed-state.json"
+      ],
+      "expected": {
+        "doctor_result": "block",
+        "failed_layer": "global-cli-runtime-provider",
+        "provider_check": "global-cli-runtime-provider",
+        "missing_commands": [
+          "loom imaginary"
+        ],
+        "fallback_to": [
+          "loom repair plan"
+        ]
+      }
+    }
   ],
   "fixtures": [
     {

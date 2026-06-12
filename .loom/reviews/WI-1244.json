@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1244",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1244 PR #1461 readiness review allows the current fixture/carrier head: implementation scope remains limited to synthetic global CLI runtime regression fixtures, aggregate CLI contract assertions, validation evidence, and granted WI-1244 fact-chain/review/shadow readiness carriers. The review consumed no-.loom/bin global CLI runtime behavior, retained .loom/bin repo-local compatibility, repair/upgrade planning blockers, provider mismatch diagnostics, suite not_applicable rationale, PR metadata binding, shadow parity, and no-release boundary. No blocking findings remain; merge still requires separate watcher merge_lane grant.",
+  "reviewer": "scheduler:019ebb62-095b-7a23-a269-2906cce8e742",
+  "authored_at": "2026-06-12T13:15:04Z",
+  "reviewed_head": "82b06c38f0cdc06bd594543807b7e4c80b21e1a2",
+  "reviewed_validation_summary": "2026-06-12 PR-readiness validation for PR #1461 head 82b06c38f0cdc06bd594543807b7e4c80b21e1a2 passed local shadow/status/root checks: python3 -m json.tool .loom/shadow/merge-ready-loom.json and .loom/shadow/closeout-loom.json; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1244 --dry-run; git diff --check; python3 .loom/bin/loom_init.py verify --target .; governance-profile status; runtime-parity validate; adopt verify --item WI-1244; python3 tools/loom.py pr metadata-preflight 1461 --head-sha 82b06c38f0cdc06bd594543807b7e4c80b21e1a2 --work-item WI-1244 --surface merge_ready --json. After #1461 was marked ready for review, local pr-gate consumed PR metadata and authored review with no missing_inputs; the only remaining local readiness transition was this recovery writeback from build to merge checkpoint, followed by review/shadow refresh and final pr-gate rerun.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1244.md",
+    "recovery_entry": ".loom/progress/WI-1244.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
