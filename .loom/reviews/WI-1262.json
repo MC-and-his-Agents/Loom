@@ -3,11 +3,11 @@
   "item_id": "WI-1262",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "Parent closeout review allow: WI-1262/#1262 consumes terminal demo bootstrap validation surface evidence from #1401/#1402/#1403/#1404 and preserves the aggregate demo bootstrap fixture check contract. The reviewed carrier head is limited to WI-1262 parent closeout carriers, status, shadow evidence, suite not_applicable rationale, evidence map, task carrier, scheduler review, and no_release rationale. #1263/#1255, #1451, Round 9/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior changes, and shared contract/schema/parser/failure vocabulary changes remain explicitly out of scope.",
+  "summary": "Terminal closeout sync review allow: WI-1262/#1262 consumes PR #1459 controlled-merge facts, issue #1262 CLOSED/COMPLETED readback, terminal closed_out carrier metadata, refreshed status/shadow evidence, and no_release rationale. This review is limited to the closeout-only carrier sync after merge commit 57154ef0ca832e10ebac6fe7419ddddff307abb2. #1263/#1255, #1451, Round 9/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior changes, fixture content changes, generated runtime behavior changes, hosted workflow semantic changes, and shared contract/schema/parser/failure vocabulary changes remain explicitly out of scope.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-12T09:46:16Z",
-  "reviewed_head": "b1e83ac7d13e0a7624a2566b4d3e904856117498",
-  "reviewed_validation_summary": "Current-head local validation passed on 2026-06-12T09:43Z: git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 tools/loom.py suite inspect --target . --item WI-1262 --json; python3 tools/loom.py suite validate --target . --item WI-1262 --json returned result=not_applicable with blocking_gaps=[] and exit 1 per current not_applicable contract; python3 tools/loom.py suite evidence validate --target . --item WI-1262 --json passed after correcting EV-001 to a single readable source locator; python3 tools/loom.py suite carrier validate --target . --item WI-1262 --json passed; python3 tools/check_demo_bootstrap_fixture.py --help passed; focused surfaces generation, canonicalization, fixture-drift, and cleanliness passed; aggregate python3 tools/check_demo_bootstrap_fixture.py --surface aggregate --show-surface-evidence --timeout 180 passed with subsurface_count=4; make loom-demo-new-project-check passed; python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py passed; examples/new-project tracked cleanliness readback was empty; temporary .loom-demo-bootstrap-check-* directories were absent after validation; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1262 passed. Live host readback before authoring: #1262 OPEN; #1263 OPEN; #1255 OPEN/REOPENED. Child evidence readback: #1401, #1402, #1403, and #1404 are closed_out in repo carriers with terminal no_release metadata. No #1263/#1255 closeout, release/npm/live action, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package behavior change, or shared contract/schema/parser vocabulary change was performed.",
+  "authored_at": "2026-06-12T10:20:00Z",
+  "reviewed_head": "57154ef0ca832e10ebac6fe7419ddddff307abb2",
+  "reviewed_validation_summary": "Post-merge terminal closeout readback: PR #1459 merged at 2026-06-12T09:59:30Z with merge commit 57154ef0ca832e10ebac6fe7419ddddff307abb2; issue #1262 closed/completed at 2026-06-12T10:18:58Z; origin/main before this terminal closeout sync was 57154ef0ca832e10ebac6fe7419ddddff307abb2; carrier closeout-sync wrote closed_out metadata for issue 1262 / PR 1459 / target branch main / no_release evidence; reconciliation sync closed #1262 and reported unsupported automatic removal for stale native blocked-by edges to already closed #1401/#1402/#1403; #1263 and #1255 remain open and were not closed out; no VERSION/tag/GitHub Release/npm publish/live action, workflow/runtime/package behavior change, fixture content change, generated runtime behavior change, hosted workflow semantic change, or shared contract/schema/parser vocabulary change was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1262.md",
     "recovery_entry": ".loom/progress/WI-1262.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "terminal_closeout_sync",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -43,6 +43,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the carrier-only WI-1262 sync for closeout-only PR consumption."
   }
 }
