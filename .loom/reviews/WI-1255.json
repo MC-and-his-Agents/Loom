@@ -3,11 +3,11 @@
   "item_id": "WI-1255",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "Umbrella closeout review allow: WI-1255/#1255 consumes completed Round 8 evidence for #1260/#1261/#1262/#1263 and #1383/#1393-#1408, explicitly handles #1260 through WI-1396 because `.loom/progress/WI-1260.md` is absent, records a no_release rationale satisfying the #1255 Release / No-Release Closeout Rule, and keeps #1451 plus #1244/#1461/#1464/#1465 out of scope. This review is limited to closeout carrier/status/review/shadow evidence and does not authorize merge_lane, issue closure, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, shared contract/schema/parser/failure vocabulary changes, Round 9/11, or Deferred roadmap scope.",
+  "summary": "Current-head umbrella closeout review allow: WI-1255/#1255 PR #1466 at head cf454666bc679038cc533068ec070fa4e888577b consumes completed Round 8 evidence for #1260/#1261/#1262/#1263 and #1383/#1393-#1408, explicitly handles #1260 through WI-1396 because `.loom/progress/WI-1260.md` is absent, records a no_release rationale satisfying the #1255 Release / No-Release Closeout Rule, and keeps #1451 plus #1244/#1461/#1464/#1465 out of scope. This review is limited to closeout carrier/status/review/shadow/spec evidence and does not authorize merge_lane, issue closure, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, shared contract/schema/parser/failure vocabulary changes, Round 9/11, or Deferred roadmap scope.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-12T14:55:00Z",
-  "reviewed_head": "e00f589d5670a4464e6543ada6a704615e137285",
-  "reviewed_validation_summary": "Umbrella closeout evidence readback prepared on 2026-06-12: origin/main is `e00f589d5670a4464e6543ada6a704615e137285`; open PR list was empty before this closeout branch; #1255 is OPEN/REOPENED; #1451 is OPEN and out of scope; #1261 CLOSED/COMPLETED at 2026-06-12T08:56:21Z; #1262 CLOSED/COMPLETED at 2026-06-12T10:18:58Z; #1263 CLOSED/COMPLETED at 2026-06-12T11:56:27Z; #1260 CLOSED/COMPLETED at 2026-06-11T13:16:04Z with release/package evidence consumed through `.loom/progress/WI-1396.md` because exact `.loom/progress/WI-1260.md` is absent on origin/main. Parent and child carriers record no_release/no publish evidence; no VERSION/tag/GitHub Release/npm publish/live action, package publication, workflow release execution, shared contract/schema/parser vocabulary change, or forbidden #1451/#1244/Round 9/Round 11/Deferred scope was performed.",
+  "authored_at": "2026-06-12T15:12:00Z",
+  "reviewed_head": "cf454666bc679038cc533068ec070fa4e888577b",
+  "reviewed_validation_summary": "Current-head umbrella closeout review for PR #1466 head cf454666bc679038cc533068ec070fa4e888577b: open PR list was empty before PR creation; PR #1466 readback shows draft=true, base e00f589d5670a4464e6543ada6a704615e137285, changed files limited to WI-1255 closeout carriers/status/review/shadow/spec evidence, closingIssuesReferences=[]; #1255 is OPEN/REOPENED; #1451 is OPEN and out of scope; #1261 CLOSED/COMPLETED at 2026-06-12T08:56:21Z; #1262 CLOSED/COMPLETED at 2026-06-12T10:18:58Z; #1263 CLOSED/COMPLETED at 2026-06-12T11:56:27Z; #1260 CLOSED/COMPLETED at 2026-06-11T13:16:04Z with release/package evidence consumed through `.loom/progress/WI-1396.md` because exact `.loom/progress/WI-1260.md` is absent on origin/main. Local validation passed: JSON syntax checks; git diff --check; suite inspect; suite validate result=not_applicable with blocking_gaps=[]; suite evidence validate; suite carrier validate; fact-chain; shadow-parity --surface all --blocking; review read; state-check; PR metadata-preflight. Parent and child carriers record no_release/no publish evidence; no VERSION/tag/GitHub Release/npm publish/live action, package publication, workflow release execution, shared contract/schema/parser vocabulary change, or forbidden #1451/#1244/Round 9/Round 11/Deferred scope was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored umbrella closeout review approved the carrier-only WI-1255 evidence sync for PR gate consumption."
+    "reason": "Authored current-head umbrella closeout review approved the WI-1255 evidence sync at PR #1466 head cf454666bc679038cc533068ec070fa4e888577b for PR gate consumption."
   }
 }
