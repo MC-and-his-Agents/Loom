@@ -75,6 +75,24 @@ python3 tools/skills_surface.py check --surface launcher-smoke [--skill <id>]
 
 `python3 tools/skills_surface.py check`, `make skills-check`, and `loom skills check --target . --json` remain the aggregate generated SKILLS validation path for merge-ready and release-readiness evidence. The named commands are evidence labels for diagnosis, PR metadata, and closeout consumption; they do not add new skill packaging semantics.
 
+#1263 preserves the aggregate runtime regression bucket while documenting named
+diagnostic runtime surfaces for parent closeout evidence:
+
+```text
+python3 tools/check_loom_check_runtime_regressions.py --surface single-flight-locking
+python3 tools/check_loom_check_runtime_regressions.py --surface worktree-local-lock-paths
+python3 tools/check_loom_check_runtime_regressions.py --surface installer-regression-lock-output
+python3 tools/check_loom_check_runtime_regressions.py --surface subprocess-env-purity
+python3 tools/check_loom_check_runtime_regressions.py --surface temp-dir-cleanup
+python3 tools/check_loom_check_runtime_regressions.py --surface demo-fixture-cleanliness
+```
+
+`python3 tools/check_loom_check_runtime_regressions.py`,
+`make loom-check-runtime-regression`, and `make loom-check` remain the aggregate
+runtime regression validation path. The checker has no `--surface aggregate`
+selector; evidence summaries must cite the no-filter command or Make target for
+aggregate proof.
+
 #890 implements the adoption and governance profile command family:
 
 ```text

@@ -106,3 +106,25 @@ live GitHub、Codex App proof、dynamic tool live smoke 与 host adapter live dr
 重型并发矩阵可以作为显式 opt-in validation，但 P0-A 默认回归必须可在本地和 CI 中稳定消费。
 
 默认轻量入口为 `make loom-check-runtime-regression`，并由 `make loom-check` 消费。该入口只验证 fail-fast owner 诊断、worktree-local lock path、默认环境净化、唯一缺失路径、Node installer lock busy 输出和 demo fixture 不变脏；不得在默认 CI 中启动重型 full-check 并发矩阵。
+
+## 8. Runtime Regression Surface Closeout
+
+#1263 consumes the runtime regression split through named local surfaces while
+preserving the aggregate `loom-check-runtime-regression` entrypoint:
+
+| Surface label | Command |
+| --- | --- |
+| `single-flight-locking` | `make loom-check-runtime-single-flight-locking` |
+| `worktree-local-lock-paths` | `make loom-check-runtime-worktree-local-lock-paths` |
+| `installer-regression-lock-output` | `make loom-check-runtime-installer-regression-lock-output` |
+| `subprocess-env-purity` | `make loom-check-runtime-subprocess-env-purity` |
+| `temp-dir-cleanup` | `make loom-check-runtime-temp-dir-cleanup` |
+| `demo-fixture-cleanliness` | `make loom-check-runtime-demo-fixture-cleanliness` |
+
+The aggregate commands remain `python3 tools/check_loom_check_runtime_regressions.py`,
+`make loom-check-runtime-regression`, and the repo-local `make loom-check`
+consumer. The retained closeout record is
+[validation-runtime-regression-surface-closeout.md](../../evidence/validations/validation-runtime-regression-surface-closeout.md).
+
+This is evidence only. It does not close parent #1263/#1255, publish a release,
+or authorize changes to shared contract/schema/parser/failure vocabulary.
