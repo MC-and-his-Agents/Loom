@@ -3,11 +3,11 @@
   "item_id": "WI-1244",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "Terminal closeout carrier review allow: WI-1244/#1244 consumes PR #1461 controlled-merge facts, origin/main merge commit 589ed8e54829faa366e3368897cd32b156d94c6a, predecessor #1243 CLOSED/COMPLETED readback, terminal carrier metadata, refreshed status/shadow evidence, and no_release rationale. This review is limited to the closeout-only carrier sync after PR #1461 merged; #1244 host issue closure, stale native dependency reconciliation, #1245/#1246/#1238, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, merge actions, and shared contract/schema/parser/failure vocabulary changes remain explicitly out of scope.",
+  "summary": "Final terminal closeout carrier review allow: WI-1244/#1244 consumes PR #1464 controlled-merge facts, origin/main merge commit b2c5bab3dd3a297bb5c8da075103b38b91795ae9, issue #1244 CLOSED/COMPLETED readback, predecessor #1243 CLOSED/COMPLETED readback, stale native blocked-by edge removal readback, terminal carrier metadata, refreshed status/shadow evidence, and no_release rationale. This review is limited to the final WI-1244 terminal sync after PR #1464 merged; #1245/#1246/#1238, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, merge actions, Round 8/9/11/Deferred/#1255 scope, and shared contract/schema/parser/failure vocabulary changes remain explicitly out of scope.",
   "reviewer": "scheduler:019ebb62-095b-7a23-a269-2906cce8e742",
-  "authored_at": "2026-06-12T13:44:09Z",
-  "reviewed_head": "589ed8e54829faa366e3368897cd32b156d94c6a",
-  "reviewed_validation_summary": "Post-merge closeout readback prepared on 2026-06-12: PR #1461 is MERGED at 2026-06-12T13:29:24Z with merge commit 589ed8e54829faa366e3368897cd32b156d94c6a; origin/main is 589ed8e54829faa366e3368897cd32b156d94c6a; issue #1244 is still OPEN; predecessor #1243 is CLOSED/COMPLETED at 2026-06-11T11:09:41Z and no longer an active blocker; implementation evidence remains PR #1461 head 8d4d78e537601bea7d72a596f4804ee53f9c5d9e with hosted checks green before merge. This carrier-only closeout branch records terminal metadata, no_release, review/shadow/status refresh, and does not change implementation behavior.",
+  "authored_at": "2026-06-12T14:32:16Z",
+  "reviewed_head": "b2c5bab3dd3a297bb5c8da075103b38b91795ae9",
+  "reviewed_validation_summary": "Final post-merge terminal sync prepared on 2026-06-12: PR #1464 is MERGED at 2026-06-12T14:11:42Z with merge commit b2c5bab3dd3a297bb5c8da075103b38b91795ae9; origin/main is b2c5bab3dd3a297bb5c8da075103b38b91795ae9; issue #1244 is CLOSED/COMPLETED at 2026-06-12T14:11:43Z; predecessor #1243 is CLOSED/COMPLETED at 2026-06-11T11:09:41Z and no longer an active blocker; stale native blocked-by edge `1244 blocked by 1243` was removed via scoped GraphQL `removeBlockedBy` and read back as `blockedBy.nodes=[]`; implementation evidence remains PR #1461 head 8d4d78e537601bea7d72a596f4804ee53f9c5d9e plus merge commit 589ed8e54829faa366e3368897cd32b156d94c6a. This final carrier-only sync records terminal metadata, no_release, review/shadow/status refresh, and does not change implementation behavior.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1244.md",
     "recovery_entry": ".loom/progress/WI-1244.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "terminal_closeout_carrier_pr",
+    "build_checkpoint": "final_terminal_closeout_sync",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -43,6 +43,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored terminal closeout review approved the carrier-only WI-1244 sync for closeout-only PR consumption."
+    "reason": "Authored final terminal closeout review approved the carrier-only WI-1244 sync for final closeout consumption."
   }
 }
