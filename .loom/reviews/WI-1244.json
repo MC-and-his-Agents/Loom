@@ -2,12 +2,12 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-1244",
   "decision": "allow",
-  "kind": "code_review",
-  "summary": "WI-1244 PR #1461 readiness review allows the current fixture/carrier head: implementation scope remains limited to synthetic global CLI runtime regression fixtures, aggregate CLI contract assertions, validation evidence, and granted WI-1244 fact-chain/review/shadow readiness carriers. The review consumed no-.loom/bin global CLI runtime behavior, retained .loom/bin repo-local compatibility, repair/upgrade planning blockers, provider mismatch diagnostics, suite not_applicable rationale, PR metadata binding, shadow parity, and no-release boundary. No blocking findings remain; merge still requires separate watcher merge_lane grant.",
+  "kind": "general_review",
+  "summary": "Terminal closeout carrier review allow: WI-1244/#1244 consumes PR #1461 controlled-merge facts, origin/main merge commit 589ed8e54829faa366e3368897cd32b156d94c6a, predecessor #1243 CLOSED/COMPLETED readback, terminal carrier metadata, refreshed status/shadow evidence, and no_release rationale. This review is limited to the closeout-only carrier sync after PR #1461 merged; #1244 host issue closure, stale native dependency reconciliation, #1245/#1246/#1238, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, merge actions, and shared contract/schema/parser/failure vocabulary changes remain explicitly out of scope.",
   "reviewer": "scheduler:019ebb62-095b-7a23-a269-2906cce8e742",
-  "authored_at": "2026-06-12T13:15:04Z",
-  "reviewed_head": "82b06c38f0cdc06bd594543807b7e4c80b21e1a2",
-  "reviewed_validation_summary": "2026-06-12 PR-readiness validation for PR #1461 head 82b06c38f0cdc06bd594543807b7e4c80b21e1a2 passed local shadow/status/root checks: python3 -m json.tool .loom/shadow/merge-ready-loom.json and .loom/shadow/closeout-loom.json; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1244 --dry-run; git diff --check; python3 .loom/bin/loom_init.py verify --target .; governance-profile status; runtime-parity validate; adopt verify --item WI-1244; python3 tools/loom.py pr metadata-preflight 1461 --head-sha 82b06c38f0cdc06bd594543807b7e4c80b21e1a2 --work-item WI-1244 --surface merge_ready --json. After #1461 was marked ready for review, local pr-gate consumed PR metadata and authored review with no missing_inputs; the only remaining local readiness transition was this recovery writeback from build to merge checkpoint, followed by review/shadow refresh and final pr-gate rerun.",
+  "authored_at": "2026-06-12T13:44:09Z",
+  "reviewed_head": "589ed8e54829faa366e3368897cd32b156d94c6a",
+  "reviewed_validation_summary": "Post-merge closeout readback prepared on 2026-06-12: PR #1461 is MERGED at 2026-06-12T13:29:24Z with merge commit 589ed8e54829faa366e3368897cd32b156d94c6a; origin/main is 589ed8e54829faa366e3368897cd32b156d94c6a; issue #1244 is still OPEN; predecessor #1243 is CLOSED/COMPLETED at 2026-06-11T11:09:41Z and no longer an active blocker; implementation evidence remains PR #1461 head 8d4d78e537601bea7d72a596f4804ee53f9c5d9e with hosted checks green before merge. This carrier-only closeout branch records terminal metadata, no_release, review/shadow/status refresh, and does not change implementation behavior.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1244.md",
     "recovery_entry": ".loom/progress/WI-1244.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "terminal_closeout_carrier_pr",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -43,6 +43,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the carrier-only WI-1244 sync for closeout-only PR consumption."
   }
 }
