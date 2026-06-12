@@ -3,11 +3,11 @@
   "item_id": "WI-1407",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review approves PR #1444 at current carrier head 00218abea8661b7e43a28617f6729e1efff34924: temp-dir-cleanup and demo-fixture-cleanliness are selectable with scoped fixture groups and stable failure_label/evidence_locator diagnostics; existing locking, subprocess-env-purity, and aggregate runtime regression surfaces are preserved; Makefile aliases map to the new selectors; WI-1407 carriers, build evidence, status, shadow, and PR metadata are current. No blockers found.",
-  "reviewer": "Round 8 scheduler",
-  "authored_at": "2026-06-11T17:41:31Z",
-  "reviewed_head": "00218abea8661b7e43a28617f6729e1efff34924",
-  "reviewed_validation_summary": "Current-head scheduler readback at 00218abea8661b7e43a28617f6729e1efff34924: PR #1444 open/non-draft/mergeable, base 1f760cce1ac48e334800a94f513b3a7173e94d7d; PR body metadata preflight PASS; git diff --check PASS; fact-chain PASS; build checkpoint PASS; suite inspect/validate/evidence/carrier PASS; build evidence integrated; spec review and implementation review are being refreshed for current carrier head; changed files remain limited to WI-1407 runtime regression implementation/docs/carrier/review/shadow/status scope; issue #1407 and parent #1263 remain open.",
+  "summary": "Terminal closeout review allow: PR #1444 is merged and issue #1407 is closed; this closeout-only carrier update records WI-1407/#1407 terminal progress, task-carrier, status, and shadow facts after the controlled merge. The reviewed closeout-only diff is limited to WI-1407 terminal carrier/status/shadow updates; parent #1263, #1408, and umbrella #1255 closeout remain explicitly out of scope. This review does not replace the implementation review consumed for PR #1444, and no release, npm publish, tag, GitHub Release, VERSION, workflow/package payload outside WI-1407/#1444 closeout, shared parser/schema vocabulary, later Round 8 scope, or live external action is changed.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-11T18:07:33Z",
+  "reviewed_head": "ad26e0ee6b130014c6c1fbd165af26605ec36ffd",
+  "reviewed_validation_summary": "Post-merge terminal closeout readback: PR #1444 merged at 2026-06-11T17:52:22Z with merge commit 4f168c642d95792ed56a15a2347d0e7f8c4bf6f3; issue #1407 closed/completed at 2026-06-11T17:52:24Z; parent #1263 remains open and was not closed out; reconciliation audit classifies only the parent/native dependency edge as outside this grant; carrier closeout-sync wrote closed_out metadata for issue 1407, PR 1444, target branch main, and evidence locator github:issue/1407#event-closed;github:pr/1444;git:4f168c642d95792ed56a15a2347d0e7f8c4bf6f3; no release/npm/live action, workflow/package payload change outside WI-1407/#1444 closeout, shared contract/schema/parser vocabulary change, #1408 processing, or parent closeout was performed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,6 +16,7 @@
     "work_item": ".loom/work-items/WI-1407.md",
     "recovery_entry": ".loom/progress/WI-1407.md",
     "status_surface": ".loom/status/current.md",
+    "closeout_pr": "github:pr/1454",
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
@@ -33,8 +34,8 @@
     "engine_adapter": null,
     "engine_evidence": null,
     "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/eeff/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/eeff/Loom --item WI-1407 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/eeff/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/eeff/Loom --item WI-1407 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1407 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1407 --json",
     "suite_evidence_map": ".loom/specs/WI-1407/evidence-map.md",
     "suite_consistency_analysis": null,
     "suite_task_carriers": [
@@ -52,6 +53,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the closeout-only carrier updates for WI-1407/#1407 without expanding into parent #1263, #1408, or later Round 8 scope."
   }
 }

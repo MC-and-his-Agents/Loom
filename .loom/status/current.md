@@ -11,20 +11,20 @@
 - Review Entry: .loom/reviews/WI-1407.json
 - Validation Entry: `git diff --check`; `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; targeted tempdir cleanup and demo fixture cleanliness runtime targets; existing #1405 locking targets; existing #1406 subprocess-env-purity target; aggregate runtime regression target; py_compile_clean; suite inspect/validate/evidence/carrier validation for WI-1407; residue audit; PR metadata preflight/readback; hosted checks
 - Closing Condition: PR for #1407 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1407 is closed, and no_release closeout is consumable by #1263/#1255.
-- Current Checkpoint: merge
-- Current Stop: WI-1407/#1444 scheduler-owned review, build evidence, fact-chain/status, shadow parity, and PR metadata readback are refreshed. Review approval is consumable with carrier-only drift from reviewed head 00218abea8661b7e43a28617f6729e1efff34924 to PR head d3990309c0e2379b94d927eb20efb3b17fc52a50.
-- Next Step: Run PR gate, merge-ready, hosted check readback, and controlled-merge check for WI-1407/#1444; request merge_lane if ready.
-- Blockers: None
-- Latest Validation Summary: Current-head scheduler readback at 00218abea8661b7e43a28617f6729e1efff34924: PR #1444 open/non-draft/mergeable, base 1f760cce1ac48e334800a94f513b3a7173e94d7d; PR body metadata preflight PASS; git diff --check PASS; fact-chain PASS; build checkpoint PASS; suite inspect/validate/evidence/carrier PASS; build evidence integrated; spec review and implementation review are being refreshed for current carrier head; changed files remain limited to WI-1407 runtime regression implementation/docs/carrier/review/shadow/status scope; issue #1407 and parent #1263 remain open.
-- Recovery Boundary: Issue #1407 / PR #1444 only under watcher-lane-grant-R8-WI-1407-202606111731. Do not process #1408 until #1407 is merged or aggregate runtime evidence dependency is explicitly satisfied. Do not close parent #1263/#1255, process Round 9/Round 11/deferred roadmap/#1244/#1245/#1246, perform release/npm/live/VERSION/tag/GitHub Release/npm publish actions, or alter shared contract/schema/parser/failure vocabulary outside PR #1444 scope.
-- Current Lane: scheduler-merge-ready
+- Current Checkpoint: closed_out
+- Current Stop: WI-1407/#1407 terminal closeout consumed PR #1444 controlled merge, issue #1407 closure, no_release decision, and terminal carrier metadata under watcher closeout extension watcher-closeout-extension-R8-WI-1407-202606111756.
+- Next Step: None for WI-1407/#1407 terminal closeout. Parent #1263, #1408 aggregate runtime closeout, and umbrella #1255 closeout remain separate scheduler-owned scopes.
+- Blockers: None for WI-1407/#1407 terminal closeout.
+- Latest Validation Summary: Post-merge terminal closeout readback: PR #1444 merged at 2026-06-11T17:52:22Z with merge commit 4f168c642d95792ed56a15a2347d0e7f8c4bf6f3; issue #1407 closed/completed at 2026-06-11T17:52:24Z; parent #1263 remains open and was not closed out; reconciliation audit classifies only the parent/native dependency edge as outside this grant; carrier closeout-sync wrote closed_out metadata for issue 1407, PR 1444, target branch main, and evidence locator github:issue/1407#event-closed;github:pr/1444;git:4f168c642d95792ed56a15a2347d0e7f8c4bf6f3; no release/npm/live action, workflow/package payload change outside WI-1407/#1444 closeout, shared contract/schema/parser vocabulary change, #1408 processing, or parent closeout was performed.
+- Recovery Boundary: WI-1407/#1407 terminal closeout only under watcher decision watcher-closeout-extension-R8-WI-1407-202606111756. Parent #1263 closeout, #1408, #1255, Round 9/11/Deferred, #1244/#1245/#1246, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime/package payload changes outside WI-1407/#1444 closeout, and shared contract/schema/parser/failure vocabulary remain forbidden.
+- Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
-- Run Entry: Scheduler consumed watcher closeout extension for WI-1404/#1404 terminal carrier sync after PR #1446 controlled merge and issue #1404 closure.
-- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns WI-1404 terminal closeout readback and closeout-only PR request.
-- Diagnostics Entry: WI-1404 is docs/evidence convergence for demo bootstrap validation surfaces; it preserves aggregate demo bootstrap validation and does not change validation behavior, fixture content, generated runtime behavior, release/package behavior, workflows, shared parser/schema vocabulary, release execution, or live external state.
-- Verification Entry: Terminal closeout readback confirms PR #1446 merged at 2026-06-11T16:35:07Z with merge commit 2983ecb6f4de109c99c73059b67794d2a617377f, issue #1404 closed/completed at 2026-06-11T16:39:53Z, parent #1262 remains open, carrier refresh dry-run passes with refresh_needed=[], fact-chain passes, shadow parity passes for closeout and merge_ready, and git diff check passes. Closeout check blocks only on manual reconciliation findings outside the implementation merge path: forbidden parent native-edge sync and post-merge closeout review evidence classification.
+- Run Entry: Scheduler consumed watcher closeout extension for WI-1407/#1407 terminal carrier sync after PR #1444 controlled merge and issue #1407 closure.
+- Logs Entry: Scheduler thread 019eb28d-ac3b-7623-8955-12542fa2e08d owns WI-1407 terminal closeout readback and closeout-only PR request.
+- Diagnostics Entry: WI-1407 split runtime tempdir cleanup and demo fixture cleanliness validation surfaces while preserving #1405 locking, #1406 subprocess environment purity, and the aggregate runtime regression entrypoint.
+- Verification Entry: Terminal closeout readback confirms PR #1444 merged at 2026-06-11T17:52:22Z with merge commit 4f168c642d95792ed56a15a2347d0e7f8c4bf6f3, issue #1407 closed/completed at 2026-06-11T17:52:24Z, parent #1263 remains open, carrier closeout-sync wrote terminal metadata, and this closeout-only branch updates status/progress/task-carrier/review/shadow facts without processing #1408 or parent closeout.
 - Lane Entry: terminal-closeout
 
 ## Sources
