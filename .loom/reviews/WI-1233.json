@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1233",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review passed for WI-1233 at head 17ca72412de47398d28a4bdbf310172d9189ac04: host-complete non-terminal carriers are classified as carrier_closeout_required with closeout-sync remediation, stale_carrier remains non-blocking, shared_workspace_conflict remains blocking, runtime copies and focused diagnostics fixtures are synchronized, and suite/carrier/evidence validation plus PR metadata readback are clean. The only post-spec-review branch drift is scheduler-authored review carrier evidence.",
+  "reviewer": "round-9-replacement-scheduler",
+  "authored_at": "2026-06-13T07:31:08Z",
+  "reviewed_head": "17ca72412de47398d28a4bdbf310172d9189ac04",
+  "reviewed_validation_summary": "2026-06-13T06:44Z mainline reconciliation validation passed on branch `work/1233-host-truth-diagnostics-recovery` at head `80a617bd98941b044b846adc728e5858abe5ecf2`: `git diff --check`; Python compile for synchronized `loom_flow.py` copies; `tools/loom_check.py --profile source --source-surface retire-workspace .`; `test/retained_item_lookup_test.py`; generated-tree drift check; demo bootstrap fixture drift check; `tools/check_cli_contract.py --surface governance-closeout`; fact-chain; state-check; carrier refresh dry-run with `refresh_needed: []`; shadow parity; suite validate/evidence/carrier validate; PR metadata preflight/readback. Scheduler flow readback before review found only missing review artifacts.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1233.md",
+    "recovery_entry": ".loom/progress/WI-1233.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/973a/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/973a/Loom --item WI-1233 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/973a/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/973a/Loom --item WI-1233 --json",
+    "suite_evidence_map": ".loom/specs/WI-1233/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1233/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
