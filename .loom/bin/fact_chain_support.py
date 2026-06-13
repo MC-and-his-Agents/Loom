@@ -139,6 +139,10 @@ RUNTIME_EVIDENCE_FIELD_LABELS = {canonical: label for label, canonical in RUNTIM
 EXECUTION_LEDGER_FIELD_LABELS = {canonical: label for label, canonical in EXECUTION_LEDGER_FIELDS.items()}
 TERMINAL_CLOSEOUT_FIELD_LABELS = {canonical: label for label, canonical in TERMINAL_CLOSEOUT_FIELDS.items()}
 
+IDLE_ITEM_ID = "no_active_item"
+NOT_APPLICABLE = "not_applicable"
+IDLE_STATUS_SURFACE = ".loom/status/current.md"
+
 
 def load_json_file(path: Path) -> dict[str, object]:
     with path.open(encoding="utf-8") as handle:
@@ -521,6 +525,13 @@ def expected_status_values(
     }
 
 
+def expected_idle_status_values() -> dict[str, str]:
+    return {
+        field_name: IDLE_ITEM_ID if field_name == "item_id" else NOT_APPLICABLE
+        for field_name in STATUS_FIELDS.values()
+    }
+
+
 def _provenance_entry(
     *,
     kind: str,
@@ -577,6 +588,296 @@ def _blocking_failure(
     if actual is not None:
         failure["actual"] = actual
     return failure
+
+
+def _idle_fact_chain_selected(mode: object, entry_points: object) -> bool:
+    if not isinstance(entry_points, dict):
+        return False
+    return mode == "idle" or entry_points.get("current_item_id") == IDLE_ITEM_ID
+
+
+def _idle_entry_point_errors(
+    *,
+    mode: object,
+    entry_points: dict[object, object],
+) -> list[str]:
+    errors: list[str] = []
+    expected = {
+        "current_item_id": IDLE_ITEM_ID,
+        "work_item": NOT_APPLICABLE,
+        "recovery_entry": NOT_APPLICABLE,
+        "status_surface": IDLE_STATUS_SURFACE,
+    }
+    if mode != "idle":
+        errors.append("idle fact-chain requires `fact_chain.mode = idle`")
+    for key, expected_value in expected.items():
+        actual = entry_points.get(key)
+        if actual != expected_value:
+            errors.append(
+                f"idle fact-chain requires `fact_chain.entry_points.{key} = {expected_value}`, got `{actual}`"
+            )
+    return errors
+
+
+def build_idle_fact_report(
+    *,
+    target_root: Path,
+    output_relative: str,
+    read_entry: str,
+    status_ref: str,
+    status_surface: dict[str, str],
+    runtime_evidence: dict[str, str],
+    status_sources: dict[str, str],
+    expected_status: dict[str, str],
+    expected_sources: dict[str, str],
+    provenance: list[dict[str, str]],
+    blocking_failures: list[dict[str, object]],
+    stale_fields: list[dict[str, object]],
+    drift_fields: list[dict[str, object]],
+    parallel_truth_drift: list[dict[str, object]],
+) -> dict[str, object]:
+    facts = {
+        field_name: {
+            "value": value,
+            "source": {
+                "carrier": "init_result",
+                "path": output_relative,
+                "field": "fact_chain.mode",
+            },
+        }
+        for field_name, value in expected_status.items()
+    }
+    runtime_evidence_report = {
+        field_name: {
+            "value": value,
+            "status": "not_applicable" if value == NOT_APPLICABLE else "present",
+            "source": {
+                "carrier": "status_surface",
+                "path": status_ref,
+                "field": label,
+            },
+        }
+        for label, field_name in RUNTIME_EVIDENCE_FIELDS.items()
+        if field_name in runtime_evidence
+        for value in (runtime_evidence[field_name],)
+    }
+    surface_status = "fresh"
+    if stale_fields:
+        surface_status = "stale"
+    elif drift_fields or parallel_truth_drift:
+        surface_status = "drift"
+    return {
+        "target": str(target_root),
+        "repository_execution_state": "idle",
+        "fact_chain": {
+            "mode": "idle",
+            "read_entry": read_entry,
+            "entry_points": {
+                "current_item_id": IDLE_ITEM_ID,
+                "work_item": NOT_APPLICABLE,
+                "recovery_entry": NOT_APPLICABLE,
+                "status_surface": status_ref,
+            },
+        },
+        "provenance": provenance,
+        "facts": facts,
+        "runtime_evidence": runtime_evidence_report,
+        "execution_ledger": {
+            "authoritative_carrier": NOT_APPLICABLE,
+            "authoritative_path": NOT_APPLICABLE,
+            "status": NOT_APPLICABLE,
+            "completeness": NOT_APPLICABLE,
+            "freshness": NOT_APPLICABLE,
+            "fields": {},
+            "missing_fields": [],
+            "forbidden_authored_fields": [],
+        },
+        "derived_status_surface": {
+            "path": status_ref,
+            "status": surface_status,
+            "values": expected_status,
+            "actual_values": status_surface,
+            "runtime_evidence": runtime_evidence,
+            "sources": expected_sources,
+            "actual_sources": status_sources,
+            "stale": stale_fields,
+            "drift": drift_fields,
+            "blocking_failures": blocking_failures,
+        },
+        "recovery_readiness": {
+            "result": "block" if blocking_failures else "pass",
+            "status": "idle" if not blocking_failures else "blocked",
+            "summary": (
+                "repository has no active Work Item; idle status surface is readable."
+                if not blocking_failures
+                else "idle status surface is readable, but locator or derived-surface drift is blocking."
+            ),
+            "missing_inputs": [
+                str(failure["message"])
+                for failure in blocking_failures
+                if isinstance(failure.get("message"), str)
+            ],
+            "fallback_to": "admission" if blocking_failures else None,
+            "checks": {
+                "authored_work_item": NOT_APPLICABLE,
+                "authored_recovery_entry": NOT_APPLICABLE,
+                "derived_status_surface": "block" if stale_fields or drift_fields else "pass",
+                "parallel_truth": "block" if parallel_truth_drift else "pass",
+            },
+            "authoritative_carrier": NOT_APPLICABLE,
+            "authoritative_path": NOT_APPLICABLE,
+            "parallel_truth_drift": parallel_truth_drift,
+            "blocking_failures": blocking_failures,
+        },
+        "blocking_failures": blocking_failures,
+    }
+
+
+def inspect_idle_fact_chain(
+    *,
+    target_root: Path,
+    output_relative: str,
+    mode: object,
+    read_entry: str,
+    entry_points: dict[object, object],
+    blocking_failures: list[dict[str, object]],
+    stale_fields: list[dict[str, object]],
+    drift_fields: list[dict[str, object]],
+    parallel_truth_drift: list[dict[str, object]],
+) -> tuple[dict[str, object], list[str]]:
+    errors = _idle_entry_point_errors(mode=mode, entry_points=entry_points)
+    status_ref = entry_points.get("status_surface")
+    if errors:
+        return {}, errors
+    status_path, status_path_errors = resolve_repo_relative_path(
+        target_root,
+        str(status_ref),
+        label="init-result.fact_chain.entry_points.status_surface",
+    )
+    if status_path_errors:
+        return {}, status_path_errors
+    assert status_path is not None
+    if not status_path.exists():
+        return {}, [f"declared idle status surface is missing on disk: status_surface -> {_relative(status_path, target_root)}"]
+
+    status_surface, runtime_evidence, status_sources, status_errors = parse_status_surface(status_path, target_root)
+    if status_errors:
+        return {}, status_errors
+
+    expected_status = expected_idle_status_values()
+    for field_name, expected_value in expected_status.items():
+        actual_value = status_surface.get(field_name)
+        if actual_value != expected_value:
+            message = (
+                "idle status surface mismatch for "
+                f"`{field_name}`: expected `{expected_value}`, got `{actual_value}`"
+            )
+            failure = _blocking_failure(
+                kind="derived_surface_stale",
+                carrier="status_surface",
+                field=field_name,
+                authority="init_result",
+                path=str(status_ref),
+                expected=expected_value,
+                actual=actual_value,
+                message=message,
+            )
+            blocking_failures.append(failure)
+            stale_fields.append(failure)
+
+    expected_sources = {
+        "work_item": NOT_APPLICABLE,
+        "recovery_entry": NOT_APPLICABLE,
+        "init_result": output_relative,
+        "read_entry": read_entry,
+    }
+    for source_key, expected_value in expected_sources.items():
+        actual_value = status_sources.get(source_key)
+        if actual_value != expected_value:
+            message = (
+                "idle status surface source mismatch for "
+                f"`{source_key}`: expected `{expected_value}`, got `{actual_value}`"
+            )
+            failure = _blocking_failure(
+                kind="source_stale",
+                carrier="status_surface",
+                field=source_key,
+                authority="init_result",
+                path=str(status_ref),
+                expected=expected_value,
+                actual=actual_value,
+                message=message,
+            )
+            blocking_failures.append(failure)
+            stale_fields.append(failure)
+
+    provenance = [
+        _provenance_entry(
+            kind="host_control_mirror",
+            carrier="init_result",
+            locator=output_relative,
+            field="fact_chain",
+            authority="host_control",
+            freshness="current" if not parallel_truth_drift else "drift",
+            trusted_because="init-result explicitly selects repository execution state `idle` and must not author recovery state",
+        ),
+        _provenance_entry(
+            kind="runtime_state",
+            carrier="init_result",
+            locator=output_relative,
+            field="current_item_id",
+            authority="init_result",
+            freshness="current",
+            trusted_because="`no_active_item` is the fixed idle item id and is not a Work Item locator",
+        ),
+        _provenance_entry(
+            kind="derived_surface",
+            carrier="status_surface",
+            path=str(status_ref),
+            field="Derived Fact Chain View",
+            authority="init_result",
+            freshness="current" if not stale_fields and not drift_fields else "stale",
+            trusted_because="idle status surface must derive active-only fields from `fact_chain.mode = idle`",
+        ),
+        _provenance_entry(
+            kind="retained_result",
+            carrier="status_surface",
+            path=str(status_ref),
+            field="Sources",
+            authority="init_result",
+            freshness="current" if not stale_fields else "stale",
+            trusted_because="idle retained source bindings are accepted only when they match the explicit idle entry points",
+        ),
+    ]
+    provenance.extend(
+        _provenance_entry(
+            kind="runtime_evidence",
+            carrier="status_surface",
+            path=str(status_ref),
+            field=RUNTIME_EVIDENCE_FIELD_LABELS.get(field_name, field_name),
+            authority="runtime_evidence",
+            freshness="not_applicable" if value == NOT_APPLICABLE else "current",
+            trusted_because="runtime evidence remains status-surface evidence in idle mode",
+        )
+        for field_name, value in runtime_evidence.items()
+    )
+
+    return build_idle_fact_report(
+        target_root=target_root,
+        output_relative=output_relative,
+        read_entry=read_entry,
+        status_ref=str(status_ref),
+        status_surface=status_surface,
+        runtime_evidence=runtime_evidence,
+        status_sources=status_sources,
+        expected_status=expected_status,
+        expected_sources=expected_sources,
+        provenance=provenance,
+        blocking_failures=blocking_failures,
+        stale_fields=stale_fields,
+        drift_fields=drift_fields,
+        parallel_truth_drift=parallel_truth_drift,
+    ), []
 
 
 def build_fact_report(
@@ -811,6 +1112,19 @@ def inspect_fact_chain(
     fatal_entry_errors = [error for error in errors if not error.startswith("init-result must not author dynamic")]
     if fatal_entry_errors:
         return {}, errors
+
+    if _idle_fact_chain_selected(mode, entry_points):
+        return inspect_idle_fact_chain(
+            target_root=target_root,
+            output_relative=output_relative,
+            mode=mode,
+            read_entry=str(read_entry),
+            entry_points=entry_points,
+            blocking_failures=blocking_failures,
+            stale_fields=stale_fields,
+            drift_fields=drift_fields,
+            parallel_truth_drift=parallel_truth_drift,
+        )
 
     work_item_path, work_item_path_errors = resolve_repo_relative_path(
         target_root,
