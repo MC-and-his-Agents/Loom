@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1233.json
 - Validation Entry: `git diff --check`; Python compile for touched Python files; focused retire workspace fixture covering `carrier_closeout_required`, preserved `stale_carrier`, and preserved `shared_workspace_conflict`; suite/carrier validation where applicable.
 - Closing Condition: The #1233 PR exposes `carrier_closeout_required` for host-complete non-terminal carriers, preserves existing active workspace classifications, passes focused local validation and metadata readback, and stops at `waiting-scheduler-gate` for scheduler-owned review/gate.
-- Current Checkpoint: build
-- Current Stop: #1233 implementation, runtime copy propagation, root fact-chain carrier sync, mainline reconciliation, PR #1474 metadata readback, and local validation are complete in worker scope; scheduler-owned review is in progress.
-- Next Step: Scheduler records current-head spec and implementation review artifacts for WI-1233, refreshes any scheduler-owned shadow/gate evidence as required, then owns PR gate, merge, and closeout.
+- Current Checkpoint: merge
+- Current Stop: #1233 implementation, runtime copy propagation, root fact-chain carrier sync, mainline reconciliation, PR #1474 metadata readback, local validation, and scheduler-owned spec/implementation review records are complete; merge gate consumption is in progress.
+- Next Step: Scheduler consumes local PR gate / merge-ready and hosted checks for the current head, then requests exact watcher merge_lane if all gate evidence is green.
 - Blockers: None
-- Latest Validation Summary: 2026-06-13T06:44Z mainline reconciliation validation passed on branch `work/1233-host-truth-diagnostics-recovery` at head `80a617bd98941b044b846adc728e5858abe5ecf2`: `git diff --check`; Python compile for synchronized `loom_flow.py` copies; `tools/loom_check.py --profile source --source-surface retire-workspace .`; `test/retained_item_lookup_test.py`; generated-tree drift check; demo bootstrap fixture drift check; `tools/check_cli_contract.py --surface governance-closeout`; fact-chain; state-check; carrier refresh dry-run with `refresh_needed: []`; shadow parity; suite validate/evidence/carrier validate; PR metadata preflight/readback. Scheduler flow readback before review found only missing review artifacts.
+- Latest Validation Summary: 2026-06-13T07:40Z scheduler review/gate recovery passed on branch `work/1233-host-truth-diagnostics-recovery`: live PR #1474 is open/non-draft and machine metadata was refreshed through review-carrier head `df0d42a9cacaadfe0172b4cc859ba49c0051fe72`; `git diff --check`; suite validate/evidence/carrier validate; PR metadata preflight; scheduler-authored `.loom/reviews/WI-1233.spec.json`; scheduler-authored `.loom/reviews/WI-1233.json`; and local PR gate readback consumed review records with no missing inputs after PR body Branch / Head SHA metadata was restored.
 - Recovery Boundary: #1233 diagnostics vocabulary only: `carrier_closeout_required` for host-complete carrier drift, preserving `stale_carrier`, `shared_workspace_conflict`, and `closeout_required` semantics. No merge, guardian/formal review, release, live config mutation, sibling issue implementation, or downstream issue writes.
 - Current Lane: contract_lane
 
@@ -23,8 +23,8 @@
 
 - Run Entry: Worker thread `019ebedc-e585-77a3-ac6e-e4e9a7b8490e` accepted scheduler instruction `T1233R-recovery-202606130242` for issue #1233 on branch `work/1233-host-truth-diagnostics-recovery`.
 - Logs Entry: Worksite `/Users/mc/.codex/worktrees/973a/Loom`; base `origin/main` at `a1712a017d597b22a9bf08ca5fd991d78127acf8`; contract lane grant `watcher-contract-lane-grant-round9-T1233-carrier-closeout-required-202606130238`.
-- Diagnostics Entry: Implementation scope is limited to active workspace diagnostics classification `carrier_closeout_required` for host-complete carrier drift and maintained runtime/test/doc copies.
-- Verification Entry: Startup readback commands completed before editing: `pwd`, `git rev-parse --show-toplevel`, `git branch --show-current`, `git rev-parse HEAD`, `git merge-base HEAD origin/main`, `git status --short --branch`, `gh issue view 1233`, and `gh pr list --state open --head work/1233-host-truth-diagnostics-recovery`. Local implementation validation passed: `git diff --check`; `make loom-demo-new-project-check`; focused Python compile for synchronized `loom_flow.py` / `loom_check.py` copies including demo runtime; `tools/loom_check.py --profile source --source-surface retire-workspace .`; `tools/loom.py suite validate --target . --item WI-1233 --json`; `tools/loom.py suite carrier validate --target . --item WI-1233 --json`.
+- Diagnostics Entry: Implementation scope remains limited to active workspace diagnostics classification `carrier_closeout_required`; non-review and review blockers are clear locally, and scheduler is consuming merge gate evidence for PR #1474.
+- Verification Entry: Current validation evidence: fact-chain, state-check, suite validate/evidence/carrier validate, PR metadata readback, scheduler-authored spec/implementation review records, and local PR gate review consumption.
 - Lane Entry: contract_lane
 
 ## Sources
