@@ -11,12 +11,12 @@
 - Review Entry: .loom/reviews/WI-1234.json
 - Validation Entry: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; Python compile on touched runtime/test files; PR metadata/head readback; hosted checks readback if available.
 - Closing Condition: The branch preserves existing `WI-<issue>` lookup, locates historical retained IDs such as `GH-21-LOOM-UPGRADE-BASELINE`, fails closed with explicit ambiguity diagnostics, pushes a PR for #1234, and stops at `waiting-scheduler-gate`.
-- Current Checkpoint: merge
-- Current Stop: Scheduler-owned current-head review for PR #1471 is recorded with no blocking findings and rebound to head `7d20bd42930d270b2e72ea54183373337bab4be3`; PR metadata readback passed on that head.
-- Next Step: Commit and push the review/progress/status/shadow carrier-only binding refresh, update PR #1471 metadata to the resulting head, then consume hosted PR gate/root-self checks before any merge-lane action.
-- Blockers: None
+- Current Checkpoint: closed_out
+- Current Stop: Terminal closeout consumed: PR #1471 merged by Loom controlled merge at head 97ec3a3310634ebcc55001837f712c4ad081969b with merge commit 42f8a377f22401e9da3a458e5adbc064469aa0ea; issue #1234 closed/completed at 2026-06-13T04:07:52Z; origin/main read back at 42f8a377f22401e9da3a458e5adbc064469aa0ea; closeout check passed; terminal carrier metadata records no_release evidence.
+- Next Step: Publish this closeout-only carrier/status/shadow sync through a narrow PR; request watcher merge_lane separately before any merge.
+- Blockers: None for WI-1234 closeout carrier sync; #1232 and #1233 remain first-batch dependencies outside this branch.
 - Latest Validation Summary: Correction validation passed locally: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py test/retained_item_lookup_test.py src/skills/shared/scripts/loom_flow.py examples/new-project/.loom/bin/loom_flow.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1234`.
-- Recovery Boundary: Resume only WI-1234 retained item lookup and ambiguity diagnostics. Do not implement #1232, #1233, #1235, #1236, #1237, #1296, Round 10, Round 11, Deferred roadmap, guardian/formal review/controlled merge, release/npm/tag/GitHub Release, live config action, or shared contract/schema/failure vocabulary changes.
+- Recovery Boundary: WI-1234/#1234 terminal closeout sync only. Consume completed facts from PR #1471 merge commit 42f8a377f22401e9da3a458e5adbc064469aa0ea and issue #1234 closeout; do not process #1232, #1233, #1235, #1236, #1237, #1296, Round 10/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime behavior changes, or shared contract/schema/parser/failure vocabulary changes.
 - Current Lane: retained-item-lookup
 
 ## Runtime Evidence
