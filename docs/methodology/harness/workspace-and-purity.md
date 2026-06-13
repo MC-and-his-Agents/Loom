@@ -68,14 +68,17 @@ Loom 当前至少要求以下纯度：
   - `workspace_entry`
   - `checkpoint`
   - `binding_locator`
-  - `classification: stale_carrier | shared_workspace_conflict | unknown`
+  - `classification: stale_carrier | carrier_closeout_required | shared_workspace_conflict | unknown`
+  - `host_truth`（当 issue / PR host readback 可用时）
   - `recommended_remediation`
+  - `next_command`（当可给出明确修复入口时）
 
 当 `scope_assessment.mode` 为 `constrained` 且出现 `out_of_scope_changes` 时，应视为范围越界阻断信号。
 
 active carrier 判定规则：
 
 - `stale_carrier` 表示同一 `workspace_entry` 下的其他 carrier 已处于 terminal checkpoint；它只进入 `report_only`，不得阻断当前 Work Item
+- `carrier_closeout_required` 表示 host issue 已 closed 或 PR 已 merged/completed，但 repo recovery carrier 仍非 terminal；它只进入 `report_only`，补救路径必须指向 versioned carrier closeout sync，不得指向 workspace retire
 - `shared_workspace_conflict` 表示同一 `workspace_entry` 下仍有另一个非 terminal carrier；它必须 fail closed
 - `unknown` 表示候选 carrier 缺失、不可读或无法证明是否 terminal；它必须 fail closed，并给出修复 locator
 

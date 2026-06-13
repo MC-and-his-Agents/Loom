@@ -9583,10 +9583,34 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
     with loom_check_temporary_directory(prefix="loom-check-active-carrier-") as tmp:
         active_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, active_target)
+        fake_bin = Path(tmp) / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        fake_gh = fake_bin / "gh"
+        fake_gh.write_text(
+            """#!/usr/bin/env python3
+import json
+import sys
+
+path = sys.argv[2] if len(sys.argv) >= 3 and sys.argv[1] == "api" else ""
+if path.endswith("/issues/2002"):
+    print(json.dumps({"id": 2002, "node_id": "I_2002", "number": 2002, "state": "closed", "title": "Closed host issue", "body": "", "html_url": "https://github.com/example/repo/issues/2002", "labels": []}))
+    raise SystemExit(0)
+if path.endswith("/pulls/2003"):
+    print(json.dumps({"number": 2003, "state": "closed", "title": "Merged host PR", "body": "Closes #2002", "html_url": "https://github.com/example/repo/pull/2003", "draft": False, "merged_at": "2026-06-13T02:00:00Z", "merge_commit_sha": "abc123", "head": {"ref": "work/closed-host-carrier", "sha": "def456"}, "base": {"ref": "main"}}))
+    raise SystemExit(0)
+print(json.dumps({"message": "not found"}), file=sys.stderr)
+raise SystemExit(1)
+""",
+            encoding="utf-8",
+        )
+        fake_gh.chmod(0o755)
+        host_truth_env = prepend_path_env(fake_bin)
         source_work_item = active_target / ".loom/work-items/INIT-0001.md"
         source_recovery = active_target / ".loom/progress/INIT-0001.md"
         stale_item = active_target / ".loom/work-items/STALE-0002.md"
         stale_recovery = active_target / ".loom/progress/STALE-0002.md"
+        closeout_item = active_target / ".loom/work-items/CLOSEOUT-0004.md"
+        closeout_recovery = active_target / ".loom/progress/CLOSEOUT-0004.md"
         stale_item.write_text(
             source_work_item.read_text(encoding="utf-8")
             .replace("INIT-0001", "STALE-0002")
@@ -9599,9 +9623,23 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
             .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
             encoding="utf-8",
         )
+        closeout_item.write_text(
+            source_work_item.read_text(encoding="utf-8")
+            .replace("INIT-0001", "CLOSEOUT-0004")
+            + "- https://github.com/example/repo/issues/2002\n"
+            + "- https://github.com/example/repo/pull/2003\n",
+            encoding="utf-8",
+        )
+        closeout_recovery.write_text(
+            source_recovery.read_text(encoding="utf-8")
+            .replace("INIT-0001", "CLOSEOUT-0004")
+            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
         payload, error = load_command_json(
             root,
             ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+            env=host_truth_env,
         )
         if error:
             failures.append(Failure(category, f"`purity-check` stale active carrier fixture failed: {error}"))
@@ -9611,6 +9649,21 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
             diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
             if not any(isinstance(entry, dict) and entry.get("classification") == "stale_carrier" for entry in diagnostics):
                 failures.append(Failure(category, "`purity-check` must expose stale active carrier diagnostics"))
+            closeout_entries = [
+                entry
+                for entry in diagnostics
+                if isinstance(entry, dict)
+                and entry.get("item_id") == "CLOSEOUT-0004"
+                and entry.get("classification") == "carrier_closeout_required"
+            ]
+            if not closeout_entries:
+                failures.append(Failure(category, "`purity-check` must expose host-complete carrier closeout diagnostics"))
+            elif any(entry.get("blocking") for entry in closeout_entries):
+                failures.append(Failure(category, "host-complete carrier closeout diagnostics must not block as a live conflict"))
+            elif not all("carrier closeout sync" in str(entry.get("recommended_remediation", "")) for entry in closeout_entries):
+                failures.append(Failure(category, "host-complete carrier remediation must point to carrier closeout sync"))
+            elif not all("carrier closeout-sync" in str(entry.get("next_command", "")) for entry in closeout_entries):
+                failures.append(Failure(category, "host-complete carrier diagnostics must include carrier closeout-sync guidance"))
 
         malformed_item = active_target / ".loom/work-items/MALFORMED-0003.md"
         malformed_item.write_text(
@@ -9620,6 +9673,7 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
         payload, error = load_command_json(
             root,
             ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+            env=host_truth_env,
         )
         if error:
             failures.append(Failure(category, f"`purity-check` malformed unrelated carrier fixture failed: {error}"))
@@ -9646,6 +9700,7 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
         payload, error = load_command_json(
             root,
             ["python3", "tools/loom_flow.py", "state-check", "--target", str(active_target), "--item", "INIT-0001"],
+            env=host_truth_env,
         )
         if error:
             failures.append(Failure(category, f"`state-check` shared workspace fixture failed: {error}"))

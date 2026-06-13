@@ -99,6 +99,11 @@ TERMINAL_CLOSEOUT_STATES = {
     "deferred",
 }
 
+GITHUB_ISSUE_URL_RE = re.compile(r"github\.com/(?P<owner>[^/\s`]+)/(?P<repo>[^/\s`]+)/issues/(?P<number>\d+)")
+GITHUB_PR_URL_RE = re.compile(r"github\.com/(?P<owner>[^/\s`]+)/(?P<repo>[^/\s`]+)/pull/(?P<number>\d+)")
+GITHUB_ISSUE_REF_RE = re.compile(r"(?i)\bgithub\s+issue\s+#?(?P<number>\d+)\b")
+GITHUB_PR_REF_RE = re.compile(r"(?i)\b(?:github\s+pr|github\s+pull\s+request|pull\s+request)\s+#?(?P<number>\d+)\b")
+
 RUNTIME_EVIDENCE_FIELDS = (
     "run_entry",
     "logs_entry",
@@ -9026,12 +9031,189 @@ def generated_companion_consumption_payload(
     }
 
 
+def extract_github_host_context(
+    target_root: Path,
+    texts: list[str],
+    *,
+    default_owner: str | None,
+    default_repo: str | None,
+) -> dict[str, Any] | None:
+    owner = default_owner
+    repo_name = default_repo
+    issue_number: int | None = None
+    pr_number: int | None = None
+    locators: list[str] = []
+
+    for text in texts:
+        for match in GITHUB_ISSUE_URL_RE.finditer(text):
+            owner = match.group("owner")
+            repo_name = match.group("repo")
+            issue_number = int(match.group("number"))
+            locators.append(match.group(0))
+        for match in GITHUB_PR_URL_RE.finditer(text):
+            owner = match.group("owner")
+            repo_name = match.group("repo")
+            pr_number = int(match.group("number"))
+            locators.append(match.group(0))
+
+    for text in texts:
+        if issue_number is None:
+            match = GITHUB_ISSUE_REF_RE.search(text)
+            if match:
+                issue_number = int(match.group("number"))
+                locators.append(f"issue #{issue_number}")
+        if pr_number is None:
+            match = GITHUB_PR_REF_RE.search(text)
+            if match:
+                pr_number = int(match.group("number"))
+                locators.append(f"PR #{pr_number}")
+
+    if not owner or not repo_name or (issue_number is None and pr_number is None):
+        return None
+    return {
+        "owner": owner,
+        "repo": repo_name,
+        "issue_number": issue_number,
+        "pr_number": pr_number,
+        "locators": sorted(set(locators)),
+    }
+
+
+def github_host_completion_truth(
+    target_root: Path,
+    context: dict[str, Any],
+    cache: dict[tuple[str, str, int | None, int | None], dict[str, Any]],
+) -> dict[str, Any]:
+    owner = str(context["owner"])
+    repo_name = str(context["repo"])
+    issue_number = context.get("issue_number")
+    pr_number = context.get("pr_number")
+    cache_key = (
+        owner,
+        repo_name,
+        int(issue_number) if isinstance(issue_number, int) else None,
+        int(pr_number) if isinstance(pr_number, int) else None,
+    )
+    if cache_key in cache:
+        return cache[cache_key]
+
+    evidence: list[dict[str, Any]] = []
+    errors: list[str] = []
+    complete = False
+    terminal_state: str | None = None
+
+    if isinstance(issue_number, int):
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        errors.extend(f"issue #{issue_number}: {message}" for message in issue_errors)
+        if issue_payload is not None:
+            state = issue_payload.get("state")
+            evidence.append(
+                {
+                    "kind": "github_issue",
+                    "number": issue_number,
+                    "state": state,
+                    "url": issue_payload.get("url"),
+                }
+            )
+            if state == "CLOSED":
+                complete = True
+                terminal_state = terminal_state or "closed_out"
+
+    if isinstance(pr_number, int):
+        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+        errors.extend(f"PR #{pr_number}: {message}" for message in pr_errors)
+        if pr_payload is not None:
+            state = pr_payload.get("state")
+            evidence.append(
+                {
+                    "kind": "github_pr",
+                    "number": pr_number,
+                    "state": state,
+                    "url": pr_payload.get("url"),
+                    "mergedAt": pr_payload.get("mergedAt"),
+                    "mergeCommit": pr_payload.get("mergeCommit"),
+                    "baseRefName": pr_payload.get("baseRefName"),
+                }
+            )
+            if state == "MERGED":
+                complete = True
+                terminal_state = "merged"
+
+    if complete:
+        status = "complete"
+    elif evidence:
+        status = "active"
+    else:
+        status = "unavailable"
+
+    payload = {
+        "status": status,
+        "complete": complete,
+        "terminal_state": terminal_state,
+        "repository": {"owner": owner, "name": repo_name},
+        "locators": context.get("locators", []),
+        "evidence": evidence,
+        "errors": errors,
+    }
+    cache[cache_key] = payload
+    return payload
+
+
+def carrier_closeout_sync_command(target_root: Path, other_item_id: str, host_truth: dict[str, Any]) -> str:
+    issue_number: int | None = None
+    pr_number: int | None = None
+    merge_commit: str | None = None
+    target_branch: str | None = None
+    merged_at: str | None = None
+    terminal_state = str(host_truth.get("terminal_state") or "closed_out")
+    for entry in host_truth.get("evidence", []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("kind") == "github_issue" and isinstance(entry.get("number"), int):
+            issue_number = entry.get("number")
+        if entry.get("kind") == "github_pr" and isinstance(entry.get("number"), int):
+            pr_number = entry.get("number")
+            merge_commit_entry = entry.get("mergeCommit")
+            if isinstance(merge_commit_entry, dict) and isinstance(merge_commit_entry.get("oid"), str):
+                merge_commit = merge_commit_entry.get("oid")
+            if isinstance(entry.get("baseRefName"), str):
+                target_branch = entry.get("baseRefName")
+            if isinstance(entry.get("mergedAt"), str):
+                merged_at = entry.get("mergedAt")
+    command = [
+        "python3",
+        "tools/loom_flow.py",
+        "carrier",
+        "closeout-sync",
+        "--target",
+        command_target(target_root),
+        "--item",
+        other_item_id,
+        "--terminal-state",
+        terminal_state,
+    ]
+    if issue_number is not None:
+        command.extend(["--issue", str(issue_number)])
+    if pr_number is not None:
+        command.extend(["--pr", str(pr_number)])
+    if merge_commit:
+        command.extend(["--merge-commit", merge_commit])
+    if target_branch:
+        command.extend(["--target-branch", target_branch])
+    command.extend(["--closed-at", merged_at or "not_applicable"])
+    command.extend(["--evidence-locator", ";".join(str(locator) for locator in host_truth.get("locators", [])) or "host-readback"])
+    command.append("--apply")
+    return shlex.join(command)
+
+
 def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entry: str) -> list[dict[str, Any]]:
     work_items_dir = target_root / ".loom/work-items"
     if not work_items_dir.exists():
         return []
 
     diagnostics: list[dict[str, Any]] = []
+    default_owner, default_repo = detect_github_repo(target_root)
+    host_truth_cache: dict[tuple[str, str, int | None, int | None], dict[str, Any]] = {}
     for candidate in sorted(work_items_dir.glob("*.md")):
         work_item_locator = relative_to_root(candidate, target_root)
         diagnostic: dict[str, Any] = {
@@ -9107,12 +9289,35 @@ def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entr
                 "leave this unrelated terminal carrier out of the current Work Item; audit or retire it through its own issue flow if it still appears active."
             )
         else:
-            diagnostic["freshness"] = "active"
-            diagnostic["classification"] = "shared_workspace_conflict"
-            diagnostic["blocking"] = True
-            diagnostic["recommended_remediation"] = (
-                "move one active item to its own branch/worktree or close its own recovery path before continuing."
+            carrier_texts = [candidate.read_text(encoding="utf-8"), recovery_path.read_text(encoding="utf-8")]
+            host_context = extract_github_host_context(
+                target_root,
+                carrier_texts,
+                default_owner=default_owner,
+                default_repo=default_repo,
             )
+            host_truth = (
+                github_host_completion_truth(target_root, host_context, host_truth_cache)
+                if host_context is not None
+                else None
+            )
+            if host_truth is not None:
+                diagnostic["host_truth"] = host_truth
+            if host_truth is not None and host_truth.get("complete") is True:
+                diagnostic["freshness"] = "host_complete_carrier_active"
+                diagnostic["classification"] = "carrier_closeout_required"
+                diagnostic["blocking"] = False
+                diagnostic["recommended_remediation"] = (
+                    "run carrier closeout sync for this Work Item so versioned recovery/status truth consumes the completed host issue or merged PR before treating the same workspace binding as a live conflict."
+                )
+                diagnostic["next_command"] = carrier_closeout_sync_command(target_root, other_item_id, host_truth)
+            else:
+                diagnostic["freshness"] = "active"
+                diagnostic["classification"] = "shared_workspace_conflict"
+                diagnostic["blocking"] = True
+                diagnostic["recommended_remediation"] = (
+                    "move one active item to its own branch/worktree or close its own recovery path before continuing."
+                )
         diagnostics.append(diagnostic)
     return diagnostics
 
@@ -11831,6 +12036,9 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
     active_diagnostics = active_workspace_diagnostics(target_root, item_id, workspace_entry)
     conflicts = [entry for entry in active_diagnostics if entry.get("blocking")]
     stale_carriers = [entry for entry in active_diagnostics if entry.get("classification") == "stale_carrier"]
+    closeout_required_carriers = [
+        entry for entry in active_diagnostics if entry.get("classification") == "carrier_closeout_required"
+    ]
     if conflicts:
         hard_failures.append(
             "workspace is bound to multiple active work items: "
@@ -11839,6 +12047,11 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
     for carrier in stale_carriers:
         report_only.append(
             "stale active carrier is unrelated to the current item and does not block this workspace: "
+            + str(carrier.get("item_id") or carrier.get("work_item_locator"))
+        )
+    for carrier in closeout_required_carriers:
+        report_only.append(
+            "host-complete carrier drift requires versioned carrier closeout sync before treating the same workspace binding as live execution: "
             + str(carrier.get("item_id") or carrier.get("work_item_locator"))
         )
 
