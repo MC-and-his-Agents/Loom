@@ -15,16 +15,25 @@ external-runtime 的目标是让成熟 adopted repo 最终可以：
 
 ## 2. 当前默认
 
-当前稳定默认仍是 vendored `.loom/bin` runtime。
+当前用户入口默认使用根 `loom` CLI，但仓库必须显式声明 runtime provider
+mode：
 
-原因：
+- `global-cli` repo 依赖已安装的根 `loom` 命令作为 runtime provider，不期望
+  提交 `.loom/bin` carrier；
+- `repo-local-wrapper` repo 有意保留 `.loom/bin` 或等价 wrapper carrier；
+  这些 carrier 只在 installed-state 明确声明时才是有效仓库 runtime
+  carrier。
 
-- `loom_init verify` 已经要求 `.loom/bin/*` 与 `.loom/bootstrap/manifest.json` 一致
-- manifest 中的 runtime artifact `sha256` 是当前 fail-closed trust boundary
-- strong-governance adopted repo 仍需要本地可审计 runtime provenance
-- vendored `.loom/bin/**` 在该阶段属于 [.loom surfaces 版本控制策略](./loom-surfaces-version-control.md) 中的稳定 carrier，必须 Git 可见
+历史 strong-governance adopted repo 可能仍需要本地可审计 runtime provenance。
+在这类 repo 中，vendored `.loom/bin/**` 仍可作为
+[.loom surfaces 版本控制策略](./loom-surfaces-version-control.md) 下的稳定
+carrier 保留，但它不再由文件存在本身证明 active provider。manifest
+provenance、installed-state 与 provider requirements 必须共同说明它是
+current、retained、audit-only、obsolete 还是 compatibility-only。
 
-因此，external-runtime 只是一条显式迁移路径，不是当前默认安装形态。
+因此，external-runtime 迁移是一条显式迁移路径；它不得把 workstation
+provider state 写成仓库 truth，也不得把未声明的 `.loom/bin` residue 当成
+当前 runtime provider。
 
 ## 3. Companion 保留面
 

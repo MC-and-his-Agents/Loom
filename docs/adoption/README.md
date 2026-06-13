@@ -36,6 +36,17 @@
 - CLI-first installed-state 合同：[loom-installed-state-v2.md](./loom-installed-state-v2.md)
 - 版本权威图：[version-authority-map.md](./version-authority-map.md)
 
+Runtime provider modes:
+
+- `global-cli` repositories consume the installed root `loom` command as the
+  runtime provider. No `.loom/bin` carrier is expected; use
+  `loom installed-state validate`, `loom doctor`, `loom verify`, and
+  `loom repair plan` to diagnose repository metadata and external provider
+  readiness without recording workstation state as repository truth.
+- `repo-local-wrapper` repositories intentionally keep repo-local carriers such
+  as `.loom/bin`; those carriers remain valid when installed-state declares
+  them as current, retained, audit-only, obsolete, or compatibility-only.
+
 边界约束：
 
 - Adoption 只负责说明项目如何进入 Loom operating layer，不把 Loom 收窄成治理套件。

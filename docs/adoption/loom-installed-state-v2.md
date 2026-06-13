@@ -296,6 +296,67 @@ Detected `.loom/bin` by itself is still only a hint. It becomes meaningful only
 when installed-state explicitly models a current, retained, audit, obsolete, or
 compatibility-only carrier state.
 
+### Global CLI Without Repo-Local Wrapper
+
+A `global-cli` repository may omit `.loom/bin` entirely. In that mode,
+installed-state records repository adoption truth and provider requirements,
+while the root `loom` executable and its packaged runtime remain external
+workstation/user-level provider state:
+
+```json
+{
+  "provider_requirements": {
+    "global_cli": {
+      "required": true,
+      "provider": "loom-cli",
+      "authority": "workstation",
+      "compatibility_mode_allowed": false
+    }
+  },
+  "layers": [
+    {
+      "id": "adoption-metadata",
+      "layer_type": "repository-adoption-metadata",
+      "installed_path": ".loom/installed-state.json",
+      "runtime_state": "ready",
+      "upgrade_eligibility": "current",
+      "provides": ["repository adoption truth"],
+      "consumes": ["global-cli-provider"]
+    },
+    {
+      "id": "global-cli-provider",
+      "layer_type": "global-cli-runtime-provider",
+      "installed_path": "workstation:loom-cli",
+      "runtime_state": "unknown",
+      "upgrade_eligibility": "unknown",
+      "provides": ["loom command semantics", "runtime provider"],
+      "consumes": []
+    }
+  ],
+  "installation_graph": {
+    "layers": ["adoption-metadata", "global-cli-provider"],
+    "edges": [
+      {"from": "adoption-metadata", "to": "global-cli-provider", "relationship": "requires-external-provider"}
+    ]
+  }
+}
+```
+
+Copyable validation commands for this mode:
+
+```bash
+loom installed-state validate --target . --json
+loom detect --target . --json
+loom doctor --target . --json
+loom verify --target . --json
+loom repair plan --target . --json
+```
+
+Passing repository metadata validation does not prove that every developer
+workstation has the global CLI installed. `doctor` and `verify` diagnose that
+external provider boundary; their output must not copy local workstation paths,
+cache state, or registration outcomes into repository truth.
+
 ## Compatibility Mode
 
 Compatibility mode is valid installed-state only when the metadata says so. It

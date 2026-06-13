@@ -28,6 +28,35 @@ Install path status:
 - Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence and compatibility records.
 - Unsupported: presenting plugin install, SKILLS install, single-skill install, or installer commands as an independent primary Loom install surface.
 
+## Runtime Provider Modes
+
+The root CLI install supports two repository runtime provider modes:
+
+- `global-cli`: the target repository records adoption metadata and depends on
+  the installed root `loom` command as the runtime provider. No `.loom/bin`
+  carrier is expected in this mode.
+- `repo-local-wrapper`: the target repository intentionally retains repo-local
+  wrapper carriers such as `.loom/bin`. That remains valid when installed-state
+  declares the wrapper/carrier role, including compatibility delegation to the
+  global CLI provider.
+
+For `global-cli` repositories, validate the repository metadata and external
+provider boundary with:
+
+```bash
+loom installed-state validate --target . --json
+loom detect --target . --json
+loom doctor --target . --json
+loom verify --target . --json
+loom repair plan --target . --json
+```
+
+These commands may report missing or incompatible workstation/global CLI state,
+but user-level provider state is not repository truth. For
+`repo-local-wrapper` repositories, `.loom/bin` is still a valid repository
+runtime carrier only when installed-state classifies it as current, retained,
+audit-only, obsolete, or compatibility-only.
+
 ## Source And Generated Surfaces
 
 - `src/skills/` is the only editable source truth for Loom skills.
