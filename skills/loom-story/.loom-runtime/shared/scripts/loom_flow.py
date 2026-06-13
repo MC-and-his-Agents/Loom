@@ -9342,8 +9342,13 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
     return context, []
 
 
-def load_retained_item_context(target_root: Path, output_relative: str, item_id: str) -> tuple[dict[str, Any], list[str]]:
-    work_item_relative = f".loom/work-items/{item_id}.md"
+def load_retained_item_context(
+    target_root: Path,
+    output_relative: str,
+    item_id: str,
+    work_item_relative: str | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    work_item_relative = work_item_relative or f".loom/work-items/{item_id}.md"
     work_item_path = target_root / work_item_relative
     if not work_item_path.exists():
         return {}, [f"missing retained work item: {work_item_relative}"]
@@ -9474,13 +9479,178 @@ def load_retained_item_context(target_root: Path, output_relative: str, item_id:
     return context, []
 
 
-def closeout_expected_item_id(target_root: Path, issue_number: int | None) -> str | None:
+def text_mentions_issue_number(text: object, issue_number: int) -> bool:
+    if not isinstance(text, str) or not text:
+        return False
+    patterns = (
+        rf"(?<![A-Za-z0-9])#\s*{issue_number}(?![A-Za-z0-9])",
+        rf"(?i)\b(?:github\s+issue|issue|gh)\s*#?\s*{issue_number}\b",
+        rf"(?i)\b(?:github:)?issue[/:#-]\s*{issue_number}\b",
+        rf"(?i)\bWI-{issue_number}\b",
+        rf"(?i)\bGH-{issue_number}(?:\b|-)",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def retained_item_candidate_reasons(
+    *,
+    target_root: Path,
+    work_item_path: Path,
+    work_item: dict[str, object],
+    issue_number: int,
+) -> list[str]:
+    reasons: list[str] = []
+    item_id = str(work_item.get("item_id") or "")
+    work_item_relative = relative_to_root(work_item_path, target_root)
+    if work_item_relative == f".loom/work-items/WI-{issue_number}.md":
+        reasons.append("canonical WI issue-number carrier path")
+    if item_id == f"WI-{issue_number}":
+        reasons.append("canonical WI issue-number item id")
+    if re.match(rf"(?i)^GH-{issue_number}(?:$|-)", item_id):
+        reasons.append("historical GH issue-number item id")
+
+    metadata_fields = (
+        item_id,
+        work_item_path.stem,
+        work_item.get("goal"),
+        work_item.get("scope"),
+        work_item.get("execution_path"),
+        work_item.get("closing_condition"),
+    )
+    if any(text_mentions_issue_number(value, issue_number) for value in metadata_fields):
+        reasons.append("work item title/body metadata references issue")
+
+    artifacts = work_item.get("associated_artifacts")
+    if isinstance(artifacts, list) and any(text_mentions_issue_number(value, issue_number) for value in artifacts):
+        reasons.append("associated artifact references issue")
+
+    recovery_relative = work_item.get("recovery_entry")
+    if isinstance(recovery_relative, str) and recovery_relative:
+        if text_mentions_issue_number(recovery_relative, issue_number):
+            reasons.append("recovery entry locator references issue")
+        recovery_path, recovery_errors = resolve_repo_relative_path(
+            target_root,
+            recovery_relative,
+            label="retained recovery entry lookup",
+        )
+        if not recovery_errors and recovery_path is not None and recovery_path.exists():
+            try:
+                recovery_text = recovery_path.read_text(encoding="utf-8")
+            except OSError:
+                recovery_text = ""
+            if text_mentions_issue_number(recovery_text, issue_number):
+                reasons.append("recovery entry evidence references issue")
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for reason in reasons:
+        if reason in seen:
+            continue
+        seen.add(reason)
+        deduped.append(reason)
+    return deduped
+
+
+def closeout_retained_item_lookup(target_root: Path, issue_number: int | None) -> dict[str, Any]:
     if issue_number is None:
+        return {"item_id": None, "work_item_relative": None, "missing_inputs": [], "diagnostics": []}
+
+    work_items_dir = target_root / ".loom/work-items"
+    if not work_items_dir.exists():
+        return {"item_id": None, "work_item_relative": None, "missing_inputs": [], "diagnostics": []}
+
+    candidates: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    for work_item_path in sorted(work_items_dir.glob("*.md")):
+        work_item_relative = relative_to_root(work_item_path, target_root)
+        try:
+            work_item, work_item_errors = parse_work_item(work_item_path, target_root)
+        except OSError as exc:
+            diagnostics.append(
+                {
+                    "work_item": work_item_relative,
+                    "status": "unreadable",
+                    "errors": [str(exc)],
+                }
+            )
+            continue
+        if work_item_errors:
+            diagnostics.append(
+                {
+                    "work_item": work_item_relative,
+                    "status": "parse_error",
+                    "errors": work_item_errors,
+                }
+            )
+            continue
+        reasons = retained_item_candidate_reasons(
+            target_root=target_root,
+            work_item_path=work_item_path,
+            work_item=work_item,
+            issue_number=issue_number,
+        )
+        if not reasons:
+            continue
+        candidates.append(
+            {
+                "item_id": str(work_item["item_id"]),
+                "work_item_relative": work_item_relative,
+                "reasons": reasons,
+            }
+        )
+
+    if not candidates:
+        return {"item_id": None, "work_item_relative": None, "missing_inputs": [], "diagnostics": diagnostics}
+    if len(candidates) > 1:
+        candidate_text = "; ".join(
+            f"{candidate['item_id']} at {candidate['work_item_relative']} via {', '.join(candidate['reasons'])}"
+            for candidate in candidates
+        )
+        return {
+            "item_id": None,
+            "work_item_relative": None,
+            "missing_inputs": [
+                f"retained Work Item lookup for issue #{issue_number} is ambiguous: {candidate_text}"
+            ],
+            "diagnostics": [*diagnostics, *candidates],
+        }
+    candidate = candidates[0]
+    return {
+        "item_id": candidate["item_id"],
+        "work_item_relative": candidate["work_item_relative"],
+        "missing_inputs": [],
+        "diagnostics": [*diagnostics, candidate],
+    }
+
+
+def closeout_expected_item_id(target_root: Path, issue_number: int | None) -> str | None:
+    lookup = closeout_retained_item_lookup(target_root, issue_number)
+    if lookup.get("missing_inputs"):
         return None
-    item_id = f"WI-{issue_number}"
-    if (target_root / f".loom/work-items/{item_id}.md").exists():
-        return item_id
-    return None
+    item_id = lookup.get("item_id")
+    return str(item_id) if isinstance(item_id, str) and item_id else None
+
+
+def closeout_expected_item_lookup(target_root: Path, issue_number: int | None) -> dict[str, Any]:
+    return closeout_retained_item_lookup(target_root, issue_number)
+
+
+def retained_item_lookup_missing_inputs(lookup: dict[str, Any]) -> list[str]:
+    missing_inputs = lookup.get("missing_inputs")
+    if not isinstance(missing_inputs, list):
+        return []
+    return [f"retained-item lookup: {message}" for message in missing_inputs]
+
+
+def retained_item_lookup_id(lookup: dict[str, Any]) -> str | None:
+    item_id = lookup.get("item_id")
+    return str(item_id) if isinstance(item_id, str) and item_id else None
+
+
+def retained_item_lookup_work_item_relative(lookup: dict[str, Any]) -> str | None:
+    work_item_relative = lookup.get("work_item_relative")
+    return str(work_item_relative) if isinstance(work_item_relative, str) and work_item_relative else None
+
 
 
 def review_runtime_root(context: dict[str, Any], reviewed_head: str | None = None) -> Path:
@@ -17646,12 +17816,16 @@ def reconciliation_audit_payload(
         missing_inputs.append("issue/pr/project")
 
     suite_gate_validation: dict[str, Any] | None = None
-    expected_reconciliation_item = closeout_expected_item_id(target_root, issue_number)
+    expected_reconciliation_lookup = closeout_expected_item_lookup(target_root, issue_number)
+    missing_inputs.extend(retained_item_lookup_missing_inputs(expected_reconciliation_lookup))
+    expected_reconciliation_item = retained_item_lookup_id(expected_reconciliation_lookup)
+    expected_reconciliation_work_item = retained_item_lookup_work_item_relative(expected_reconciliation_lookup)
     if expected_reconciliation_item is not None:
         suite_context, suite_context_errors = load_retained_item_context(
             target_root,
             ".loom/bootstrap/init-result.json",
             expected_reconciliation_item,
+            expected_reconciliation_work_item,
         )
         if suite_context_errors:
             suite_gate_validation = {
@@ -17830,6 +18004,7 @@ def reconciliation_audit_payload(
                     target_root,
                     ".loom/bootstrap/init-result.json",
                     expected_reconciliation_item,
+                    expected_reconciliation_work_item,
                 )
                 review_record = None
                 review_path = None
@@ -19228,7 +19403,10 @@ def closeout_payload(
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
     effective_profile = effective_closeout_gate_profile(gate_profile)
-    expected_closeout_item = closeout_expected_item_id(target_root, issue_number)
+    expected_closeout_lookup = closeout_expected_item_lookup(target_root, issue_number)
+    missing_inputs.extend(retained_item_lookup_missing_inputs(expected_closeout_lookup))
+    expected_closeout_item = retained_item_lookup_id(expected_closeout_lookup)
+    expected_closeout_work_item = retained_item_lookup_work_item_relative(expected_closeout_lookup)
     context, context_errors = load_context(target_root, ".loom/bootstrap/init-result.json", None)
     if (
         expected_closeout_item is not None
@@ -19238,6 +19416,7 @@ def closeout_payload(
             target_root,
             ".loom/bootstrap/init-result.json",
             expected_closeout_item,
+            expected_closeout_work_item,
         )
     fact_chain_context: dict[str, Any] | None = context if not context_errors else None
     if context_errors:
