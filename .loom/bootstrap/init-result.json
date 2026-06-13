@@ -72,14 +72,14 @@
   ],
   "fact_chain": {
     "mode": "work-item + recovery-entry + derived status-surface",
-      "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
-      "entry_points": {
-        "current_item_id": "WI-1234",
-        "work_item": ".loom/work-items/WI-1234.md",
-        "recovery_entry": ".loom/progress/WI-1234.md",
-        "status_surface": ".loom/status/current.md"
-      }
-    },
+    "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+    "entry_points": {
+      "current_item_id": "WI-1234",
+      "work_item": ".loom/work-items/WI-1234.md",
+      "recovery_entry": ".loom/progress/WI-1234.md",
+      "status_surface": ".loom/status/current.md"
+    }
+  },
   "initial_artifacts": [
     {
       "path": ".loom/README.md",
