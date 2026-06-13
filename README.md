@@ -42,6 +42,22 @@ Install the root Loom CLI:
 npm install -g @mc-and-his-agents/loom
 ```
 
+Choose the repository runtime provider mode explicitly:
+
+- `global-cli`: the repository records Loom adoption metadata and depends on
+  the installed root `loom` command as the runtime provider. No `.loom/bin`
+  runtime carrier is expected in this mode; workstation/global CLI availability
+  is diagnosed separately from repository truth.
+- `repo-local-wrapper`: the repository intentionally keeps repo-local wrapper
+  carriers such as `.loom/bin`. Those carriers remain valid when installed-state
+  declares them, including compatibility windows where the wrapper delegates to
+  the global CLI provider.
+
+See [docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md),
+[docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md),
+and [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)
+for the detailed adoption contracts and validation commands.
+
 Install and verify the Codex host payload for a target repository:
 
 ```bash

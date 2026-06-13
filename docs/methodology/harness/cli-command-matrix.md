@@ -28,8 +28,8 @@ Regression bucket / named surface / fast-vs-full validation semantics for long-r
 | `loom installed-state validate` | implemented | Validates schema, layers, graph, and version metadata. |
 | `loom installed-state export` | implemented | Emits valid installed-state plus installation graph. |
 | `loom detect` | implemented | Detects current, legacy, symlink, single-skill, metadata-only, embedded plugin, and mixed installed surfaces. |
-| `loom doctor` | implemented | Diagnoses installed-state, declared adoption mode, provider readiness, and legacy surface readiness with fail-closed repair fallback. |
-| `loom repair plan` | implemented | Emits a non-mutating repair plan for missing, invalid, or legacy installed surfaces. |
+| `loom doctor` | implemented | Diagnoses installed-state, declared adoption mode, runtime provider mode (`global-cli` or `repo-local-wrapper`), provider readiness, and legacy surface readiness with fail-closed repair fallback. |
+| `loom repair plan` | implemented | Emits a non-mutating repair plan for missing, invalid, legacy, or runtime-provider carrier drift. |
 | `loom repair apply` | implemented | Fails closed until write ownership and rollback semantics are approved by a later Work Item. |
 
 ## Implemented Phase Commands
@@ -151,6 +151,10 @@ the target artifact/scope is explicit. Metadata-only repository adoption,
 embedded repository payload, compatibility skills export, single-skill export,
 workstation registration, and runtime carrier changes are separate operations
 under the [installation taxonomy](../../adoption/installation-taxonomy.md).
+The runtime provider mode is also explicit: `global-cli` repositories expect the
+installed root `loom` command and do not require `.loom/bin`, while
+`repo-local-wrapper` repositories keep `.loom/bin` or equivalent wrappers only
+when installed-state declares that carrier role.
 `upgrade-plan` is non-mutating and emits ordered repair /
 legacy-classification / no-op actions. `verify` consumes `doctor` so
 installed-state, declared adoption mode, provider readiness, and legacy-surface
@@ -158,6 +162,16 @@ readiness stay aligned. `upgrade` requires `--apply` and refuses to mutate while
 installed-state is invalid or legacy surfaces remain unclassified. `rollback`
 remains a structured fail-closed command because rollback/delete ownership
 cannot be inferred from installed surface detection.
+
+Copyable validation commands for a `global-cli` repository:
+
+```bash
+loom installed-state validate --target . --json
+loom detect --target . --json
+loom doctor --target . --json
+loom verify --target . --json
+loom repair plan --target . --json
+```
 
 ## Scenario Commands
 

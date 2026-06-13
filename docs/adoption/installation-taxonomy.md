@@ -140,6 +140,31 @@ Metadata-only adoption may retain runtime carriers for audit or consumer gates.
 That retention must not make the repository look like an embedded skills
 payload install.
 
+## Runtime Provider Modes
+
+Loom exposes two user-facing runtime provider modes:
+
+| Mode | Repository expectation | Provider authority | Validation entry |
+| --- | --- | --- | --- |
+| `global-cli` | `.loom/installed-state.json` records a dependency on the installed root `loom` command. No `.loom/bin` carrier is expected. | Global CLI runtime provider; workstation/user-level state remains outside repository truth. | `loom installed-state validate`, `loom doctor`, `loom verify`, `loom repair plan` |
+| `repo-local-wrapper` | `.loom/bin` or equivalent repo-local wrapper carriers are intentionally present and classified by installed-state. | Repository runtime carrier for wrapper/provenance, or compatibility delegation to the declared provider. | Same commands, plus wrapper residue/provenance classification in diagnostics |
+
+For `global-cli` repositories, a detected `.loom/bin` directory is legacy or
+retained residue until installed-state explicitly says otherwise. It must not be
+used as proof that the repository owns the active runtime provider. For
+`repo-local-wrapper` repositories, `.loom/bin` remains a valid repository
+carrier when the metadata declares its current or retained role.
+
+Copyable validation commands for a `global-cli` repository:
+
+```bash
+loom installed-state validate --target . --json
+loom detect --target . --json
+loom doctor --target . --json
+loom verify --target . --json
+loom repair plan --target . --json
+```
+
 ## Repo-Local Wrapper Compatibility
 
 `repo-local-wrapper` is a compatibility carrier, not a third authority line.
