@@ -42,7 +42,12 @@
     "suite_carrier_consumed_contracts": []
   },
   "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored closeout review approved the post-merge release evidence for terminal closeout consumption."
+    "status": "waived",
+    "reason": "Post-merge carrier closeout sync cannot bind an authored review to its own final commit hash without creating another head drift; release evidence was already read back and this waiver is limited to the carrier/evidence sync PR.",
+    "change_class": "release",
+    "substitute_validation": "json validation, git diff --check, fact-chain pass, suite carrier validate pass, PR #1497 merge readback, release run 27559414536 success, Git tag/GitHub Release/npm/global CLI/no-.loom-bin fixture readback",
+    "authority": "codex-main-thread",
+    "risk_acceptance": "bounded to WI-1246 post-merge closeout carrier sync; no runtime, package, release workflow, schema, parser, or downstream repository behavior changes",
+    "one_shot": true
   }
 }
