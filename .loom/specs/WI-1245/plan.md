@@ -1,0 +1,6 @@
+# WI-1245 Plan Boundary
+
+- WI-1245 is a bounded docs and CLI help alignment Work Item for runtime provider mode terminology, with implementation scope already limited by issue #1245, PR #1472, the Work Item carrier, build evidence, and the formal suite path decision in `.loom/specs/WI-1245/spec.md`.
+- No separate implementation sequencing plan is required because this PR does not alter runtime behavior, parser/schema logic, fixture matrices, generated payload semantics, release mechanics, permissions, data handling, or external-visible execution actions.
+- This file is a build-readiness locator only. It does not replace Work Item scope, build evidence, current-head review, spec-review of the suite decision, PR body metadata/head binding, hosted checks readback, PR gate, release/no-release judgment, controlled merge, or closeout evidence.
+- Require a concrete implementation plan if this PR expands beyond runtime provider documentation and CLI help wording into runtime behavior, parser/schema logic, fixture matrices, generated artifacts, release/tag/npm/GitHub Release mechanics, permissions, external-visible actions, #1246 follow-up implementation, or shared contract/failure vocabulary changes.

@@ -1,0 +1,127 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1245-main-thread-runtime-provider-docs-alignment",
+      "task_goal": "Align WI-1245 / PR #1472 runtime provider mode documentation, CLI help wording, and Loom carrier metadata for current PR head consumption.",
+      "context_locators": [
+        ".loom/work-items/WI-1245.md",
+        ".loom/progress/WI-1245.md",
+        ".loom/status/current.md",
+        ".loom/specs/WI-1245/spec.md",
+        ".loom/specs/WI-1245/plan.md",
+        ".loom/specs/WI-1245/task-carrier.md",
+        "README.md",
+        "README.zh-CN.md",
+        "docs/adoption/README.md",
+        "docs/adoption/installation-taxonomy.md",
+        "docs/adoption/loom-installed-state-v2.md",
+        "docs/adoption/unified-install-experience.md",
+        "docs/adoption/external-runtime-companion-contract.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        "tools/loom.py",
+        "PR #1472"
+      ],
+      "read_scope": [
+        "WI-1245 / PR #1472 branch, PR body metadata, current Loom carrier/status/progress/fact-chain, suite not_applicable decision, shadow parity, and related docs/help validation surfaces"
+      ],
+      "write_ownership": [
+        ".loom/progress/WI-1245.md",
+        ".loom/progress/WI-1245-build-evidence.json",
+        ".loom/reviews/WI-1245.json",
+        ".loom/status/current.md",
+        ".loom/work-items/WI-1245.md",
+        ".loom/specs/WI-1245/spec.md",
+        ".loom/specs/WI-1245/plan.md",
+        ".loom/specs/WI-1245/task-carrier.md",
+        ".loom/shadow/merge-ready-loom.json",
+        ".loom/shadow/closeout-loom.json",
+        "README.md",
+        "README.zh-CN.md",
+        "docs/adoption/README.md",
+        "docs/adoption/installation-taxonomy.md",
+        "docs/adoption/loom-installed-state-v2.md",
+        "docs/adoption/unified-install-experience.md",
+        "docs/adoption/external-runtime-companion-contract.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        "tools/loom.py",
+        "PR #1472 body metadata"
+      ],
+      "non_goals": [
+        "No merge, issue closeout, milestone closeout, release, tag, npm publish, GitHub Release, or live external action",
+        "No #1246 implementation or Round 9/Round 11/deferred scope",
+        "No shared schema, parser, gate, failure vocabulary, runtime behavior, permissions, fixture matrix, or generated artifact change",
+        "No watcher, heartbeat, lane grant, or /Users/mc/orchestration/loom truth maintenance"
+      ],
+      "validation_expectation": "Consume local static checks, fact-chain/state-check, suite not_applicable validation, shadow parity, PR metadata preflight/readback, branch/head readback, and hosted check readback before gate or merge scheduling.",
+      "output_format": "Committed PR branch updates plus WI-1245 carrier/status/progress/review/shadow evidence and final readback summary.",
+      "integration_target": [
+        ".loom/progress/WI-1245.md",
+        ".loom/progress/WI-1245-build-evidence.json",
+        ".loom/reviews/WI-1245.json",
+        ".loom/status/current.md",
+        ".loom/work-items/WI-1245.md",
+        ".loom/specs/WI-1245/spec.md",
+        ".loom/specs/WI-1245/plan.md",
+        ".loom/specs/WI-1245/task-carrier.md",
+        "PR #1472"
+      ],
+      "status": "integrated",
+      "summary": "Main-thread implementation and recovery output was integrated into PR #1472 on branch work/1245-runtime-provider-modes. The implementation remains limited to runtime provider mode documentation/help wording and WI-1245 carrier alignment; suite path is formally not_applicable and no runtime behavior or shared contract semantics changed.",
+      "locators": [
+        ".loom/progress/WI-1245.md",
+        ".loom/progress/WI-1245-build-evidence.json",
+        ".loom/status/current.md",
+        ".loom/specs/WI-1245/spec.md",
+        ".loom/specs/WI-1245/plan.md",
+        ".loom/specs/WI-1245/task-carrier.md",
+        ".loom/work-items/WI-1245.md",
+        "PR #1472"
+      ]
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1245-runtime-provider-docs-help",
+      "status": "integrated",
+      "summary": "Runtime provider mode terminology and second-machine setup guidance were integrated across README/adoption documentation, CLI command matrix, and tools/loom.py help wording without changing runtime behavior.",
+      "locators": [
+        "README.md",
+        "README.zh-CN.md",
+        "docs/adoption/README.md",
+        "docs/adoption/installation-taxonomy.md",
+        "docs/adoption/loom-installed-state-v2.md",
+        "docs/adoption/unified-install-experience.md",
+        "docs/adoption/external-runtime-companion-contract.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        "tools/loom.py"
+      ]
+    },
+    {
+      "id": "WI-1245-carrier-metadata-alignment",
+      "status": "integrated",
+      "summary": "WI-1245 work item, progress, status, suite not_applicable decision, task carrier, PR body metadata, and shadow evidence are the owned carrier surfaces for this alignment round.",
+      "locators": [
+        ".loom/work-items/WI-1245.md",
+        ".loom/progress/WI-1245.md",
+        ".loom/status/current.md",
+        ".loom/specs/WI-1245/spec.md",
+        ".loom/specs/WI-1245/plan.md",
+        ".loom/specs/WI-1245/task-carrier.md",
+        ".loom/shadow/merge-ready-loom.json",
+        ".loom/shadow/closeout-loom.json",
+        "PR #1472"
+      ]
+    },
+    {
+      "id": "WI-1245-current-head-validation",
+      "status": "integrated",
+      "summary": "Local validation consumed help JSON, py_compile, provider-mode coverage search, node wrapper help, git diff --check, fact-chain/state-check, suite inspect/validate/carrier validate, shadow-parity, CLI contract check, PR metadata preflight/readback, branch head readback, and hosted checks readback.",
+      "locators": [
+        ".loom/progress/WI-1245.md",
+        ".loom/status/current.md",
+        "PR #1472"
+      ]
+    }
+  ]
+}
