@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1234
-- Goal: Support retained Work Item lookup beyond the `WI-<issue>` naming assumption for Round 9 WI-6 / GitHub issue #1234.
-- Scope: Update retained closeout lookup in `src/skills/shared/scripts/loom_flow.py`, `skills/shared/scripts/loom_flow.py`, generated/shared runtime copies under `.loom/bin/loom_flow.py` and `skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py`, root bootstrap locator/hash carriers `.loom/bootstrap/init-result.json` and `.loom/bootstrap/manifest.json`, demo bootstrap fixture outputs under `examples/new-project/.loom/`, WI-1234 suite-not-applicable carrier `.loom/specs/WI-1234/spec.md`, WI-1234 shadow hash metadata under `.loom/shadow/merge-ready-loom.json` and `.loom/shadow/closeout-loom.json`, and focused tests proving canonical `WI-<issue>`, historical `GH-21-LOOM-UPGRADE-BASELINE`, associated artifact evidence, recovery entry evidence, and ambiguous retained carrier behavior. Do not implement #1232, #1233, #1235, #1236, #1237, #1296, Round 10, Round 11, Deferred roadmap, release, merge, guardian, controlled merge, or shared contract/schema/failure vocabulary changes.
-- Execution Path: issue #1234 -> branch `work/1234-retained-item-lookup` -> PR for retained lookup runtime and WI-1234 carriers -> local validation -> scheduler-owned gate.
+- Item ID: WI-1245
+- Goal: Update README, adoption docs, CLI help, and downstream migration guidance for runtime provider modes.
+- Scope: Issue #1245 / PR #1472 only: document repo-local-wrapper and global-cli runtime provider modes, second-machine setup, validation commands, .loom/bin expectations, CLI help wording, and command matrix guidance. Do not publish release artifacts, perform HotCP-specific PR edits, start #1246, run high-cost gates, merge, release, tag, publish, or change shared contract/schema/vocabulary.
+- Execution Path: issue #1245 -> branch work/1245-runtime-provider-modes -> PR #1472 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1234.md
-- Review Entry: .loom/reviews/WI-1234.json
-- Validation Entry: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; Python compile on touched runtime/test files; PR metadata/head readback; hosted checks readback if available.
-- Closing Condition: The branch preserves existing `WI-<issue>` lookup, locates historical retained IDs such as `GH-21-LOOM-UPGRADE-BASELINE`, fails closed with explicit ambiguity diagnostics, pushes a PR for #1234, and stops at `waiting-scheduler-gate`.
-- Current Checkpoint: closed_out
-- Current Stop: Terminal closeout consumed: PR #1471 merged by Loom controlled merge at head 97ec3a3310634ebcc55001837f712c4ad081969b with merge commit 42f8a377f22401e9da3a458e5adbc064469aa0ea; issue #1234 closed/completed at 2026-06-13T04:07:52Z; origin/main read back at 42f8a377f22401e9da3a458e5adbc064469aa0ea; closeout check passed; terminal carrier metadata records no_release evidence.
-- Next Step: Publish this closeout-only carrier/status/shadow sync through a narrow PR; request watcher merge_lane separately before any merge.
-- Blockers: None for WI-1234 closeout carrier sync; #1232 and #1233 remain first-batch dependencies outside this branch.
-- Latest Validation Summary: Correction validation passed locally: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py test/retained_item_lookup_test.py src/skills/shared/scripts/loom_flow.py examples/new-project/.loom/bin/loom_flow.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1234`.
-- Recovery Boundary: WI-1234/#1234 terminal closeout sync only. Consume completed facts from PR #1471 merge commit 42f8a377f22401e9da3a458e5adbc064469aa0ea and issue #1234 closeout; do not process #1232, #1233, #1235, #1236, #1237, #1296, Round 10/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime behavior changes, or shared contract/schema/parser/failure vocabulary changes.
-- Current Lane: retained-item-lookup
+- Recovery Entry: .loom/progress/WI-1245.md
+- Review Entry: .loom/reviews/WI-1245.json
+- Validation Entry: python3 tools/loom.py help --json; python3 -m py_compile tools/loom.py; rg -n "repo-local-wrapper|global-cli|\.loom/bin|workstation" README.md README.zh-CN.md docs/adoption/README.md docs/adoption/installation-taxonomy.md docs/adoption/loom-installed-state-v2.md docs/adoption/unified-install-experience.md docs/adoption/external-runtime-companion-contract.md docs/methodology/harness/cli-command-matrix.md tools/loom.py; python3 tools/check_cli_contract.py; node bin/loom.mjs --help; git diff --check; PR metadata preflight/readback; fact-chain/state-check/shadow parity; scheduler-owned current-head review and later PR gate
+- Closing Condition: PR #1472 for WI-1245 is refreshed to the current main head, PR metadata and repo carriers bind the current PR head/base, current-head review is recorded, scheduler-owned gates pass, and no_release closeout is consumed before #1246 starts.
+- Current Checkpoint: build
+- Current Stop: Round 10 recovery readback located the formal workspace at `/Users/mc/.codex/worktrees/a9fc/Loom`; PR #1472 and `origin/work/1245-runtime-provider-modes` both point at head ac1de9aadc2a5f34c7c683e67b3272aeaf0db329 with base 4e607c90bd8adddf6cd3106ad85af3d8d769f524, while the PR body metadata still referenced the old head 706aa65810b403ba1875f74f45368e15db4edc68.
+- Next Step: Commit the WI-1245 carrier/status/suite-decision refresh, then immediately refresh PR body metadata and review evidence to the resulting branch head, push, read back GitHub PR/branch/checks, and stop before high-cost gate or merge scheduling.
+- Blockers: High-cost gate, controlled merge, release/tag/publish, #1246, and any contract/schema/vocabulary change are blocked until separately granted. PR remains draft until scheduler-owned gate sequence is authorized.
+- Latest Validation Summary: 2026-06-15T05:50:47Z readback: `git status --short --branch` in the formal worktree showed branch `work/1245-runtime-provider-modes` with WI-1245 carrier edits only; `git rev-parse HEAD` and `git rev-parse origin/work/1245-runtime-provider-modes` both returned ac1de9aadc2a5f34c7c683e67b3272aeaf0db329; `git rev-parse origin/main` returned 4e607c90bd8adddf6cd3106ad85af3d8d769f524; `gh pr view 1472 --json ...` returned PR head ac1de9aadc2a5f34c7c683e67b3272aeaf0db329/base 4e607c90bd8adddf6cd3106ad85af3d8d769f524 and stale body metadata at head 706aa65810b403ba1875f74f45368e15db4edc68/base a1712a017d597b22a9bf08ca5fd991d78127acf8; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 .loom/bin/loom_flow.py state-check --target . --item WI-1245` passed; `python3 .loom/bin/loom_flow.py flow build --target . --item WI-1245` classified the remaining gap as missing suite path/build evidence, so this carrier refresh adds the official not_applicable suite path decision instead of fake formal suite artifacts.
+- Recovery Boundary: WI-1245 / PR #1472 carrier, PR metadata, review, and shadow recovery only. Do not run or consume high-cost gate/guardian/loom-pr-merge-gate success, do not controlled merge, do not release/tag/publish, do not start #1246, do not read retired/systemError thread turns, and do not change shared contract/schema/vocabulary.
+- Current Lane: shared_fact_chain_status_lane,current_item_review_lane,shadow_carrier_lane
 
 ## Runtime Evidence
 
-- Run Entry: Worker thread `019ebed1-4549-70f3-9113-934878853210` for scheduler thread `019ebecb-4123-7600-9527-6616c5e94d84`, instruction `T1234-initial-202606131028`.
-- Logs Entry: Worksite `/Users/mc/.codex/worktrees/2c45/Loom`; branch `work/1234-retained-item-lookup`; base/head at startup `a1712a017d597b22a9bf08ca5fd991d78127acf8`.
-- Diagnostics Entry: CodeGraph was unavailable in the Codex worktree and read from project identity `/Users/mc/dev/Loom`; it identified `closeout_expected_item_id`, `reconciliation_audit_payload`, and `closeout_payload` as the retained closeout lookup path.
-- Verification Entry: Source/generated/demo/bootstrap drift checks, root self-governance closeout surface, shadow parity, and WI-1234 state-check passed locally under scheduler correction `T1234-generated-sync-correction-202606130252`; final hosted verification will be bound to the pushed PR #1471 head.
-- Lane Entry: retained-item-lookup
+- Run Entry: Codex thread `019ec9cf-c7fb-7b73-a6f3-3db100aecded` resumed WI-1245/PR #1472 alignment on 2026-06-15T05:50:47Z.
+- Logs Entry: Formal worksite `/Users/mc/.codex/worktrees/a9fc/Loom`; branch `work/1245-runtime-provider-modes`; pre-carrier-refresh head ac1de9aadc2a5f34c7c683e67b3272aeaf0db329; base `origin/main` 4e607c90bd8adddf6cd3106ad85af3d8d769f524.
+- Diagnostics Entry: `/Users/mc/dev/Loom` main was read only as a non-authoritative locator and rejected as the execution site because it was on `main` and lacked WI-1245 carriers; `/Users/mc/.codex/worktrees/a9fc/Loom` is the registered branch worktree for PR #1472.
+- Verification Entry: Low-cost recovery checks passed before carrier commit: `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py state-check --target . --item WI-1245`; `python3 .loom/bin/loom_flow.py flow resume --target . --item WI-1245`. `python3 .loom/bin/loom_flow.py flow build --target . --item WI-1245` returned block for missing formal suite/build evidence, classified as requiring a not_applicable suite path decision rather than fake spec/plan artifacts.
+- Lane Entry: shared_fact_chain_status_lane,current_item_review_lane,shadow_carrier_lane
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1234.md
-- Dynamic Truth: .loom/progress/WI-1234.md
+- Static Truth: .loom/work-items/WI-1245.md
+- Dynamic Truth: .loom/progress/WI-1245.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
