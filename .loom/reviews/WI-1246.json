@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1246",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Code review allows WI-1246 at head 8db3829d2fb95cac205b91b81657b0f53df3aa66: the diff is limited to v0.13.11 version authority surfaces, generated skill package repo_version values, WI-1246 Loom carriers, shadow/status evidence, and release readiness evidence. Pre-release occupancy, release/version/package/CLI/skills, source contract-only loom_check, suite not_applicable, fact-chain/state/build, and diff checks passed. Post-merge release run, tag, GitHub Release, npm publish, installed/global CLI smoke, no-.loom/bin fixture, and #1246/#1238 closeout remain pending and must be consumed after the release PR merges.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-15T14:27:18Z",
+  "reviewed_head": "8db3829d2fb95cac205b91b81657b0f53df3aa66",
+  "reviewed_validation_summary": "2026-06-15T14:22Z WI-1246 local release validation on branch `work/1246-release-closeout`: pre-release occupancy confirmed current GitHub Release/npm/repo version at `v0.13.10` / `0.13.10` and candidate `v0.13.11` / `0.13.11` absent across fetched git tags, GitHub Release, and npm; `python3 tools/version_surface_check.py` passed; `python3 tools/check_release_surface.py` passed; `python3 tools/check_npm_package.py` passed for `@mc-and-his-agents/loom@0.13.11` with payload_file_count=2275; `npm run test:package` passed 4 tests; `npm pack --dry-run --json --ignore-scripts` passed for `@mc-and-his-agents/loom@0.13.11` with 2275 files; `node bin/loom.mjs --help` passed; `node bin/loom.mjs version --json` returned `repo_version=v0.13.11`; `python3 tools/skills_surface.py check --surface package-metadata` passed; `python3 tools/skills_surface.py check` passed; `python3 tools/loom.py skills package --json` passed with all package `repo_version=v0.13.11`; `python3 tools/loom.py skills release-check --json` passed; `python3 tools/loom.py suite inspect --target . --item WI-1246 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1246 --json` returned `result=not_applicable` with `blocking_gaps=[]`; `python3 tools/loom.py suite carrier validate --target . --item WI-1246 --json` passed; `python3 tools/check_cli_contract.py` passed all 6 surfaces in 384.56s; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed; `git diff --check` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 .loom/bin/loom_flow.py state-check --target . --item WI-1246` passed; `python3 .loom/bin/loom_flow.py flow build --target . --item WI-1246 --build-evidence .loom/progress/WI-1246-build-evidence.json` passed with attempt `WI-1246-build-52a553f214f9-e9741bab5d1f`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1246.md",
+    "recovery_entry": ".loom/progress/WI-1246.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
