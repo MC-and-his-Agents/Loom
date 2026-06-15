@@ -3,7 +3,7 @@
   "package_type": "single-skill",
   "package_id": "loom-merge-ready",
   "display_name": "Loom Merge Ready",
-  "repo_version": "v0.13.10",
+  "repo_version": "v0.13.11",
   "source_repository": "https://github.com/MC-and-his-Agents/Loom",
   "source_revision": "repository-working-tree",
   "skill_package_version": "1.0.0",

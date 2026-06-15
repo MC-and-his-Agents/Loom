@@ -1,0 +1,96 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1246-main-thread-release-closeout",
+      "task_goal": "Release Loom CLI global-cli runtime provider support as v0.13.11 and record release/downstream migration closeout evidence for issue #1246 and parent FR #1238.",
+      "context_locators": [
+        ".loom/work-items/WI-1246.md",
+        ".loom/progress/WI-1246.md",
+        ".loom/status/current.md",
+        ".loom/specs/WI-1246/spec.md",
+        ".loom/specs/WI-1246/plan.md",
+        ".loom/specs/WI-1246/task-carrier.md",
+        "docs/evidence/v0.13.11-release-readiness.md",
+        "VERSION",
+        "package.json",
+        "skills/*/loom-package.json",
+        "issue #1246",
+        "issue #1238"
+      ],
+      "read_scope": [
+        "Release/version/package/CLI/skills surfaces, GitHub issue/PR/release/tag readback, npm package readback, repo carriers, and post-merge release evidence for v0.13.11"
+      ],
+      "write_ownership": [
+        "VERSION",
+        "package.json",
+        "skills/*/loom-package.json",
+        ".loom/bootstrap/init-result.json",
+        ".loom/work-items/WI-1246.md",
+        ".loom/progress/WI-1246.md",
+        ".loom/progress/WI-1246-build-evidence.json",
+        ".loom/reviews/WI-1246.json",
+        ".loom/specs/WI-1246/spec.md",
+        ".loom/specs/WI-1246/plan.md",
+        ".loom/specs/WI-1246/task-carrier.md",
+        ".loom/status/current.md",
+        ".loom/shadow/merge-ready-loom.json",
+        ".loom/shadow/closeout-loom.json",
+        "docs/evidence/v0.13.11-release-readiness.md",
+        "PR body metadata for the release closeout PR",
+        "issue #1246 closeout record",
+        "issue #1238 closeout record"
+      ],
+      "non_goals": [
+        "No Round 9, Round 11, deferred #1318, unrelated runtime behavior, schema/parser/failure vocabulary, or external downstream repository migration changes",
+        "No destructive npm or GitHub operations",
+        "No claim that PR-event release judgment is final release evidence",
+        "No post-merge release evidence before the push-to-main release run, Git tag, GitHub Release, npm package, and installed/global CLI readbacks complete"
+      ],
+      "validation_expectation": "Run local release/version/package/CLI/skills checks before review; after merge, wait for and read back the push-to-main loom-cli-release run, Git tag, GitHub Release, npm package, installed/global CLI smoke, and no-.loom/bin global-cli fixture evidence before child-to-parent issue closeout.",
+      "output_format": "Committed release closeout PR branch updates plus WI-1246 carrier/status/progress/review/shadow evidence, release evidence document, PR metadata, live release readback, and final issue closeout summary.",
+      "integration_target": [
+        ".loom/progress/WI-1246.md",
+        ".loom/progress/WI-1246-build-evidence.json",
+        ".loom/reviews/WI-1246.json",
+        ".loom/status/current.md",
+        "docs/evidence/v0.13.11-release-readiness.md",
+        "PR #pending"
+      ],
+      "status": "integrated",
+      "summary": "Main-thread release closeout preparation is integrated into branch work/1246-release-closeout. Version authority surfaces are bumped to v0.13.11, pre-release occupancy checks passed, and post-merge release evidence remains explicitly pending until live readback.",
+      "locators": [
+        ".loom/work-items/WI-1246.md",
+        ".loom/progress/WI-1246.md",
+        ".loom/status/current.md",
+        "docs/evidence/v0.13.11-release-readiness.md",
+        "VERSION",
+        "package.json",
+        "skills/*/loom-package.json"
+      ]
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1246-version-authority-bump",
+      "status": "integrated",
+      "summary": "VERSION, package.json, and generated skills/*/loom-package.json repo_version values were updated from v0.13.10 / 0.13.10 to v0.13.11 / 0.13.11.",
+      "locators": [
+        "VERSION",
+        "package.json",
+        "skills/*/loom-package.json"
+      ]
+    },
+    {
+      "id": "WI-1246-pre-release-occupancy",
+      "status": "integrated",
+      "summary": "Pre-release readback confirmed v0.13.11 / 0.13.11 was unoccupied across fetched git tags, GitHub Release, and npm package version before the release PR.",
+      "locators": [
+        "docs/evidence/v0.13.11-release-readiness.md",
+        "git tag --list",
+        "gh release view v0.13.11",
+        "npm view @mc-and-his-agents/loom@0.13.11 version"
+      ]
+    }
+  ]
+}
