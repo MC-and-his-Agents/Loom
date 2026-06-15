@@ -1,6 +1,6 @@
 {
   "name": "@mc-and-his-agents/loom",
-  "version": "0.13.11",
+  "version": "0.14.0",
   "description": "CLI-first Loom control-plane entry for agent-first project operating layers.",
   "type": "module",
   "bin": {
