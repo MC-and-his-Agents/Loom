@@ -6268,6 +6268,7 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
         entry_points = init_result.get("fact_chain", {}).get("entry_points")
         if isinstance(entry_points, dict) and isinstance(entry_points.get("current_item_id"), str):
             active_item = entry_points["current_item_id"]
+    root_is_idle = active_item == "no_active_item"
 
     required_paths = (
         ".loom/bootstrap/manifest.json",
@@ -6355,6 +6356,11 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             maturity = payload.get("maturity")
             if isinstance(maturity, dict) and maturity.get("current") == "strong":
                 pass
+            elif root_is_idle and isinstance(maturity, dict):
+                missing_by_level = maturity.get("missing_by_level")
+                light_missing = missing_by_level.get("light") if isinstance(missing_by_level, dict) else []
+                if not isinstance(light_missing, list) or not {"work_item", "recovery", "review"}.issubset(set(light_missing)):
+                    failures.append(Failure("root-self-adoption", "`root governance status` idle closeout must be blocked only by absent active carriers"))
             elif host_verification_unconfirmed(payload):
                 missing_by_level = maturity.get("missing_by_level") if isinstance(maturity, dict) else {}
                 strong_missing = missing_by_level.get("strong") if isinstance(missing_by_level, dict) else []

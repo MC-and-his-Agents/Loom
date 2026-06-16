@@ -4619,6 +4619,9 @@ def assert_idle_root_self_governance_direct_contract() -> None:
     _, adopt_verify = run_flow_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "no_active_item"], expect=0)
     if adopt_verify.get("result") != "pass" or not isinstance(adopt_verify.get("idle_repository"), dict):
         raise AssertionError("idle adopt verify direct check did not pass")
+    roundtrip = adopt_verify.get("producer_consumer_roundtrip")
+    if not isinstance(roundtrip, dict) or roundtrip.get("bypass_check", {}).get("result") != "pass":
+        raise AssertionError("idle adopt verify did not preserve producer/consumer roundtrip evidence")
 
 
 def run_governance_closeout_contract() -> None:

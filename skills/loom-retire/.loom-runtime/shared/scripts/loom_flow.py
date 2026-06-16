@@ -13406,6 +13406,23 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
                 "runtime_state": runtime_state,
                 "governance_surface": governance_surface,
                 "pr_template": pr_template,
+                "producer_consumer_roundtrip": {
+                    "producer": {
+                        "status": "not_applicable",
+                        "body_sections": [],
+                    },
+                    "consumer": {
+                        "result": "not_applicable",
+                        "summary": "idle repositories have no active adoption PR body to validate.",
+                        "missing_inputs": [],
+                    },
+                    "bypass_check": {
+                        "scenario": "Review Artifacts section omitted while repository is idle",
+                        "result": "pass",
+                        "consumer_result": "block",
+                        "missing_inputs": ["idle repository has no active adoption review artifacts"],
+                    },
+                },
                 "idle_repository": {
                     "result": "pass",
                     "current_item_id": NO_ACTIVE_ITEM_ID,
