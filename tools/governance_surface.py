@@ -26,6 +26,8 @@ PLANNED_LOCATORS = {
     "spec_path": ".loom/specs/INIT-0001/spec.md",
     "plan_path": ".loom/specs/INIT-0001/plan.md",
 }
+IDLE_ITEM_ID = "no_active_item"
+NOT_APPLICABLE = "not_applicable"
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -175,21 +177,61 @@ def first_match(directory: Path, suffix: str, root: Path) -> str:
     return ""
 
 
+def active_entry_points(root: Path) -> dict[str, str]:
+    payload = safe_read_json(root / ".loom/bootstrap/init-result.json")
+    if not isinstance(payload, dict):
+        return {}
+    fact_chain = payload.get("fact_chain")
+    if not isinstance(fact_chain, dict):
+        return {}
+    entry_points = fact_chain.get("entry_points")
+    if not isinstance(entry_points, dict):
+        return {}
+    active: dict[str, str] = {}
+    mode = fact_chain.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        active["mode"] = mode.strip()
+    for key in ("current_item_id", "work_item", "recovery_entry", "status_surface"):
+        value = entry_points.get(key)
+        if isinstance(value, str) and value.strip():
+            active[key] = value.strip()
+    return active
+
+
+def existing_locator(root: Path, relative: str | None) -> str:
+    if not isinstance(relative, str) or not relative.strip() or relative == NOT_APPLICABLE:
+        return ""
+    path = root / relative
+    return relative_locator(path, root) if path.exists() else ""
+
+
+def active_or_first(root: Path, relative: str | None, directory: Path, suffix: str, *, idle: bool) -> str:
+    if idle:
+        return ""
+    active_locator = existing_locator(root, relative)
+    if active_locator:
+        return active_locator
+    return first_match(directory, suffix, root) if directory.exists() else ""
+
+
 def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: bool) -> dict[str, dict[str, str]]:
+    active = active_entry_points(root)
+    active_item_id = active.get("current_item_id") or "INIT-0001"
+    idle = active.get("mode") == "idle" and active_item_id == IDLE_ITEM_ID
     item_dir = root / ".loom/work-items"
     recovery_dir = root / ".loom/progress"
     review_dir = root / ".loom/reviews"
-    status_path = root / ".loom/status/current.md"
-    spec_path = root / ".loom/specs/INIT-0001/spec.md"
-    plan_path = root / ".loom/specs/INIT-0001/plan.md"
+    status_locator = active.get("status_surface") or ".loom/status/current.md"
+    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
+    plan_path = root / f".loom/specs/{active_item_id}/plan.md"
 
     present_locators = {
-        "work_item": first_match(item_dir, ".md", root) if item_dir.exists() else "",
-        "recovery": first_match(recovery_dir, ".md", root) if recovery_dir.exists() else "",
-        "review": first_match(review_dir, ".json", root) if review_dir.exists() else "",
-        "status_surface": relative_locator(status_path, root) if status_path.exists() else "",
-        "spec_path": relative_locator(spec_path, root) if spec_path.exists() else "",
-        "plan_path": relative_locator(plan_path, root) if plan_path.exists() else "",
+        "work_item": active_or_first(root, active.get("work_item"), item_dir, ".md", idle=idle),
+        "recovery": active_or_first(root, active.get("recovery_entry"), recovery_dir, ".md", idle=idle),
+        "review": "" if idle else relative_locator(review_dir / f"{active_item_id}.json", root) if (review_dir / f"{active_item_id}.json").exists() else "",
+        "status_surface": existing_locator(root, status_locator),
+        "spec_path": "" if idle else relative_locator(spec_path, root) if spec_path.exists() else "",
+        "plan_path": "" if idle else relative_locator(plan_path, root) if plan_path.exists() else "",
     }
 
     summary: dict[str, dict[str, str]] = {}
@@ -205,10 +247,14 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
 
 
 def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool) -> str:
+    active = active_entry_points(root)
+    item_id = active.get("current_item_id") or "INIT-0001"
+    if active.get("mode") == "idle" and item_id == IDLE_ITEM_ID:
+        return NOT_APPLICABLE
     if bootstrap_mode:
-        return "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001"
+        return f"python3 .loom/bin/loom_flow.py flow resume --target . --item {item_id}"
     if loom_state == "active":
-        return f"{command_prefix(root, 'loom_flow.py')} flow resume --target . --item INIT-0001"
+        return f"{command_prefix(root, 'loom_flow.py')} flow resume --target . --item {item_id}"
     if loom_state == "partial":
         return "python3 tools/loom_init.py route --target <repo> --task \"请接手当前事项并恢复上下文后继续推进\""
     return "unknown"
@@ -225,15 +271,19 @@ def detect_validation_entry(loom_state: str, *, bootstrap_mode: bool) -> str:
 
 
 def detect_review_merge_surface(root: Path, loom_state: str, *, bootstrap_mode: bool) -> dict[str, str]:
+    active = active_entry_points(root)
+    item_id = active.get("current_item_id") or "INIT-0001"
     pr_template = ".github/PULL_REQUEST_TEMPLATE.md" if file_exists(root, ".github/PULL_REQUEST_TEMPLATE.md") else "unknown"
     validation_surface = ".loom/status/current.md" if file_exists(root, ".loom/status/current.md") else "unknown"
     if bootstrap_mode and validation_surface == "unknown":
         validation_surface = ".loom/status/current.md"
 
-    if bootstrap_mode:
-        merge_surface = "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001"
+    if active.get("mode") == "idle" and item_id == IDLE_ITEM_ID:
+        merge_surface = NOT_APPLICABLE
+    elif bootstrap_mode:
+        merge_surface = f"python3 .loom/bin/loom_flow.py checkpoint merge --target . --item {item_id}"
     elif loom_state == "active":
-        merge_surface = f"{command_prefix(root, 'loom_flow.py')} checkpoint merge --target . [--item <id>]"
+        merge_surface = f"{command_prefix(root, 'loom_flow.py')} checkpoint merge --target . --item {item_id}"
     else:
         merge_surface = "unknown"
     return {
@@ -305,6 +355,8 @@ def build_governance_surface(
     scenario_override: str | None = None,
 ) -> dict[str, Any]:
     loom_state = detect_loom_state(root)
+    active = active_entry_points(root)
+    execution_state = "idle" if active.get("mode") == "idle" and active.get("current_item_id") == IDLE_ITEM_ID else loom_state
     repository_mode = detect_repository_mode(root, loom_state, scenario_override=scenario_override)
     planning_mode = bootstrap_mode and repository_mode == "new" and loom_state != "active"
     carrier_summary = detect_carrier_summary(root, repository_mode=repository_mode, planning_mode=planning_mode)
@@ -333,6 +385,7 @@ def build_governance_surface(
     return {
         "repository_mode": repository_mode,
         "loom_state": loom_state,
+        "repository_execution_state": execution_state,
         "carrier_summary": carrier_summary,
         "execution_entry": execution_entry,
         "validation_entry": validation_entry,

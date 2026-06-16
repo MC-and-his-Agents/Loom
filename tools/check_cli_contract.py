@@ -3539,6 +3539,122 @@ def write_terminal_carrier_target(target: Path, item: str) -> None:
     )
 
 
+def install_bootstrapped_runtime(target: Path) -> None:
+    runtime_target = target / ".loom" / "bin"
+    manifest_target = target / ".loom" / "bootstrap" / "manifest.json"
+    if runtime_target.exists():
+        shutil.rmtree(runtime_target)
+    shutil.copytree(REPO_ROOT / ".loom" / "bin", runtime_target)
+    manifest_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".loom" / "bootstrap" / "manifest.json", manifest_target)
+
+
+def write_idle_fact_chain_target(target: Path) -> None:
+    install_bootstrapped_runtime(target)
+    (target / ".loom" / "status").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "status" / "current.md").write_text(
+        "# Current Status\n\n"
+        "## Derived Fact Chain View\n\n"
+        "- Item ID: no_active_item\n"
+        "- Goal: not_applicable\n"
+        "- Scope: not_applicable\n"
+        "- Execution Path: not_applicable\n"
+        "- Workspace Entry: not_applicable\n"
+        "- Recovery Entry: not_applicable\n"
+        "- Review Entry: not_applicable\n"
+        "- Validation Entry: not_applicable\n"
+        "- Closing Condition: not_applicable\n"
+        "- Current Checkpoint: not_applicable\n"
+        "- Current Stop: not_applicable\n"
+        "- Next Step: not_applicable\n"
+        "- Blockers: not_applicable\n"
+        "- Latest Validation Summary: not_applicable\n"
+        "- Recovery Boundary: not_applicable\n"
+        "- Current Lane: not_applicable\n\n"
+        "## Runtime Evidence\n\n"
+        "- Run Entry: not_applicable\n"
+        "- Logs Entry: not_applicable\n"
+        "- Diagnostics Entry: not_applicable\n"
+        "- Verification Entry: not_applicable\n"
+        "- Lane Entry: not_applicable\n\n"
+        "## Sources\n\n"
+        "- Static Truth: not_applicable\n"
+        "- Dynamic Truth: not_applicable\n"
+        "- Locator Truth: .loom/bootstrap/init-result.json\n"
+        "- Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "bootstrap" / "init-result.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-init-output/v1",
+                "fact_chain": {
+                    "mode": "idle",
+                    "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+                    "entry_points": {
+                        "current_item_id": "no_active_item",
+                        "work_item": "not_applicable",
+                        "recovery_entry": "not_applicable",
+                        "status_surface": ".loom/status/current.md",
+                    },
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def assert_idle_read_surface_contract(tmp: Path) -> None:
+    idle_target = tmp / "idle-read-surface"
+    idle_target.mkdir()
+    write_idle_fact_chain_target(idle_target)
+    _, fact_chain = run_json(["fact-chain", "--target", str(idle_target), "--json"], expect=0)
+    if (
+        fact_chain.get("result") != "pass"
+        or fact_chain.get("report", {}).get("repository_execution_state") != "idle"
+        or fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
+    ):
+        raise AssertionError("idle fact-chain did not pass with no_active_item")
+    _, status = run_json(["status", "--target", str(idle_target), "--json"], expect=0)
+    if (
+        status.get("result") != "pass"
+        or status.get("item", {}).get("status") != "idle"
+        or status.get("item", {}).get("id") != "no_active_item"
+        or status.get("item", {}).get("workspace_entry") != "not_applicable"
+    ):
+        raise AssertionError("idle status did not report a non-blocking idle item")
+    governance_surface = status.get("governance_surface")
+    if not isinstance(governance_surface, dict):
+        raise AssertionError("idle status did not include governance surface")
+    if "INIT-0001" in json.dumps(governance_surface, sort_keys=True):
+        raise AssertionError("idle governance surface defaulted to INIT-0001")
+
+    locator_drift_target = tmp / "active-locator-drift"
+    locator_drift_target.mkdir()
+    write_terminal_carrier_target(locator_drift_target, "WI-active")
+    init_result = locator_drift_target / ".loom" / "bootstrap" / "init-result.json"
+    payload = json.loads(init_result.read_text(encoding="utf-8"))
+    payload["fact_chain"]["entry_points"]["current_item_id"] = "WI-other"
+    init_result.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    status_code, locator_drift = run_json(["fact-chain", "--target", str(locator_drift_target), "--json"])
+    if status_code == 0 or locator_drift.get("result") != "block":
+        raise AssertionError("active locator drift did not fail closed")
+
+    stale_status_target = tmp / "active-stale-status"
+    stale_status_target.mkdir()
+    write_terminal_carrier_target(stale_status_target, "WI-active")
+    status_path = stale_status_target / ".loom" / "status" / "current.md"
+    status_path.write_text(
+        status_path.read_text(encoding="utf-8").replace("- Goal: Fixture for explicit carrier closeout sync.", "- Goal: stale status value."),
+        encoding="utf-8",
+    )
+    status_code, stale_status = run_json(["fact-chain", "--target", str(stale_status_target), "--json"])
+    if status_code == 0 or stale_status.get("result") != "block":
+        raise AssertionError("active stale status surface did not fail closed")
+
+
 def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
     target = tmp / "terminal-carrier"
     target.mkdir()
@@ -4223,6 +4339,7 @@ def run_governance_closeout_contract() -> None:
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
+        assert_idle_read_surface_contract(tmp)
 
     print("governance closeout surface checks passed")
 
