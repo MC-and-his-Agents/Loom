@@ -141,7 +141,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "repair",
         "status": "implemented",
         "json": True,
-        "summary": "Fail closed until a later Work Item enables mutating repair execution.",
+        "summary": "Apply explicit safe carrier closeout repairs; fail closed for installed-surface repair actions.",
     },
     {
         "command": "install",
@@ -1567,6 +1567,35 @@ def repair_actions(target: Path, detection: dict[str, Any], installed_errors: li
 
 
 def repair_plan_payload(target: Path) -> dict[str, Any]:
+    return repair_plan_payload_with_carrier(target, item=None, issue=None, output_relative=".loom/bootstrap/init-result.json")
+
+
+def carrier_repair_flow_payload(
+    target: Path,
+    action: str,
+    *,
+    item: str | None,
+    issue: int | None,
+    output_relative: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    flow_args = ["repair", action, "--target", str(target), "--output", output_relative]
+    if item:
+        flow_args.extend(["--item", item])
+    if issue is not None:
+        flow_args.extend(["--issue", str(issue)])
+    if dry_run:
+        flow_args.append("--dry-run")
+    return flow_payload(f"repair {action}", flow_args, fallback_to=["loom carrier closeout-sync --target <repo> --json"])
+
+
+def repair_plan_payload_with_carrier(
+    target: Path,
+    *,
+    item: str | None,
+    issue: int | None,
+    output_relative: str,
+) -> dict[str, Any]:
     detection = detect_payload(target)
     state_path, state, installed_error = load_installed_state(target)
     installed_errors = [{"path": "installed-state", "reason": installed_error["fail_closed_reason"]}] if installed_error else validate_installed_state(state)
@@ -1577,18 +1606,48 @@ def repair_plan_payload(target: Path) -> dict[str, Any]:
     registration_action = workstation_registration_action(target)
     if registration_action:
         actions.append(registration_action)
-    result = "pass" if detection["surface_count"] or actions else "block"
+    has_installed_surface_actions = bool(actions)
+    carrier_repair = carrier_repair_flow_payload(
+        target,
+        "plan",
+        item=item,
+        issue=issue,
+        output_relative=output_relative,
+    )
+    carrier_missing_inputs = carrier_repair.get("missing_inputs")
+    carrier_missing_issue_only = (
+        item is None
+        and issue is None
+        and isinstance(carrier_missing_inputs, list)
+        and carrier_missing_inputs == ["issue selector is required for safe carrier repair"]
+    )
+    carrier_actions = carrier_repair.get("actions") if isinstance(carrier_repair.get("actions"), list) else []
+    if not (has_installed_surface_actions and carrier_missing_issue_only):
+        actions.extend(action for action in carrier_actions if isinstance(action, dict))
+    carrier_blocks_plan = carrier_repair.get("result") == "block" and not (has_installed_surface_actions and carrier_missing_issue_only)
+    result = "block" if carrier_blocks_plan else "pass" if detection["surface_count"] or actions else "block"
     return output(
         "repair plan",
         result,
         schema=REPAIR_PLAN_SCHEMA,
-        summary="Repair plan generated without mutating target state." if result == "pass" else "No installed surface exists to repair.",
+        summary=(
+            "Repair plan generated without mutating target state."
+            if result == "pass"
+            else "Repair planning is blocked until installed-surface or carrier ownership is unambiguous."
+            if carrier_blocks_plan
+            else "No installed surface exists to repair."
+        ),
         target=str(target),
         mutates=False,
         detection=detection,
+        carrier_repair=carrier_repair,
         actions=actions,
-        failed_layer=None if result == "pass" else "installed-surface",
-        fail_closed_reason=None if result == "pass" else "target has no detectable Loom surface",
+        failed_layer=None if result == "pass" else "carrier-repair" if carrier_blocks_plan else "installed-surface",
+        fail_closed_reason=None
+        if result == "pass"
+        else "; ".join(str(message) for message in carrier_repair.get("missing_inputs", []))
+        if carrier_blocks_plan
+        else "target has no detectable Loom surface",
         fallback_to=None if result == "pass" else ["loom install"],
     )
 
@@ -1597,27 +1656,113 @@ def handle_repair(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom repair")
     parser.add_argument("action", choices=("plan", "apply"))
     parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
+    parser.add_argument("--issue", type=int)
+    parser.add_argument("--output", default=".loom/bootstrap/init-result.json")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     target = resolve_target(args.target)
     if not target.exists():
         return emit(block_target(f"repair {args.action}", target, "target path does not exist"))
-    plan = repair_plan_payload(target)
+    plan = repair_plan_payload_with_carrier(
+        target,
+        item=args.item,
+        issue=args.issue,
+        output_relative=args.output,
+    )
     if args.action == "plan":
         return emit(plan)
+    non_carrier_actions = [
+        action
+        for action in plan.get("actions", [])
+        if isinstance(action, dict) and action.get("kind") != "carrier_closeout_sync"
+    ]
+    planned_carrier_repair = plan.get("carrier_repair") if isinstance(plan.get("carrier_repair"), dict) else {}
+    planned_carrier_updates = planned_carrier_repair.get("versioned_carrier_updates")
+    has_planned_carrier_apply = isinstance(planned_carrier_updates, list) and bool(planned_carrier_updates)
+    if non_carrier_actions and has_planned_carrier_apply:
+        return emit(
+            output(
+                "repair apply",
+                "block",
+                schema=REPAIR_PLAN_SCHEMA,
+                summary="Safe carrier repair apply is blocked until installed-surface repair actions are resolved.",
+                target=str(target),
+                mutates=False,
+                dry_run=args.dry_run,
+                plan=plan,
+                carrier_repair=planned_carrier_repair,
+                unapplied_actions=non_carrier_actions,
+                failed_layer="installed-surface",
+                fail_closed_reason="repair apply cannot combine carrier closeout writes with installed-surface repair actions",
+                fallback_to=["loom repair plan", "loom installed-state validate --target <repo> --json", "loom doctor"],
+            )
+        )
+    carrier_apply = carrier_repair_flow_payload(
+        target,
+        "apply",
+        item=args.item,
+        issue=args.issue,
+        output_relative=args.output,
+        dry_run=args.dry_run,
+    )
+    carrier_updates = carrier_apply.get("versioned_carrier_updates")
+    has_carrier_apply = isinstance(carrier_updates, list) and bool(carrier_updates)
+    if carrier_apply.get("result") == "pass" and has_carrier_apply:
+        return emit(
+            output(
+                "repair apply",
+                "pass",
+                schema=REPAIR_PLAN_SCHEMA,
+                summary=(
+                    "Safe carrier repair applied versioned carrier updates."
+                    if carrier_apply.get("mutates")
+                    else "Safe carrier repair apply dry-run generated versioned carrier updates without mutating target state."
+                ),
+                target=str(target),
+                mutates=bool(carrier_apply.get("mutates")),
+                dry_run=bool(carrier_apply.get("dry_run")),
+                plan=plan,
+                carrier_repair=carrier_apply,
+                host_mutations=False,
+                host_actions=[],
+                versioned_carrier_updates=carrier_updates,
+                unapplied_actions=non_carrier_actions,
+                failed_layer=None,
+                fail_closed_reason=None,
+                fallback_to=None,
+            )
+        )
+    if carrier_apply.get("result") == "block":
+        return emit(
+            output(
+                "repair apply",
+                "block",
+                schema=REPAIR_PLAN_SCHEMA,
+                summary="Safe carrier repair apply is blocked until host-complete carrier ownership is unambiguous.",
+                target=str(target),
+                mutates=False,
+                dry_run=args.dry_run,
+                plan=plan,
+                carrier_repair=carrier_apply,
+                failed_layer="carrier-repair",
+                fail_closed_reason="; ".join(str(message) for message in carrier_apply.get("missing_inputs", [])),
+                fallback_to=["loom repair plan", "loom carrier closeout-sync --target <repo> --json"],
+            )
+        )
     return emit(
         output(
             "repair apply",
             "block",
             schema=REPAIR_PLAN_SCHEMA,
-            summary="Mutating repair apply is intentionally disabled until an explicit apply contract is approved.",
+            summary="Mutating installed-surface repair apply remains disabled; no safe carrier closeout repair action was available.",
             target=str(target),
             mutates=False,
             dry_run=args.dry_run,
             plan=plan,
             failed_layer="repair-apply",
-            fail_closed_reason="repair apply requires a later Work Item to approve write ownership and rollback semantics",
+            fail_closed_reason="repair apply is currently limited to safe carrier closeout sync actions",
             fallback_to=["loom repair plan", "loom doctor"],
         )
     )

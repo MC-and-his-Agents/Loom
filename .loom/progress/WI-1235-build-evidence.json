@@ -1,0 +1,95 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1235-readonly-implementation-review",
+      "task_goal": "Review the #1235 repair/sync implementation for issue ownership, host mutation boundaries, write ordering, CLI metadata, generated-runtime drift, and regression coverage gaps.",
+      "context_locators": [
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        ".loom/work-items/WI-1235.md",
+        ".loom/progress/WI-1235.md",
+        "GitHub issue #1235"
+      ],
+      "read_scope": [
+        "Read-only review of the safe carrier repair implementation and tests",
+        "Read-only review of generated skills runtime sync requirements",
+        "Read-only classification of review findings before main-executor integration"
+      ],
+      "write_ownership": [
+        "read-only/no-write"
+      ],
+      "non_goals": [
+        "No host state mutation",
+        "No GitHub issue or Project update from the repair command",
+        "No #1236 fixture inventory, #1237 docs outline, #1296 release closeout, Round 10, Round 11, or deferred-roadmap work"
+      ],
+      "validation_expectation": "Main executor integrates accepted findings into implementation, focused CLI contract fixtures, generated runtime copies, and Loom carriers before review.",
+      "output_format": "Finding summary with severity, affected locators, expected behavior, and suggested regression coverage.",
+      "integration_target": [
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "skills/*/.loom-runtime/shared/scripts/loom_flow.py",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        ".loom/progress/WI-1235.md",
+        ".loom/specs/WI-1235/evidence-map.md"
+      ],
+      "status": "integrated",
+      "summary": "Read-only findings were integrated: explicit issue ownership is required, ambiguous or mismatched issue locators fail closed, mixed carrier and installed-surface repair apply blocks before mutation, init-result write preflight runs before carrier writes, CLI repair metadata advertises carrier repair behavior, and regression fixtures cover omitted issue, ambiguous retained item, multi-issue locator, invalid output, dry-run, real apply, and mixed-action failure paths."
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1235-safe-carrier-repair-implementation",
+      "status": "integrated",
+      "summary": "Main executor integrated safe host-complete carrier repair planning and apply behavior across the shared runtime, root CLI wrapper, generated skills runtime copies, focused CLI contract fixtures, and WI-1235 Loom carriers while keeping host mutation out of the repair command.",
+      "locators": [
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "skills/loom-adopt/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-build/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-handoff/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-init/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-pre-review/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-resume/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-retire/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py",
+        "skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        ".loom/work-items/WI-1235.md",
+        ".loom/progress/WI-1235.md",
+        ".loom/progress/WI-1235-build-evidence.json",
+        ".loom/status/current.md",
+        ".loom/bootstrap/init-result.json",
+        ".loom/shadow/closeout-loom.json",
+        ".loom/shadow/merge-ready-loom.json",
+        ".loom/specs/WI-1235/suite-index.md",
+        ".loom/specs/WI-1235/spec.md",
+        ".loom/specs/WI-1235/plan.md",
+        ".loom/specs/WI-1235/research.md",
+        ".loom/specs/WI-1235/contracts.md",
+        ".loom/specs/WI-1235/readiness-checklist.md",
+        ".loom/specs/WI-1235/evidence-map.md",
+        ".loom/specs/WI-1235/consistency-analysis.md",
+        ".loom/specs/WI-1235/execution-breakdown.md",
+        ".loom/specs/WI-1235/task-carrier.md"
+      ]
+    },
+    {
+      "id": "WI-1235-local-validation",
+      "status": "integrated",
+      "summary": "Local verification evidence was integrated into WI-1235 progress and evidence-map carriers: py_compile passed, governance-closeout CLI contract passed, aggregate CLI contract passed, suite validate passed, suite evidence validate passed, suite carrier validate passed, fact-chain passed, and host mutation remains pending only for PR/check/merge/issue closeout control-plane actions.",
+      "locators": [
+        ".loom/progress/WI-1235.md",
+        ".loom/specs/WI-1235/evidence-map.md",
+        ".loom/specs/WI-1235/task-carrier.md"
+      ]
+    }
+  ]
+}
