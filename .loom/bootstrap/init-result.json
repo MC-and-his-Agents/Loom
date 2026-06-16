@@ -71,12 +71,12 @@
     }
   ],
   "fact_chain": {
-    "mode": "idle",
+    "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "no_active_item",
-      "work_item": "not_applicable",
-      "recovery_entry": "not_applicable",
+      "current_item_id": "WI-1237",
+      "work_item": ".loom/work-items/WI-1237.md",
+      "recovery_entry": ".loom/progress/WI-1237.md",
       "status_surface": ".loom/status/current.md"
     }
   },
