@@ -106,7 +106,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "installation",
         "status": "implemented",
         "json": True,
-        "summary": "Validate installed-state schema, layers, graph, and fail-closed metadata.",
+        "summary": "Validate installed-state schema, layers, graph, runtime-provider declarations, and fail-closed metadata.",
     },
     {
         "command": "installed-state export",
@@ -127,14 +127,14 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "diagnostics",
         "status": "implemented",
         "json": True,
-        "summary": "Diagnose detected surfaces and installed-state readiness.",
+        "summary": "Diagnose installed-state readiness and runtime provider mode: global-cli without .loom/bin, or repo-local-wrapper with declared .loom/bin carriers.",
     },
     {
         "command": "repair plan",
         "domain": "repair",
         "status": "implemented",
         "json": True,
-        "summary": "Emit a non-mutating repair plan for detected legacy or drifted surfaces.",
+        "summary": "Emit a non-mutating repair plan for legacy, drifted, or runtime-provider carrier surfaces.",
     },
     {
         "command": "repair apply",
@@ -148,12 +148,24 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "delivery",
         "status": "implemented",
         "json": True,
-        "summary": "Install explicit repository adoption metadata, embedded payload, or compatibility skills surfaces.",
+        "summary": "Install explicit repository adoption metadata, embedded payload, compatibility skills surfaces, or declared runtime-provider mode.",
     },
-    {"command": "upgrade-plan", "domain": "delivery", "status": "implemented", "json": True},
+    {
+        "command": "upgrade-plan",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan non-mutating upgrades across installed-state, legacy surfaces, and runtime-provider carriers.",
+    },
     {"command": "upgrade", "domain": "delivery", "status": "implemented", "json": True},
     {"command": "rollback", "domain": "delivery", "status": "implemented", "json": True},
-    {"command": "verify", "domain": "delivery", "status": "implemented", "json": True},
+    {
+        "command": "verify",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Verify the same readiness boundary as doctor, including global-cli versus repo-local-wrapper runtime provider mode.",
+    },
     {"command": "init", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "adopt", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "route", "domain": "scenario", "status": "implemented", "json": True},
@@ -695,6 +707,10 @@ def print_usage(stream) -> None:
         "  version [--json]\n"
         "  help [--json]\n"
         "  installed-state show|validate|export --target <repo> [--json]\n\n"
+        "install, provider, and repair commands:\n"
+        "  install, doctor, verify, upgrade-plan, repair plan\n"
+        "  global-cli repos use the root loom provider and do not expect .loom/bin\n"
+        "  repo-local-wrapper repos keep declared .loom/bin carriers as valid wrappers\n\n"
         "scenario and gate commands:\n"
         "  init, adopt, route, status, fact-chain, profile, checkpoint, gate\n"
         "  resume, spec-review, review, merge-ready, check\n"
