@@ -15,8 +15,10 @@ The implementation owns only:
 - `.loom/work-items/WI-1507.md`
 - `.loom/progress/WI-1507.md`
 - `.loom/specs/WI-1507/**`
+- `.loom/runtime/build/WI-1507.json`
 - `.loom/status/current.md`
 - `.loom/bootstrap/init-result.json`
+- `.loom/shadow/merge-ready-loom.json` and `.loom/shadow/closeout-loom.json` only as official shadow refreshes for `.loom/status/current.md`
 
 ## Required Boundaries
 
