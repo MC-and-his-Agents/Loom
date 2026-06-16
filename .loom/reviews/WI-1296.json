@@ -2,56 +2,39 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-1296",
   "decision": "allow",
-  "kind": "code_review",
-  "summary": "Implementation review allows WI-1296 at merge-checkpoint head e063f0915467c07f8132f81b8882f6e91931d768: version surfaces are synchronized to v0.14.1 / npm 0.14.1; release/tag/npm preflight shows v0.14.1 is unoccupied before merge; suite evidence and task carrier validate after the EV-003 locator repair; fact-chain and shadow parity pass at checkpoint merge; spec-review gate passes; PR metadata fixture with release_required passes; and merge checkpoint now requires only the current implementation review artifact. No runtime behavior, release workflow semantics, installer legacy release line, schema/parser/failure vocabulary, Round 10/11/deferred, or unrelated files are changed. Post-merge release evidence remains mandatory before closing #1296/#1228/Round 9.",
-  "reviewer": "codex-round9-implementation-review",
-  "authored_at": "2026-06-16T16:47:42Z",
-  "reviewed_head": "e063f0915467c07f8132f81b8882f6e91931d768",
-  "reviewed_validation_summary": "2026-06-16T16:45Z local merge-readiness carrier sync passed before push: v0.14.1 remote tag absent; `gh release view v0.14.1` release not found; npm `@mc-and-his-agents/loom@0.14.1` E404; `git diff --check` pass; fact-chain pass; shadow-parity pass; version surface pass; release surface pass; npm package check pass for version 0.14.1; skills surface pass; `loom.py skills release-check --json` pass; suite inspect/validate/evidence validate/carrier validate pass for WI-1296 after task-carrier locator repair; `tools/check_cli_contract.py` pass in 397.50s; `flow spec-review` pass; `flow review` pass; PR metadata preflight pass for local body/payload fixture; PR gate consumed implementation review with carrier-only review artifact drift and then required the merge checkpoint carrier to be advanced from build to merge, which this update performs.",
+  "kind": "general_review",
+  "summary": "Terminal closeout review allows WI-1296 at carrier closeout head 4a068056215639f56037a11e209536293f1768a2: PR #1520 merged at head 0b5851e343d1b04a94acf7a477f90a57b9ef07f2 with merge commit 276d79aab74e294bcffb450676934b03ba87da7e; issue #1296 is CLOSED/COMPLETED with Project status Done; WI-1296 progress, task-carrier, and evidence-map consume post-merge release evidence; init-result/status now read idle/no_active_item; closeout and merge-ready shadows match the idle status hash; release evidence is retained through main-push release workflow run 27634457472, tag v0.14.1, GitHub Release v0.14.1, npm @mc-and-his-agents/loom@0.14.1, and installed/global CLI smoke. This review covers carrier-only closeout sync and does not change release workflow semantics, runtime behavior, schema, parser, failure vocabulary, installer legacy release line, Round 10/11, deferred scope, or unrelated files.",
+  "reviewer": "codex-round9-closeout-review",
+  "authored_at": "2026-06-16T17:22:00Z",
+  "reviewed_head": "4a068056215639f56037a11e209536293f1768a2",
+  "reviewed_validation_summary": "2026-06-16T17:22Z terminal closeout freeze passed before refreshing PR #1521 to the final head: PR #1520 read back MERGED with merge commit 276d79aab74e294bcffb450676934b03ba87da7e; origin/main read back at the merge commit; issue #1296 read back CLOSED/COMPLETED with Project status Done; `loom-cli-release` main-push run 27634457472 completed success; tag v0.14.1 peels to 276d79aab74e294bcffb450676934b03ba87da7e; GitHub Release v0.14.1 was published at 2026-06-16T17:05:07Z; npm @mc-and-his-agents/loom@0.14.1 read back with tarball and integrity; installed/global CLI smoke for version 0.14.1 passed; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier closeout-sync --target . --item WI-1296 --dry-run --terminal-state closed_out --issue 1296 --pr 1520 --merge-commit 276d79aab74e294bcffb450676934b03ba87da7e --target-branch main --closed-at 2026-06-16T17:01:58Z --evidence-locator 'github:pr/1520;git:276d79aab74e294bcffb450676934b03ba87da7e;github-actions:27634457472;git-tag:v0.14.1;github-release:v0.14.1;npm:@mc-and-his-agents/loom@0.14.1;installed-global-cli-smoke'` passed before idle and `--apply` wrote terminal metadata; after idle sync, `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --json` passed with idle/no_active_item; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target .` passed with merge-ready pass and closeout done; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1296 --json` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1296 --json` passed with task-carrier rows normalized to done; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py` passed. A post-idle rerun of carrier closeout-sync dry-run was classified as not applicable because the command requires an active Work Item and the already-applied terminal metadata is present.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
   "follow_ups": [],
   "consumed_inputs": {
-    "work_item": ".loom/work-items/WI-1296.md",
+    "implementation_pr": "https://github.com/MC-and-his-Agents/Loom/pull/1520",
+    "implementation_head": "0b5851e343d1b04a94acf7a477f90a57b9ef07f2",
+    "implementation_merge_commit": "276d79aab74e294bcffb450676934b03ba87da7e",
+    "issue": "https://github.com/MC-and-his-Agents/Loom/issues/1296",
+    "release_workflow_run": "https://github.com/MC-and-his-Agents/Loom/actions/runs/27634457472",
+    "release_tag": "v0.14.1 -> 276d79aab74e294bcffb450676934b03ba87da7e",
+    "github_release": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.14.1",
+    "npm_package": "@mc-and-his-agents/loom@0.14.1",
+    "installed_global_cli_smoke": "pass for npm package @mc-and-his-agents/loom@0.14.1",
     "recovery_entry": ".loom/progress/WI-1296.md",
+    "task_carrier": ".loom/specs/WI-1296/task-carrier.md",
+    "evidence_map": ".loom/specs/WI-1296/evidence-map.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "budget_risk": {
-      "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
-      "enforcement": "advisory",
-      "highest_risk": "none",
-      "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
-      "adapter_evidence_locator": "",
-      "provenance": {
-        "source": "github_host"
-      }
-    },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1296-release-closeout/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1296-release-closeout --item WI-1296 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1296-release-closeout/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1296-release-closeout --item WI-1296 --json",
-    "suite_evidence_map": ".loom/specs/WI-1296/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1296/task-carrier.md"
+    "init_result": ".loom/bootstrap/init-result.json",
+    "shadow_surfaces": [
+      ".loom/shadow/closeout-loom.json",
+      ".loom/shadow/merge-ready-loom.json"
     ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "release_judgment": "release_required satisfied by PR #1520 merge and main-push release workflow run 27634457472; this closeout PR itself is carrier-only and must be no_release"
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the reviewed carrier closeout head for post-merge closeout PR consumption; implementation and release behavior were already merged through PR #1520, while this head only synchronizes repo-local terminal carriers and evidence."
   }
 }
