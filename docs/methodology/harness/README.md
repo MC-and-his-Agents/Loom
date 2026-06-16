@@ -49,6 +49,8 @@
   - 定义 execution breakdown unit 如何由 GitHub issue、Project item、checklist、`tasks.md`、external tracker 或 `not_applicable` 承接，并保护 `Work Item` truth
 - [gate-chain.md](./gate-chain.md)
   - 定义 implementation review、`merge-ready`、`controlled merge`、`closeout` 的强前置消费链
+- [gate-freeze.md](./gate-freeze.md)
+  - 定义 `loom-gate-freeze/v1` 门禁输入冻结快照合同、字段、词表、failure classifier 与 hosted admission 消费边界；本合同不实现 CLI 或 workflow
 - [tiered-gate-consumption-contract.md](./tiered-gate-consumption-contract.md)
   - 定义治理强度字段、`suite_path: not_applicable` 与 fail-closed gate 消费合同
   - Final closeout and release/no-release convergence for #1314 is indexed at [../../evidence/governance-intensity-final-closeout.md](../../evidence/governance-intensity-final-closeout.md)

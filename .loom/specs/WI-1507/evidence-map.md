@@ -1,0 +1,8 @@
+# WI-1507 Evidence Map
+
+| Evidence ID | Evidence Type | Source Locator | Consumes | Binding | Freshness | Consumer Boundary | Remediation Direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | `docs/methodology/harness/gate-freeze.md` | `.loom/specs/WI-1507/spec.md` S1 S2 S3 S4 S5 | WI-1507 / branch work/1507-gate-freeze-contract / gate freeze contract | present | review / merge-ready / #1508 implementation planning | Re-read the contract after any snapshot field, classifier, vocabulary, or release-boundary change. |
+| EV-002 | behavior_evidence | `docs/methodology/harness/cli-command-matrix.md` | `.loom/specs/WI-1507/spec.md` S5 | WI-1507 / planned command surface boundary / `loom help --json` command_count=81 and no implemented `gate freeze` command | present | review / merge-ready / PR gate | Re-run `python3 tools/loom.py help --json` and confirm planned commands are not claimed implemented before #1508. |
+| EV-003 | test_evidence | `.loom/progress/WI-1507.md` | `.loom/specs/WI-1507/plan.md#validation` | WI-1507 / 2026-06-16T18:06Z focused local validation and `.loom/runtime/build/WI-1507.json` build evidence summary | present | review / merge-ready | Re-run the validation commands after docs, carrier, command-matrix, or build evidence changes and update `.loom/progress/WI-1507.md`. |
+| EV-004 | fresh_verification_input | `.loom/progress/WI-1507.md` | EV-001 EV-002 EV-003 | WI-1507 / latest validation summary / branch work/1507-gate-freeze-contract | present | review / merge-ready / closeout | Refresh after validation, PR creation/update, hosted checks readback, merge, or closeout. |

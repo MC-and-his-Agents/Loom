@@ -204,6 +204,23 @@ loom retire
 
 No command in the #889/#892/#896 implementation batch remains reserved. Later phase issues may still reserve additional names outside #885 scope.
 
+## Planned Gate Freeze Surface
+
+#1507 freezes the `loom-gate-freeze/v1` snapshot contract in
+[gate-freeze.md](./gate-freeze.md). The planned command family is:
+
+```text
+loom gate freeze check
+loom gate freeze write
+```
+
+These names are contract targets only until #1508 adds them to
+`loom help --json` and the CLI contract checks. Current consumers must not
+suggest either command as an executable repair command unless the current
+command matrix proves the name exists. If a freeze snapshot needs to suggest an
+unimplemented command, it must emit `unsupported_command_surface` and provide an
+existing supported alternative path.
+
 ## Planned Suite Commands
 
 #1052 planned the full spec suite CLI command surface. #1109-#1111 implement the first read-only command and add it to the mechanical help matrix and CLI contract checks:
