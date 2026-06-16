@@ -140,6 +140,7 @@ PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
 PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
 PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
+GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
 GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID = "loom-governance-intensity"
 GOVERNANCE_INTENSITY_VALUES = {"light", "standard", "reinforced"}
 GOVERNANCE_CHANGE_CLASS_VALUES = {
@@ -676,6 +677,31 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
     pr_metadata.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
     pr_metadata.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
+
+    gate_freeze = subparsers.add_parser("gate-freeze", help="Generate or validate hosted gate input freeze snapshots")
+    gate_freeze.add_argument("operation", choices=("check", "write"))
+    gate_freeze.add_argument("--target", required=True, help="Target repository root")
+    gate_freeze.add_argument("--item", help="Expected Loom Work Item id")
+    gate_freeze.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    gate_freeze.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    gate_freeze.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    gate_freeze.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    gate_freeze.add_argument("--head-sha", help="Expected PR head SHA")
+    gate_freeze.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
+    gate_freeze.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    gate_freeze.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
+    gate_freeze.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
+    gate_freeze.add_argument(
+        "--surface",
+        choices=("pre_review", "review", "merge_ready"),
+        default="merge_ready",
+        help="Gate surface whose PR metadata contract is consumed by the snapshot",
+    )
+    gate_freeze.add_argument("--write-path", help="Repo-relative snapshot output path; defaults to .loom/runtime/gate-freeze/<item>.json")
 
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
     controlled_merge.add_argument("operation", choices=("check", "merge"))
@@ -15455,6 +15481,9 @@ def pr_metadata_preflight_payload(
     pr_payload: dict[str, Any] | None = None,
     effective_pr: int | None = None,
     governance_surface: dict[str, Any] | None = None,
+    expected_item: str | None = None,
+    expected_head_sha: str | None = None,
+    expected_branch: str | None = None,
 ) -> dict[str, Any]:
     governance_surface = governance_surface or build_governance_surface(target_root)
     fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
@@ -15511,9 +15540,9 @@ def pr_metadata_preflight_payload(
             field=field,
             body=body if isinstance(body, str) else None,
             surface=surface,
-            expected_item=body_item,
-            expected_head_sha=pr_head if isinstance(pr_head, str) and pr_head else body_head,
-            expected_branch=pr_branch if isinstance(pr_branch, str) and pr_branch else body_branch,
+            expected_item=expected_item or body_item,
+            expected_head_sha=expected_head_sha or (pr_head if isinstance(pr_head, str) and pr_head else body_head),
+            expected_branch=expected_branch or (pr_branch if isinstance(pr_branch, str) and pr_branch else body_branch),
         )
         for field in applicable_contracts
     ]
@@ -15570,6 +15599,380 @@ def pr_metadata_preflight_payload(
         "body_artifact": body_artifact_result,
         "inferences": inferences,
     }
+
+
+def gate_freeze_file_binding(target_root: Path, relative: str, *, label: str) -> dict[str, Any]:
+    path, errors = resolve_repo_relative_path(target_root, relative, label=label)
+    binding: dict[str, Any] = {
+        "label": label,
+        "locator": relative,
+        "result": "block",
+        "sha256": None,
+        "size_bytes": None,
+        "missing_inputs": [],
+    }
+    if errors:
+        binding["missing_inputs"] = errors
+        return binding
+    assert path is not None
+    if not path.exists() or not path.is_file():
+        binding["missing_inputs"] = [f"{label} points to a missing file: {relative}"]
+        return binding
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        binding["missing_inputs"] = [f"failed to read {relative}: {exc.strerror or exc}"]
+        return binding
+    binding["result"] = "pass"
+    binding["sha256"] = hashlib.sha256(data).hexdigest()
+    binding["size_bytes"] = len(data)
+    return binding
+
+
+def gate_freeze_command_surface(context: dict[str, Any]) -> dict[str, Any]:
+    required = {"gate freeze check", "gate freeze write"}
+    errors: list[str] = []
+    for loom_cli in suite_validate_command_candidates(context):
+        completed = run_process(
+            [sys.executable, str(loom_cli), "help", "--json"],
+            cwd=loom_cli.parents[1],
+            timeout_seconds=30.0,
+        )
+        raw_output = completed.stdout.strip()
+        try:
+            payload = json.loads(raw_output) if raw_output else {}
+        except json.JSONDecodeError as exc:
+            errors.append(f"{loom_cli}: help emitted non-JSON output: {exc.msg}")
+            continue
+        commands = {
+            str(entry.get("command"))
+            for entry in payload.get("commands", [])
+            if isinstance(entry, dict) and entry.get("status") == "implemented"
+        }
+        missing = sorted(required - commands)
+        if not missing:
+            return {
+                "result": "pass",
+                "summary": "gate freeze commands are present in the implemented command matrix.",
+                "source_locator": str(loom_cli),
+                "required_commands": sorted(required),
+                "missing_inputs": [],
+            }
+        errors.append(f"{loom_cli}: missing implemented commands: {', '.join(missing)}")
+    return {
+        "result": "block",
+        "summary": "gate freeze commands are missing from the implemented command matrix.",
+        "source_locator": "tools/loom.py",
+        "required_commands": sorted(required),
+        "missing_inputs": errors or ["loom help --json command matrix unavailable"],
+    }
+
+
+def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None) -> dict[str, Any]:
+    review_entry = context.get("review_entry")
+    review_relative = str(review_entry) if isinstance(review_entry, str) and review_entry else None
+    review_record, review_path, review_errors = load_review_record(
+        context["target_root"],
+        context["item_id"],
+        review_file=review_relative,
+    )
+    binding: dict[str, Any] = {
+        "result": "block",
+        "locator": review_path,
+        "review_record": review_record,
+        "head_binding": None,
+        "missing_inputs": [],
+    }
+    if review_errors:
+        binding["missing_inputs"] = review_errors
+        return binding
+    if review_record is None:
+        binding["missing_inputs"] = [f"review artifact missing: {review_path}"]
+        return binding
+    head_binding, head_errors = review_head_binding_for_head(
+        context["target_root"],
+        reviewed_head=review_record.get("reviewed_head") if isinstance(review_record.get("reviewed_head"), str) else None,
+        target_head=head_sha or git_head_sha(context["target_root"]),
+        allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+    )
+    binding["head_binding"] = head_binding
+    binding["missing_inputs"] = head_errors
+    if review_record.get("decision") != "allow":
+        binding["missing_inputs"].append("review artifact decision is not allow")
+    binding["result"] = "pass" if not binding["missing_inputs"] else "block"
+    return binding
+
+
+def gate_freeze_shadow_binding(target_root: Path, governance_surface: dict[str, Any]) -> dict[str, Any]:
+    repo_interop = governance_surface.get("repo_interop")
+    reports = [
+        shadow_parity_report(repo_interop, target_root=target_root, surface=surface)
+        for surface in SHADOW_PARITY_SURFACES
+    ]
+    missing_inputs: list[str] = []
+    for report in reports:
+        if report.get("result") == "match":
+            continue
+        surface = str(report.get("surface") or "unknown")
+        missing_inputs.append(f"shadow parity {surface}: {report.get('summary')}")
+        for message in report.get("missing_inputs", []):
+            missing_inputs.append(f"shadow parity {surface}: {message}")
+    return {
+        "result": "pass" if not missing_inputs else "block",
+        "summary": "shadow parity matches across all freeze surfaces." if not missing_inputs else "shadow parity has missing or mismatched freeze inputs.",
+        "reports": reports,
+        "missing_inputs": dedupe_strings(missing_inputs),
+    }
+
+
+def gate_freeze_release_binding(pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+    fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+    release_judgment = fields.get("release_judgment")
+    if release_judgment in GOVERNANCE_RELEASE_JUDGMENT_VALUES:
+        return {
+            "result": "pass" if release_judgment != "deferred_release_judgment_blocking" else "block",
+            "release_judgment": release_judgment,
+            "source": "pr_metadata.governance_intensity_carrier.fields.release_judgment",
+            "missing_inputs": [] if release_judgment != "deferred_release_judgment_blocking" else ["release judgment is deferred and blocking"],
+        }
+    return {
+        "result": "block",
+        "release_judgment": None,
+        "source": "pr_metadata.governance_intensity_carrier.fields.release_judgment",
+        "missing_inputs": ["release judgment metadata is missing"],
+    }
+
+
+def gate_freeze_blocking_inputs(input_bindings: dict[str, Any]) -> list[dict[str, Any]]:
+    blocking: list[dict[str, Any]] = []
+    for key, binding in input_bindings.items():
+        if not isinstance(binding, dict):
+            continue
+        result = binding.get("result")
+        if result in {"pass", "not_applicable", "advisory"}:
+            continue
+        messages = binding.get("missing_inputs")
+        if not isinstance(messages, list):
+            messages = []
+        blocking.append(
+            {
+                "id": f"{key}-not-ready",
+                "input": key,
+                "failure_kind": "missing_or_stale_gate_input",
+                "result": result or "block",
+                "source_locator": binding.get("locator") or binding.get("source_locator"),
+                "consumer_impact": "hosted gate admission cannot trust a frozen snapshot until this input is refreshed.",
+                "messages": [str(message) for message in messages],
+                "next_action": "refresh the source input and rerun `loom gate freeze check --target <repo> --json`.",
+            }
+        )
+    return blocking
+
+
+def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
+    target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return {
+            **runtime_state_block_payload(
+                command="gate-freeze",
+                operation=operation,
+                runtime_state=runtime_state,
+                summary="gate freeze is blocked because the Loom runtime state is inconsistent.",
+            ),
+            "schema_version": GATE_FREEZE_SCHEMA,
+            "mutates": operation == "write",
+        }
+
+    context, context_errors = load_context(target_root, args.output, args.item)
+    if context_errors:
+        missing_inputs = [str(message) for message in context_errors]
+        return {
+            "command": "gate-freeze",
+            "operation": operation,
+            "schema_version": GATE_FREEZE_SCHEMA,
+            "result": "block",
+            "summary": "gate freeze requires an active Loom Work Item fact chain.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "loom status --target <repo> --json",
+            "mutates": operation == "write",
+            "runtime_state": runtime_state,
+            "target": str(target_root),
+            "input_bindings": {
+                "fact_chain": {
+                    "result": "block",
+                    "source_locator": args.output,
+                    "missing_inputs": missing_inputs,
+                }
+            },
+            "readiness": {
+                "result": "block",
+                "blocking_inputs": [
+                    {
+                        "id": "fact-chain-not-ready",
+                        "input": "fact_chain",
+                        "failure_kind": "missing_or_stale_gate_input",
+                        "source_locator": args.output,
+                        "consumer_impact": "hosted gate admission cannot build a freeze snapshot without an active Work Item.",
+                        "messages": missing_inputs,
+                        "next_action": "resume or initialize the active Work Item before freezing gate inputs.",
+                    }
+                ],
+                "refresh_suggestions": ["loom status --target <repo> --json"],
+                "next_action": "resume or initialize the active Work Item before freezing gate inputs.",
+            },
+        }
+
+    head_sha = args.head_sha or git_head_sha(target_root)
+    branch_name = args.branch or git_branch(target_root)
+    governance_surface = build_governance_surface(target_root)
+    pr_metadata = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface=args.surface,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        pr_number=args.pr,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=args.pr_payload_file,
+        body_file=args.body_file,
+        compare_body_file=args.compare_body_file,
+        governance_surface=governance_surface,
+        expected_item=context["item_id"],
+        expected_head_sha=head_sha,
+        expected_branch=branch_name,
+    )
+    suite_validation = spec_suite_validation_payload(context)
+    suite_evidence_validation = suite_validation_command_payload(context, domain="evidence")
+    suite_carrier_validation = suite_validation_command_payload(context, domain="carrier")
+    work_item_binding = gate_freeze_file_binding(target_root, str(context["work_item_path"].relative_to(target_root)), label="work item")
+    progress_binding = gate_freeze_file_binding(target_root, str(context["recovery_path"].relative_to(target_root)), label="progress carrier")
+    status_binding = gate_freeze_file_binding(target_root, str(context["status_path"].relative_to(target_root)), label="status surface")
+
+    input_bindings: dict[str, Any] = {
+        "fact_chain": {
+            "result": "pass",
+            "source_locator": args.output,
+            "item_id": context["item_id"],
+            "workspace_entry": context["workspace_entry"],
+            "read_entry": context["read_entry"],
+            "missing_inputs": [],
+        },
+        "work_item_carrier": work_item_binding,
+        "progress_carrier": progress_binding,
+        "status_surface": status_binding,
+        "pr_metadata": pr_metadata,
+        "review_binding": gate_freeze_review_binding(context, head_sha=head_sha),
+        "shadow_parity": gate_freeze_shadow_binding(target_root, governance_surface),
+        "suite_validation": suite_validation,
+        "suite_evidence_validation": suite_evidence_validation,
+        "suite_carrier_validation": suite_carrier_validation,
+        "release_requiredness": gate_freeze_release_binding(pr_metadata),
+        "command_surface": gate_freeze_command_surface(context),
+    }
+    blocking_inputs = gate_freeze_blocking_inputs(input_bindings)
+    result = "pass" if not blocking_inputs else "block"
+    refresh_suggestions = dedupe_strings(
+        [
+            "loom pr metadata-preflight --surface merge_ready --target <repo> --json",
+            "loom shadow-parity --target <repo> --surface all --blocking --json",
+            "loom suite validate --target <repo> --item <item> --json",
+            "loom review --target <repo> --json",
+        ]
+        if blocking_inputs
+        else []
+    )
+    snapshot_subject = {
+        "item_id": context["item_id"],
+        "workspace_entry": context["workspace_entry"],
+        "branch": branch_name,
+        "head_sha": head_sha,
+        "base_sha": git_merge_base(target_root, "origin/main", "HEAD"),
+        "pr": args.pr,
+        "surface": args.surface,
+        "generated_at": current_iso_timestamp(),
+        "source_commands": {
+            "check": "loom gate freeze check --target <repo> --json",
+            "write": "loom gate freeze write --target <repo> --json",
+        },
+    }
+    payload: dict[str, Any] = {
+        "command": "gate-freeze",
+        "operation": operation,
+        "schema_version": GATE_FREEZE_SCHEMA,
+        "result": result,
+        "summary": "gate freeze snapshot inputs are ready." if result == "pass" else "gate freeze snapshot has blocking input gaps.",
+        "missing_inputs": [
+            message
+            for blocking in blocking_inputs
+            for message in blocking.get("messages", [])
+            if isinstance(blocking, dict)
+        ],
+        "fallback_to": None if result == "pass" else "refresh_gate_inputs",
+        "mutates": operation == "write",
+        "runtime_state": runtime_state,
+        "target": str(target_root),
+        "snapshot_subject": snapshot_subject,
+        "input_bindings": input_bindings,
+        "readiness": {
+            "result": result,
+            "blocking_inputs": blocking_inputs,
+            "refresh_suggestions": refresh_suggestions,
+            "next_action": "hosted_admission_allowed" if result == "pass" else "refresh_gate_inputs_before_hosted_admission",
+        },
+        "failure_classifier": {
+            "schema_version": "loom-gate-freeze-failure-classifier/v1",
+            "findings": blocking_inputs,
+        },
+    }
+    fingerprint_payload = {
+        "schema_version": payload["schema_version"],
+        "snapshot_subject": snapshot_subject,
+        "input_bindings": input_bindings,
+        "readiness": payload["readiness"],
+    }
+    payload["snapshot_id"] = hashlib.sha256(
+        json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return payload
+
+
+def handle_gate_freeze(args: argparse.Namespace) -> int:
+    payload = gate_freeze_payload(args, operation=args.operation)
+    if args.operation == "write":
+        target_root = Path(args.target).expanduser().resolve()
+        item_id = (
+            payload.get("snapshot_subject", {}).get("item_id")
+            if isinstance(payload.get("snapshot_subject"), dict)
+            else None
+        )
+        item_slug = str(item_id or args.item or "unknown")
+        relative = args.write_path or f".loom/runtime/gate-freeze/{item_slug}.json"
+        path, errors = resolve_repo_relative_path(target_root, relative, label="gate freeze write path")
+        allowed_root = (target_root / ".loom" / "runtime" / "gate-freeze").resolve()
+        if path is not None:
+            resolved_path = path.resolve()
+            if resolved_path == allowed_root or not resolved_path.is_relative_to(allowed_root):
+                errors.append("gate freeze write path must be under .loom/runtime/gate-freeze/")
+        if errors or path is None:
+            payload["result"] = "block"
+            payload["summary"] = "gate freeze write path is invalid."
+            payload.setdefault("missing_inputs", [])
+            payload["missing_inputs"] = dedupe_strings([*payload["missing_inputs"], *errors])
+            payload["write_artifact"] = {
+                "result": "block",
+                "locator": relative,
+                "missing_inputs": errors,
+            }
+        else:
+            write_json_file(path, payload)
+            payload["write_artifact"] = {
+                "result": "pass",
+                "locator": relative,
+                "mutates": "repo-local-runtime-only",
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+    return emit(payload)
 
 
 PRE_REVIEW_REQUIRED_VALIDATION_TOKENS = (
@@ -16769,6 +17172,8 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
             pr_payload_file=args.pr_payload_file,
             body_file=args.body_file,
             compare_body_file=args.compare_body_file,
+            expected_head_sha=args.head_sha,
+            expected_branch=args.branch,
         )
     )
 
@@ -23511,6 +23916,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_pr_gate(args)
     if args.command == "pr-metadata":
         return handle_pr_metadata(args)
+    if args.command == "gate-freeze":
+        return handle_gate_freeze(args)
     if args.command == "controlled-merge":
         return handle_controlled_merge(args)
     if args.command == "runtime-evidence":

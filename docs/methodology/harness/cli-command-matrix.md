@@ -112,10 +112,10 @@ loom profile status|upgrade-plan|upgrade
 loom status
 loom fact-chain
 loom checkpoint admission|build|merge
-loom gate pre-review|spec-review|review|pr|merge|closeout
+loom gate pre-review|spec-review|review|pr|merge|freeze check|freeze write|closeout
 ```
 
-`status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate closeout` checks closeout state but does not sync or close host objects.
+`status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate freeze check` validates the hosted gate input snapshot without writing. `gate freeze write` writes only a repo-local runtime snapshot under `.loom/runtime/gate-freeze/`. `gate closeout` checks closeout state but does not sync or close host objects.
 
 For #1229, the contract now reserves an explicit idle repository state for these read surfaces:
 
@@ -204,20 +204,19 @@ loom retire
 
 No command in the #889/#892/#896 implementation batch remains reserved. Later phase issues may still reserve additional names outside #885 scope.
 
-## Planned Gate Freeze Surface
+## Gate Freeze Surface
 
 #1507 freezes the `loom-gate-freeze/v1` snapshot contract in
-[gate-freeze.md](./gate-freeze.md). The planned command family is:
+[gate-freeze.md](./gate-freeze.md). The implemented command family is:
 
 ```text
 loom gate freeze check
 loom gate freeze write
 ```
 
-These names are contract targets only until #1508 adds them to
-`loom help --json` and the CLI contract checks. Current consumers must not
-suggest either command as an executable repair command unless the current
-command matrix proves the name exists. If a freeze snapshot needs to suggest an
+These names are present in `loom help --json` and covered by CLI contract
+checks. Consumers must still read the current command matrix before suggesting
+either command as an executable repair command. If a freeze snapshot needs to suggest an
 unimplemented command, it must emit `unsupported_command_surface` and provide an
 existing supported alternative path.
 
