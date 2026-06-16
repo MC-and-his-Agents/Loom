@@ -3,11 +3,11 @@
   "item_id": "WI-1237",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allows WI-1237 at head bad7fd3e074626078bb2f079d1fcb6532e2af159: README now gives a concrete idle/no_active_item recovery path; harness docs separate local workspace retire, host closeout sync, and repo carrier closeout-sync ownership; CLI help summaries expose those lifecycle boundaries; release-surface docs and release-doc-contract checker coverage retain the HotCP-style stale carrier fixture story for release/no-release closeout. The changes are scoped to docs/help/checker and WI-1237 carriers; no runtime semantics, schema, parser, failure vocabulary, release workflow publish behavior, package payload, VERSION/tag/GitHub Release/npm publish, #1296, #1228, Round 10/11, or Deferred roadmap scope was changed.",
+  "summary": "Implementation review allows WI-1237 at head a4abc526e1fc253dfbe5cf11c40d935529246bf0: README now gives a concrete idle/no_active_item recovery path; harness docs separate local workspace retire, host closeout sync, and repo carrier closeout-sync ownership; CLI help summaries expose those lifecycle boundaries; release-surface docs and release-doc-contract checker coverage retain the HotCP-style stale carrier fixture story for release/no-release closeout; merge checkpoint carriers and shadow hashes are aligned. The changes are scoped to docs/help/checker and WI-1237 carriers; no runtime semantics, schema, parser, failure vocabulary, release workflow publish behavior, package payload, VERSION/tag/GitHub Release/npm publish, #1296, #1228, Round 10/11, or Deferred roadmap scope was changed.",
   "reviewer": "codex-round9-implementation-review",
-  "authored_at": "2026-06-16T15:18:13Z",
-  "reviewed_head": "bad7fd3e074626078bb2f079d1fcb6532e2af159",
-  "reviewed_validation_summary": "2026-06-16T15:11Z local validation passed: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py help --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py --surface release-doc-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; suite validate/evidence/carrier for WI-1237; fact-chain readback for WI-1237; shadow parity; full `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed all 6 surfaces in 288.09s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed.",
+  "authored_at": "2026-06-16T15:23:15Z",
+  "reviewed_head": "a4abc526e1fc253dfbe5cf11c40d935529246bf0",
+  "reviewed_validation_summary": "2026-06-16T15:23Z local validation passed: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py help --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py --surface release-doc-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; suite validate/evidence/carrier for WI-1237; fact-chain readback for WI-1237 at checkpoint merge; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target .` passed; full `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed all 6 surfaces in 288.09s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py flow build --target . --item WI-1237`, `flow pre-review`, and `flow spec-review` passed; pre-PR `flow review run` correctly reported missing PR/head/body metadata and did not start the review engine.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -50,8 +50,8 @@
       "docs/methodology/harness/full-spec-suite-cli-surface.md"
     ]
   },
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored implementation review approved the current head for docs/help/release-surface closeout consumption."
-  }
+    "semantic_review_disposition": {
+      "status": "passed",
+      "reason": "Authored implementation review approved the merge checkpoint head for docs/help/release-surface closeout consumption."
+    }
 }
