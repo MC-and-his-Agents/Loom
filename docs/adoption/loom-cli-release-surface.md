@@ -133,6 +133,15 @@ When a Work Item does not publish a release, closeout must record an explicit `n
 
 No-release evidence does not replace review, fact-chain, PR metadata preflight, hosted checks, controlled merge, target branch readback, reconciliation audit, or closeout.
 
+For idle closeout sync work, a valid no-release rationale may cite the HotCP-style stale carrier fixture only when the change is documentation, help text, checker coverage, or carrier evidence. The rationale must still retain the command evidence that proves the recovery path:
+
+- `workspace retire` remains local-only and does not write versioned carriers.
+- host closeout sync/readback proves issue, Project, PR, merge commit, and target branch truth.
+- `carrier closeout-sync` writes terminal carrier metadata without host mutation.
+- `fact-chain` reads back `idle` / `no_active_item` after carrier sync.
+
+Release readiness checks must cover the user-facing command names and the fixture story so release/no-release closeout can distinguish documentation/checker-only work from a CLI behavior shipment.
+
 ## Installer Sunset
 
 `loom-installer` is a deprecated legacy artifact. It is not the `loom` CLI, not a recommended install path, and not the primary `loom` CLI release signal.

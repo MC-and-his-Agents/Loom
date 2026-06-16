@@ -149,6 +149,14 @@ closeout truth 与 workspace retire 必须分层：
 - `carrier closeout-sync` 是唯一用于写入结构化 terminal closeout metadata 的版本化 carrier sync 入口；默认 dry-run，只有显式 `--apply` 才写 `.loom/progress/<item>.md`
 - post-merge retire 不得制造新的需要再开 PR 合入 main 的 carrier diff
 
+HotCP-style stale active carrier closeout 必须把三类 evidence 分开保留：
+
+- host evidence：PR mergedAt、merge commit、target branch contains merge commit、issue state/reason、Project status，以及 release/no-release judgment。
+- local-only retire evidence：`workspace retire` 的 `retire_scope = local_only` 与 `versioned_carrier_updates = []`。
+- carrier sync evidence：`carrier closeout-sync --dry-run` 与 `--apply` 的 `host_mutations = false`、写入的 terminal metadata、以及随后 `fact-chain` 读回 `idle` / `no_active_item`。
+
+这一路径可以消费 #1236 HotCP regression fixture 的行为证明；它不能把 workspace retire、host issue close、CI success 或 PR merge 单独当作 repo carrier closeout 完成。
+
 这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
 因此，`closeout check` 至少要能区分：
 

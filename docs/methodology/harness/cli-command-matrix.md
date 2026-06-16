@@ -126,6 +126,16 @@ For #1229, the contract now reserves an explicit idle repository state for these
 
 `workspace retire` remains local-only. Versioned terminal carrier updates use the explicit `carrier closeout-sync` command so local cleanup, host closeout sync, and repo carrier closeout sync do not share an ambiguous command name.
 
+Idle closeout recovery is intentionally split into three layers:
+
+| Layer | Command family | Writes host state | Writes versioned carriers | Primary use |
+| --- | --- | --- | --- | --- |
+| Local worksite retirement | `loom workspace retire` | no | no | Produce local-only cleanup/retire evidence while leaving `.loom/progress/**`, `.loom/status/current.md`, and `.loom/bootstrap/init-result.json` unchanged. |
+| Host closeout sync | host-owned merge/readback plus `reconciliation audit|sync` / `closeout check|sync` | yes, only through explicit host sync paths | no | Align GitHub issue, PR, Project, target branch, and merge commit truth. |
+| Repo carrier closeout sync | `loom carrier closeout-sync` | no | yes, only with `--apply` | Repair HotCP-style stale active carriers after host truth already proves completion. |
+
+The HotCP-style stale carrier regression fixture covers this sequence: `workspace retire` stays `local_only`; `repair plan/apply` or `carrier closeout-sync` exposes repo-local `carrier_closeout_sync`; the final fact-chain reads `idle` with `current_item_id = no_active_item`.
+
 ## Carrier Commands
 
 ```text

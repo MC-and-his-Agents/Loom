@@ -53,6 +53,9 @@ Loom 当前不提供以下原生命令：
 - branch / PR purity 可以被 Loom 报告和消费，但不意味着 Loom 接管其生命周期
 - `workspace` 是执行现场抽象，不等于 git worktree
 - `workspace attach` 只定位并绑定既有现场，不创建、不删除、不接管宿主对象
+- `workspace retire` 只表示 local-only 工作现场退休；它不关闭 issue、不移动 Project、不合并 PR、不写 terminal carrier
+- host closeout sync 只处理 GitHub / git 控制面事实，例如 issue、Project、PR、merge commit、target branch readback
+- `carrier closeout-sync` 只写 repo 版本化 terminal metadata；它不做 host closeout sync，也不替代 host readback
 - `run` / `stop` 只属于 execution-boundary 读面或事件语义，不是 Loom core worker lifecycle 命令
 - `remove` 不进入 Loom core；目录、git worktree 或 worker 删除继续由宿主平台拥有
 - Loom 只消费 `active issue` 与宿主对象的绑定，不在这里主定义 `active issue`
