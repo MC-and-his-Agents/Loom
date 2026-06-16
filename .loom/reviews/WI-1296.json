@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1296",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1296 at merge-checkpoint head e063f0915467c07f8132f81b8882f6e91931d768: version surfaces are synchronized to v0.14.1 / npm 0.14.1; release/tag/npm preflight shows v0.14.1 is unoccupied before merge; suite evidence and task carrier validate after the EV-003 locator repair; fact-chain and shadow parity pass at checkpoint merge; spec-review gate passes; PR metadata fixture with release_required passes; and merge checkpoint now requires only the current implementation review artifact. No runtime behavior, release workflow semantics, installer legacy release line, schema/parser/failure vocabulary, Round 10/11/deferred, or unrelated files are changed. Post-merge release evidence remains mandatory before closing #1296/#1228/Round 9.",
+  "reviewer": "codex-round9-implementation-review",
+  "authored_at": "2026-06-16T16:47:42Z",
+  "reviewed_head": "e063f0915467c07f8132f81b8882f6e91931d768",
+  "reviewed_validation_summary": "2026-06-16T16:45Z local merge-readiness carrier sync passed before push: v0.14.1 remote tag absent; `gh release view v0.14.1` release not found; npm `@mc-and-his-agents/loom@0.14.1` E404; `git diff --check` pass; fact-chain pass; shadow-parity pass; version surface pass; release surface pass; npm package check pass for version 0.14.1; skills surface pass; `loom.py skills release-check --json` pass; suite inspect/validate/evidence validate/carrier validate pass for WI-1296 after task-carrier locator repair; `tools/check_cli_contract.py` pass in 397.50s; `flow spec-review` pass; `flow review` pass; PR metadata preflight pass for local body/payload fixture; PR gate consumed implementation review with carrier-only review artifact drift and then required the merge checkpoint carrier to be advanced from build to merge, which this update performs.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1296.md",
+    "recovery_entry": ".loom/progress/WI-1296.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1296-release-closeout/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1296-release-closeout --item WI-1296 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1296-release-closeout/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1296-release-closeout --item WI-1296 --json",
+    "suite_evidence_map": ".loom/specs/WI-1296/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1296/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

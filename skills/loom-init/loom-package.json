@@ -3,7 +3,7 @@
   "package_type": "single-skill",
   "package_id": "loom-init",
   "display_name": "Loom Init",
-  "repo_version": "v0.14.0",
+  "repo_version": "v0.14.1",
   "source_repository": "https://github.com/MC-and-his-Agents/Loom",
   "source_revision": "repository-working-tree",
   "skill_package_version": "1.0.0",
