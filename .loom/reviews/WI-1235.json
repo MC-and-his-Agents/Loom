@@ -3,11 +3,11 @@
   "item_id": "WI-1235",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review passed for WI-1235 at head b3816704a4e78d52114e6751397a31e2e69e5d11: safe repair plan/apply requires explicit issue ownership, rejects ambiguous/mismatched/multi-issue carrier evidence, reads GitHub host truth without host mutation, preflights init-result before writes, limits apply writes to progress/status/init-result carriers, blocks mixed installed-surface and carrier repair actions before mutation, synchronizes generated runtime/demo fixtures, and has focused governance-closeout plus aggregate contract coverage. Review runner PR metadata discovery was blocked without PR args, but `src/skills/shared/scripts/loom_flow.py flow review --target . --item WI-1235 --pr 1504 --branch work/1235-safe-repair-sync` consumed the current PR metadata and only reported the missing implementation review artifact.",
-  "reviewer": "codex-round9-implementation-review",
-  "authored_at": "2026-06-16T07:20:20Z",
-  "reviewed_head": "b3816704a4e78d52114e6751397a31e2e69e5d11",
-  "reviewed_validation_summary": "2026-06-16T06:55Z local validation on branch `work/1235-safe-repair-sync`: `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py` passed; `python3 tools/loom.py suite validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1235 --json`, `python3 tools/loom.py fact-chain --target . --json`, and `python3 tools/loom.py build --target . --item WI-1235 --build-evidence .loom/progress/WI-1235-build-evidence.json --json` passed after adding `.loom/specs/WI-1235/implementation-contract.md` and aligning PR metadata expectations to reinforced/runtime/full; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout` passed in 74.66s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 344.63s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed; `make loom-demo-new-project-sync` refreshed the demo stable fixture after hosted `demo-bootstrap` drift, and `make loom-demo-new-project-check` must pass before the next push; no host mutation command was executed by repair fixtures.",
+  "summary": "Implementation review passed for WI-1235 idle retained gate repair at code head 9c4aabac893f4a8cc752c9030d73ae8c402e6534: the change falls back to retained Work Item context only when the repository fact-chain is explicitly idle and the caller supplies a concrete retained item; active fact-chain mismatches and unreadable retained carriers still fail closed; flow/review/pr-gate expose suite/review evidence for terminal closeout consumption; root, skills, demo runtime copies and bootstrap sha carriers are synchronized. This review is for terminal closeout PR consumption and does not claim a normal build checkpoint pass after the WI is already closed_out.",
+  "reviewer": "codex-round9-closeout-review",
+  "authored_at": "2026-06-16T09:42:46Z",
+  "reviewed_head": "9c4aabac893f4a8cc752c9030d73ae8c402e6534",
+  "reviewed_validation_summary": "2026-06-16T09:38Z local validation for PR #1506 code head 9c4aabac893f4a8cc752c9030d73ae8c402e6534 passed: py_compile for source/generated/root/demo loom_flow plus tools/check_cli_contract; generated-tree-drift check; carrier refresh --dry-run with .loom/bin/loom_flow.py sha256 01da032afcb6c1daf46706ea765ee584c29a7896802ccf5cfe47918b85b84342 current in manifest/init-result; shadow-parity all blocking; governance-closeout contract passed in 57.18s; loom_check source closeout-reconciliation passed in 21.56s; aggregate CLI contract passed in 306.79s; make loom-demo-new-project-check passed after committing generated demo runtime changes.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1235.md",
     "recovery_entry": ".loom/progress/WI-1235.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "fallback",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored implementation review approved the reviewed code head for terminal closeout PR consumption; build checkpoint remains closed_out/fallback after the WI has already been completed."
   }
 }
