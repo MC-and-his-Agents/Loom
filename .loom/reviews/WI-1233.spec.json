@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1233",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review passed for WI-1233 at head 2719b3bc5ab855cfd8bd895c67d8b4d4a4696da5: minimal formal suite and task carrier correctly constrain the carrier_closeout_required vocabulary to host-complete carrier drift under the watcher contract_lane grant, with merge-checkpoint carrier state ready for gate consumption.",
+  "reviewer": "round-9-replacement-scheduler",
+  "authored_at": "2026-06-13T07:37:14Z",
+  "reviewed_head": "2719b3bc5ab855cfd8bd895c67d8b4d4a4696da5",
+  "reviewed_validation_summary": "2026-06-13T07:40Z scheduler review/gate recovery passed on branch `work/1233-host-truth-diagnostics-recovery`: live PR #1474 is open/non-draft and machine metadata was refreshed through review-carrier head `df0d42a9cacaadfe0172b4cc859ba49c0051fe72`; `git diff --check`; suite validate/evidence/carrier validate; PR metadata preflight; scheduler-authored `.loom/reviews/WI-1233.spec.json`; scheduler-authored `.loom/reviews/WI-1233.json`; and local PR gate readback consumed review records with no missing inputs after PR body Branch / Head SHA metadata was restored.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1233.md",
+    "recovery_entry": ".loom/progress/WI-1233.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/973a/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1233/spec.md",
+    "suite_plan": ".loom/specs/WI-1233/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1233/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1233/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
