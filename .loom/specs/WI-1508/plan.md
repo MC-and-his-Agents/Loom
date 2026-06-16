@@ -32,5 +32,5 @@
 
 ## Scope Guard
 
-- Do not implement #1509-#1515 behavior in this PR.
+- Do not implement remaining follow-on behavior in this PR.
 - Do not modify `.github/workflows`, PR templates, release workflows, package metadata, VERSION, tags, GitHub Releases, npm state, or external host settings.
