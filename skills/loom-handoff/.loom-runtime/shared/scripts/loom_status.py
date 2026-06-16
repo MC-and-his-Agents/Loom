@@ -30,6 +30,7 @@ from loom_flow import (
     latest_execution_failure_payload,
     latest_execution_attempt_payload,
     latest_retry_evidence_payload,
+    load_fact_chain_report,
     load_context,
     project_drift_payload,
     report_blocking_failures,
@@ -41,6 +42,8 @@ from loom_flow import (
     spec_review_gate_payload,
     validate_goal_execution_contract,
 )
+
+IDLE_ITEM_ID = "no_active_item"
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -454,6 +457,95 @@ def full_closeout_status_payload(
     }
 
 
+def idle_status_payload(
+    root: Path,
+    *,
+    report: dict[str, object],
+    runtime_state: dict[str, object],
+    requested_item: str | None,
+) -> dict[str, object]:
+    blocking_failures = report_blocking_failures(report)
+    missing_inputs = report_blocking_messages(report)
+    result = "block" if blocking_failures else "pass"
+    if requested_item and requested_item != IDLE_ITEM_ID:
+        result = "block"
+        message = f"current item mismatch: expected `{requested_item}`, got `{IDLE_ITEM_ID}`"
+        if message not in missing_inputs:
+            missing_inputs.append(message)
+    governance_surface = build_governance_surface(root)
+    return {
+        "command": "status",
+        "result": result,
+        "summary": (
+            "repository is idle; no active Work Item is selected."
+            if result == "pass"
+            else "repository is idle, but the requested active item or idle status surface is not consumable."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": "admission" if result == "block" else None,
+        "runtime_state": runtime_state,
+        "provenance": report_provenance(report),
+        "recovery_readiness": report_recovery_readiness(report),
+        "execution_ledger": report_execution_ledger(report),
+        "blocking_failures": blocking_failures,
+        "item": {
+            "status": "idle",
+            "id": IDLE_ITEM_ID,
+            "goal": "not_applicable",
+            "scope": "not_applicable",
+            "execution_path": "not_applicable",
+            "workspace_entry": "not_applicable",
+            "recovery_entry": "not_applicable",
+            "review_entry": "not_applicable",
+            "validation_entry": "not_applicable",
+        },
+        "current_checkpoint": "not_applicable",
+        "recovery": "not_applicable",
+        "spec_review": {"result": "not_applicable", "summary": "no active Work Item is selected."},
+        "review": {"result": "not_applicable", "summary": "no active Work Item is selected."},
+        "merge_ready": {"result": "not_applicable", "summary": "no active Work Item is selected."},
+        "closeout": {
+            "result": "not_applicable",
+            "summary": "closeout is not evaluated because no active Work Item is selected.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        },
+        "governance_status": {
+            "schema_version": "loom-governance-status/v2",
+            "result": "pass" if result == "pass" else "block",
+            "current_gate": "idle",
+            "classifications": [] if result == "pass" else ["gate_failure"],
+            "missing_inputs": missing_inputs,
+            "head_binding": {"status": "not_applicable", "head_ref": None, "base_ref": None},
+            "gate_chain": [],
+            "maturity": (
+                governance_surface.get("governance_control_plane", {}).get("maturity")
+                if isinstance(governance_surface.get("governance_control_plane"), dict)
+                else None
+            ),
+        },
+        "external_orchestrator": {
+            "schema_version": "loom-governance-status/v2",
+            "view": "external_orchestrator_consumer",
+            "result": "pass" if result == "pass" else "block",
+            "current_gate": "idle",
+            "classifications": [] if result == "pass" else ["gate_failure"],
+            "missing_inputs": missing_inputs,
+            "allowed_operations": ["status_read", "gate_read"],
+            "source_policy": {
+                "status_source": "derived_from_fact_chain_idle",
+                "gate_source": "not_applicable_without_active_item",
+                "writeback": "not_applicable",
+                "fallback_to": "admission",
+            },
+            "provenance": report_provenance(report),
+            "recovery_readiness": report_recovery_readiness(report),
+        },
+        "governance_surface": governance_surface,
+        "github": {"repository": None, "issue": None, "pr": None},
+    }
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     target_root = Path(args.target).expanduser().resolve()
@@ -469,6 +561,25 @@ def main(argv: list[str]) -> int:
                 "runtime_state": runtime_state,
             }
         )
+
+    fact_report, fact_errors = load_fact_chain_report(target_root, args.output)
+    if not fact_errors:
+        fact_chain = fact_report.get("fact_chain")
+        entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+        if (
+            isinstance(fact_chain, dict)
+            and fact_chain.get("mode") == "idle"
+            and isinstance(entry_points, dict)
+            and entry_points.get("current_item_id") == IDLE_ITEM_ID
+        ):
+            return emit(
+                idle_status_payload(
+                    target_root,
+                    report=fact_report,
+                    runtime_state=runtime_state,
+                    requested_item=args.item,
+                )
+            )
 
     context, errors = load_context(target_root, args.output, args.item)
     if errors:

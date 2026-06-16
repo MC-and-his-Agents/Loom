@@ -112,6 +112,8 @@ GATE_STARTER_ALIASES = {
         "summary": "Audit closeout drift without mutating host state.",
     },
 }
+IDLE_ITEM_ID = "no_active_item"
+NOT_APPLICABLE = "not_applicable"
 LOOM_EXECUTION_BUDGET_SCHEMA = "loom-execution-budget/v1"
 LOOM_EXECUTION_BUDGET_ENFORCEMENT = "advisory"
 LOOM_EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
@@ -2925,6 +2927,9 @@ def active_entry_points(root: Path) -> dict[str, str]:
     if not isinstance(entry_points, dict):
         return {}
     active: dict[str, str] = {}
+    mode = fact_chain.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        active["mode"] = mode.strip()
     for key in ("current_item_id", "work_item", "recovery_entry", "status_surface"):
         value = entry_points.get(key)
         if isinstance(value, str) and value.strip():
@@ -2932,8 +2937,19 @@ def active_entry_points(root: Path) -> dict[str, str]:
     return active
 
 
+def repository_execution_state(root: Path, loom_state: str) -> str:
+    active = active_entry_points(root)
+    if active.get("mode") == "idle" and active.get("current_item_id") == IDLE_ITEM_ID:
+        return "idle"
+    if loom_state == "active":
+        return "active"
+    return loom_state
+
+
 def work_item_workspace_entry(root: Path) -> str:
     active = active_entry_points(root)
+    if active.get("mode") == "idle" and active.get("current_item_id") == IDLE_ITEM_ID:
+        return NOT_APPLICABLE
     locator = active.get("work_item")
     if not locator:
         return ""
@@ -2962,6 +2978,24 @@ def select_workspace_profile(workspace_entry: str, item_id: str) -> tuple[str, s
 def detect_workspace_profile(root: Path, *, host_binding: dict[str, Any]) -> dict[str, Any]:
     active = active_entry_points(root)
     item_id = active.get("current_item_id", "")
+    if active.get("mode") == "idle" and item_id == IDLE_ITEM_ID:
+        return {
+            "schema_version": "loom-workspace-profile/v1",
+            "selected": NOT_APPLICABLE,
+            "selection_reason": "repository is idle and has no active Work Item workspace",
+            "profiles": WORKSPACE_PROFILE_CONTRACTS,
+            "workspace_entry": NOT_APPLICABLE,
+            "workspace_path": NOT_APPLICABLE,
+            "workspace_exists": False,
+            "host_worktree": {
+                "ownership": "host",
+                "status": NOT_APPLICABLE,
+                "locator": NOT_APPLICABLE,
+            },
+            "result": "pass",
+            "missing_inputs": [],
+            "recommended_action": "create or select a Work Item before running workspace-bound gates",
+        }
     workspace_entry = work_item_workspace_entry(root)
     selected, reason = select_workspace_profile(workspace_entry, item_id)
     locator, workspace_path = resolve_locator(root, workspace_entry)
@@ -3001,11 +3035,16 @@ def detect_workspace_profile(root: Path, *, host_binding: dict[str, Any]) -> dic
 def detect_gate_starter(root: Path) -> dict[str, Any]:
     active = active_entry_points(root)
     item_id = active.get("current_item_id", "INIT-0001")
+    idle = active.get("mode") == "idle" and item_id == IDLE_ITEM_ID
     aliases: dict[str, dict[str, Any]] = {}
     missing_entrypoints: list[str] = []
     for alias, contract in GATE_STARTER_ALIASES.items():
         row = dict(contract)
         command = str(row["command"]).replace("<current-item>", item_id)
+        if idle and alias == "status":
+            command = "python3 .loom/bin/loom_status.py --target ."
+        elif idle and "<current-item>" in str(contract["command"]):
+            command = NOT_APPLICABLE
         row["command"] = command
         entrypoint = root / str(row["entrypoint"])
         row["runtime_present"] = entrypoint.exists()
@@ -3096,6 +3135,7 @@ def approved_spec_review_locator(root: Path, active_item_id: str) -> str:
 def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: bool) -> dict[str, dict[str, str]]:
     active = active_entry_points(root)
     active_item_id = active.get("current_item_id") or "INIT-0001"
+    idle = active.get("mode") == "idle" and active_item_id == IDLE_ITEM_ID
     item_dir = root / ".loom/work-items"
     recovery_dir = root / ".loom/progress"
     review_dir = root / ".loom/reviews"
@@ -3104,12 +3144,12 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
     plan_path = root / f".loom/specs/{active_item_id}/plan.md"
 
     present_locators = {
-        "work_item": active_or_first(root, active.get("work_item"), item_dir, ".md"),
-        "recovery": active_or_first(root, active.get("recovery_entry"), recovery_dir, ".md"),
-        "review": current_review_locator(root, review_dir, active_item_id),
+        "work_item": "" if idle else active_or_first(root, active.get("work_item"), item_dir, ".md"),
+        "recovery": "" if idle else active_or_first(root, active.get("recovery_entry"), recovery_dir, ".md"),
+        "review": "" if idle else current_review_locator(root, review_dir, active_item_id),
         "status_surface": existing_locator(root, status_locator),
-        "spec_path": relative_locator(spec_path, root) if spec_path.exists() else "",
-        "plan_path": relative_locator(plan_path, root) if plan_path.exists() else "",
+        "spec_path": "" if idle else relative_locator(spec_path, root) if spec_path.exists() else "",
+        "plan_path": "" if idle else relative_locator(plan_path, root) if plan_path.exists() else "",
     }
 
     summary: dict[str, dict[str, str]] = {}
@@ -3125,6 +3165,11 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
 
 
 def detect_spec_gate_inputs(root: Path, active_item_id: str) -> dict[str, dict[str, str]]:
+    if active_item_id == IDLE_ITEM_ID:
+        return {
+            "suite_path_decision": carrier_entry(NOT_APPLICABLE, NOT_APPLICABLE, "idle fact chain"),
+            "spec_review": carrier_entry(NOT_APPLICABLE, NOT_APPLICABLE, "idle fact chain"),
+        }
     spec_path = root / f".loom/specs/{active_item_id}/spec.md"
     suite_path = suite_path_decision(spec_path)
     suite_locator = relative_locator(spec_path, root) if suite_path == "not_applicable" else ""
@@ -3144,6 +3189,8 @@ def detect_spec_gate_inputs(root: Path, active_item_id: str) -> dict[str, dict[s
 
 
 def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool, active_item_id: str = "INIT-0001") -> str:
+    if active_item_id == IDLE_ITEM_ID:
+        return NOT_APPLICABLE
     if bootstrap_mode:
         return f"python3 .loom/bin/loom_flow.py flow resume --target . --item {active_item_id}"
     if loom_state == "active":
@@ -3169,7 +3216,9 @@ def detect_review_merge_surface(root: Path, loom_state: str, *, bootstrap_mode: 
     if bootstrap_mode and validation_surface == "unknown":
         validation_surface = ".loom/status/current.md"
 
-    if bootstrap_mode:
+    if active_item_id == IDLE_ITEM_ID:
+        merge_surface = NOT_APPLICABLE
+    elif bootstrap_mode:
         merge_surface = f"python3 .loom/bin/loom_flow.py checkpoint merge --target . --item {active_item_id}"
     elif loom_state == "active":
         merge_surface = f"{command_prefix(root, 'loom_flow.py')} checkpoint merge --target . --item {active_item_id}"
@@ -3632,6 +3681,7 @@ def build_governance_surface(
     scenario_override: str | None = None,
 ) -> dict[str, Any]:
     loom_state = detect_loom_state(root)
+    execution_state = repository_execution_state(root, loom_state)
     repository_mode = detect_repository_mode(root, loom_state, scenario_override=scenario_override)
     planning_mode = bootstrap_mode and repository_mode == "new" and loom_state != "active"
     active_item_id = active_entry_points(root).get("current_item_id", "INIT-0001")
@@ -3677,7 +3727,7 @@ def build_governance_surface(
             missing_inputs.extend(repo_interface_missing)
         if repo_interop["availability"] == "incomplete":
             missing_inputs.extend(repo_interop_missing)
-        if host_binding["result"] == "block":
+        if host_binding["result"] == "block" and execution_state != "idle":
             missing_inputs.extend(f"host binding: {message}" for message in host_binding["missing_inputs"])
         control_plane_ready = github_control_plane["default_branch"] != "unknown"
         carrier_ready = bool(present_carriers)
@@ -3690,6 +3740,7 @@ def build_governance_surface(
     return {
         "repository_mode": repository_mode,
         "loom_state": loom_state,
+        "repository_execution_state": execution_state,
         "carrier_summary": carrier_summary,
         "execution_entry": execution_entry,
         "validation_entry": validation_entry,

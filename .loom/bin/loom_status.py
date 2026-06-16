@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 from governance_surface import (
     build_governance_surface,
@@ -18,13 +21,18 @@ from loom_flow import (
     detect_github_repo,
     emit,
     fact_chain_error_contract,
+    flow_governance_lint_status,
+    goal_execution_contract,
     github_issue_payload,
     github_pr_payload,
+    governance_lint_missing_inputs,
     implementation_review_status_payload,
     latest_execution_failure_payload,
     latest_execution_attempt_payload,
     latest_retry_evidence_payload,
+    load_fact_chain_report,
     load_context,
+    project_drift_payload,
     report_blocking_failures,
     report_blocking_messages,
     report_provenance,
@@ -32,7 +40,10 @@ from loom_flow import (
     report_recovery_readiness,
     runtime_state_payload,
     spec_review_gate_payload,
+    validate_goal_execution_contract,
 )
+
+IDLE_ITEM_ID = "no_active_item"
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -122,6 +133,7 @@ def gate_status(name: str, payload: dict[str, object] | None, *, required: bool 
 def governance_control_status(
     *,
     governance_surface: dict[str, object],
+    governance_lint: dict[str, object],
     spec_review: dict[str, object],
     review: dict[str, object],
     merge_ready: dict[str, object],
@@ -187,6 +199,15 @@ def governance_control_status(
         for message in gate.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
+    if governance_lint.get("result") == "block":
+        if "governance_lint" not in classifications:
+            classifications.append("governance_lint")
+        for message in governance_lint_missing_inputs(governance_lint):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+        if not blocking:
+            current_gate = "governance_lint"
+    governance_lint_blocking = governance_lint.get("result") == "block"
     pr_payload = github_status.get("pr") if isinstance(github_status, dict) else None
     head_binding = {
         "status": "present" if isinstance(pr_payload, dict) and pr_payload.get("headRefName") else "host-managed",
@@ -195,7 +216,7 @@ def governance_control_status(
     }
     return {
         "schema_version": "loom-governance-status/v2",
-        "result": "pass" if not blocking else "block",
+        "result": "pass" if not blocking and not governance_lint_blocking else "block",
         "current_gate": current_gate,
         "classifications": list(dict.fromkeys(classifications)),
         "missing_inputs": missing_inputs,
@@ -436,6 +457,95 @@ def full_closeout_status_payload(
     }
 
 
+def idle_status_payload(
+    root: Path,
+    *,
+    report: dict[str, object],
+    runtime_state: dict[str, object],
+    requested_item: str | None,
+) -> dict[str, object]:
+    blocking_failures = report_blocking_failures(report)
+    missing_inputs = report_blocking_messages(report)
+    result = "block" if blocking_failures else "pass"
+    if requested_item and requested_item != IDLE_ITEM_ID:
+        result = "block"
+        message = f"current item mismatch: expected `{requested_item}`, got `{IDLE_ITEM_ID}`"
+        if message not in missing_inputs:
+            missing_inputs.append(message)
+    governance_surface = build_governance_surface(root)
+    return {
+        "command": "status",
+        "result": result,
+        "summary": (
+            "repository is idle; no active Work Item is selected."
+            if result == "pass"
+            else "repository is idle, but the requested active item or idle status surface is not consumable."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": "admission" if result == "block" else None,
+        "runtime_state": runtime_state,
+        "provenance": report_provenance(report),
+        "recovery_readiness": report_recovery_readiness(report),
+        "execution_ledger": report_execution_ledger(report),
+        "blocking_failures": blocking_failures,
+        "item": {
+            "status": "idle",
+            "id": IDLE_ITEM_ID,
+            "goal": "not_applicable",
+            "scope": "not_applicable",
+            "execution_path": "not_applicable",
+            "workspace_entry": "not_applicable",
+            "recovery_entry": "not_applicable",
+            "review_entry": "not_applicable",
+            "validation_entry": "not_applicable",
+        },
+        "current_checkpoint": "not_applicable",
+        "recovery": "not_applicable",
+        "spec_review": {"result": "not_applicable", "summary": "no active Work Item is selected."},
+        "review": {"result": "not_applicable", "summary": "no active Work Item is selected."},
+        "merge_ready": {"result": "not_applicable", "summary": "no active Work Item is selected."},
+        "closeout": {
+            "result": "not_applicable",
+            "summary": "closeout is not evaluated because no active Work Item is selected.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        },
+        "governance_status": {
+            "schema_version": "loom-governance-status/v2",
+            "result": "pass" if result == "pass" else "block",
+            "current_gate": "idle",
+            "classifications": [] if result == "pass" else ["gate_failure"],
+            "missing_inputs": missing_inputs,
+            "head_binding": {"status": "not_applicable", "head_ref": None, "base_ref": None},
+            "gate_chain": [],
+            "maturity": (
+                governance_surface.get("governance_control_plane", {}).get("maturity")
+                if isinstance(governance_surface.get("governance_control_plane"), dict)
+                else None
+            ),
+        },
+        "external_orchestrator": {
+            "schema_version": "loom-governance-status/v2",
+            "view": "external_orchestrator_consumer",
+            "result": "pass" if result == "pass" else "block",
+            "current_gate": "idle",
+            "classifications": [] if result == "pass" else ["gate_failure"],
+            "missing_inputs": missing_inputs,
+            "allowed_operations": ["status_read", "gate_read"],
+            "source_policy": {
+                "status_source": "derived_from_fact_chain_idle",
+                "gate_source": "not_applicable_without_active_item",
+                "writeback": "not_applicable",
+                "fallback_to": "admission",
+            },
+            "provenance": report_provenance(report),
+            "recovery_readiness": report_recovery_readiness(report),
+        },
+        "governance_surface": governance_surface,
+        "github": {"repository": None, "issue": None, "pr": None},
+    }
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     target_root = Path(args.target).expanduser().resolve()
@@ -451,6 +561,25 @@ def main(argv: list[str]) -> int:
                 "runtime_state": runtime_state,
             }
         )
+
+    fact_report, fact_errors = load_fact_chain_report(target_root, args.output)
+    if not fact_errors:
+        fact_chain = fact_report.get("fact_chain")
+        entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+        if (
+            isinstance(fact_chain, dict)
+            and fact_chain.get("mode") == "idle"
+            and isinstance(entry_points, dict)
+            and entry_points.get("current_item_id") == IDLE_ITEM_ID
+        ):
+            return emit(
+                idle_status_payload(
+                    target_root,
+                    report=fact_report,
+                    runtime_state=runtime_state,
+                    requested_item=args.item,
+                )
+            )
 
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
@@ -517,8 +646,27 @@ def main(argv: list[str]) -> int:
         owner=args.owner,
         repo_name=args.repo_name,
     )
+    project_drift = project_drift_payload(
+        target_root=target_root,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        project_number=args.project,
+        mode="advisory",
+    )
+    goal_contract = goal_execution_contract(context)
+    goal_readiness = validate_goal_execution_contract(
+        goal_contract,
+        context,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        branch_name=args.branch,
+    )
+    governance_lint = flow_governance_lint_status(context, surface="status")
     control_status = governance_control_status(
         governance_surface=governance_surface,
+        governance_lint=governance_lint,
         spec_review=spec_review,
         review=review,
         merge_ready=merge_ready,
@@ -572,6 +720,9 @@ def main(argv: list[str]) -> int:
     for message in report_blocking_messages(context["report"]):
         if message not in missing_inputs:
             missing_inputs.append(message)
+    for message in governance_lint_missing_inputs(governance_lint):
+        if message not in missing_inputs:
+            missing_inputs.append(message)
 
     result = "pass" if not missing_inputs else "block"
     summary = (
@@ -605,6 +756,10 @@ def main(argv: list[str]) -> int:
             "policy_readiness": policy_readiness,
             "execution_budget": execution_budget,
             "execution_budget_risk": execution_budget_risk,
+            "goal_execution_contract": goal_contract,
+            "goal_readiness": goal_readiness,
+            "project_drift": project_drift,
+            "governance_lint": governance_lint,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],

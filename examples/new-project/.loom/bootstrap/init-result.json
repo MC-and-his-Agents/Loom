@@ -420,13 +420,13 @@
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/fact_chain_support.py",
-      "sha256": "026fcfe89d227412f618aba1494fc928f8177b1f2145c12f8a8a56ce42dec295"
+      "sha256": "0762e3cf0eb9a33aff62d3676e92e8ab5b7cc054871e43de1d4cea716da0faa0"
     },
     {
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "35ac2c9c2511782145d2f1fad08a0cc355b85d0613af49438be4e75292e84290"
+      "sha256": "7d66bf7afee50dc7d9b8239661833b2ab577229113a00f572a3b518dfe12628e"
     },
     {
       "path": ".loom/bin/loom_flow.py",
@@ -438,7 +438,7 @@
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "c5fcfe7994434f45d79c11e1b8e9cde3653a57aaea6d03099ae07dde71228cfc"
+      "sha256": "e67c177cfb8a73510e64536a0388103285fbc9339343025d210c83ca28c74fad"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -659,6 +659,7 @@
   "governance_surface": {
     "repository_mode": "new",
     "loom_state": "active",
+    "repository_execution_state": "active",
     "carrier_summary": {
       "work_item": {
         "status": "present",
