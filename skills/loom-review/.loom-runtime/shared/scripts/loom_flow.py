@@ -15963,7 +15963,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
     refresh_suggestions = dedupe_strings(
         [
             "loom pr metadata-preflight --surface merge_ready --target <repo> --json",
-            "gh pr edit --body-file <rendered-pr-body.md>; gh pr view --json body; loom gate freeze check --target <repo> --body-file <rendered-pr-body.md> --compare-body-file <readback-pr-body.md> --json",
+            "gh pr edit --body-file <rendered-pr-body.md>; read back the PR body into <readback-pr-body.md>; loom gate freeze check --target <repo> --body-file <rendered-pr-body.md> --compare-body-file <readback-pr-body.md> --json",
             "loom shadow-parity --target <repo> --surface all --blocking --json",
             "loom suite validate --target <repo> --item <item> --json",
             "loom review --target <repo> --json",
