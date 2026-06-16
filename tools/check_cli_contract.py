@@ -285,9 +285,33 @@ def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None 
     return completed.returncode, payload
 
 
+def retained_closeout_work_item_id() -> str | None:
+    candidates: list[tuple[str, str, str]] = []
+    for path in sorted((REPO_ROOT / ".loom" / "progress").glob("WI-*.md")):
+        text = path.read_text(encoding="utf-8")
+        item_match = re.search(r"(?im)^\s*-\s*Item ID:\s*(WI-\d+)\s*$", text)
+        checkpoint_match = re.search(r"(?im)^\s*-\s*Current Checkpoint:\s*([A-Za-z_-]+)\s*$", text)
+        if not item_match or not checkpoint_match:
+            continue
+        checkpoint = checkpoint_match.group(1).lower().replace("-", "_")
+        if checkpoint not in {"closed", "closed_out", "done"} or "## Terminal Closeout Metadata" not in text:
+            continue
+        closed_match = re.search(r"(?im)^\s*-\s*Closed At:\s*([^\n]+?)\s*$", text)
+        closed_at = closed_match.group(1).strip() if closed_match else ""
+        candidates.append((closed_at, path.name, item_match.group(1)))
+    if not candidates:
+        return None
+    return sorted(candidates)[-1][2]
+
+
 def active_work_item_id() -> str:
     payload = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
-    item_id = payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id")
+    fact_chain = payload.get("fact_chain", {}) if isinstance(payload.get("fact_chain"), dict) else {}
+    item_id = fact_chain.get("entry_points", {}).get("current_item_id") if isinstance(fact_chain.get("entry_points"), dict) else None
+    if fact_chain.get("mode") == "idle" or item_id == "no_active_item":
+        retained_item = retained_closeout_work_item_id()
+        if retained_item:
+            return retained_item
     if not isinstance(item_id, str) or not item_id:
         raise AssertionError("init-result current_item_id is missing")
     return item_id
