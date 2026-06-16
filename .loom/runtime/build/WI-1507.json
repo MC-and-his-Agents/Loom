@@ -1,0 +1,147 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "main-agent",
+      "task_goal": "Define the WI-1507 loom-gate-freeze/v1 contract and scoped Loom carriers.",
+      "context_locators": [
+        "#1507",
+        "#1505",
+        "docs/methodology/harness/gate-chain.md",
+        "docs/methodology/harness/pr-merge-gate.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        "docs/methodology/harness/governance-failure-taxonomy.md",
+        "docs/methodology/templates/evidence-map.md",
+        "docs/methodology/harness/task-carrier-contract.md"
+      ],
+      "read_scope": [
+        "GitHub issue #1507 acceptance criteria",
+        "GitHub milestone/12 issue list",
+        "docs/methodology/harness/**",
+        "docs/methodology/templates/**",
+        ".loom/work-items/**",
+        ".loom/progress/**",
+        ".loom/specs/**",
+        ".loom/status/current.md",
+        ".loom/bootstrap/init-result.json"
+      ],
+      "write_ownership": [
+        "docs/methodology/harness/gate-freeze.md",
+        "docs/methodology/harness/README.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        ".loom/work-items/WI-1507.md",
+        ".loom/progress/WI-1507.md",
+        ".loom/specs/WI-1507/spec.md",
+        ".loom/specs/WI-1507/plan.md",
+        ".loom/specs/WI-1507/implementation-contract.md",
+        ".loom/specs/WI-1507/evidence-map.md",
+        ".loom/specs/WI-1507/task-carrier.md",
+        ".loom/runtime/build/WI-1507.json",
+        ".loom/status/current.md",
+        ".loom/bootstrap/init-result.json"
+      ],
+      "non_goals": [
+        "do not implement #1508 CLI",
+        "do not modify hosted workflows",
+        "do not modify PR template behavior",
+        "do not change runtime gate semantics",
+        "do not weaken review, PR gate, controlled merge, release/no-release, or closeout truth",
+        "do not implement #1509, #1510, #1511, #1512, #1513, #1514, #1515, or #1505 closeout"
+      ],
+      "validation_expectation": "Run diff check, help JSON command matrix smoke, fact-chain, suite validate, suite evidence validate, suite carrier validate, py_compile for tools/loom.py, and build flow with this evidence.",
+      "output_format": "contract document, scoped Loom carriers, validation summary, PR metadata/readback, review record, and merge/closeout readback",
+      "integration_target": ".loom/progress/WI-1507.md",
+      "status": "integrated"
+    },
+    {
+      "id": "euclid-github-state-read",
+      "task_goal": "Read milestone/7, milestone/12, #1505, and #1507-#1515 GitHub state and dependency order.",
+      "context_locators": [
+        "GitHub repo MC-and-his-Agents/Loom",
+        "milestone/7",
+        "milestone/12",
+        "#1505",
+        "#1507-#1515"
+      ],
+      "read_scope": [
+        "gh/REST readback",
+        "git branch/worktree/read-only state",
+        ".loom carrier presence for milestone/12"
+      ],
+      "write_ownership": [
+        "session-output:milestone-12-github-state-summary"
+      ],
+      "non_goals": [
+        "do not modify files",
+        "do not checkout branches",
+        "do not create or update GitHub objects"
+      ],
+      "validation_expectation": "Main executor must consume the read-only summary and independently keep official write actions in the formal worktree.",
+      "output_format": "read-only issue/PR/branch/dependency summary",
+      "integration_target": ".loom/specs/WI-1507/evidence-map.md",
+      "status": "integrated"
+    },
+    {
+      "id": "sartre-code-contract-read",
+      "task_goal": "Read existing gate, PR metadata, review binding, shadow parity, suite, and release/no-release code surfaces for the future #1508 implementation path.",
+      "context_locators": [
+        "tools/loom.py",
+        "skills/shared/scripts/loom_flow.py",
+        "src/skills/shared/scripts/loom_flow.py",
+        "docs/methodology/harness",
+        ".github/workflows",
+        "skills/loom-pre-review",
+        "skills/loom-review",
+        "skills/loom-merge-ready"
+      ],
+      "read_scope": [
+        "CLI command matrix",
+        "PR metadata preflight",
+        "PR gate",
+        "review head binding",
+        "shadow parity",
+        "suite evidence/carrier validation",
+        "release/no-release surfaces"
+      ],
+      "write_ownership": [
+        "session-output:gate-freeze-code-surface-summary"
+      ],
+      "non_goals": [
+        "do not modify files",
+        "do not run high-cost loom_check",
+        "do not implement #1508 in #1507"
+      ],
+      "validation_expectation": "Main executor must use the read-only summary to keep #1507 a contract-only change and defer CLI implementation to #1508.",
+      "output_format": "read-only code surface summary with risks and validation commands",
+      "integration_target": "docs/methodology/harness/gate-freeze.md",
+      "status": "integrated"
+    }
+  ],
+  "integration_evidence": [
+    {
+      "carrier": "contract",
+      "locator": "docs/methodology/harness/gate-freeze.md",
+      "summary": "Defines the loom-gate-freeze/v1 snapshot envelope, subject, input bindings, vocabulary versions, readiness fields, failure classifier, release boundary, and positive/negative examples."
+    },
+    {
+      "carrier": "docs",
+      "locator": "docs/methodology/harness/README.md",
+      "summary": "Indexes gate-freeze.md as the harness contract landing point without claiming an implemented CLI."
+    },
+    {
+      "carrier": "docs",
+      "locator": "docs/methodology/harness/cli-command-matrix.md",
+      "summary": "Records gate freeze as a planned command surface and requires unsupported_command_surface until #1508 adds commands to the mechanical matrix."
+    },
+    {
+      "carrier": "suite",
+      "locator": ".loom/specs/WI-1507/evidence-map.md",
+      "summary": "Evidence map binds behavior evidence, command matrix boundary proof, focused validation, and fresh verification input for WI-1507."
+    },
+    {
+      "carrier": "task_carrier",
+      "locator": ".loom/specs/WI-1507/task-carrier.md",
+      "summary": "Task carrier links WI-1507 to GitHub issue #1507 as tracking-only primary carrier."
+    }
+  ]
+}
