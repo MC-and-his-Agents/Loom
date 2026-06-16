@@ -4602,10 +4602,30 @@ def assert_active_closeout_contract(active_item: str) -> None:
         assert_closeout_blocks_missing_suite_evidence(active_item)
 
 
+def assert_idle_root_self_governance_direct_contract() -> None:
+    init_result = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
+    fact_chain = init_result.get("fact_chain") if isinstance(init_result, dict) else {}
+    entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else {}
+    if not isinstance(entry_points, dict) or entry_points.get("current_item_id") != "no_active_item":
+        return
+
+    runtime_status, runtime_parity = run_flow_json(["runtime-parity", "validate", "--target", str(REPO_ROOT)], expect=0)
+    if runtime_status != 0 or runtime_parity.get("result") != "pass":
+        raise AssertionError("idle runtime-parity direct check did not pass")
+    work_item_check = next((check for check in runtime_parity.get("checks", []) if check.get("name") == "work_item"), None)
+    if not isinstance(work_item_check, dict) or work_item_check.get("result") != "pass":
+        raise AssertionError("idle runtime-parity did not treat no_active_item as a pass")
+
+    _, adopt_verify = run_flow_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "no_active_item"], expect=0)
+    if adopt_verify.get("result") != "pass" or not isinstance(adopt_verify.get("idle_repository"), dict):
+        raise AssertionError("idle adopt verify direct check did not pass")
+
+
 def run_governance_closeout_contract() -> None:
     assert_governance_closeout_help_contract()
     active_item = active_work_item_id()
     assert_active_closeout_contract(active_item)
+    assert_idle_root_self_governance_direct_contract()
     assert_reconciliation_suite_taxonomy_contract()
     with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)

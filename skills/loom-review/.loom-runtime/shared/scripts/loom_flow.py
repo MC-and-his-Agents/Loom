@@ -9768,6 +9768,10 @@ def load_context_with_retained_idle_fallback(
     return retained_context, []
 
 
+def expected_idle_item(expected_item: str | None) -> bool:
+    return expected_item is None or expected_item == NO_ACTIVE_ITEM_ID
+
+
 def text_mentions_issue_number(text: object, issue_number: int) -> bool:
     if not isinstance(text, str) or not text:
         return False
@@ -13381,6 +13385,33 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
     governance_surface = build_governance_surface(target_root)
 
     if context_errors:
+        if is_idle_context_errors(context_errors) and expected_idle_item(expected_item):
+            missing_inputs: list[str] = []
+            if runtime_state.get("result") != "pass":
+                missing_inputs.extend(str(message) for message in runtime_state.get("missing_inputs", []))
+            missing_inputs.extend(pr_template_errors)
+            result = "pass" if not missing_inputs else "block"
+            return {
+                "command": "adopt",
+                "operation": "verify",
+                "schema_version": "loom-adoption-verify/v1",
+                "result": result,
+                "summary": (
+                    "adoption verify is satisfied for an idle repository with no active Work Item."
+                    if result == "pass"
+                    else "idle adoption verify found blocking runtime or template gaps."
+                ),
+                "missing_inputs": missing_inputs,
+                "fallback_to": None if result == "pass" else "adoption",
+                "runtime_state": runtime_state,
+                "governance_surface": governance_surface,
+                "pr_template": pr_template,
+                "idle_repository": {
+                    "result": "pass",
+                    "current_item_id": NO_ACTIVE_ITEM_ID,
+                    "fact_chain_error": IDLE_FACT_CHAIN_ERROR,
+                },
+            }
         return {
             "command": "adopt",
             "operation": "verify",
@@ -19379,15 +19410,28 @@ def runtime_parity_payload(
     carrier_summary = governance_surface.get("carrier_summary")
 
     if context_errors:
-        checks.append(
-            runtime_parity_check(
-                "work_item",
-                result="block",
-                summary="runtime parity could not read the Work Item fact chain.",
-                missing_inputs=[f"fact-chain: {message}" for message in context_errors],
-                fallback_to="admission",
+        if is_idle_context_errors(context_errors) and expected_idle_item(expected_item):
+            checks.append(
+                runtime_parity_check(
+                    "work_item",
+                    result="pass",
+                    summary="Repository is idle; no active Work Item is required for runtime parity.",
+                    evidence={
+                        "current_item_id": NO_ACTIVE_ITEM_ID,
+                        "fact_chain": "idle",
+                    },
+                )
             )
-        )
+        else:
+            checks.append(
+                runtime_parity_check(
+                    "work_item",
+                    result="block",
+                    summary="runtime parity could not read the Work Item fact chain.",
+                    missing_inputs=[f"fact-chain: {message}" for message in context_errors],
+                    fallback_to="admission",
+                )
+            )
     else:
         checks.append(
             runtime_parity_check(
