@@ -39,6 +39,20 @@ python3 tools/loom.py skills release-check --json
 npm install -g @mc-and-his-agents/loom
 ```
 
+明确选择仓库 runtime provider mode：
+
+- `global-cli`：仓库记录 Loom adoption metadata，并依赖已安装的根
+  `loom` 命令作为 runtime provider。该模式不期望存在 `.loom/bin`
+  runtime carrier；workstation/global CLI 可用性会和仓库真相分开诊断。
+- `repo-local-wrapper`：仓库有意保留 `.loom/bin` 等 repo-local wrapper
+  carrier。只要 installed-state 明确声明，这些 carrier 仍然有效；在
+  wrapper 委托给 global CLI provider 的兼容窗口中也同样有效。
+
+详细接入合同与验证命令见
+[docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)、
+[docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md)
+和 [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)。
+
 为目标仓库安装并验证 Codex 宿主 payload：
 
 ```bash

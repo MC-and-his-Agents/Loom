@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1245",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head closeout carrier review approves WI-1245 post-merge terminal sync at head a95980c2ec3ab8c5dad7112a0d8b798a499f127c. Scope is limited to terminal progress/status/shadow evidence after PR #1472 controlled merge, issue #1245 closure, blockedBy reconciliation, and no_release closeout; it does not authorize #1246, release/tag/npm/GitHub Release, runtime behavior changes, parser/schema changes, or additional documentation scope.",
+  "reviewer": "codex-thread:019eca14-282e-7003-a2b5-73ef5df01a25",
+  "authored_at": "2026-06-15T08:18:57Z",
+  "reviewed_head": "a95980c2ec3ab8c5dad7112a0d8b798a499f127c",
+  "reviewed_validation_summary": "Post-merge closeout evidence on 2026-06-15: PR #1472 is MERGED at 2026-06-15T07:48:26Z with merge commit ed0e7080c0f463874faf486968557746167aa935; origin/main after fetch is ed0e7080c0f463874faf486968557746167aa935 and contains the merge commit; issue #1245 is CLOSED/COMPLETED at 2026-06-15T07:56:59Z; GitHub native blockedBy for #1245 was reconciled from #1243/#1244 to totalCount=0; #1246 remains OPEN as the separate release/downstream migration closeout item; no_release remains final for WI-1245: no VERSION/tag/GitHub Release/npm publish/live action, package publication, workflow release execution, or shared contract/schema/parser vocabulary change occurred. Pre-merge retained validation includes merge-ready pass, hosted loom-pr-merge-gate rerun success, required checks success, PR body metadata readback, semantic review disposition pass with carrier-only head binding, fact-chain/state-check/shadow parity, suite not_applicable validation, and controlled-merge check/execute pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1245.md",
+    "recovery_entry": ".loom/progress/WI-1245.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored closeout review approved the post-merge terminal carrier sync only; canonical implementation review remains in .loom/reviews/WI-1245.json."
+  }
+}
