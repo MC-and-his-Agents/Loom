@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1236",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1236 at carrier checkpoint head db03b05851e799699cba1798f5543d213fa5936c: HotCP stale active closeout regression fixture remains scoped to tools/check_cli_contract.py, starts from host-complete non-terminal carriers, proves workspace retire remains local_only without versioned carrier mutation, proves repair plan/apply exposes carrier_closeout_sync without host mutations and terminalizes status/init-result to idle no_active_item, and covers retained historical item naming. The follow-up carrier sync only advances WI-1236 progress/status/shadow to merge checkpoint after PR #1516 body readback and review gate passed; it does not change code, runtime behavior, schema, parser, failure vocabulary, docs/help, release, workflow, or unrelated scope.",
+  "reviewer": "codex-round9-implementation-review",
+  "authored_at": "2026-06-16T14:28:50Z",
+  "reviewed_head": "db03b05851e799699cba1798f5543d213fa5936c",
+  "reviewed_validation_summary": "2026-06-16T14:21Z local freeze/readback before merge checkpoint carrier sync passed: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1236 --dry-run`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --mode blocking`; PR #1516 body readback matched rendered metadata block for review and merge_ready preflight at head 031aada7dcbe96527201e16f9c9f74ebb452ad72; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py flow review --target . --item WI-1236 --pr 1516 --branch work/1236-hotcp-regression-fixtures` passed. Initial merge-ready and PR gate were classified as checkpoint drift only because the progress carrier still read `build`; this entry advances the carrier to `merge` for revalidation.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1236.md",
+    "recovery_entry": ".loom/progress/WI-1236.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1236-hotcp-regression-fixtures/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1236-hotcp-regression-fixtures --item WI-1236 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1236-hotcp-regression-fixtures/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1236-hotcp-regression-fixtures --item WI-1236 --json",
+    "suite_evidence_map": ".loom/specs/WI-1236/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1236/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
