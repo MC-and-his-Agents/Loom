@@ -1,0 +1,97 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "main-agent",
+      "task_goal": "Prepare WI-1296 Loom CLI v0.14.1 release closeout.",
+      "context_locators": [
+        "#1296",
+        "#1228",
+        "#1235",
+        "#1236",
+        "#1237",
+        "PR #1519 merge commit a840bfa2dab65fa46c254d1eae7f6069afcd8b84",
+        "VERSION",
+        "package.json",
+        "skills/loom-*/loom-package.json",
+        ".github/workflows/loom-cli-release.yml"
+      ],
+      "read_scope": [
+        "GitHub issue #1296 and dependency graph",
+        "GitHub PR #1519 merge readback",
+        "release/tag/npm surfaces for v0.14.0 and v0.14.1",
+        ".github/workflows/loom-cli-release.yml",
+        "release/version/package/CLI/skills validation tools"
+      ],
+      "write_ownership": [
+        "VERSION",
+        "package.json",
+        "skills/loom-*/loom-package.json",
+        ".loom/work-items/WI-1296.md",
+        ".loom/progress/WI-1296.md",
+        ".loom/specs/WI-1296/spec.md",
+        ".loom/specs/WI-1296/plan.md",
+        ".loom/specs/WI-1296/implementation-contract.md",
+        ".loom/specs/WI-1296/evidence-map.md",
+        ".loom/specs/WI-1296/task-carrier.md",
+        ".loom/runtime/build/WI-1296.json",
+        ".loom/status/current.md",
+        ".loom/bootstrap/init-result.json",
+        ".loom/shadow/closeout-loom.json",
+        ".loom/shadow/merge-ready-loom.json"
+      ],
+      "non_goals": [
+        "do not manually publish npm from the local machine",
+        "do not manually create git tags or GitHub Releases",
+        "do not alter release workflow semantics",
+        "do not change installer legacy release surfaces",
+        "do not close parent #1228 before #1296 terminal closeout",
+        "do not touch Round 10, Round 11, Deferred roadmap, runtime behavior, schema, parser, failure vocabulary, or unrelated files"
+      ],
+      "validation_expectation": "Run release/tag/npm preflight, diff check, version surface, release surface, npm package, skills, CLI contract, suite validate/evidence/carrier, fact-chain, shadow parity, review, PR metadata, hosted checks, release-judgment, controlled merge, and post-merge release readback.",
+      "output_format": "release PR plus PR metadata, Loom review record, hosted check evidence, main-push release workflow run, tag/GitHub Release/npm/global smoke readback, terminal closeout carriers, and issue #1296 closeout readback",
+      "integration_target": ".loom/progress/WI-1296.md",
+      "status": "in_progress"
+    },
+    {
+      "id": "aquinas-readonly-release-prep",
+      "task_goal": "Prepare #1296 release/no-release evidence inventory and command package while #1237 closeout was on the critical path.",
+      "context_locators": [
+        "#1296",
+        "#1228",
+        "GitHub release/tag/npm readback",
+        "loom-cli-release workflow history"
+      ],
+      "read_scope": [
+        "GitHub issues #1296/#1228/#1235/#1236/#1237",
+        "release/tag/npm surfaces",
+        ".loom/** WI-1296 carrier presence",
+        "release workflow run list"
+      ],
+      "write_ownership": [
+        "session-output:WI-1296-readonly-release-evidence-summary"
+      ],
+      "non_goals": [
+        "do not write repository files",
+        "do not push",
+        "do not mutate GitHub state"
+      ],
+      "validation_expectation": "Main executor must verify current facts before consuming the read-only summary because #1519 status was changing during the sidecar read.",
+      "output_format": "read-only summary with facts, commands, and risks",
+      "integration_target": ".loom/specs/WI-1296/evidence-map.md",
+      "status": "integrated"
+    }
+  ],
+  "integration_evidence": [
+    {
+      "carrier": "release_preflight",
+      "locator": "git ls-remote / gh release view / npm view for v0.14.1",
+      "summary": "v0.14.1 is unoccupied by remote tag, GitHub Release, and npm package before the release PR."
+    },
+    {
+      "carrier": "version_surface",
+      "locator": "VERSION; package.json; skills/loom-*/loom-package.json",
+      "summary": "Release surfaces are prepared for v0.14.1 / npm 0.14.1 validation."
+    }
+  ]
+}
