@@ -236,11 +236,13 @@ def run_surface_checks(checks: tuple[SurfaceCheck, ...]) -> int:
     return 0
 
 
-def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[str, str] | None = None) -> tuple[int, dict[str, Any]]:
     if args[:2] == ["skills", "check"]:
         for cache_dir in REPO_ROOT.rglob("__pycache__"):
             shutil.rmtree(cache_dir)
     env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     completed = subprocess.run(
         [sys.executable, str(LOOM), *args],
@@ -3539,6 +3541,53 @@ def write_terminal_carrier_target(target: Path, item: str) -> None:
     )
 
 
+def write_host_complete_active_repair_target(target: Path, item: str) -> None:
+    write_terminal_carrier_target(target, item)
+    (target / ".loom" / "installed-state.json").write_text(json.dumps(valid_state(target), indent=2) + "\n", encoding="utf-8")
+    issue_url = "https://github.com/example/repo/issues/2002"
+    pr_url = "https://github.com/example/repo/pull/2003"
+    work_item = target / ".loom" / "work-items" / f"{item}.md"
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    status = target / ".loom" / "status" / "current.md"
+    work_item.write_text(
+        work_item.read_text(encoding="utf-8") + f"- #2002\n- {issue_url}\n- {pr_url}\n",
+        encoding="utf-8",
+    )
+    progress.write_text(
+        progress.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+        encoding="utf-8",
+    )
+    status.write_text(
+        status.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+        encoding="utf-8",
+    )
+
+
+def write_fake_closed_host_gh(bin_dir: Path) -> dict[str, str]:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    fake_gh = bin_dir / "gh"
+    fake_gh.write_text(
+        """#!/usr/bin/env python3
+import json
+import sys
+
+path = sys.argv[2] if len(sys.argv) >= 3 and sys.argv[1] == "api" else ""
+if path.endswith("/issues/2002"):
+    print(json.dumps({"id": 2002, "node_id": "I_2002", "number": 2002, "state": "closed", "title": "Closed host issue", "body": "", "html_url": "https://github.com/example/repo/issues/2002", "closed_at": "2026-06-13T02:01:00Z", "labels": []}))
+    raise SystemExit(0)
+if path.endswith("/pulls/2003"):
+    print(json.dumps({"number": 2003, "state": "closed", "title": "Merged host PR", "body": "Closes #2002", "html_url": "https://github.com/example/repo/pull/2003", "draft": False, "merged_at": "2026-06-13T02:00:00Z", "merge_commit_sha": "abc123", "head": {"ref": "work/closed-host-carrier", "sha": "def456"}, "base": {"ref": "main"}}))
+    raise SystemExit(0)
+print(json.dumps({"message": "not found"}), file=sys.stderr)
+raise SystemExit(1)
+""",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    current_path = os.environ.get("PATH", "")
+    return {"PATH": str(bin_dir) if not current_path else f"{bin_dir}:{current_path}"}
+
+
 def install_bootstrapped_runtime(target: Path) -> None:
     runtime_target = target / ".loom" / "bin"
     manifest_target = target / ".loom" / "bootstrap" / "manifest.json"
@@ -3732,6 +3781,206 @@ def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
         or "- PR: 1299" not in text
     ):
         raise AssertionError("carrier closeout-sync apply did not write structured terminal metadata")
+
+
+def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
+    target = tmp / "repair-active-carrier"
+    target.mkdir()
+    item = "WI-repair"
+    write_host_complete_active_repair_target(target, item)
+    env = write_fake_closed_host_gh(tmp / "fake-gh-bin")
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    status = target / ".loom" / "status" / "current.md"
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    before = {
+        "progress": progress.read_text(encoding="utf-8"),
+        "status": status.read_text(encoding="utf-8"),
+        "init_result": init_result.read_text(encoding="utf-8"),
+    }
+
+    omitted_issue_status, omitted_issue_plan = run_json(
+        ["repair", "plan", "--target", str(target), "--json"],
+        env_overrides=env,
+    )
+    if (
+        omitted_issue_status == 0
+        or omitted_issue_plan.get("result") != "block"
+        or "issue selector is required" not in str(omitted_issue_plan.get("fail_closed_reason", ""))
+        or progress.read_text(encoding="utf-8") != before["progress"]
+        or status.read_text(encoding="utf-8") != before["status"]
+        or init_result.read_text(encoding="utf-8") != before["init_result"]
+    ):
+        raise AssertionError("repair plan did not require an explicit issue selector for active carrier repair")
+
+    _, plan = run_json(
+        ["repair", "plan", "--target", str(target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    carrier_action = next((action for action in plan.get("actions", []) if isinstance(action, dict) and action.get("kind") == "carrier_closeout_sync"), None)
+    update_kinds = {update.get("kind") for update in carrier_action.get("versioned_carrier_updates", [])} if isinstance(carrier_action, dict) else set()
+    if (
+        plan.get("result") != "pass"
+        or plan.get("mutates") is not False
+        or carrier_action is None
+        or carrier_action.get("host_mutations") is not False
+        or carrier_action.get("host_actions") != []
+        or not {"terminal-closeout-metadata", "idle-status-surface", "idle-init-result-fact-chain"}.issubset(update_kinds)
+        or progress.read_text(encoding="utf-8") != before["progress"]
+        or status.read_text(encoding="utf-8") != before["status"]
+        or init_result.read_text(encoding="utf-8") != before["init_result"]
+    ):
+        raise AssertionError("repair plan did not expose non-mutating safe carrier closeout action")
+
+    _, dry_run = run_json(
+        ["repair", "apply", "--target", str(target), "--issue", "2002", "--dry-run", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    if (
+        dry_run.get("result") != "pass"
+        or dry_run.get("mutates") is not False
+        or progress.read_text(encoding="utf-8") != before["progress"]
+        or status.read_text(encoding="utf-8") != before["status"]
+        or init_result.read_text(encoding="utf-8") != before["init_result"]
+    ):
+        raise AssertionError("repair apply dry-run mutated carrier files")
+
+    multi_issue = tmp / "repair-multi-issue-carrier"
+    multi_issue.mkdir()
+    write_host_complete_active_repair_target(multi_issue, item)
+    multi_work_item = multi_issue / ".loom" / "work-items" / f"{item}.md"
+    multi_work_item.write_text(
+        multi_work_item.read_text(encoding="utf-8") + "- GitHub issue #2004\n",
+        encoding="utf-8",
+    )
+    status_code, multi_issue_plan = run_json(
+        ["repair", "plan", "--target", str(multi_issue), "--issue", "2002", "--json"],
+        env_overrides=env,
+    )
+    if (
+        status_code == 0
+        or multi_issue_plan.get("result") != "block"
+        or "found #2002, #2004" not in str(multi_issue_plan.get("fail_closed_reason", ""))
+    ):
+        raise AssertionError("repair plan did not refuse carrier text with multiple GitHub issue locators")
+
+    mixed_action = tmp / "repair-mixed-action-carrier"
+    mixed_action.mkdir()
+    write_terminal_carrier_target(mixed_action, item)
+    mixed_work_item = mixed_action / ".loom" / "work-items" / f"{item}.md"
+    mixed_progress = mixed_action / ".loom" / "progress" / f"{item}.md"
+    mixed_status = mixed_action / ".loom" / "status" / "current.md"
+    mixed_init_result = mixed_action / ".loom" / "bootstrap" / "init-result.json"
+    mixed_work_item.write_text(
+        mixed_work_item.read_text(encoding="utf-8") + "- #2002\n- https://github.com/example/repo/issues/2002\n- https://github.com/example/repo/pull/2003\n",
+        encoding="utf-8",
+    )
+    mixed_progress.write_text(
+        mixed_progress.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+        encoding="utf-8",
+    )
+    mixed_status.write_text(
+        mixed_status.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+        encoding="utf-8",
+    )
+    mixed_before = {
+        "progress": mixed_progress.read_text(encoding="utf-8"),
+        "status": mixed_status.read_text(encoding="utf-8"),
+        "init_result": mixed_init_result.read_text(encoding="utf-8"),
+    }
+    mixed_status_code, mixed_apply = run_json(
+        ["repair", "apply", "--target", str(mixed_action), "--issue", "2002", "--json"],
+        env_overrides=env,
+    )
+    if (
+        mixed_status_code == 0
+        or mixed_apply.get("result") != "block"
+        or mixed_apply.get("failed_layer") != "installed-surface"
+        or mixed_progress.read_text(encoding="utf-8") != mixed_before["progress"]
+        or mixed_status.read_text(encoding="utf-8") != mixed_before["status"]
+        or mixed_init_result.read_text(encoding="utf-8") != mixed_before["init_result"]
+    ):
+        raise AssertionError("repair apply did not block mixed installed-surface and carrier repair actions before mutation")
+
+    invalid_output_status, invalid_output_apply = run_json(
+        [
+            "repair",
+            "apply",
+            "--target",
+            str(target),
+            "--issue",
+            "2002",
+            "--output",
+            ".loom/bootstrap/missing-init-result.json",
+            "--json",
+        ],
+        env_overrides=env,
+    )
+    if (
+        invalid_output_status == 0
+        or invalid_output_apply.get("result") != "block"
+        or progress.read_text(encoding="utf-8") != before["progress"]
+        or status.read_text(encoding="utf-8") != before["status"]
+        or init_result.read_text(encoding="utf-8") != before["init_result"]
+    ):
+        raise AssertionError("repair apply with invalid init-result locator did not fail closed without mutation")
+
+    _, applied = run_json(
+        ["repair", "apply", "--target", str(target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    progress_text = progress.read_text(encoding="utf-8")
+    status_text = status.read_text(encoding="utf-8")
+    init_payload = json.loads(init_result.read_text(encoding="utf-8"))
+    if (
+        applied.get("result") != "pass"
+        or applied.get("mutates") is not True
+        or applied.get("host_mutations") is not False
+        or applied.get("host_actions") != []
+        or "## Terminal Closeout Metadata" not in progress_text
+        or "- Issue: 2002" not in progress_text
+        or "- PR: 2003" not in progress_text
+        or "- Merge Commit: abc123" not in progress_text
+        or "- Item ID: no_active_item" not in status_text
+        or init_payload.get("fact_chain", {}).get("mode") != "idle"
+        or init_payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
+    ):
+        raise AssertionError("repair apply did not terminalize active carrier and switch repo to idle")
+    _, fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0)
+    if (
+        fact_chain.get("result") != "pass"
+        or fact_chain.get("report", {}).get("repository_execution_state") != "idle"
+    ):
+        raise AssertionError("repair apply did not produce consumable idle fact-chain")
+
+    ambiguous = tmp / "repair-ambiguous-carrier"
+    ambiguous.mkdir()
+    write_host_complete_active_repair_target(ambiguous, item)
+    duplicate_item = ambiguous / ".loom" / "work-items" / "GH-2002-duplicate.md"
+    duplicate_progress = ambiguous / ".loom" / "progress" / "GH-2002-duplicate.md"
+    duplicate_item.write_text(
+        (ambiguous / ".loom" / "work-items" / f"{item}.md").read_text(encoding="utf-8")
+        .replace(item, "GH-2002-duplicate")
+        .replace(f".loom/progress/{item}.md", ".loom/progress/GH-2002-duplicate.md"),
+        encoding="utf-8",
+    )
+    duplicate_progress.write_text(
+        (ambiguous / ".loom" / "progress" / f"{item}.md").read_text(encoding="utf-8").replace(item, "GH-2002-duplicate"),
+        encoding="utf-8",
+    )
+    status_code, ambiguous_plan = run_json(
+        ["repair", "plan", "--target", str(ambiguous), "--issue", "2002", "--json"],
+        env_overrides=env,
+    )
+    if (
+        status_code == 0
+        or ambiguous_plan.get("result") != "block"
+        or "ambiguous" not in str(ambiguous_plan.get("fail_closed_reason", ""))
+    ):
+        raise AssertionError("repair plan did not refuse ambiguous retained item matches")
+
 
 def assert_suite_evidence_surface_fixtures(tmp: Path, *, include_carrier: bool = True) -> None:
     evidence_target = tmp / "suite-evidence"
@@ -4339,6 +4588,7 @@ def run_governance_closeout_contract() -> None:
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
+        assert_repair_apply_carrier_closeout_contract(tmp)
         assert_idle_read_surface_contract(tmp)
 
     print("governance closeout surface checks passed")
@@ -5594,6 +5844,7 @@ def run_aggregate_cli_contract() -> None:
         assert_semantic_review_disposition_pr_gate_fixture(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
+        assert_repair_apply_carrier_closeout_contract(tmp)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")

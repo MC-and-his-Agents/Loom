@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1232
-- Goal: Teach Loom fact-chain, status, and governance read surfaces to consume idle/no-active-item state without weakening active Work Item fail-closed checks.
-- Scope: Issue #1232 only: update fact-chain inspection, status reporting, governance carrier summaries, focused CLI contract fixtures, synchronized runtime copies, and WI-1232 carriers. Excludes #1233 host-truth diagnostics, #1234 retained lookup, #1235 repair/apply, #1236 fixture expansion beyond #1232 proof, #1237 docs/help finalization, #1296 release, Round 10, Round 11, Deferred roadmap, high-cost guardian/formal review, controlled merge, release, npm, tag, GitHub Release, live config mutation, and shared contract/schema/failure vocabulary changes.
-- Execution Path: issue #1232 -> branch `work/1232-idle-read-surfaces` -> idle read-surface implementation and focused fixtures -> local validation -> PR metadata/readback -> scheduler-owned gate.
+- Item ID: WI-1235
+- Goal: Add a safe repair plan and apply flow for host-complete Work Items whose versioned carriers still look active.
+- Scope: Issue #1235 only: update `tools/loom.py`, `tools/check_cli_contract.py`, `src/skills/shared/scripts/loom_flow.py`, `skills/shared/scripts/loom_flow.py`, generated `skills/*/.loom-runtime/shared/scripts/loom_flow.py` copies, demo bootstrap stable runtime fixture files under `examples/new-project/.loom/`, WI-1235 `.loom` carriers/specs/shadow hashes, and `loom repair plan/apply` carrier closeout support for host-complete active carriers. Require explicit issue ownership, keep host state read-only, update focused CLI contract coverage, and synchronize generated skills runtime/demo copies. Excludes #1236 fixture inventory, #1237 docs outline, #1296 release/no-release closeout, Round 10, Round 11, Deferred roadmap, release/tag/npm actions, issue/project mutation by the repair command, and unrelated refactors.
+- Execution Path: issue #1235 -> branch `work/1235-safe-repair-sync` -> repair/sync implementation -> local contract validation -> PR metadata/readback -> merge-ready gate.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1232.md
-- Review Entry: .loom/reviews/WI-1232.json
-- Validation Entry: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py` on touched Python files; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_status.py --target .`; PR metadata preflight/readback; hosted checks readback if available.
-- Closing Condition: PR for #1232 is pushed with idle fact-chain/status/governance read surfaces, active locator/stale-status fail-closed fixture coverage, scoped WI-1232 carriers, clean local validation, PR metadata aligned to the branch head, and worker stops at scheduler-owned gate.
-- Current Checkpoint: closed_out
-- Current Stop: Terminal closeout consumed: PR #1473 merged by Loom controlled merge at head e7e2674716c0548e53a6be11bebe18bef12378f8 with merge commit e65dfc119591cf9773c6a5971979595bf8b20aea; issue #1232 closed/completed at 2026-06-16T03:45:16Z; origin/main read back at e65dfc119591cf9773c6a5971979595bf8b20aea; no_release evidence retained through PR metadata and release-judgment check.
-- Next Step: Publish this WI-1232 closeout-only carrier/status/shadow sync; retire local/remote branch residue only after the closeout carrier is consumed.
-- Blockers: None for WI-1232 closeout carrier sync.
-- Latest Validation Summary: 2026-06-16T03:26Z current-head recovery for PR #1473 on branch work/1232-idle-read-surfaces: merged origin/main into the branch as 133539226a6f46d11f8f590a91c93d0e866c77b5; resolved conflicts in .loom/bootstrap/init-result.json, .loom/status/current.md, .loom/shadow/closeout-loom.json, and .loom/shadow/merge-ready-loom.json by keeping WI-1232 as the active PR carrier while preserving mainline WI-1245/WI-1246 closeout files; git diff --check passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py on PR Python diff passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout passed; suite validate/evidence/carrier validate passed for WI-1232; fact-chain readback passed with current_item_id WI-1232; loom_status before commit blocked only on expected dirty-worktree purity; merge-ready on 133539226a6f46d11f8f590a91c93d0e866c77b5 blocked only on stale review and PR metadata before current-head review refresh; authored .loom/reviews/WI-1232.json was refreshed for head 133539226a6f46d11f8f590a91c93d0e866c77b5 with no findings.
-- Recovery Boundary: WI-1232/#1232 terminal closeout sync only. Consume completed facts from PR #1473 merge commit e65dfc119591cf9773c6a5971979595bf8b20aea and issue #1232 closeout; do not process #1233, #1234, #1235, #1236, #1237, #1296, Round 10/11, Deferred roadmap, release/npm/live actions, VERSION/tag/GitHub Release/npm publish, workflow/runtime behavior changes, or shared contract/schema/parser/failure vocabulary changes.
-- Current Lane: round-9-wi-4-idle-read-surfaces
+- Recovery Entry: .loom/progress/WI-1235.md
+- Review Entry: .loom/reviews/WI-1235.json
+- Validation Entry: `python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/check_cli_contract.py --surface aggregate`; `python3 tools/loom.py suite validate --target . --item WI-1235 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1235 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1235 --json`; `python3 tools/loom.py fact-chain --target . --json`; PR metadata and hosted checks readback before merge.
+- Closing Condition: PR for #1235 is pushed with safe carrier repair plan/apply behavior, explicit issue ownership fail-closed semantics, no host mutation actions, focused regression evidence, synced skills runtime copies, current WI-1235 carrier/review/shadow evidence, passing checks/gate, merge commit readback, and issue #1235 CLOSED/COMPLETED.
+- Current Checkpoint: merge
+- Current Stop: PR #1504 body/head metadata readback, spec review, implementation review, and local review flow are complete for head c8398648d727063ebe06caf7d143dca7a618ff80; hosted checks, pr-gate, controlled merge, merge commit readback, and issue closeout readback remain pending.
+- Next Step: Wait for hosted required checks on PR #1504, run pr-gate and controlled-merge checks, merge after gates pass, then read back PR, issue, main, and Loom carrier closeout before starting #1236/#1237.
+- Blockers: None
+- Latest Validation Summary: 2026-06-16T06:55Z local validation on branch `work/1235-safe-repair-sync`: `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py` passed; `python3 tools/loom.py suite validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1235 --json`, `python3 tools/loom.py fact-chain --target . --json`, and `python3 tools/loom.py build --target . --item WI-1235 --build-evidence .loom/progress/WI-1235-build-evidence.json --json` passed after adding `.loom/specs/WI-1235/implementation-contract.md` and aligning PR metadata expectations to reinforced/runtime/full; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout` passed in 74.66s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 344.63s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed; `make loom-demo-new-project-sync` refreshed the demo stable fixture after hosted `demo-bootstrap` drift, and `make loom-demo-new-project-check` must pass before the next push; no host mutation command was executed by repair fixtures.
+- Recovery Boundary: WI-1235/#1235 safe repair/sync flow only. Do not implement #1236 fixture inventory, #1237 docs outline, #1296 release/no-release closeout, parent #1228 closeout, Round 10/11, Deferred roadmap, release/tag/npm actions, GitHub issue/project mutation from repair commands, or unrelated refactors in this PR.
+- Current Lane: round-9-wi-7-safe-repair-sync
 
 ## Runtime Evidence
 
-- Run Entry: Scheduler thread `019ebecb-4123-7600-9527-6616c5e94d84` consumed worker recovery result, merged latest `origin/main` closeout carrier facts into PR #1473 branch, and prepared exact-head review artifacts for WI-1232.
-- Logs Entry: Worksite `/Users/mc/.codex/worktrees/c98a/Loom` on branch `work/1232-idle-read-surfaces`; branch was reconciled with current `origin/main`; correction scope was limited to WI-1232 review/gate readiness after #1234 closeout landed on main.
-- Diagnostics Entry: WI-1232 implementation scope remains limited to idle/no-active-item read surfaces; terminal closeout now consumes already merged host facts without reopening runtime implementation.
-- Verification Entry: Current validation evidence: fact-chain, state-check, suite validate/evidence/carrier validate, PR metadata readback, scheduler-authored spec/implementation review records, local PR gate review consumption, PR #1473 merge readback, issue #1232 CLOSED/COMPLETED readback, and no_release evidence.
-- Lane Entry: round-9-wi-4-idle-read-surfaces
+- Run Entry: Current Codex thread for Round 9 milestone idle closeout sync, formal worktree `/Users/mc/dev/Loom-worktrees/1235-safe-repair-sync`, branch `work/1235-safe-repair-sync`.
+- Logs Entry: Local command evidence recorded in .loom/progress/WI-1235.md and .loom/specs/WI-1235/evidence-map.md; aggregate CLI contract passed in the formal worktree.
+- Diagnostics Entry: Read-only review identified issue-selector bypass, mixed-action pass semantics, preflight write ordering, CLI metadata, and drift test gaps; code and tests were updated before aggregate validation passed.
+- Verification Entry: Current local verification evidence includes git diff check, py_compile, suite validate/evidence/carrier validate, fact-chain, build flow with integrated build evidence, governance-closeout contract, aggregate CLI contract, skills surface check, and contract-only source loom_check. PR metadata, hosted checks, merge-ready gate, merge commit readback, and issue closeout readback remain pending.
+- Lane Entry: round-9-wi-7-safe-repair-sync
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1232.md
-- Dynamic Truth: .loom/progress/WI-1232.md
+- Static Truth: .loom/work-items/WI-1235.md
+- Dynamic Truth: .loom/progress/WI-1235.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

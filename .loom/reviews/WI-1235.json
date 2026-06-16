@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1235",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review passed for WI-1235 at head b3816704a4e78d52114e6751397a31e2e69e5d11: safe repair plan/apply requires explicit issue ownership, rejects ambiguous/mismatched/multi-issue carrier evidence, reads GitHub host truth without host mutation, preflights init-result before writes, limits apply writes to progress/status/init-result carriers, blocks mixed installed-surface and carrier repair actions before mutation, synchronizes generated runtime/demo fixtures, and has focused governance-closeout plus aggregate contract coverage. Review runner PR metadata discovery was blocked without PR args, but `src/skills/shared/scripts/loom_flow.py flow review --target . --item WI-1235 --pr 1504 --branch work/1235-safe-repair-sync` consumed the current PR metadata and only reported the missing implementation review artifact.",
+  "reviewer": "codex-round9-implementation-review",
+  "authored_at": "2026-06-16T07:20:20Z",
+  "reviewed_head": "b3816704a4e78d52114e6751397a31e2e69e5d11",
+  "reviewed_validation_summary": "2026-06-16T06:55Z local validation on branch `work/1235-safe-repair-sync`: `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py` passed; `python3 tools/loom.py suite validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1235 --json`, `python3 tools/loom.py fact-chain --target . --json`, and `python3 tools/loom.py build --target . --item WI-1235 --build-evidence .loom/progress/WI-1235-build-evidence.json --json` passed after adding `.loom/specs/WI-1235/implementation-contract.md` and aligning PR metadata expectations to reinforced/runtime/full; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout` passed in 74.66s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 344.63s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed; `make loom-demo-new-project-sync` refreshed the demo stable fixture after hosted `demo-bootstrap` drift, and `make loom-demo-new-project-check` must pass before the next push; no host mutation command was executed by repair fixtures.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1235.md",
+    "recovery_entry": ".loom/progress/WI-1235.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1235-safe-repair-sync/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1235-safe-repair-sync --item WI-1235 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1235-safe-repair-sync/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1235-safe-repair-sync --item WI-1235 --json",
+    "suite_evidence_map": ".loom/specs/WI-1235/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1235/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
