@@ -96,6 +96,8 @@ REQUIRED_COMMANDS = {
     "gate review",
     "gate pr",
     "gate merge",
+    "gate freeze check",
+    "gate freeze write",
     "gate closeout",
     "host list",
     "host doctor",
@@ -4794,10 +4796,64 @@ def run_aggregate_cli_contract() -> None:
         "gate review",
         "gate pr",
         "gate merge",
+        "gate freeze check",
+        "gate freeze write",
         "gate closeout",
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #890/#891")
+    for command in ("gate freeze check", "gate freeze write"):
+        if matrix[command]["domain"] != "gate" or matrix[command]["status"] != "implemented":
+            raise AssertionError(f"{command} must be declared as an implemented gate command for #1508")
+
+    freeze_status, freeze_payload = run_json(["gate", "freeze", "check", "--target", str(REPO_ROOT), "--json"], expect=None)
+    if freeze_status == 0 and freeze_payload.get("result") != "pass":
+        raise AssertionError("gate freeze check returned success without a pass result")
+    if freeze_payload.get("schema_version") != "loom-gate-freeze/v1":
+        raise AssertionError("gate freeze check must emit loom-gate-freeze/v1")
+    if freeze_payload.get("mutates") is not False:
+        raise AssertionError("gate freeze check must remain read-only")
+    if "input_bindings" not in freeze_payload or "readiness" not in freeze_payload:
+        raise AssertionError("gate freeze check must expose input_bindings and readiness diagnostics")
+    subject = freeze_payload.get("snapshot_subject")
+    pr_metadata = freeze_payload.get("input_bindings", {}).get("pr_metadata")
+    if isinstance(subject, dict) and isinstance(pr_metadata, dict) and pr_metadata.get("result") == "pass":
+        for contract in pr_metadata.get("metadata_contracts", []):
+            if not isinstance(contract, dict):
+                continue
+            envelope = contract.get("envelope")
+            fields = envelope.get("fields") if isinstance(envelope, dict) else None
+            if not isinstance(fields, dict):
+                continue
+            expected_bindings = {
+                "loom_work_item": subject.get("item_id"),
+                "head_sha": subject.get("head_sha"),
+                "branch": subject.get("branch"),
+            }
+            for field_name, expected_value in expected_bindings.items():
+                if isinstance(expected_value, str) and expected_value and fields.get(field_name) != expected_value:
+                    raise AssertionError("gate freeze must not pass stale PR metadata that is not bound to the snapshot subject")
+    outside_freeze_path = REPO_ROOT / ".loom" / "runtime" / "gate-freeze-outside" / "probe.json"
+    if outside_freeze_path.exists():
+        outside_freeze_path.unlink()
+    _, invalid_write = run_json(
+        [
+            "gate",
+            "freeze",
+            "write",
+            "--target",
+            str(REPO_ROOT),
+            "--write-path",
+            ".loom/runtime/gate-freeze-outside/probe.json",
+            "--json",
+        ],
+        expect=1,
+    )
+    if outside_freeze_path.exists():
+        outside_freeze_path.unlink()
+        raise AssertionError("gate freeze write must not write outside .loom/runtime/gate-freeze/")
+    if invalid_write.get("write_artifact", {}).get("result") != "block":
+        raise AssertionError("gate freeze write must block invalid write paths outside .loom/runtime/gate-freeze/")
     for command in (
         "install",
         "upgrade-plan",
