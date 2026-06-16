@@ -4006,6 +4006,108 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
         raise AssertionError("repair plan did not refuse ambiguous retained item matches")
 
 
+def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
+    target = tmp / "hotcp-stale-active-root"
+    target.mkdir()
+    item = "WI-hotcp-root"
+    write_host_complete_active_repair_target(target, item)
+    env = write_fake_closed_host_gh(tmp / "fake-hotcp-gh-bin")
+
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    status = target / ".loom" / "status" / "current.md"
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    before = {
+        "progress": progress.read_text(encoding="utf-8"),
+        "status": status.read_text(encoding="utf-8"),
+        "init_result": init_result.read_text(encoding="utf-8"),
+    }
+
+    _, active_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0)
+    active_entry_points = active_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
+    if (
+        active_fact_chain.get("result") != "pass"
+        or active_fact_chain.get("report", {}).get("repository_execution_state") == "idle"
+        or active_entry_points.get("current_item_id") != item
+        or "- Current Checkpoint: build" not in before["progress"]
+    ):
+        raise AssertionError("HotCP fixture did not start as a stale active carrier pointing at the completed Work Item")
+
+    _, retire = run_json(["workspace", "retire", "--target", str(target), "--item", item, "--json"], expect=0)
+    if (
+        retire.get("result") != "pass"
+        or retire.get("retire_scope") != "local_only"
+        or retire.get("versioned_carrier_updates") != []
+        or progress.read_text(encoding="utf-8") != before["progress"]
+        or status.read_text(encoding="utf-8") != before["status"]
+        or init_result.read_text(encoding="utf-8") != before["init_result"]
+    ):
+        raise AssertionError("workspace retire mutated versioned stale active carriers or did not report local_only scope")
+
+    _, post_retire_plan = run_json(
+        ["repair", "plan", "--target", str(target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    carrier_action = next(
+        (action for action in post_retire_plan.get("actions", []) if isinstance(action, dict) and action.get("kind") == "carrier_closeout_sync"),
+        None,
+    )
+    update_kinds = {update.get("kind") for update in carrier_action.get("versioned_carrier_updates", [])} if isinstance(carrier_action, dict) else set()
+    if (
+        post_retire_plan.get("result") != "pass"
+        or carrier_action is None
+        or carrier_action.get("host_mutations") is not False
+        or carrier_action.get("host_actions") != []
+        or not {"terminal-closeout-metadata", "idle-status-surface", "idle-init-result-fact-chain"}.issubset(update_kinds)
+    ):
+        raise AssertionError("HotCP fixture did not require carrier closeout sync after local workspace retire")
+
+    _, applied = run_json(
+        ["repair", "apply", "--target", str(target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    _, idle_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0)
+    idle_entry_points = idle_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
+    if (
+        applied.get("result") != "pass"
+        or applied.get("mutates") is not True
+        or idle_fact_chain.get("report", {}).get("repository_execution_state") != "idle"
+        or idle_entry_points.get("current_item_id") != "no_active_item"
+        or "## Terminal Closeout Metadata" not in progress.read_text(encoding="utf-8")
+    ):
+        raise AssertionError("HotCP fixture carrier closeout sync did not terminalize stale active carrier into idle fact-chain")
+
+    retained_target = tmp / "hotcp-retained-historical-name"
+    retained_target.mkdir()
+    retained_item = "GH-21-LOOM-UPGRADE-BASELINE"
+    write_host_complete_active_repair_target(retained_target, retained_item)
+    _, retained_plan = run_json(
+        ["repair", "plan", "--target", str(retained_target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    retained_action = next(
+        (action for action in retained_plan.get("actions", []) if isinstance(action, dict) and action.get("kind") == "carrier_closeout_sync"),
+        None,
+    )
+    _, retained_applied = run_json(
+        ["repair", "apply", "--target", str(retained_target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    _, retained_fact_chain = run_json(["fact-chain", "--target", str(retained_target), "--json"], expect=0)
+    retained_progress = retained_target / ".loom" / "progress" / f"{retained_item}.md"
+    if (
+        retained_plan.get("result") != "pass"
+        or retained_action is None
+        or retained_applied.get("result") != "pass"
+        or retained_fact_chain.get("report", {}).get("repository_execution_state") != "idle"
+        or "## Terminal Closeout Metadata" not in retained_progress.read_text(encoding="utf-8")
+    ):
+        raise AssertionError("HotCP retained historical item naming fixture did not consume carrier closeout sync")
+
+
 def assert_suite_evidence_surface_fixtures(tmp: Path, *, include_carrier: bool = True) -> None:
     evidence_target = tmp / "suite-evidence"
     evidence_suite = evidence_target / ".loom" / "specs" / "WI-evidence"
@@ -4636,6 +4738,7 @@ def run_governance_closeout_contract() -> None:
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
         assert_repair_apply_carrier_closeout_contract(tmp)
+        assert_hotcp_stale_active_closeout_regression_fixture(tmp)
         assert_idle_read_surface_contract(tmp)
 
     print("governance closeout surface checks passed")
