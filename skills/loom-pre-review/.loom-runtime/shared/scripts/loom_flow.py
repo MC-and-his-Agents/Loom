@@ -6899,6 +6899,47 @@ def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) 
     }
 
 
+def suite_gate_unreadable_payload(errors: list[str], *, surface: str) -> dict[str, Any]:
+    missing_inputs = [f"fact-chain: {message}" for message in errors]
+    summary = "suite evidence and carrier validation context is unreadable for this gate surface."
+    validation = {
+        "result": "block",
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "fact-chain",
+        "command": "not_applicable",
+        "validator": None,
+        "validator_mode": "fact-chain-unreadable",
+        "payload": None,
+    }
+    return {
+        "schema_version": "loom-suite-gate-validation/v1",
+        "surface": surface,
+        "result": "block",
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "fact-chain",
+        "authority_boundary": {
+            "role": "gate_input_evidence",
+            "does_not_replace": [
+                "work_item",
+                "review_record",
+                "merge_ready_result",
+                "closeout_evidence",
+                "docs_source_truth",
+            ],
+        },
+        "consumed_locators": {
+            "evidence_map": None,
+            "task_carriers": [],
+        },
+        "validations": {
+            "evidence": dict(validation),
+            "carrier": dict(validation),
+        },
+    }
+
+
 def suite_gate_payload_for_surface(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
     if suite_gate_required_for_surface(context, surface=surface):
         return suite_gate_validation_payload(context, surface=surface)
@@ -9497,7 +9538,13 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
     if errors:
         return {}, errors
 
-    item_id = report["fact_chain"]["entry_points"]["current_item_id"]
+    fact_chain = report.get("fact_chain")
+    entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+    if not isinstance(entry_points, dict):
+        return {}, ["fact-chain entry_points must be readable for active context"]
+    item_id = entry_points.get("current_item_id")
+    if fact_chain.get("mode") == "idle" or item_id == "no_active_item":
+        return {}, ["repository is idle; no active Work Item is selected"]
     if expected_item and expected_item != item_id:
         return {}, [f"current item mismatch: expected `{expected_item}`, got `{item_id}`"]
 
@@ -13554,7 +13601,8 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
 def carrier_refresh_payload(target_root: Path, output_relative: str, expected_item: str | None, *, dry_run: bool) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     context, context_errors = load_context(target_root, output_relative, expected_item)
-    missing_inputs: list[str] = [f"fact-chain: {message}" for message in context_errors]
+    idle_context = context_errors == ["repository is idle; no active Work Item is selected"]
+    missing_inputs: list[str] = [] if idle_context else [f"fact-chain: {message}" for message in context_errors]
 
     manifest_path, manifest_path_errors = resolve_repo_relative_path(target_root, ".loom/bootstrap/manifest.json", label="bootstrap manifest")
     init_path, init_path_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
@@ -13593,7 +13641,12 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
                 missing_inputs.append(f"runtime-state: {message}")
 
     review_status: dict[str, Any] = {"status": "not_checked"}
-    if not context_errors:
+    if idle_context:
+        review_status = {
+            "status": "not_applicable",
+            "reason": "repository is idle; no active Work Item review binding is selected",
+        }
+    elif not context_errors:
         assert context
         review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
         spec_review_path = default_spec_review_path(context["item_id"])
@@ -20055,6 +20108,11 @@ def closeout_payload(
             suite_gate_validation = suite_gate_validation_payload(fact_chain_context, surface="closeout")
         else:
             suite_gate_validation = suite_gate_not_applicable_payload(fact_chain_context, surface="closeout")
+    elif context_errors == ["repository is idle; no active Work Item is selected"]:
+        suite_gate_validation = suite_gate_not_applicable_payload({}, surface="closeout")
+    elif context_errors:
+        suite_gate_validation = suite_gate_unreadable_payload(context_errors, surface="closeout")
+    if suite_gate_validation is not None:
         suite_subchecks = closeout_suite_gate_subchecks(suite_gate_validation, profile=CLOSEOUT_LIGHT_PROFILE)
         gate["subchecks"].extend(suite_subchecks)
         for subcheck in suite_subchecks:

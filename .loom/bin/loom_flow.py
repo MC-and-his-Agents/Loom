@@ -589,6 +589,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     carrier.add_argument("--closed-at", help="Closeout timestamp or not_applicable")
     carrier.add_argument("--evidence-locator", help="Repo or host locator for closeout evidence")
 
+    repair = subparsers.add_parser("repair", help="Plan or apply safe repo-local carrier repairs")
+    repair.add_argument("operation", choices=("plan", "apply"))
+    repair.add_argument("--target", required=True, help="Target repository root")
+    repair.add_argument("--item", help="Expected current item id")
+    repair.add_argument("--issue", type=int, help="Expected GitHub issue number for retained-item disambiguation")
+    repair.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    repair.add_argument("--dry-run", action="store_true", help="Preview repair apply without writing files")
+
     host_binding = subparsers.add_parser("host-binding", help="Validate or inspect host issue, PR, branch, SHA, Project, and dependency bindings")
     host_binding.add_argument("operation", choices=("validate", "inspect"))
     host_binding.add_argument("--target", required=True, help="Target repository root")
@@ -5966,6 +5978,7 @@ def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
         "title": payload.get("title"),
         "body": payload.get("body"),
         "url": payload.get("html_url"),
+        "closedAt": payload.get("closed_at"),
         "labels": [
             str(label.get("name"))
             for label in labels
@@ -6865,6 +6878,47 @@ def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) 
         "summary": summary,
         "missing_inputs": [],
         "fallback_to": None,
+        "authority_boundary": {
+            "role": "gate_input_evidence",
+            "does_not_replace": [
+                "work_item",
+                "review_record",
+                "merge_ready_result",
+                "closeout_evidence",
+                "docs_source_truth",
+            ],
+        },
+        "consumed_locators": {
+            "evidence_map": None,
+            "task_carriers": [],
+        },
+        "validations": {
+            "evidence": dict(validation),
+            "carrier": dict(validation),
+        },
+    }
+
+
+def suite_gate_unreadable_payload(errors: list[str], *, surface: str) -> dict[str, Any]:
+    missing_inputs = [f"fact-chain: {message}" for message in errors]
+    summary = "suite evidence and carrier validation context is unreadable for this gate surface."
+    validation = {
+        "result": "block",
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "fact-chain",
+        "command": "not_applicable",
+        "validator": None,
+        "validator_mode": "fact-chain-unreadable",
+        "payload": None,
+    }
+    return {
+        "schema_version": "loom-suite-gate-validation/v1",
+        "surface": surface,
+        "result": "block",
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "fact-chain",
         "authority_boundary": {
             "role": "gate_input_evidence",
             "does_not_replace": [
@@ -9113,6 +9167,7 @@ def github_host_completion_truth(
                     "number": issue_number,
                     "state": state,
                     "url": issue_payload.get("url"),
+                    "closedAt": issue_payload.get("closedAt"),
                 }
             )
             if state == "CLOSED":
@@ -9483,7 +9538,13 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
     if errors:
         return {}, errors
 
-    item_id = report["fact_chain"]["entry_points"]["current_item_id"]
+    fact_chain = report.get("fact_chain")
+    entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+    if not isinstance(entry_points, dict):
+        return {}, ["fact-chain entry_points must be readable for active context"]
+    item_id = entry_points.get("current_item_id")
+    if fact_chain.get("mode") == "idle" or item_id == "no_active_item":
+        return {}, ["repository is idle; no active Work Item is selected"]
     if expected_item and expected_item != item_id:
         return {}, [f"current item mismatch: expected `{expected_item}`, got `{item_id}`"]
 
@@ -13540,7 +13601,8 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
 def carrier_refresh_payload(target_root: Path, output_relative: str, expected_item: str | None, *, dry_run: bool) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     context, context_errors = load_context(target_root, output_relative, expected_item)
-    missing_inputs: list[str] = [f"fact-chain: {message}" for message in context_errors]
+    idle_context = context_errors == ["repository is idle; no active Work Item is selected"]
+    missing_inputs: list[str] = [] if idle_context else [f"fact-chain: {message}" for message in context_errors]
 
     manifest_path, manifest_path_errors = resolve_repo_relative_path(target_root, ".loom/bootstrap/manifest.json", label="bootstrap manifest")
     init_path, init_path_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
@@ -13579,7 +13641,12 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
                 missing_inputs.append(f"runtime-state: {message}")
 
     review_status: dict[str, Any] = {"status": "not_checked"}
-    if not context_errors:
+    if idle_context:
+        review_status = {
+            "status": "not_applicable",
+            "reason": "repository is idle; no active Work Item review binding is selected",
+        }
+    elif not context_errors:
         assert context
         review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
         spec_review_path = default_spec_review_path(context["item_id"])
@@ -13734,6 +13801,377 @@ def carrier_closeout_sync_payload(target_root: Path, output_relative: str, expec
         "versioned_carrier_updates": [update],
         "item": {"id": context["item_id"]},
     }
+
+
+def terminal_metadata_from_host_truth(host_truth: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
+    issue_number: int | None = None
+    pr_number: int | None = None
+    merge_commit: str | None = None
+    target_branch: str | None = None
+    closed_at: str | None = None
+    terminal_state = str(host_truth.get("terminal_state") or "closed_out")
+    for entry in host_truth.get("evidence", []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("kind") == "github_issue" and isinstance(entry.get("number"), int):
+            issue_number = entry.get("number")
+            if isinstance(entry.get("closedAt"), str):
+                closed_at = entry.get("closedAt")
+        if entry.get("kind") == "github_pr" and isinstance(entry.get("number"), int):
+            pr_number = entry.get("number")
+            merge_commit_entry = entry.get("mergeCommit")
+            if isinstance(merge_commit_entry, dict) and isinstance(merge_commit_entry.get("oid"), str):
+                merge_commit = merge_commit_entry.get("oid")
+            if isinstance(entry.get("baseRefName"), str):
+                target_branch = entry.get("baseRefName")
+            if isinstance(entry.get("mergedAt"), str):
+                closed_at = entry.get("mergedAt")
+    metadata = {
+        "terminal_state": terminal_state,
+        "issue": str(issue_number) if issue_number is not None else "not_applicable",
+        "pr": str(pr_number) if pr_number is not None else "not_applicable",
+        "merge_commit": merge_commit or "not_applicable",
+        "target_branch": target_branch or "not_applicable",
+        "closed_at": closed_at or "not_applicable",
+        "evidence_locator": ";".join(str(locator) for locator in host_truth.get("locators", [])) or "host-readback",
+    }
+    missing_inputs: list[str] = []
+    for field_name in ("issue", "pr", "merge_commit", "target_branch", "closed_at", "evidence_locator"):
+        if metadata[field_name] == "not_applicable":
+            missing_inputs.append(f"{field_name.replace('_', '-')} is required for safe carrier repair")
+    return metadata, missing_inputs
+
+
+def render_idle_status_surface(*, read_entry: str, output_relative: str) -> str:
+    lines = [
+        "# Current Status",
+        "",
+        "## Derived Fact Chain View",
+        "",
+        "- Item ID: no_active_item",
+        "- Goal: not_applicable",
+        "- Scope: not_applicable",
+        "- Execution Path: not_applicable",
+        "- Workspace Entry: not_applicable",
+        "- Recovery Entry: not_applicable",
+        "- Review Entry: not_applicable",
+        "- Validation Entry: not_applicable",
+        "- Closing Condition: not_applicable",
+        "- Current Checkpoint: not_applicable",
+        "- Current Stop: not_applicable",
+        "- Next Step: not_applicable",
+        "- Blockers: not_applicable",
+        "- Latest Validation Summary: not_applicable",
+        "- Recovery Boundary: not_applicable",
+        "- Current Lane: not_applicable",
+        "",
+        "## Runtime Evidence",
+        "",
+        "- Run Entry: not_applicable",
+        "- Logs Entry: not_applicable",
+        "- Diagnostics Entry: not_applicable",
+        "- Verification Entry: not_applicable",
+        "- Lane Entry: not_applicable",
+        "",
+        "## Sources",
+        "",
+        "- Static Truth: not_applicable",
+        "- Dynamic Truth: not_applicable",
+        f"- Locator Truth: {output_relative}",
+        f"- Fact Chain CLI: {read_entry}",
+    ]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def load_idle_init_result_payload(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    try:
+        payload = load_json_file(path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return None, [f"invalid init-result JSON: {exc}"]
+    if not isinstance(payload, dict):
+        return None, ["init-result must be a JSON object"]
+    return payload, []
+
+
+def write_idle_init_result(path: Path, payload: dict[str, Any], *, read_entry: str) -> None:
+    fact_chain = payload.get("fact_chain")
+    if not isinstance(fact_chain, dict):
+        fact_chain = {}
+        payload["fact_chain"] = fact_chain
+    fact_chain["mode"] = "idle"
+    fact_chain["read_entry"] = read_entry
+    fact_chain["entry_points"] = {
+        "current_item_id": "no_active_item",
+        "work_item": "not_applicable",
+        "recovery_entry": "not_applicable",
+        "status_surface": ".loom/status/current.md",
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def carrier_repair_candidate(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    issue_number: int | None,
+) -> tuple[dict[str, Any] | None, list[str], list[dict[str, Any]]]:
+    diagnostics: list[dict[str, Any]] = []
+    context, context_errors = load_context(target_root, output_relative, expected_item)
+    if context_errors:
+        diagnostics.append(
+            {
+                "kind": "fact-chain-unavailable",
+                "missing_inputs": context_errors,
+                "repairable": False,
+            }
+        )
+        if expected_item is not None or issue_number is not None:
+            return None, [f"fact-chain: {message}" for message in context_errors], diagnostics
+        return None, [], diagnostics
+    if context["current_checkpoint"] in TERMINAL_CHECKPOINTS:
+        diagnostics.append(
+            {
+                "kind": "current-carrier-terminal",
+                "item_id": context["item_id"],
+                "checkpoint": context["current_checkpoint"],
+                "repairable": False,
+            }
+        )
+        return None, [], diagnostics
+
+    missing_inputs: list[str] = []
+    if issue_number is None:
+        diagnostics.append(
+            {
+                "kind": "retained-item-lookup",
+                "issue": None,
+                "item_id": None,
+                "diagnostics": [],
+                "missing_inputs": ["issue selector is required for safe carrier repair"],
+            }
+        )
+        return None, ["issue selector is required for safe carrier repair"], diagnostics
+    if issue_number is not None:
+        lookup = closeout_retained_item_lookup(target_root, issue_number)
+        missing_inputs.extend(retained_item_lookup_missing_inputs(lookup))
+        lookup_item = retained_item_lookup_id(lookup)
+        if not missing_inputs and lookup_item and lookup_item != context["item_id"]:
+            missing_inputs.append(
+                f"retained-item lookup resolved issue #{issue_number} to `{lookup_item}`, but current fact-chain item is `{context['item_id']}`"
+            )
+        if not missing_inputs and lookup_item is None:
+            missing_inputs.append(f"retained-item lookup found no Work Item for issue #{issue_number}")
+        diagnostics.append(
+            {
+                "kind": "retained-item-lookup",
+                "issue": issue_number,
+                "item_id": lookup_item,
+                "diagnostics": lookup.get("diagnostics", []),
+                "missing_inputs": retained_item_lookup_missing_inputs(lookup),
+            }
+        )
+        if missing_inputs:
+            return None, missing_inputs, diagnostics
+
+    default_owner, default_repo = detect_github_repo(target_root)
+    carrier_texts = [
+        context["work_item_path"].read_text(encoding="utf-8"),
+        context["recovery_path"].read_text(encoding="utf-8"),
+    ]
+    extracted_issue_numbers: set[int] = set()
+    for text in carrier_texts:
+        extracted_issue_numbers.update(int(match.group("number")) for match in GITHUB_ISSUE_URL_RE.finditer(text))
+        extracted_issue_numbers.update(int(match.group("number")) for match in GITHUB_ISSUE_REF_RE.finditer(text))
+    if not extracted_issue_numbers:
+        missing_inputs.append(f"carrier text does not contain GitHub issue #{issue_number}")
+    elif extracted_issue_numbers != {issue_number}:
+        missing_inputs.append(
+            "carrier GitHub issue locators must resolve exactly to "
+            f"#{issue_number}; found {', '.join(f'#{number}' for number in sorted(extracted_issue_numbers))}"
+        )
+    if missing_inputs:
+        diagnostics.append(
+            {
+                "kind": "host-locator-ownership",
+                "issue": issue_number,
+                "extracted_issue_numbers": sorted(extracted_issue_numbers),
+                "missing_inputs": missing_inputs,
+            }
+        )
+        return None, missing_inputs, diagnostics
+    host_context = extract_github_host_context(
+        target_root,
+        carrier_texts,
+        default_owner=default_owner,
+        default_repo=default_repo,
+    )
+    if host_context is None:
+        diagnostics.append(
+            {
+                "kind": "host-context-unavailable",
+                "item_id": context["item_id"],
+                "repairable": False,
+            }
+        )
+        return None, [], diagnostics
+    if host_context.get("issue_number") != issue_number:
+        return (
+            None,
+            [f"host context issue #{host_context.get('issue_number')} does not match requested issue #{issue_number}"],
+            diagnostics,
+        )
+    host_truth = github_host_completion_truth(target_root, host_context, {})
+    diagnostics.append(
+        {
+            "kind": "host-completion-truth",
+            "item_id": context["item_id"],
+            "host_truth": host_truth,
+        }
+    )
+    if host_truth.get("errors"):
+        return None, [f"host truth: {message}" for message in host_truth.get("errors", [])], diagnostics
+    if host_truth.get("complete") is not True:
+        diagnostics.append(
+            {
+                "kind": "host-not-complete",
+                "item_id": context["item_id"],
+                "host_truth_status": host_truth.get("status"),
+                "repairable": False,
+            }
+        )
+        return None, [], diagnostics
+
+    metadata, metadata_missing = terminal_metadata_from_host_truth(host_truth)
+    missing_inputs.extend(metadata_missing)
+    if missing_inputs:
+        return None, missing_inputs, diagnostics
+    return {
+        "context": context,
+        "host_truth": host_truth,
+        "metadata": metadata,
+    }, [], diagnostics
+
+
+def carrier_repair_payload(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    issue_number: int | None,
+    *,
+    apply: bool,
+    dry_run: bool,
+) -> dict[str, Any]:
+    candidate, missing_inputs, diagnostics = carrier_repair_candidate(target_root, output_relative, expected_item, issue_number)
+    versioned_carrier_updates: list[dict[str, Any]] = []
+    item: dict[str, Any] | None = None
+    if candidate is not None:
+        context = candidate["context"]
+        metadata = candidate["metadata"]
+        item = {"id": context["item_id"]}
+        init_result_path: Path | None = None
+        init_result_payload: dict[str, Any] | None = None
+        planned_action = "write" if apply and not dry_run else "preview"
+        versioned_carrier_updates = [
+            {
+                "path": relative_to_root(context["recovery_path"], target_root),
+                "kind": "terminal-closeout-metadata",
+                "planned_action": planned_action,
+                "metadata": metadata,
+            },
+            {
+                "path": relative_to_root(context["status_path"], target_root),
+                "kind": "idle-status-surface",
+                "planned_action": planned_action,
+                "item_id": "no_active_item",
+            },
+            {
+                "path": output_relative,
+                "kind": "idle-init-result-fact-chain",
+                "planned_action": planned_action,
+                "entry_points": {
+                    "current_item_id": "no_active_item",
+                    "work_item": "not_applicable",
+                    "recovery_entry": "not_applicable",
+                    "status_surface": ".loom/status/current.md",
+                },
+            },
+        ]
+        if apply and not dry_run and not missing_inputs:
+            init_result_path, init_result_errors = resolve_repo_relative_path(
+                target_root,
+                output_relative,
+                label="init-result locator",
+            )
+            missing_inputs.extend(init_result_errors)
+            if init_result_path is not None and not missing_inputs:
+                init_result_payload, init_result_payload_errors = load_idle_init_result_payload(init_result_path)
+                missing_inputs.extend(init_result_payload_errors)
+        if apply and not dry_run and not missing_inputs:
+            assert init_result_path is not None
+            assert init_result_payload is not None
+            write_terminal_closeout_metadata(context["recovery_path"], metadata)
+            context["status_path"].write_text(
+                render_idle_status_surface(read_entry=context["read_entry"], output_relative=output_relative),
+                encoding="utf-8",
+            )
+            write_idle_init_result(init_result_path, init_result_payload, read_entry=context["read_entry"])
+
+    action = {
+        "id": "carrier-closeout-active-to-idle",
+        "kind": "carrier_closeout_sync",
+        "status": "planned" if versioned_carrier_updates and not missing_inputs else "blocked" if missing_inputs else "not_applicable",
+        "scope": "repo-local-versioned-carriers",
+        "mutates": bool(apply and not dry_run and versioned_carrier_updates and not missing_inputs),
+        "host_mutations": False,
+        "host_actions": [],
+        "versioned_carrier_updates": versioned_carrier_updates,
+        "reason": (
+            "current active carrier is host-complete and can be terminalized before switching the repository to idle."
+            if versioned_carrier_updates
+            else "no host-complete active carrier repair was detected."
+        ),
+        "command": "loom repair apply --target <repo> --json" if versioned_carrier_updates else "loom repair plan --target <repo> --json",
+    }
+    actions = [action] if versioned_carrier_updates or missing_inputs else []
+    result = "block" if missing_inputs else "pass"
+    return {
+        "command": "repair",
+        "operation": "apply" if apply else "plan",
+        "schema_version": "loom-carrier-repair-plan/v1",
+        "result": result,
+        "summary": (
+            "safe carrier repair applied versioned progress, status, and init-result updates."
+            if result == "pass" and apply and not dry_run and versioned_carrier_updates
+            else "safe carrier repair plan generated without mutating target state."
+            if result == "pass"
+            else "safe carrier repair is blocked until host-complete carrier ownership is unambiguous."
+        ),
+        "target": str(target_root),
+        "mutates": bool(apply and not dry_run and versioned_carrier_updates and not missing_inputs),
+        "dry_run": not apply or dry_run,
+        "missing_inputs": missing_inputs,
+        "actions": actions,
+        "diagnostics": diagnostics,
+        "item": item,
+        "host_mutations": False,
+        "host_actions": [],
+        "versioned_carrier_updates": versioned_carrier_updates,
+        "fallback_to": None if result == "pass" else "manual-carrier-closeout-review",
+    }
+
+
+def handle_repair(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        carrier_repair_payload(
+            target_root,
+            args.output,
+            args.item,
+            args.issue,
+            apply=args.operation == "apply",
+            dry_run=bool(args.dry_run),
+        )
+    )
 
 
 def handle_carrier(args: argparse.Namespace) -> int:
@@ -19670,6 +20108,11 @@ def closeout_payload(
             suite_gate_validation = suite_gate_validation_payload(fact_chain_context, surface="closeout")
         else:
             suite_gate_validation = suite_gate_not_applicable_payload(fact_chain_context, surface="closeout")
+    elif context_errors == ["repository is idle; no active Work Item is selected"]:
+        suite_gate_validation = suite_gate_not_applicable_payload({}, surface="closeout")
+    elif context_errors:
+        suite_gate_validation = suite_gate_unreadable_payload(context_errors, surface="closeout")
+    if suite_gate_validation is not None:
         suite_subchecks = closeout_suite_gate_subchecks(suite_gate_validation, profile=CLOSEOUT_LIGHT_PROFILE)
         gate["subchecks"].extend(suite_subchecks)
         for subcheck in suite_subchecks:
@@ -22970,6 +23413,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_runtime_state(args)
     if args.command == "adopt":
         return handle_adopt(args)
+    if args.command == "repair":
+        return handle_repair(args)
     if args.command == "carrier":
         return handle_carrier(args)
     if args.command == "host-binding":
