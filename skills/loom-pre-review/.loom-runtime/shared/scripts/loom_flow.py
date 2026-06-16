@@ -15743,6 +15743,92 @@ def gate_freeze_release_binding(pr_metadata_preflight: dict[str, Any] | None) ->
     }
 
 
+def gate_freeze_pr_body_pin_next_action(body_file: str | None) -> str:
+    body_file_arg = f" {shlex.quote(body_file)}" if body_file else " <rendered-pr-body.md>"
+    return (
+        f"re-run `gh pr edit --body-file{body_file_arg}`, read back the PR body into "
+        "`--compare-body-file`, then rerun `loom gate freeze check --target <repo> --json`."
+    )
+
+
+def gate_freeze_pr_body_pin_binding(pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(pr_metadata_preflight, dict):
+        return {
+            "schema_version": "loom-gate-freeze-pr-body-pin/v1",
+            "result": "not_applicable",
+            "summary": "PR metadata preflight is unavailable, so PR body hash pinning is not available.",
+            "source_locator": None,
+            "rendered_body_sha256": None,
+            "readback_body_sha256": None,
+            "metadata_block_fingerprints": [],
+            "missing_inputs": [],
+            "next_action": None,
+        }
+    body_artifact = pr_metadata_preflight.get("body_artifact")
+    if not isinstance(body_artifact, dict):
+        return {
+            "schema_version": "loom-gate-freeze-pr-body-pin/v1",
+            "result": "not_applicable",
+            "summary": "No rendered PR body artifact was provided for freeze pinning.",
+            "source_locator": None,
+            "rendered_body_sha256": None,
+            "readback_body_sha256": None,
+            "metadata_block_fingerprints": [],
+            "missing_inputs": [],
+            "next_action": None,
+        }
+
+    body_file = body_artifact.get("body_file") if isinstance(body_artifact.get("body_file"), str) else None
+    compare_body_file = (
+        body_artifact.get("compare_body_file") if isinstance(body_artifact.get("compare_body_file"), str) else None
+    )
+    rendered_body_sha256 = (
+        body_artifact.get("body_sha256") if isinstance(body_artifact.get("body_sha256"), str) else None
+    )
+    readback_body_sha256 = (
+        body_artifact.get("compare_body_sha256")
+        if isinstance(body_artifact.get("compare_body_sha256"), str)
+        else None
+    )
+    comparisons = body_artifact.get("machine_block_comparisons")
+    metadata_block_fingerprints = comparisons if isinstance(comparisons, list) else []
+    missing_inputs: list[str] = []
+
+    if body_artifact.get("result") == "block":
+        missing_inputs.extend(str(message) for message in body_artifact.get("missing_inputs", []))
+    if body_file and not compare_body_file:
+        missing_inputs.append("post-edit PR body readback file is required for gate freeze PR body pinning")
+    if rendered_body_sha256 and readback_body_sha256 and rendered_body_sha256 != readback_body_sha256:
+        missing_inputs.append("rendered PR body hash does not match GitHub readback PR body hash")
+    if pr_metadata_preflight.get("result") == "block":
+        for message in pr_metadata_preflight.get("missing_inputs", []):
+            missing_inputs.append(f"PR metadata preflight: {message}")
+
+    missing_inputs = dedupe_strings(missing_inputs)
+    result = "pass" if not missing_inputs else "block"
+    next_action = gate_freeze_pr_body_pin_next_action(body_file)
+    return {
+        "schema_version": "loom-gate-freeze-pr-body-pin/v1",
+        "result": result,
+        "summary": (
+            "PR body rendered/readback hashes and metadata machine block fingerprints are pinned."
+            if result == "pass"
+            else "PR body rendered/readback hash or metadata carrier pinning is stale."
+        ),
+        "source_locator": body_file,
+        "readback_locator": compare_body_file,
+        "rendered_body_sha256": rendered_body_sha256,
+        "readback_body_sha256": readback_body_sha256,
+        "metadata_block_fingerprints": metadata_block_fingerprints,
+        "preflight_body_source": body_artifact.get("preflight_body_source"),
+        "pr_metadata_result": pr_metadata_preflight.get("result"),
+        "missing_inputs": missing_inputs,
+        "fallback_to": "gh_pr_edit_body_file_readback" if result == "block" else None,
+        "safe_update_strategy": body_artifact.get("safe_update_strategy"),
+        "next_action": next_action if result == "block" else None,
+    }
+
+
 def gate_freeze_blocking_inputs(input_bindings: dict[str, Any]) -> list[dict[str, Any]]:
     blocking: list[dict[str, Any]] = []
     for key, binding in input_bindings.items():
@@ -15763,7 +15849,8 @@ def gate_freeze_blocking_inputs(input_bindings: dict[str, Any]) -> list[dict[str
                 "source_locator": binding.get("locator") or binding.get("source_locator"),
                 "consumer_impact": "hosted gate admission cannot trust a frozen snapshot until this input is refreshed.",
                 "messages": [str(message) for message in messages],
-                "next_action": "refresh the source input and rerun `loom gate freeze check --target <repo> --json`.",
+                "next_action": binding.get("next_action")
+                or "refresh the source input and rerun `loom gate freeze check --target <repo> --json`.",
             }
         )
     return blocking
@@ -15862,6 +15949,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
         "progress_carrier": progress_binding,
         "status_surface": status_binding,
         "pr_metadata": pr_metadata,
+        "pr_body_pin": gate_freeze_pr_body_pin_binding(pr_metadata),
         "review_binding": gate_freeze_review_binding(context, head_sha=head_sha),
         "shadow_parity": gate_freeze_shadow_binding(target_root, governance_surface),
         "suite_validation": suite_validation,
@@ -15875,6 +15963,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
     refresh_suggestions = dedupe_strings(
         [
             "loom pr metadata-preflight --surface merge_ready --target <repo> --json",
+            "gh pr edit --body-file <rendered-pr-body.md>; read back the PR body into <readback-pr-body.md>; loom gate freeze check --target <repo> --body-file <rendered-pr-body.md> --compare-body-file <readback-pr-body.md> --json",
             "loom shadow-parity --target <repo> --surface all --blocking --json",
             "loom suite validate --target <repo> --item <item> --json",
             "loom review --target <repo> --json",

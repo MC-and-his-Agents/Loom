@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1509",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Reviewed WI-1509 at head 9159c947 after the hosted loom-check github-api-budget failure. The only implementation change since the prior review removes the literal `gh pr view` recommendation from gate freeze repair guidance and replaces it with host PR body readback wording; synced runtime copies and root/demo manifests were refreshed. Focused validation passed for py_compile, git diff --check, root verify, runtime parity, demo verify, shadow parity, source distribution-regression, and source contract-only. No blocking correctness, scope, or test findings remain.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-16T23:09:04Z",
+  "reviewed_head": "9159c947cdaa2cf723ce61735fba5d4c72c05b03",
+  "reviewed_validation_summary": "2026-06-16T23:07Z WI-1509 post-CI validation passed: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 examples/new-project/.loom/bin/loom_init.py verify --target examples/new-project`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface distribution-regression .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .`. The earlier hosted `loom-pr-merge-gate` failure on run 27653279714 was classified as PR body update/check-start timing drift; rerun job 81782191725 passed. The earlier hosted `loom-check` failure was classified as github-api-budget guard on a literal `gh pr view` recommendation in `loom_flow.py`; replacing it with host-API readback wording cleared local distribution-regression and contract-only checks.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1509.md",
+    "recovery_entry": ".loom/progress/WI-1509.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1509-pr-body-hash-pin/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1509-pr-body-hash-pin --item WI-1509 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1509-pr-body-hash-pin/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1509-pr-body-hash-pin --item WI-1509 --json",
+    "suite_evidence_map": ".loom/specs/WI-1509/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1509/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
