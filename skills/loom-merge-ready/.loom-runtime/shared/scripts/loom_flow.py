@@ -6899,6 +6899,47 @@ def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) 
     }
 
 
+def suite_gate_unreadable_payload(errors: list[str], *, surface: str) -> dict[str, Any]:
+    missing_inputs = [f"fact-chain: {message}" for message in errors]
+    summary = "suite evidence and carrier validation context is unreadable for this gate surface."
+    validation = {
+        "result": "block",
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "fact-chain",
+        "command": "not_applicable",
+        "validator": None,
+        "validator_mode": "fact-chain-unreadable",
+        "payload": None,
+    }
+    return {
+        "schema_version": "loom-suite-gate-validation/v1",
+        "surface": surface,
+        "result": "block",
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "fact-chain",
+        "authority_boundary": {
+            "role": "gate_input_evidence",
+            "does_not_replace": [
+                "work_item",
+                "review_record",
+                "merge_ready_result",
+                "closeout_evidence",
+                "docs_source_truth",
+            ],
+        },
+        "consumed_locators": {
+            "evidence_map": None,
+            "task_carriers": [],
+        },
+        "validations": {
+            "evidence": dict(validation),
+            "carrier": dict(validation),
+        },
+    }
+
+
 def suite_gate_payload_for_surface(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
     if suite_gate_required_for_surface(context, surface=surface):
         return suite_gate_validation_payload(context, surface=surface)
@@ -8092,7 +8133,7 @@ def build_review_flow_payload(
             "runtime_state": runtime_state,
         }
 
-    context, errors = load_context(target_root, output_relative, expected_item)
+    context, errors = load_context_with_retained_idle_fallback(target_root, output_relative, expected_item)
     if errors:
         return {
             "command": "flow",
@@ -9492,12 +9533,22 @@ def path_in_scope(path: str, scope_paths: list[str]) -> bool:
     return any(path == scope_path or path.startswith(f"{scope_path}/") for scope_path in scope_paths)
 
 
+NO_ACTIVE_ITEM_ID = "no_active_item"
+IDLE_FACT_CHAIN_ERROR = "repository is idle; no active Work Item is selected"
+
+
 def load_context(target_root: Path, output_relative: str, expected_item: str | None) -> tuple[dict[str, Any], list[str]]:
     report, errors = load_fact_chain_report(target_root, output_relative)
     if errors:
         return {}, errors
 
-    item_id = report["fact_chain"]["entry_points"]["current_item_id"]
+    fact_chain = report.get("fact_chain")
+    entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+    if not isinstance(entry_points, dict):
+        return {}, ["fact-chain entry_points must be readable for active context"]
+    item_id = entry_points.get("current_item_id")
+    if fact_chain.get("mode") == "idle" or item_id == NO_ACTIVE_ITEM_ID:
+        return {}, [IDLE_FACT_CHAIN_ERROR]
     if expected_item and expected_item != item_id:
         return {}, [f"current item mismatch: expected `{expected_item}`, got `{item_id}`"]
 
@@ -9696,6 +9747,29 @@ def load_retained_item_context(
         "retained_item_context": True,
     }
     return context, []
+
+
+def is_idle_context_errors(errors: list[str]) -> bool:
+    return errors == [IDLE_FACT_CHAIN_ERROR]
+
+
+def load_context_with_retained_idle_fallback(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+) -> tuple[dict[str, Any], list[str]]:
+    context, errors = load_context(target_root, output_relative, expected_item)
+    if not is_idle_context_errors(errors) or not expected_item or expected_item == NO_ACTIVE_ITEM_ID:
+        return context, errors
+
+    retained_context, retained_errors = load_retained_item_context(target_root, output_relative, expected_item)
+    if retained_errors:
+        return {}, [*errors, *[f"retained item: {message}" for message in retained_errors]]
+    return retained_context, []
+
+
+def expected_idle_item(expected_item: str | None) -> bool:
+    return expected_item is None or expected_item == NO_ACTIVE_ITEM_ID
 
 
 def text_mentions_issue_number(text: object, issue_number: int) -> bool:
@@ -13311,6 +13385,50 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
     governance_surface = build_governance_surface(target_root)
 
     if context_errors:
+        if is_idle_context_errors(context_errors) and expected_idle_item(expected_item):
+            missing_inputs: list[str] = []
+            if runtime_state.get("result") != "pass":
+                missing_inputs.extend(str(message) for message in runtime_state.get("missing_inputs", []))
+            missing_inputs.extend(pr_template_errors)
+            result = "pass" if not missing_inputs else "block"
+            return {
+                "command": "adopt",
+                "operation": "verify",
+                "schema_version": "loom-adoption-verify/v1",
+                "result": result,
+                "summary": (
+                    "adoption verify is satisfied for an idle repository with no active Work Item."
+                    if result == "pass"
+                    else "idle adoption verify found blocking runtime or template gaps."
+                ),
+                "missing_inputs": missing_inputs,
+                "fallback_to": None if result == "pass" else "adoption",
+                "runtime_state": runtime_state,
+                "governance_surface": governance_surface,
+                "pr_template": pr_template,
+                "producer_consumer_roundtrip": {
+                    "producer": {
+                        "status": "not_applicable",
+                        "body_sections": [],
+                    },
+                    "consumer": {
+                        "result": "not_applicable",
+                        "summary": "idle repositories have no active adoption PR body to validate.",
+                        "missing_inputs": [],
+                    },
+                    "bypass_check": {
+                        "scenario": "Review Artifacts section omitted while repository is idle",
+                        "result": "pass",
+                        "consumer_result": "block",
+                        "missing_inputs": ["idle repository has no active adoption review artifacts"],
+                    },
+                },
+                "idle_repository": {
+                    "result": "pass",
+                    "current_item_id": NO_ACTIVE_ITEM_ID,
+                    "fact_chain_error": IDLE_FACT_CHAIN_ERROR,
+                },
+            }
         return {
             "command": "adopt",
             "operation": "verify",
@@ -13554,7 +13672,8 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
 def carrier_refresh_payload(target_root: Path, output_relative: str, expected_item: str | None, *, dry_run: bool) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     context, context_errors = load_context(target_root, output_relative, expected_item)
-    missing_inputs: list[str] = [f"fact-chain: {message}" for message in context_errors]
+    idle_context = is_idle_context_errors(context_errors)
+    missing_inputs: list[str] = [] if idle_context else [f"fact-chain: {message}" for message in context_errors]
 
     manifest_path, manifest_path_errors = resolve_repo_relative_path(target_root, ".loom/bootstrap/manifest.json", label="bootstrap manifest")
     init_path, init_path_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
@@ -13593,7 +13712,12 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
                 missing_inputs.append(f"runtime-state: {message}")
 
     review_status: dict[str, Any] = {"status": "not_checked"}
-    if not context_errors:
+    if idle_context:
+        review_status = {
+            "status": "not_applicable",
+            "reason": "repository is idle; no active Work Item review binding is selected",
+        }
+    elif not context_errors:
         assert context
         review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
         spec_review_path = default_spec_review_path(context["item_id"])
@@ -16219,7 +16343,7 @@ def pr_gate_payload(
     context: dict[str, Any] = {}
     context_errors: list[str] = []
     if effective_item is not None:
-        context, context_errors = load_context(target_root, output_relative, effective_item)
+        context, context_errors = load_context_with_retained_idle_fallback(target_root, output_relative, effective_item)
     else:
         context, context_errors = load_context(target_root, output_relative, expected_item)
     if context_errors:
@@ -19303,15 +19427,28 @@ def runtime_parity_payload(
     carrier_summary = governance_surface.get("carrier_summary")
 
     if context_errors:
-        checks.append(
-            runtime_parity_check(
-                "work_item",
-                result="block",
-                summary="runtime parity could not read the Work Item fact chain.",
-                missing_inputs=[f"fact-chain: {message}" for message in context_errors],
-                fallback_to="admission",
+        if is_idle_context_errors(context_errors) and expected_idle_item(expected_item):
+            checks.append(
+                runtime_parity_check(
+                    "work_item",
+                    result="pass",
+                    summary="Repository is idle; no active Work Item is required for runtime parity.",
+                    evidence={
+                        "current_item_id": NO_ACTIVE_ITEM_ID,
+                        "fact_chain": "idle",
+                    },
+                )
             )
-        )
+        else:
+            checks.append(
+                runtime_parity_check(
+                    "work_item",
+                    result="block",
+                    summary="runtime parity could not read the Work Item fact chain.",
+                    missing_inputs=[f"fact-chain: {message}" for message in context_errors],
+                    fallback_to="admission",
+                )
+            )
     else:
         checks.append(
             runtime_parity_check(
@@ -20055,6 +20192,11 @@ def closeout_payload(
             suite_gate_validation = suite_gate_validation_payload(fact_chain_context, surface="closeout")
         else:
             suite_gate_validation = suite_gate_not_applicable_payload(fact_chain_context, surface="closeout")
+    elif is_idle_context_errors(context_errors):
+        suite_gate_validation = suite_gate_not_applicable_payload({}, surface="closeout")
+    elif context_errors:
+        suite_gate_validation = suite_gate_unreadable_payload(context_errors, surface="closeout")
+    if suite_gate_validation is not None:
         suite_subchecks = closeout_suite_gate_subchecks(suite_gate_validation, profile=CLOSEOUT_LIGHT_PROFILE)
         gate["subchecks"].extend(suite_subchecks)
         for subcheck in suite_subchecks:
@@ -20929,7 +21071,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
 
 def handle_review(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
-    context, errors = load_context(target_root, args.output, args.item)
+    context, errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
     if errors:
         return emit(
             {
@@ -22155,7 +22297,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     if args.operation == "story":
         return emit(story_flow_payload(target_root=target_root, runtime_state=runtime_state, steps=steps))
 
-    context, errors = load_context(target_root, args.output, args.item)
+    context, errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
     if errors:
         return emit(
             {

@@ -71,12 +71,12 @@
     }
   ],
   "fact_chain": {
-    "mode": "work-item + recovery-entry + derived status-surface",
+    "mode": "idle",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1235",
-      "work_item": ".loom/work-items/WI-1235.md",
-      "recovery_entry": ".loom/progress/WI-1235.md",
+      "current_item_id": "no_active_item",
+      "work_item": "not_applicable",
+      "recovery_entry": "not_applicable",
       "status_surface": ".loom/status/current.md"
     }
   },
@@ -128,7 +128,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "e0e2d36100296ab4a9958a5c06435acd788ddeb702831c1e2e5e1c99559f3772"
+      "sha256": "40ea1efc4356a085c62cbb5686bc01e591c768707371ae9d4ddbf1b5bec69f69"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -152,7 +152,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "b612306a28db54f394f82bc3893328e5ead0f9fe8c7929d0bc78871033027ae0"
+      "sha256": "88e508c5ea6ac3e97ff6f3a78d441e0fbb100cf80e336d9470766501e977f24e"
     },
     {
       "path": "AGENTS.md",

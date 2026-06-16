@@ -285,9 +285,33 @@ def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None 
     return completed.returncode, payload
 
 
+def retained_closeout_work_item_id() -> str | None:
+    candidates: list[tuple[str, str, str]] = []
+    for path in sorted((REPO_ROOT / ".loom" / "progress").glob("WI-*.md")):
+        text = path.read_text(encoding="utf-8")
+        item_match = re.search(r"(?im)^\s*-\s*Item ID:\s*(WI-\d+)\s*$", text)
+        checkpoint_match = re.search(r"(?im)^\s*-\s*Current Checkpoint:\s*([A-Za-z_-]+)\s*$", text)
+        if not item_match or not checkpoint_match:
+            continue
+        checkpoint = checkpoint_match.group(1).lower().replace("-", "_")
+        if checkpoint not in {"closed", "closed_out", "done"} or "## Terminal Closeout Metadata" not in text:
+            continue
+        closed_match = re.search(r"(?im)^\s*-\s*Closed At:\s*([^\n]+?)\s*$", text)
+        closed_at = closed_match.group(1).strip() if closed_match else ""
+        candidates.append((closed_at, path.name, item_match.group(1)))
+    if not candidates:
+        return None
+    return sorted(candidates)[-1][2]
+
+
 def active_work_item_id() -> str:
     payload = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
-    item_id = payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id")
+    fact_chain = payload.get("fact_chain", {}) if isinstance(payload.get("fact_chain"), dict) else {}
+    item_id = fact_chain.get("entry_points", {}).get("current_item_id") if isinstance(fact_chain.get("entry_points"), dict) else None
+    if fact_chain.get("mode") == "idle" or item_id == "no_active_item":
+        retained_item = retained_closeout_work_item_id()
+        if retained_item:
+            return retained_item
     if not isinstance(item_id, str) or not item_id:
         raise AssertionError("init-result current_item_id is missing")
     return item_id
@@ -4578,10 +4602,33 @@ def assert_active_closeout_contract(active_item: str) -> None:
         assert_closeout_blocks_missing_suite_evidence(active_item)
 
 
+def assert_idle_root_self_governance_direct_contract() -> None:
+    init_result = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
+    fact_chain = init_result.get("fact_chain") if isinstance(init_result, dict) else {}
+    entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else {}
+    if not isinstance(entry_points, dict) or entry_points.get("current_item_id") != "no_active_item":
+        return
+
+    runtime_status, runtime_parity = run_flow_json(["runtime-parity", "validate", "--target", str(REPO_ROOT)], expect=0)
+    if runtime_status != 0 or runtime_parity.get("result") != "pass":
+        raise AssertionError("idle runtime-parity direct check did not pass")
+    work_item_check = next((check for check in runtime_parity.get("checks", []) if check.get("name") == "work_item"), None)
+    if not isinstance(work_item_check, dict) or work_item_check.get("result") != "pass":
+        raise AssertionError("idle runtime-parity did not treat no_active_item as a pass")
+
+    _, adopt_verify = run_flow_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "no_active_item"], expect=0)
+    if adopt_verify.get("result") != "pass" or not isinstance(adopt_verify.get("idle_repository"), dict):
+        raise AssertionError("idle adopt verify direct check did not pass")
+    roundtrip = adopt_verify.get("producer_consumer_roundtrip")
+    if not isinstance(roundtrip, dict) or roundtrip.get("bypass_check", {}).get("result") != "pass":
+        raise AssertionError("idle adopt verify did not preserve producer/consumer roundtrip evidence")
+
+
 def run_governance_closeout_contract() -> None:
     assert_governance_closeout_help_contract()
     active_item = active_work_item_id()
     assert_active_closeout_contract(active_item)
+    assert_idle_root_self_governance_direct_contract()
     assert_reconciliation_suite_taxonomy_contract()
     with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)
