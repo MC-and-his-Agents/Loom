@@ -32,6 +32,7 @@
 | EV-003 | fresh_verification_input | .loom/progress/WI-1235.md | EV-001 EV-002 plus generated-tree drift | WI-1235 / local worktree / 2026-06-16T06:55Z validation | present | review / merge-ready / closeout / status | Rerun after generated runtime or CLI contract changes. |
 | EV-004 | structural_evidence | .loom/status/current.md | suite, fact-chain, review, merge-ready | WI-1235 carrier set / current branch | present | review / merge-ready / closeout / status | Rerun suite validate/evidence/carrier validate and fact-chain after carrier changes. |
 | EV-005 | build_evidence | .loom/progress/WI-1235-build-evidence.json | delegated findings and integration ownership | WI-1235 / build checkpoint / integrated findings | present | build / pre-review / review | Recheck after implementation, validation evidence, or ownership changes. |
+| EV-006 | fixture_evidence | examples/new-project/.loom/bin/loom_flow.py | generated runtime demo fixture sync | WI-1235 / hosted demo-bootstrap failure / local fixture sync | present | hosted checks / merge-ready | Rerun `make loom-demo-new-project-check` after runtime or demo bootstrap fixture changes. |
 
 ## Excluded / Deferred
 

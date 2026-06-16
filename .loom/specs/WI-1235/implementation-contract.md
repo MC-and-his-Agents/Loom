@@ -37,6 +37,9 @@ The implementation may write only:
 - `skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py`
 - `skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py`
 - `skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py`
+- `examples/new-project/.loom/bin/loom_flow.py`
+- `examples/new-project/.loom/bootstrap/init-result.json`
+- `examples/new-project/.loom/bootstrap/manifest.json`
 - WI-1235 Loom work item, progress, build evidence, suite, status, shadow, and review carriers
 
 ## Runtime Contract
@@ -64,6 +67,7 @@ Required validation before review/merge-ready consumption:
 - `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`
 - `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`
 - `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only`
+- `make loom-demo-new-project-check`
 - PR metadata preflight/readback against the current PR body and head SHA
 - Hosted required checks on the current PR head
 - Loom review, PR gate, merge-ready, controlled merge, and post-merge closeout readback
