@@ -15,6 +15,8 @@ The implementation owns only:
 - `.loom/work-items/WI-1507.md`
 - `.loom/progress/WI-1507.md`
 - `.loom/specs/WI-1507/**`
+- `.loom/reviews/WI-1507.spec.json`
+- `.loom/reviews/WI-1507.json`
 - `.loom/runtime/build/WI-1507.json`
 - `.loom/status/current.md`
 - `.loom/bootstrap/init-result.json`
