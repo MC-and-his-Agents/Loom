@@ -3,55 +3,30 @@
   "item_id": "WI-1237",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "Implementation review allows WI-1237 at head 3ca4c75bf07b06d6509bb059b5558421dd1dccda: README now gives a concrete idle/no_active_item recovery path; harness docs separate local workspace retire, host closeout sync, and repo carrier closeout-sync ownership; CLI help summaries expose those lifecycle boundaries; release-surface docs and release-doc-contract checker coverage retain the HotCP-style stale carrier fixture story for release/no-release closeout; merge checkpoint carriers, PR #1518 readback, stale dependency edge cleanup, and shadow hashes are aligned. The changes are scoped to docs/help/checker and WI-1237 carriers; no runtime semantics, schema, parser, failure vocabulary, release workflow publish behavior, package payload, VERSION/tag/GitHub Release/npm publish, #1296, #1228, Round 10/11, or Deferred roadmap scope was changed.",
-  "reviewer": "codex-round9-implementation-review",
-  "authored_at": "2026-06-16T15:39:10Z",
-  "reviewed_head": "3ca4c75bf07b06d6509bb059b5558421dd1dccda",
-  "reviewed_validation_summary": "2026-06-16T15:38Z local and host validation passed: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py help --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py --surface release-doc-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; suite validate/evidence/carrier for WI-1237; fact-chain readback for WI-1237 at checkpoint merge; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target .`; full `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed all 6 surfaces in 288.09s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py flow build --target . --item WI-1237`, `flow pre-review`, `flow spec-review`, and post-PR `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py flow review --target . --item WI-1237 --pr 1518 --branch work/1237-docs-help-closeout --issue 1237` passed; PR #1518 GitHub readback is OPEN/ready, and PR body metadata preflight consumed the current pushed head and branch; GraphQL removed stale #1237 blocked-by edges to CLOSED #1232, #1233, #1234, #1235, and #1236, then readback returned `blockedBy.nodes=[]` and `blocking.nodes=[#1228,#1296]`.",
+  "summary": "Terminal closeout review allows WI-1237 at carrier closeout head 1167356a861517f584f34b7b194e7ebc5f803295: PR #1518 merged at head b8bcb48120e934dac0b4b31a00a825ffe55c540d with merge commit 864e12ace9090ba38cf55d6456726d7d291d5aae; issue #1237 is CLOSED/COMPLETED; WI-1237 progress carries terminal closeout metadata and dynamic checkpoint closed_out; init-result/status surface now read idle/no_active_item; closeout and merge-ready shadows match the idle status hash; no release action was performed and no_release evidence is retained through PR #1518 metadata plus hosted release-judgment run 27629489398/job 81700235408. This review covers carrier-only closeout sync and does not change docs/help implementation, runtime behavior, schema, parser, failure vocabulary, release, workflow, or unrelated scope.",
+  "reviewer": "codex-round9-closeout-review",
+  "authored_at": "2026-06-16T15:56:29Z",
+  "reviewed_head": "1167356a861517f584f34b7b194e7ebc5f803295",
+  "reviewed_validation_summary": "2026-06-16T15:47Z local and hosted validation for PR #1518 head b8bcb48120e934dac0b4b31a00a825ffe55c540d passed: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py help --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py --surface release-doc-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; suite validate/evidence/carrier for WI-1237; fact-chain readback for WI-1237 at checkpoint merge; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target .`; full `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed all 6 surfaces in 288.09s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py flow build --target . --item WI-1237`, `flow pre-review`, `flow spec-review`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py flow review --target . --item WI-1237 --pr 1518 --branch work/1237-docs-help-closeout --issue 1237` passed; PR #1518 metadata/readback consumed head b8bcb48120e934dac0b4b31a00a825ffe55c540d; hosted `loom-pr-merge-gate`, `loom-check`, `release-judgment`, `node-installer-pr`, `py-compile`, `repo-local-cli`, `root-self-governance`, and `demo-bootstrap` checks all passed; GitHub PR #1518 merged as 864e12ace9090ba38cf55d6456726d7d291d5aae; issue #1237 read back CLOSED/COMPLETED; GraphQL removed stale #1237 blocked-by edges to CLOSED #1232, #1233, #1234, #1235, and #1236, then readback returned `blockedBy.nodes=[]` and `blocking.nodes=[#1228,#1296]`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
   "follow_ups": [],
   "consumed_inputs": {
-    "work_item": ".loom/work-items/WI-1237.md",
+    "implementation_pr": "https://github.com/MC-and-his-Agents/Loom/pull/1518",
+    "implementation_merge_commit": "864e12ace9090ba38cf55d6456726d7d291d5aae",
+    "issue": "https://github.com/MC-and-his-Agents/Loom/issues/1237",
     "recovery_entry": ".loom/progress/WI-1237.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "budget_risk": {
-      "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
-      "enforcement": "advisory",
-      "highest_risk": "none",
-      "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
-      "adapter_evidence_locator": "",
-      "provenance": {
-        "source": "github_host"
-      }
-    },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1237-docs-help-closeout/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1237-docs-help-closeout --item WI-1237 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1237-docs-help-closeout/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1237-docs-help-closeout --item WI-1237 --json",
-    "suite_evidence_map": ".loom/specs/WI-1237/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1237/task-carrier.md"
+    "init_result": ".loom/bootstrap/init-result.json",
+    "shadow_surfaces": [
+      ".loom/shadow/closeout-loom.json",
+      ".loom/shadow/merge-ready-loom.json"
     ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "release_judgment": "no_release via PR #1518 metadata and hosted release-judgment run 27629489398 job 81700235408"
   },
-    "semantic_review_disposition": {
-      "status": "passed",
-      "reason": "Authored implementation review approved the merge checkpoint head, PR readback, and stale dependency cleanup for docs/help/release-surface closeout consumption."
-    }
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored terminal closeout review approved the reviewed carrier closeout head for post-merge closeout PR consumption; build/merge checkpoint remains closed_out/fallback after the WI has already completed."
+  }
 }
