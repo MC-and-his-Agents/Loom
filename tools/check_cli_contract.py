@@ -4817,6 +4817,9 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError("gate freeze check must expose input_bindings and readiness diagnostics")
     subject = freeze_payload.get("snapshot_subject")
     pr_metadata = freeze_payload.get("input_bindings", {}).get("pr_metadata")
+    pr_body_pin = freeze_payload.get("input_bindings", {}).get("pr_body_pin")
+    if not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1":
+        raise AssertionError("gate freeze check must expose a PR body pin binding")
     if isinstance(subject, dict) and isinstance(pr_metadata, dict) and pr_metadata.get("result") == "pass":
         for contract in pr_metadata.get("metadata_contracts", []):
             if not isinstance(contract, dict):
@@ -4833,6 +4836,113 @@ def run_aggregate_cli_contract() -> None:
             for field_name, expected_value in expected_bindings.items():
                 if isinstance(expected_value, str) and expected_value and fields.get(field_name) != expected_value:
                     raise AssertionError("gate freeze must not pass stale PR metadata that is not bound to the snapshot subject")
+
+    runtime_pr_dir = REPO_ROOT / ".loom" / "runtime" / "pr"
+    runtime_pr_dir.mkdir(parents=True, exist_ok=True)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
+    rendered_pr_body = runtime_pr_dir / "cli-contract-rendered.md"
+    readback_pr_body = runtime_pr_dir / "cli-contract-readback.md"
+    readback_pr_body_drift = runtime_pr_dir / "cli-contract-readback-drift.md"
+    carrier_drift_body = runtime_pr_dir / "cli-contract-carrier-drift.md"
+    try:
+        branch = "work/1509-pr-body-hash-pin"
+        body = governance_metadata_body(item="WI-1509", branch=branch, head_sha=head_sha)
+        rendered_pr_body.write_text(body, encoding="utf-8")
+        readback_pr_body.write_text(body, encoding="utf-8")
+        _, body_pin_payload = run_json(
+            [
+                "gate",
+                "freeze",
+                "check",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                "WI-1509",
+                "--branch",
+                branch,
+                "--body-file",
+                ".loom/runtime/pr/cli-contract-rendered.md",
+                "--compare-body-file",
+                ".loom/runtime/pr/cli-contract-readback.md",
+                "--json",
+            ],
+            expect=None,
+        )
+        body_pin = body_pin_payload.get("input_bindings", {}).get("pr_body_pin")
+        if not isinstance(body_pin, dict) or body_pin.get("result") != "pass":
+            raise AssertionError(f"gate freeze PR body pin positive fixture did not pass: {body_pin}")
+        if body_pin.get("rendered_body_sha256") != body_pin.get("readback_body_sha256"):
+            raise AssertionError("gate freeze PR body pin did not record matching rendered/readback body hashes")
+        if not body_pin.get("metadata_block_fingerprints"):
+            raise AssertionError("gate freeze PR body pin did not retain metadata block fingerprints")
+
+        readback_pr_body_drift.write_text(body + "\nOperator note added after edit.\n", encoding="utf-8")
+        _, body_hash_drift_payload = run_json(
+            [
+                "gate",
+                "freeze",
+                "check",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                "WI-1509",
+                "--branch",
+                branch,
+                "--body-file",
+                ".loom/runtime/pr/cli-contract-rendered.md",
+                "--compare-body-file",
+                ".loom/runtime/pr/cli-contract-readback-drift.md",
+                "--json",
+            ],
+            expect=1,
+        )
+        body_hash_drift = body_hash_drift_payload.get("input_bindings", {}).get("pr_body_pin")
+        if not isinstance(body_hash_drift, dict) or body_hash_drift.get("result") != "block":
+            raise AssertionError("gate freeze PR body pin must block rendered/readback body hash drift")
+        if "rendered PR body hash does not match GitHub readback PR body hash" not in body_hash_drift.get("missing_inputs", []):
+            raise AssertionError("gate freeze PR body pin did not report rendered/readback body hash drift")
+        if not any(
+            blocking.get("input") == "pr_body_pin"
+            and "gh pr edit --body-file" in str(blocking.get("next_action"))
+            for blocking in body_hash_drift_payload.get("readiness", {}).get("blocking_inputs", [])
+            if isinstance(blocking, dict)
+        ):
+            raise AssertionError("gate freeze PR body pin block must include the gh pr edit/readback next action")
+
+        carrier_drift_body.write_text(
+            governance_metadata_body(item="WI-1509", branch=branch, head_sha="2" * 40),
+            encoding="utf-8",
+        )
+        _, carrier_drift_payload = run_json(
+            [
+                "gate",
+                "freeze",
+                "check",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                "WI-1509",
+                "--head-sha",
+                head_sha,
+                "--branch",
+                branch,
+                "--body-file",
+                ".loom/runtime/pr/cli-contract-rendered.md",
+                "--compare-body-file",
+                ".loom/runtime/pr/cli-contract-carrier-drift.md",
+                "--json",
+            ],
+            expect=1,
+        )
+        carrier_drift = carrier_drift_payload.get("input_bindings", {}).get("pr_body_pin")
+        if not isinstance(carrier_drift, dict) or carrier_drift.get("result") != "block":
+            raise AssertionError("gate freeze PR body pin must block machine carrier binding drift")
+        if not any("PR metadata preflight:" in str(message) for message in carrier_drift.get("missing_inputs", [])):
+            raise AssertionError("gate freeze PR body pin must preserve preflight carrier mismatch messages")
+    finally:
+        for path in (rendered_pr_body, readback_pr_body, readback_pr_body_drift, carrier_drift_body):
+            if path.exists():
+                path.unlink()
     outside_freeze_path = REPO_ROOT / ".loom" / "runtime" / "gate-freeze-outside" / "probe.json"
     if outside_freeze_path.exists():
         outside_freeze_path.unlink()

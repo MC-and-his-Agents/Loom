@@ -1,0 +1,5 @@
+# WI-1509 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1509 | Issue OPEN / branch work/1509-pr-body-hash-pin / PR pending | in_progress | primary | .loom/work-items/WI-1509.md | .loom/specs/WI-1509/plan.md#implementation-steps | .loom/specs/WI-1509/spec.md#acceptance-scenarios | .loom/specs/WI-1509/plan.md#validation | .loom/specs/WI-1509/evidence-map.md | GitHub issue #1509 acceptance criteria; milestone/12 goal; branch work/1509-pr-body-hash-pin; local worktree `/Users/mc/dev/Loom-1509-pr-body-hash-pin` | Recheck issue #1509, PR head/body metadata, review record, hosted checks, merge-ready gate, target branch, merge commit, and closeout evidence before merge-ready or closeout; task carrier state is tracking-only and does not replace Work Item, review, PR gate, merge-ready, or closeout truth. |
