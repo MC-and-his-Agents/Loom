@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1507.json
 - Validation Entry: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1507 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1507 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1507 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py help --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pre-review --target . --item WI-1507 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-preflight 1522 --head-sha <current-head> --work-item WI-1507 --surface merge_ready --json`
 - Closing Condition: PR for #1507 is merged, issue #1507 is closed/completed, and the contract is consumable by #1508 without reopening field boundaries.
-- Current Checkpoint: pre_review
+- Current Checkpoint: build
 - Current Stop: PR #1522 is open as draft for branch `work/1507-gate-freeze-contract`; `loom-gate-freeze/v1` contract and WI-1507 carriers are drafted; pre-review, PR body readback, and PR metadata preflight have passed, with merge blocked until formal spec/implementation review artifacts exist.
 - Next Step: Run formal spec review and implementation review for #1507, then re-run PR gate and merge-ready checks on the current PR head.
 - Blockers: None
