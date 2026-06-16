@@ -3,11 +3,11 @@
   "item_id": "WI-1235",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review passed for WI-1235 idle retained gate repair at code head 9c4aabac893f4a8cc752c9030d73ae8c402e6534: the change falls back to retained Work Item context only when the repository fact-chain is explicitly idle and the caller supplies a concrete retained item; active fact-chain mismatches and unreadable retained carriers still fail closed; flow/review/pr-gate expose suite/review evidence for terminal closeout consumption; root, skills, demo runtime copies and bootstrap sha carriers are synchronized. This review is for terminal closeout PR consumption and does not claim a normal build checkpoint pass after the WI is already closed_out.",
+  "summary": "Implementation review passed for WI-1235 idle self-governance and retained gate repair at code head 3cc58fe0ba2ed17da0e72d2210eca143597a7797: retained Work Item fallback still applies only when the repository fact-chain is explicitly idle and the caller supplies a concrete retained item; active fact-chain mismatches and unreadable retained carriers fail closed; flow/review/pr-gate expose suite/review evidence for terminal closeout consumption; root self-governance runtime-parity and adopt verify accept `no_active_item` only for an idle repository; root, skills, demo runtime copies and bootstrap sha carriers are synchronized. This review is for terminal closeout PR consumption and does not claim a normal build checkpoint pass after the WI is already closed_out.",
   "reviewer": "codex-round9-closeout-review",
-  "authored_at": "2026-06-16T09:42:46Z",
-  "reviewed_head": "9c4aabac893f4a8cc752c9030d73ae8c402e6534",
-  "reviewed_validation_summary": "2026-06-16T09:38Z local validation for PR #1506 code head 9c4aabac893f4a8cc752c9030d73ae8c402e6534 passed: py_compile for source/generated/root/demo loom_flow plus tools/check_cli_contract; generated-tree-drift check; carrier refresh --dry-run with .loom/bin/loom_flow.py sha256 01da032afcb6c1daf46706ea765ee584c29a7896802ccf5cfe47918b85b84342 current in manifest/init-result; shadow-parity all blocking; governance-closeout contract passed in 57.18s; loom_check source closeout-reconciliation passed in 21.56s; aggregate CLI contract passed in 306.79s; make loom-demo-new-project-check passed after committing generated demo runtime changes.",
+  "authored_at": "2026-06-16T10:16:05Z",
+  "reviewed_head": "3cc58fe0ba2ed17da0e72d2210eca143597a7797",
+  "reviewed_validation_summary": "2026-06-16T10:16Z local validation for PR #1506 code head 3cc58fe0ba2ed17da0e72d2210eca143597a7797 passed: py_compile for source/generated/root/demo loom_flow plus tools/check_cli_contract; generated-tree-drift check; root self-governance command chain passed with .loom/bin/loom_flow.py sha256 28232684c702932ac064401c8af3df55d098aa61c43e8de922437de2697cc9a1 current in manifest/init-result; carrier refresh --dry-run; shadow-parity all blocking; make loom-demo-new-project-check; governance-closeout contract passed in 74.69s; loom_check source closeout-reconciliation passed in 22.57s; aggregate CLI contract passed in 264.16s.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the reviewed code head for terminal closeout PR consumption; build checkpoint remains closed_out/fallback after the WI has already been completed."
+    "reason": "Authored implementation review approved the reviewed code head for terminal closeout PR consumption; idle `no_active_item` self-governance is covered, and build checkpoint remains closed_out/fallback after the WI has already been completed."
   }
 }
