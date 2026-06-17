@@ -87,5 +87,6 @@ Build readiness 消费的共享合同见：
 - [spec-suite.md](.loom-runtime/shared/references/templates/spec-suite.md)
 - [execution-breakdown.md](.loom-runtime/shared/references/templates/execution-breakdown.md)
 - [task-carrier-contract.md](.loom-runtime/shared/references/harness/task-carrier-contract.md)
+- [lane-orchestration.md](.loom-runtime/shared/references/harness/lane-orchestration.md)
 - [evidence-map.md](.loom-runtime/shared/references/templates/evidence-map.md)
 - [consistency-analysis.md](.loom-runtime/shared/references/templates/consistency-analysis.md)

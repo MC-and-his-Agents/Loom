@@ -21,3 +21,7 @@ description: 负责交接当前事项。Use when Codex needs to prepare a handof
 
 - [references/input-signals.md](./references/input-signals.md)
 - [references/output-contract.md](./references/output-contract.md)
+
+handoff 对 lane 输出与 shared carrier 串行写的边界，消费的共享合同见：
+
+- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)

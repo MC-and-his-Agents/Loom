@@ -39,4 +39,5 @@ Merge-ready 消费的共享合同见：
 - [evidence-map.md](../shared/references/templates/evidence-map.md)
 - [consistency-analysis.md](../shared/references/templates/consistency-analysis.md)
 - [gate-chain.md](../shared/references/harness/gate-chain.md)
+- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)
 - [../shared/references/harness/pr-merge-gate.md](../shared/references/harness/pr-merge-gate.md)

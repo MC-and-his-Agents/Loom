@@ -39,4 +39,5 @@ Merge-ready 消费的共享合同见：
 - [evidence-map.md](.loom-runtime/shared/references/templates/evidence-map.md)
 - [consistency-analysis.md](.loom-runtime/shared/references/templates/consistency-analysis.md)
 - [gate-chain.md](.loom-runtime/shared/references/harness/gate-chain.md)
+- [lane-orchestration.md](.loom-runtime/shared/references/harness/lane-orchestration.md)
 - [../shared/references/harness/pr-merge-gate.md](.loom-runtime/shared/references/harness/pr-merge-gate.md)
