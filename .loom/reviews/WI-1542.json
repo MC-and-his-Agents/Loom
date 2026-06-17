@@ -3,16 +3,16 @@
   "item_id": "WI-1542",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1542 retained Work Item lookup ranking is approved at head a854c4b8b1b1fea221335cf3092816fcfe7be225: canonical issue-number carrier path, canonical item id, and exact associated artifact issue locator outrank historical recovery text mentions; true same-strength ambiguity remains fail-closed; generated skills runtime copies, demo bootstrap fixture sync, suite evidence map, and focused regression coverage are present.",
+  "summary": "WI-1542 carrier-only closeout sync is approved at head 445a3ddaf7137341d54bcb0fc58fc9e3addd90fa: PR #1551 only terminalizes the repo-local WI-1542 carrier after PR #1550 merged, keeps remaining active-carrier audit UX split/follow-up scoped, and preserves the retained implementation evidence without adding implementation drift.",
   "reviewer": "codex",
-  "authored_at": "2026-06-17T13:52:21Z",
-  "reviewed_head": "a854c4b8b1b1fea221335cf3092816fcfe7be225",
-  "reviewed_validation_summary": "2026-06-17T13:52Z WI-1542 validation passed at head 3a38a2d11ebaa6b113145d9fd2087d9b90b4701e: `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py examples/new-project/.loom/bin/loom_flow.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1542 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1542 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1542 --json`; `git diff --check`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`.",
+  "authored_at": "2026-06-17T15:02:30Z",
+  "reviewed_head": "445a3ddaf7137341d54bcb0fc58fc9e3addd90fa",
+  "reviewed_validation_summary": "2026-06-17T15:02Z WI-1542 carrier-only closeout sync validation passed at head 445a3ddaf7137341d54bcb0fc58fc9e3addd90fa: `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py status --target . --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-preflight --surface merge_ready --work-item WI-1542 --head-sha 445a3ddaf7137341d54bcb0fc58fc9e3addd90fa --body-file .loom/runtime/pr/wi1542-carrier-closeout-sync.md --compare-body-file .loom/runtime/pr/wi1542-carrier-closeout-sync-readback.md --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr gate 1551 --work-item WI-1542 --head-sha 445a3ddaf7137341d54bcb0fc58fc9e3addd90fa --json`; `git diff --check`.",
   "fallback_to": null,
   "findings": [
     {
       "id": "compat-follow-up-1",
-      "summary": "#1543 can build closeout queue/status UX on top of the retained lookup ranking.",
+      "summary": "#1543 can build closeout queue/status UX on top of the retained lookup ranking after #1551 lands.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
@@ -22,7 +22,7 @@
     },
     {
       "id": "compat-follow-up-2",
-      "summary": "#1515 should consume the #1544 closeout readback after WI-1542 lands.",
+      "summary": "#1515 should consume the #1544/#1542 closeout readback after WI-1542 carrier sync lands.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
@@ -33,49 +33,27 @@
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "#1543 can build closeout queue/status UX on top of the retained lookup ranking.",
-    "#1515 should consume the #1544 closeout readback after WI-1542 lands."
+    "#1543 can build closeout queue/status UX on top of the retained lookup ranking after #1551 lands.",
+    "#1515 should consume the #1544/#1542 closeout readback after WI-1542 carrier sync lands."
   ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1542.md",
     "recovery_entry": ".loom/progress/WI-1542.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "budget_risk": {
-      "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
-      "enforcement": "advisory",
-      "highest_risk": "none",
-      "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
-      "adapter_evidence_locator": "",
-      "provenance": {
-        "source": "github_host"
-      }
-    },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1542-retained-item-lookup/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1542-retained-item-lookup --item WI-1542 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1542-retained-item-lookup/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1542-retained-item-lookup --item WI-1542 --json",
-    "suite_evidence_map": ".loom/specs/WI-1542/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1542/task-carrier.md"
-    ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1551",
+    "pr_body_readback": ".loom/runtime/pr/wi1542-carrier-closeout-sync-readback.md",
+    "build_checkpoint": "terminal_closeout_carrier_sync",
+    "local_pr_gate": "pass",
+    "terminal_closeout_consumption": "pass",
+    "head_binding": {
+      "reviewed_head": "445a3ddaf7137341d54bcb0fc58fc9e3addd90fa",
+      "current_head": "445a3ddaf7137341d54bcb0fc58fc9e3addd90fa",
+      "status": "fresh",
+      "stale": false
+    }
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored closeout carrier review approved the current PR head for terminal carrier sync consumption."
   }
 }
