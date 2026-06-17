@@ -5,8 +5,8 @@
   "kind": "code_review",
   "summary": "WI-1531 docs-only closeout terminal profile contract is approved: formal suite is explicitly not_applicable, the diff is limited to docs/fixture/carrier surfaces, and downstream runtime behavior remains out of scope.",
   "reviewer": "codex",
-  "authored_at": "2026-06-17T04:51:00Z",
-  "reviewed_head": "d6da64c3f5a842bb0baee17caa2ea81a08024a3b",
+  "authored_at": "2026-06-17T04:56:00Z",
+  "reviewed_head": "2ba49b099f07357f7d51bba23c5af40ab9fa43fd",
   "reviewed_validation_summary": "2026-06-17T04:43Z WI-1531 local validation completed after formal suite `not_applicable` correction: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1531 --json` returned structured result `not_applicable`.",
   "fallback_to": null,
   "findings": [],
@@ -32,8 +32,8 @@
     "reason": "Docs-only contract patch stays within #1531, uses formal suite not_applicable with required rationale, and leaves implementation, hosted admission, closeout gate behavior, classifier names, and release closeout to dependent issues."
   },
   "head_binding": {
-    "reviewed_head": "d6da64c3f5a842bb0baee17caa2ea81a08024a3b",
-    "current_head": "d6da64c3f5a842bb0baee17caa2ea81a08024a3b",
+    "reviewed_head": "2ba49b099f07357f7d51bba23c5af40ab9fa43fd",
+    "current_head": "2ba49b099f07357f7d51bba23c5af40ab9fa43fd",
     "status": "fresh",
     "stale": false,
     "changed_paths": [],
