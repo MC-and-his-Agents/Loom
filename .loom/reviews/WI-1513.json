@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1513",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1513 implementation remains approved after checkpoint carrier advancement to merge. The only post-review changes are Loom carrier metadata for PR #1564 head 25a6efa21ba1f29911cff031a7c4b9d59b211751 and do not alter classifier runtime behavior, hosted admission, closeout gate behavior, PR metadata rendering, or release closeout scope.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-17T22:23:08Z",
+  "reviewed_head": "25a6efa21ba1f29911cff031a7c4b9d59b211751",
+  "reviewed_validation_summary": "2026-06-17T22:21Z validation passed for PR #1564 head 25a6efa21ba1f29911cff031a7c4b9d59b211751: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py status --target . --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PR body metadata preflight/readback for head 25a6efa21ba1f29911cff031a7c4b9d59b211751.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1513.md",
+    "recovery_entry": ".loom/progress/WI-1513.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/default-codex-exec",
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1513-failure-classifier-v2/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1513-failure-classifier-v2 --item WI-1513 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1513-failure-classifier-v2/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1513-failure-classifier-v2 --item WI-1513 --json",
+    "suite_evidence_map": ".loom/specs/WI-1513/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1513/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

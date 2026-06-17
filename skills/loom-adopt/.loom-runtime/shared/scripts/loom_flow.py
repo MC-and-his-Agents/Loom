@@ -141,6 +141,79 @@ PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
 PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
 GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
+FAILURE_CLASSIFIER_SCHEMA = "loom-failure-classifier/v1"
+FAILURE_CLASSIFIER_CATEGORIES = (
+    "code_semantics",
+    "pr_metadata_drift",
+    "carrier_refresh_needed",
+    "shadow_stale",
+    "review_stale",
+    "host_api_unreadable",
+    "ci_environment",
+    "permission",
+    "external_service_flake",
+    "suite_evidence_contract_invalid",
+    "task_carrier_contract_invalid",
+    "contract_vocabulary_invalid",
+    "unsupported_command_surface",
+    "freeze_artifact_unreadable",
+    "hosted_snapshot_mismatch",
+    "release_evidence_phase_error",
+)
+FAILURE_CLASSIFIER_KIND_MAP = {
+    "head_binding_drift": "review_stale",
+    "review_stale": "review_stale",
+    "validation_summary_drift": "review_stale",
+    "shadow_source_hash_drift": "shadow_stale",
+    "carrier_refresh_stale": "carrier_refresh_needed",
+    "head_or_pr_drift": "pr_metadata_drift",
+    "stale_evidence": "suite_evidence_contract_invalid",
+    "missing_evidence_map": "suite_evidence_contract_invalid",
+    "missing_fresh_verification_evidence": "suite_evidence_contract_invalid",
+    "missing_task_carrier_locator": "task_carrier_contract_invalid",
+    "carrier_truth_conflict": "task_carrier_contract_invalid",
+    "invalid_not_applicable_rationale": "contract_vocabulary_invalid",
+    "missing_suite_path_decision": "contract_vocabulary_invalid",
+    "unsupported_command_surface": "unsupported_command_surface",
+    "freeze_artifact_unreadable": "freeze_artifact_unreadable",
+    "hosted_snapshot_mismatch": "hosted_snapshot_mismatch",
+    "release_evidence_phase_error": "release_evidence_phase_error",
+    "host_api_unreadable": "host_api_unreadable",
+    "permission": "permission",
+    "ci_environment": "ci_environment",
+    "external_service_flake": "external_service_flake",
+}
+FAILURE_CLASSIFIER_INPUT_MAP = {
+    "pr_metadata": "pr_metadata_drift",
+    "pr_body_pin": "pr_metadata_drift",
+    "carrier_refresh": "carrier_refresh_needed",
+    "shadow_parity": "shadow_stale",
+    "shadow_freshness": "shadow_stale",
+    "review_binding": "review_stale",
+    "suite_evidence_validation": "suite_evidence_contract_invalid",
+    "suite_validation": "contract_vocabulary_invalid",
+    "suite_carrier_validation": "task_carrier_contract_invalid",
+    "command_surface": "unsupported_command_surface",
+    "release_requiredness": "release_evidence_phase_error",
+}
+FAILURE_CLASSIFIER_NEXT_ACTIONS = {
+    "code_semantics": "fix the code or contract violation, then rerun the failing gate.",
+    "pr_metadata_drift": "regenerate or update the PR body machine carrier, read it back, then rerun gate freeze.",
+    "carrier_refresh_needed": "refresh Loom carriers, then rerun gate freeze.",
+    "shadow_stale": "refresh or restore shadow evidence, then rerun shadow parity and gate freeze.",
+    "review_stale": "rerun authored Loom review for the current head, then rerun gate freeze.",
+    "host_api_unreadable": "bridge an explicit GH_TOKEN/GITHUB_TOKEN for this command or retry after host API access recovers.",
+    "ci_environment": "fix the CI/runtime environment and rerun the check.",
+    "permission": "fix host permissions or bridge an explicit token for this command.",
+    "external_service_flake": "wait for the external service to recover, then rerun once.",
+    "suite_evidence_contract_invalid": "fix suite evidence contract fields, then rerun suite evidence validation.",
+    "task_carrier_contract_invalid": "fix Work Item/task carrier fields, then rerun suite carrier validation.",
+    "contract_vocabulary_invalid": "use the supported contract vocabulary, then rerun validation.",
+    "unsupported_command_surface": "use an implemented Loom command surface or update the command matrix.",
+    "freeze_artifact_unreadable": "restore the freeze artifact or declared source file, then rerun gate freeze.",
+    "hosted_snapshot_mismatch": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
+    "release_evidence_phase_error": "record release/no-release evidence in the correct phase, then rerun gate freeze.",
+}
 GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID = "loom-governance-intensity"
 GOVERNANCE_INTENSITY_VALUES = {"light", "standard", "reinforced"}
 GOVERNANCE_CHANGE_CLASS_VALUES = {
@@ -16711,6 +16784,42 @@ def gate_freeze_refresh_suggestions(input_bindings: dict[str, Any]) -> list[str]
     return dedupe_strings(suggestions)
 
 
+def failure_classifier_category(failure_kind: str, input_name: str) -> str:
+    if failure_kind in FAILURE_CLASSIFIER_KIND_MAP:
+        return FAILURE_CLASSIFIER_KIND_MAP[failure_kind]
+    if input_name in FAILURE_CLASSIFIER_INPUT_MAP:
+        return FAILURE_CLASSIFIER_INPUT_MAP[input_name]
+    return "code_semantics"
+
+
+def failure_classifier_payload(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized: list[dict[str, Any]] = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        failure_kind = str(finding.get("failure_kind") or finding.get("kind") or "code_semantics")
+        input_name = str(finding.get("input") or finding.get("subject") or "")
+        classifier = failure_classifier_category(failure_kind, input_name)
+        next_action = FAILURE_CLASSIFIER_NEXT_ACTIONS[classifier]
+        normalized.append(
+            {
+                "classifier": classifier,
+                "failure_kind": failure_kind,
+                "input": input_name,
+                "result": finding.get("result") or "block",
+                "severity": finding.get("severity") or "block",
+                "evidence_locator": finding.get("source_locator"),
+                "next_action": next_action,
+                "messages": list(finding.get("messages") or []),
+            }
+        )
+    return {
+        "schema_version": FAILURE_CLASSIFIER_SCHEMA,
+        "supported_classifiers": list(FAILURE_CLASSIFIER_CATEGORIES),
+        "findings": normalized,
+    }
+
+
 def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
     target_root = Path(args.target).expanduser().resolve()
     runtime_state = runtime_state_payload(target_root)
@@ -16856,10 +16965,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
             "refresh_suggestions": refresh_suggestions,
             "next_action": "hosted_admission_allowed" if result == "pass" else "refresh_gate_inputs_before_hosted_admission",
         },
-        "failure_classifier": {
-            "schema_version": "loom-gate-freeze-failure-classifier/v1",
-            "findings": blocking_inputs,
-        },
+        "failure_classifier": failure_classifier_payload(blocking_inputs),
     }
     fingerprint_payload = {
         "schema_version": payload["schema_version"],
