@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1538.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; git diff -- .loom/progress/WI-1531.md .loom/reviews/WI-1531.json; git diff --check
 - Closing Condition: PR for #1538 is merged, issue #1538 is closed/completed, and downstream Work Items no longer see WI-1531 as host-complete carrier drift.
-- Current Checkpoint: build
-- Current Stop: WI-1538/#1538 carrier-only patch is assembled: WI-1531 dynamic checkpoint/status now reflect already-recorded terminal metadata while retaining the original WI-1531 implementation review validation summary.
-- Next Step: Run final local validation, record current-head review for WI-1538, update PR #1537 metadata/readback, and wait for hosted PR gate.
+- Current Checkpoint: merge
+- Current Stop: WI-1538/#1538 carrier-only patch, review record, PR metadata readback, and local PR gate inputs are assembled for host merge.
+- Next Step: Rerun hosted PR gate for PR #1537, merge after required checks pass, then close #1538 and resume the downstream #1529 purity/review flow.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T06:44Z fact-chain, shadow parity, review-history scope proof, and diff check passed for WI-1538 carrier-only sync; retained closeout check was classified as not a WI-1538 gate input because active repair carriers make issue-number lookup ambiguous.
+- Latest Validation Summary: 2026-06-17T07:02Z fact-chain, shadow parity, PR metadata readback/preflight, review-history scope proof, and diff check passed for WI-1538 carrier-only sync; retained closeout check was classified as not a WI-1538 gate input because active repair carriers make issue-number lookup ambiguous.
 - Recovery Boundary: WI-1538/#1538 only. Do not change runtime behavior, gate semantics, closeout profile contracts, hosted admission, downstream implementation, release mechanics, or WI-1531 retained implementation review history.
 - Current Lane: milestone-12-wi-1538-terminal-carrier-sync
 
