@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1531
-- Goal: Define the `loom-closeout-freeze/v1` terminal profile contract so closeout-only PRs can carry already-produced terminal facts without weakening host/git/carrier readback, review, release/no-release, or closeout checks.
-- Scope: Issue #1531 only: document the closeout terminal profile schema, authority boundary, terminal subject and facts, carrier bindings, retained review and allowed paths rules, two-phase consumption, closeout modes, generic failure kinds, and non-executable fixture inventory. Do not implement `gate freeze --profile closeout`, hosted admission, closeout-specific gate behavior, #1510 carrier/shadow fields, #1513 classifier names, #1532/#1533 runtime behavior, #1534 executable docs/skills convergence, or #1515 release/no-release closeout.
-- Execution Path: issue #1531 -> branch `work/1531-closeout-freeze-contract` -> docs/fixture contract patch -> local validation -> PR metadata/readback -> review/merge-ready.
+- Item ID: WI-1538
+- Goal: Synchronize WI-1531 terminal checkpoint carrier so completed host facts are no longer treated as live workspace drift.
+- Scope: Issue #1538 only: carrier-only sync for WI-1531 progress/status/shadow terminal checkpoint fields. Do not change runtime behavior, gate semantics, closeout profile contracts, hosted admission, downstream implementation, or release mechanics.
+- Execution Path: issue #1538 -> branch work/1531-terminal-carrier-sync-v2 -> carrier-only patch -> local validation -> PR metadata/readback -> current-head review -> merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1531.md
-- Review Entry: .loom/reviews/WI-1531.json
-- Validation Entry: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`
-- Closing Condition: PR for #1531 is merged, issue #1531 is closed/completed, and `loom-closeout-freeze/v1` is available as a documented terminal profile contract and fixture inventory while implementation remains deferred to #1532/#1533/#1534.
+- Recovery Entry: .loom/progress/WI-1538.md
+- Review Entry: .loom/reviews/WI-1538.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; git diff -- .loom/progress/WI-1531.md .loom/reviews/WI-1531.json; git diff --check
+- Closing Condition: PR for #1538 is merged, issue #1538 is closed/completed, and downstream Work Items no longer see WI-1531 as host-complete carrier drift.
 - Current Checkpoint: merge
-- Current Stop: WI-1531/#1531 is ready for PR merge-gate evaluation: docs-only contract patch, formal suite `not_applicable` rationale, PR metadata/readback, and local fact-chain validation are aligned. The patch intentionally does not implement closeout freeze runtime behavior.
-- Next Step: Wait for hosted PR gate and required checks on PR #1535, then perform controlled merge only if current head remains unchanged. Downstream implementation remains in #1532/#1533/#1534 after #1510/#1512/#1513 surfaces stabilize.
+- Current Stop: WI-1538/#1538 carrier-only patch, review record, PR metadata readback, and local PR gate inputs are assembled for host merge.
+- Next Step: Rerun hosted PR gate for PR #1537, merge after required checks pass, then close #1538 and resume the downstream #1529 purity/review flow.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T04:43Z WI-1531 local validation completed after formal suite `not_applicable` correction: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1531 --json` returned structured result `not_applicable`.
-- Recovery Boundary: WI-1531/#1531 only. Do not implement #1510 carrier/shadow freshness, #1512 hosted admission consumption, #1513 classifier mapping, #1532 local admission, #1533 closeout-specific gate, #1534 docs/skills executable convergence, #1515 release/no-release closeout, or unrelated runtime behavior.
-- Current Lane: milestone-12-wi-1531-closeout-freeze-contract
+- Latest Validation Summary: 2026-06-17T07:02Z fact-chain, shadow parity, PR metadata readback/preflight, review-history scope proof, and diff check passed for WI-1538 carrier-only sync; retained closeout check was classified as not a WI-1538 gate input because active repair carriers make issue-number lookup ambiguous.
+- Recovery Boundary: WI-1538/#1538 only. Do not change runtime behavior, gate semantics, closeout profile contracts, hosted admission, downstream implementation, release mechanics, or WI-1531 retained implementation review history.
+- Current Lane: milestone-12-wi-1538-terminal-carrier-sync
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-17 WI-1531 branch and carrier initialization
+- Run Entry: 2026-06-17 WI-1538 carrier-only sync validation
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1531 is a docs-only contract slice for `loom-closeout-freeze/v1`; runtime implementation and executable fixture conversion remain in downstream issues.
-- Verification Entry: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`.
-- Lane Entry: milestone-12-wi-1531-closeout-freeze-contract
+- Diagnostics Entry: WI-1538 is a carrier-only repair Work Item that terminalizes WI-1531 dynamic checkpoint fields without replacing WI-1531 retained implementation review history.
+- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff -- .loom/progress/WI-1531.md .loom/reviews/WI-1531.json`; `git diff --check`.
+- Lane Entry: milestone-12-wi-1538-terminal-carrier-sync
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1531.md
-- Dynamic Truth: .loom/progress/WI-1531.md
+- Static Truth: .loom/work-items/WI-1538.md
+- Dynamic Truth: .loom/progress/WI-1538.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
