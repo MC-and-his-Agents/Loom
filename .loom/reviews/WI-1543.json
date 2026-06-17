@@ -3,11 +3,11 @@
   "item_id": "WI-1543",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1543 implementation is approved for a read-only closeout queue/status PR slice: `loom closeout queue status` routes to `closeout-queue status`, requires explicit queue input before retained Work Item scanning, classifies queue entries into local closeout modes, preserves no-mutation envelope fields, blocks explicit filter misses, blocks missing target paths with the same schema, updates generated runtime copies, and documents the command matrix. The earlier read-only reviewer blockers around broad default scans, filter-miss no-op, and missing-target envelope stability were fixed and directly revalidated.",
+  "summary": "WI-1543 implementation remains approved after the demo bootstrap fixture sync: the read-only closeout queue/status entrypoint and generated runtime copies are unchanged in scope, the stable examples/new-project fixture now matches the generated loom_flow.py/runtime manifest hashes, and the hosted demo-bootstrap/repo-local-cli/loom-check failure was classified as fixture drift rather than implementation or host flake.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T16:05:17Z",
-  "reviewed_head": "a0c9fbfe2dfae11038f980914d8d4b4fd55e773a",
-  "reviewed_validation_summary": "2026-06-17T16:05Z WI-1543 targeted validation passed at head a0c9fbfe2dfae11038f980914d8d4b4fd55e773a: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/loom_flow.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1543 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1543 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1543 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py closeout queue status --target . --item WI-1542 --json`; `git diff --check`.",
+  "authored_at": "2026-06-17T16:22:00Z",
+  "reviewed_head": "58be86cc9b2c20590561d2a3c413acc2c2e0070b",
+  "reviewed_validation_summary": "2026-06-17T16:22Z WI-1543 targeted validation passed at head 58be86cc9b2c20590561d2a3c413acc2c2e0070b: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/loom_flow.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py tools/check_demo_bootstrap_fixture.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `git diff --check`.",
   "fallback_to": null,
   "findings": [
     {
@@ -71,10 +71,15 @@
     "same_class_review": {
       "result": "pass",
       "summary": "Checked CLI routing, runtime schema, no-mutation fields, queue input guard, filter miss handling, missing target envelope, generated skills runtime parity, command matrix documentation, and exclusion boundaries for hosted admission, classifier taxonomy, closeout freeze profile semantics, release behavior, and external host writes."
+    },
+    "demo_bootstrap_fixture": "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py",
+    "fixture_drift_classification": {
+      "result": "pass",
+      "summary": "Hosted demo-bootstrap, repo-local-cli, and loom-check failures on PR #1552 head 0433ff1f were classified as demo bootstrap stable fixture drift; make loom-demo-new-project-sync refreshed examples/new-project .loom/bin/loom_flow.py plus init-result/manifest hashes."
     }
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current WI-1543 read-only queue/status slice for merge checkpoint consumption."
+    "reason": "Authored implementation review approved the current WI-1543 read-only queue/status slice after fixture sync."
   }
 }
