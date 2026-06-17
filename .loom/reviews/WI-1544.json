@@ -6,8 +6,8 @@
   "summary": "WI-1544 docs/skills lane orchestration protocol is approved: the diff is limited to harness methodology, source skill references, generated skill distribution copies, and WI-1544 carriers; it does not change runtime command behavior, hosted gate behavior, classifier vocabulary, closeout profile semantics, release behavior, or external host state.",
   "reviewer": "codex",
   "authored_at": "2026-06-17T12:21:23Z",
-  "reviewed_head": "2257d8564494f4a80796541208de9372e114260d",
-  "reviewed_validation_summary": "2026-06-17T12:19Z WI-1544 validation passed: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body metadata preflight passed; PR #1548 rendered/readback metadata compare passed at head 2257d8564494f4a80796541208de9372e114260d.",
+  "reviewed_head": "92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16",
+  "reviewed_validation_summary": "2026-06-17T12:19Z WI-1544 validation passed: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body metadata preflight passed; PR #1548 rendered/readback metadata compare passed at head 92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -33,11 +33,17 @@
     "reason": "Docs/skills protocol patch stays within #1544, uses formal suite not_applicable with explicit rationale, and leaves runtime commands, hosted gates, classifier names, closeout profile behavior, release judgment, and implementation lanes to their own issues."
   },
   "head_binding": {
-    "reviewed_head": "2257d8564494f4a80796541208de9372e114260d",
-    "current_head": "2257d8564494f4a80796541208de9372e114260d",
-    "status": "fresh",
+    "reviewed_head": "92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16",
+    "current_head": "92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16",
+    "status": "carrier-only",
     "stale": false,
-    "changed_paths": [],
+    "changed_paths": [
+      ".loom/reviews/WI-1544.json",
+      ".loom/status/current.md",
+      ".loom/progress/WI-1544.md",
+      ".loom/specs/WI-1544/evidence-map.md",
+      ".loom/specs/WI-1544/plan.md"
+    ],
     "disallowed_paths": []
   }
 }

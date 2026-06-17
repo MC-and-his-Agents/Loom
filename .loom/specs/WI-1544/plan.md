@@ -16,7 +16,7 @@
 - `python3 tools/skills_surface.py check`
 - `git diff --check`
 - `python3 tools/loom.py pr metadata-preflight --body-file .loom/tmp/pr-1544-rendered.md --surface merge_ready --json`
-- `python3 tools/loom.py pr metadata-preflight 1548 --body-file .loom/tmp/pr-1544-rendered.md --compare-body-file .loom/tmp/pr-1548-readback.md --head-sha 2257d8564494f4a80796541208de9372e114260d --work-item WI-1544 --surface merge_ready --json`
+- `python3 tools/loom.py pr metadata-preflight 1548 --body-file .loom/tmp/pr-1544-rendered.md --compare-body-file .loom/tmp/pr-1548-readback.md --head-sha 92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16 --work-item WI-1544 --surface merge_ready --json`
 
 ## Dependencies
 
