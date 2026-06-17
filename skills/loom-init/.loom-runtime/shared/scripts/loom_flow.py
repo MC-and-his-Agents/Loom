@@ -16800,7 +16800,7 @@ def failure_classifier_payload(findings: list[dict[str, Any]]) -> dict[str, Any]
         failure_kind = str(finding.get("failure_kind") or finding.get("kind") or "code_semantics")
         input_name = str(finding.get("input") or finding.get("subject") or "")
         classifier = failure_classifier_category(failure_kind, input_name)
-        next_action = str(finding.get("next_action") or FAILURE_CLASSIFIER_NEXT_ACTIONS[classifier])
+        next_action = FAILURE_CLASSIFIER_NEXT_ACTIONS[classifier]
         normalized.append(
             {
                 "classifier": classifier,

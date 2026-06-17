@@ -5588,6 +5588,13 @@ def run_aggregate_cli_contract() -> None:
         }
         if "pr_metadata_drift" not in body_hash_drift_classifiers:
             raise AssertionError("gate freeze PR body hash drift must classify as pr_metadata_drift")
+        if not any(
+            finding.get("classifier") == "pr_metadata_drift"
+            and "regenerate or update the PR body machine carrier" in str(finding.get("next_action"))
+            for finding in body_hash_drift_payload.get("failure_classifier", {}).get("findings", [])
+            if isinstance(finding, dict)
+        ):
+            raise AssertionError("gate freeze PR body hash drift must expose the classifier-specific next_action")
 
         carrier_drift_body.write_text(
             governance_metadata_body(item=freeze_item, branch=branch, head_sha="2" * 40),
@@ -5626,6 +5633,13 @@ def run_aggregate_cli_contract() -> None:
         }
         if "pr_metadata_drift" not in carrier_drift_classifiers:
             raise AssertionError("gate freeze carrier binding drift must classify as pr_metadata_drift")
+        if not any(
+            finding.get("classifier") == "pr_metadata_drift"
+            and "regenerate or update the PR body machine carrier" in str(finding.get("next_action"))
+            for finding in carrier_drift_payload.get("failure_classifier", {}).get("findings", [])
+            if isinstance(finding, dict)
+        ):
+            raise AssertionError("gate freeze carrier binding drift must expose the classifier-specific next_action")
     finally:
         for path in (rendered_pr_body, readback_pr_body, readback_pr_body_drift, carrier_drift_body):
             if path.exists():
