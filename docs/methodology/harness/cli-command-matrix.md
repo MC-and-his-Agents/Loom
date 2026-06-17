@@ -113,6 +113,7 @@ loom status
 loom fact-chain
 loom checkpoint admission|build|merge
 loom gate pre-review|spec-review|review|pr|merge|freeze check|freeze write|closeout
+loom closeout queue status
 ```
 
 `status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate freeze check` validates the hosted gate input snapshot without writing. `gate freeze write` writes only a repo-local runtime snapshot under `.loom/runtime/gate-freeze/`. `gate closeout` checks closeout state but does not sync or close host objects.
@@ -126,13 +127,16 @@ For #1229, the contract now reserves an explicit idle repository state for these
 
 `workspace retire` remains local-only. Versioned terminal carrier updates use the explicit `carrier closeout-sync` command so local cleanup, host closeout sync, and repo carrier closeout sync do not share an ambiguous command name.
 
-Idle closeout recovery is intentionally split into three layers:
+Idle closeout recovery is intentionally split into explicit layers:
 
 | Layer | Command family | Writes host state | Writes versioned carriers | Primary use |
 | --- | --- | --- | --- | --- |
+| Closeout residue queue read | `loom closeout queue status` | no | no | Classify retained post-merge closeout residue and suggest the next read-only or explicit sync command. |
 | Local worksite retirement | `loom workspace retire` | no | no | Produce local-only cleanup/retire evidence while leaving `.loom/progress/**`, `.loom/status/current.md`, and `.loom/bootstrap/init-result.json` unchanged. |
 | Host closeout sync | host-owned merge/readback plus `reconciliation audit|sync` / `closeout check|sync` | yes, only through explicit host sync paths | no | Align GitHub issue, PR, Project, target branch, and merge commit truth. |
 | Repo carrier closeout sync | `loom carrier closeout-sync` | no | yes, only with `--apply` | Repair HotCP-style stale active carriers after host truth already proves completion. |
+
+`closeout queue status` is read-only. It reports retained Work Items, host completion evidence when provided by a queue fixture or terminal metadata, carrier checkpoint state, closeout mode, next action, and next command. It does not replace `closeout check`, `reconciliation audit|sync`, or `carrier closeout-sync`.
 
 The HotCP-style stale carrier regression fixture covers this sequence: `workspace retire` stays `local_only`; `repair plan/apply` or `carrier closeout-sync` exposes repo-local `carrier_closeout_sync`; the final fact-chain reads `idle` with `current_item_id = no_active_item`.
 
@@ -194,11 +198,12 @@ loom plan
 loom build
 loom pre-review
 loom closeout
+loom closeout queue status
 loom handoff
 loom retire
 ```
 
-`story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling; it does not write terminal carrier metadata.
+`story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `closeout queue status` is a read-only post-merge residue queue view; it suggests follow-up commands but does not perform host sync or carrier sync. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling; it does not write terminal carrier metadata.
 
 ## Reserved Phase Commands
 

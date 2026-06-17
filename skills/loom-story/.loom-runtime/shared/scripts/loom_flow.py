@@ -876,6 +876,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
     closeout.add_argument("--skip-gate", action="store_true", help="Skip explicit heavyweight local gate execution during closeout")
 
+    closeout_queue = subparsers.add_parser("closeout-queue", help="Read post-merge closeout residue queue status without writing")
+    closeout_queue.add_argument("operation", choices=("status",))
+    closeout_queue.add_argument("--target", required=True, help="Target repository root")
+    closeout_queue.add_argument("--issue", type=int, action="append", default=[], help="Limit scan to one or more GitHub issue numbers")
+    closeout_queue.add_argument("--item", action="append", default=[], help="Limit scan to one or more Work Item ids")
+    closeout_queue.add_argument("--queue-file", help="Optional repo-relative JSON fixture with host completion inputs")
+    closeout_queue.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root; reported for next-command context only",
+    )
+
     reconciliation = subparsers.add_parser("reconciliation", help="Audit Loom GitHub drift before closeout reconciliation")
     reconciliation.add_argument("operation", choices=("audit", "sync"))
     reconciliation.add_argument("--target", required=True, help="Target repository root")
@@ -14291,6 +14303,470 @@ def carrier_repair_payload(
     }
 
 
+def parse_terminal_closeout_metadata(path: Path) -> dict[str, str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    in_section = False
+    metadata: dict[str, str] = {}
+    for line in lines:
+        if line.strip() == "## Terminal Closeout Metadata":
+            in_section = True
+            continue
+        if in_section and line.startswith("## "):
+            break
+        if not in_section or not line.startswith("- ") or ":" not in line:
+            continue
+        key, value = line[2:].split(":", 1)
+        normalized = key.strip().lower().replace(" ", "_").replace("-", "_")
+        metadata[normalized] = value.strip()
+    return metadata
+
+
+def parse_optional_number(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        match = re.search(r"\d+", value)
+        if match:
+            return int(match.group(0))
+    return None
+
+
+def extract_single_number(pattern: re.Pattern[str], texts: list[str]) -> int | None:
+    values: set[int] = set()
+    for text in texts:
+        values.update(int(match.group("number")) for match in pattern.finditer(text))
+    return next(iter(values)) if len(values) == 1 else None
+
+
+def closeout_queue_fixture_by_item(target_root: Path, queue_file: str | None) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    if not queue_file:
+        return {}, []
+    payload, errors = load_optional_json_fixture(target_root, queue_file, label="closeout queue fixture")
+    if errors:
+        return {}, errors
+    if isinstance(payload, dict):
+        raw_items = payload.get("items")
+        if raw_items is None:
+            raw_items = payload.get("queue")
+    elif isinstance(payload, list):
+        raw_items = payload
+    else:
+        raw_items = None
+    if not isinstance(raw_items, list):
+        return {}, ["closeout queue fixture must contain an items array"]
+    by_item: dict[str, dict[str, Any]] = {}
+    fixture_errors: list[str] = []
+    for index, raw_item in enumerate(raw_items, start=1):
+        if not isinstance(raw_item, dict):
+            fixture_errors.append(f"closeout queue fixture item {index} must be an object")
+            continue
+        item_id = raw_item.get("item_id") or raw_item.get("item")
+        if not isinstance(item_id, str) or not item_id:
+            fixture_errors.append(f"closeout queue fixture item {index} is missing item_id")
+            continue
+        by_item[item_id] = raw_item
+    return by_item, fixture_errors
+
+
+def normalize_host_completion(raw: Any, metadata: dict[str, str]) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        host = dict(raw)
+        source = str(host.get("source") or "fixture")
+    else:
+        host = {}
+        source = "terminal_metadata" if metadata else "local_scan"
+    merge_commit = str(host.get("merge_commit") or host.get("mergeCommit") or metadata.get("merge_commit") or "").strip()
+    target_branch = str(host.get("target_branch") or host.get("baseRefName") or metadata.get("target_branch") or "").strip()
+    closed_at = str(host.get("closed_at") or host.get("closedAt") or host.get("mergedAt") or metadata.get("closed_at") or "").strip()
+    evidence_locator = str(host.get("evidence_locator") or metadata.get("evidence_locator") or "").strip()
+    issue_closed = host.get("issue_closed")
+    pr_merged = host.get("pr_merged")
+    if issue_closed is None and str(host.get("issue_state") or host.get("state") or "").lower() == "closed":
+        issue_closed = True
+    if pr_merged is None and str(host.get("pr_state") or "").upper() == "MERGED":
+        pr_merged = True
+    if pr_merged is None and merge_commit:
+        pr_merged = True
+    if issue_closed is None and metadata.get("issue") and metadata.get("issue") != "not_applicable":
+        issue_closed = True
+    if pr_merged is None and metadata.get("pr") and metadata.get("pr") != "not_applicable" and merge_commit:
+        pr_merged = True
+    missing: list[str] = []
+    if issue_closed is not True:
+        missing.append("issue_closed")
+    if pr_merged is not True:
+        missing.append("pr_merged")
+    for field_name, value in (
+        ("merge_commit", merge_commit),
+        ("target_branch", target_branch),
+        ("closed_at", closed_at),
+        ("evidence_locator", evidence_locator),
+    ):
+        if not value or value == "not_applicable":
+            missing.append(field_name)
+    if not raw and not metadata:
+        result = "unknown"
+        missing = ["host_completion"]
+    else:
+        result = "pass" if not missing else "block"
+    return {
+        "result": result,
+        "source": source,
+        "issue_closed": issue_closed if issue_closed is not None else "unknown",
+        "pr_merged": pr_merged if pr_merged is not None else "unknown",
+        "merge_commit": merge_commit or None,
+        "target_branch": target_branch or None,
+        "closed_at": closed_at or None,
+        "evidence_locator": evidence_locator or None,
+        "missing_inputs": missing,
+    }
+
+
+def terminal_metadata_complete(metadata: dict[str, str]) -> bool:
+    if not metadata:
+        return False
+    terminal_state = metadata.get("terminal_state")
+    if terminal_state in {None, "", "not_applicable"}:
+        return False
+    required = ("issue", "pr", "merge_commit", "target_branch", "closed_at", "evidence_locator")
+    return all(metadata.get(field) and metadata.get(field) != "not_applicable" for field in required)
+
+
+def closeout_queue_next_command(
+    *,
+    mode: str,
+    item_id: str,
+    issue_number: int | None,
+    pr_number: int | None,
+    host_completion: dict[str, Any],
+) -> str | None:
+    if mode == "light_carrier_sync":
+        if issue_number is None or pr_number is None:
+            return None
+        merge_commit = host_completion.get("merge_commit")
+        target_branch = host_completion.get("target_branch")
+        closed_at = host_completion.get("closed_at")
+        evidence_locator = host_completion.get("evidence_locator")
+        if not all(isinstance(value, str) and value for value in (merge_commit, target_branch, closed_at, evidence_locator)):
+            return None
+        return (
+            "loom carrier closeout-sync --target <repo> "
+            f"--item {item_id} --issue {issue_number} --pr {pr_number} "
+            f"--merge-commit {merge_commit} --target-branch {target_branch} "
+            f"--closed-at {closed_at} --evidence-locator {shlex.quote(evidence_locator)} --json"
+        )
+    if mode == "batched_closeout" and issue_number is not None:
+        return f"loom repair plan --target <repo> --issue {issue_number} --json"
+    if mode == "full_closeout" and issue_number is not None:
+        command = f"loom closeout --target <repo> --issue {issue_number}"
+        if pr_number is not None:
+            command += f" --pr {pr_number}"
+        return command + " --json"
+    return None
+
+
+def classify_closeout_queue_item(
+    *,
+    item_id: str,
+    work_item_relative: str,
+    recovery_relative: str | None,
+    checkpoint: str | None,
+    terminal_metadata: dict[str, str],
+    host_completion: dict[str, Any],
+    issue_number: int | None,
+    pr_number: int | None,
+) -> dict[str, Any]:
+    carrier_checkpoint = normalize_checkpoint(checkpoint or "")
+    carrier_terminal = carrier_checkpoint in TERMINAL_CHECKPOINTS or terminal_state_from_checkpoint(carrier_checkpoint) is not None
+    metadata_present = bool(terminal_metadata)
+    metadata_complete = terminal_metadata_complete(terminal_metadata)
+    missing_inputs = list(host_completion.get("missing_inputs", []))
+    host_result = host_completion.get("result")
+    if issue_number is None:
+        missing_inputs.append("issue_number")
+    if pr_number is None and host_result in {"pass", "block"}:
+        missing_inputs.append("pr_number")
+
+    if metadata_complete and carrier_terminal and host_result in {"pass", "unknown"}:
+        mode = "auto_no_op"
+        next_action = "none"
+        fallback_to = None
+        missing_inputs = []
+    elif host_result == "pass" and carrier_terminal:
+        mode = "light_carrier_sync"
+        next_action = "preview terminal carrier metadata sync"
+        fallback_to = "loom carrier closeout-sync --target <repo> --json"
+    elif host_result == "pass" and not carrier_terminal:
+        mode = "batched_closeout"
+        next_action = "plan stale active carrier closeout"
+        fallback_to = "loom repair plan --target <repo> --issue <issue> --json"
+    elif host_result == "block" and issue_number is not None and pr_number is not None:
+        mode = "full_closeout"
+        next_action = "run full closeout check with host readback"
+        fallback_to = "loom closeout --target <repo> --issue <issue> --pr <pr> --json"
+    else:
+        mode = "blocked"
+        next_action = "provide retained host completion evidence before queue classification"
+        fallback_to = "manual-reconciliation"
+        if host_result == "unknown" and "host_completion" not in missing_inputs:
+            missing_inputs.append("host_completion")
+
+    next_command = closeout_queue_next_command(
+        mode=mode,
+        item_id=item_id,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        host_completion=host_completion,
+    )
+    if mode != "auto_no_op" and next_command is None:
+        if "next_command_inputs" not in missing_inputs:
+            missing_inputs.append("next_command_inputs")
+        if mode != "blocked":
+            mode = "blocked"
+            next_action = "provide missing inputs before queue classification"
+            fallback_to = "manual-reconciliation"
+
+    return {
+        "item_id": item_id,
+        "work_item_relative": work_item_relative,
+        "issue_number": issue_number,
+        "pr_number": pr_number,
+        "host_completion": host_completion,
+        "carrier_checkpoint": carrier_checkpoint or None,
+        "terminal_metadata_present": metadata_present,
+        "merge_commit": host_completion.get("merge_commit") or terminal_metadata.get("merge_commit"),
+        "target_branch": host_completion.get("target_branch") or terminal_metadata.get("target_branch"),
+        "closed_at": host_completion.get("closed_at") or terminal_metadata.get("closed_at"),
+        "reconciliation_result": "not_run",
+        "closeout_mode": mode,
+        "evidence_locator": host_completion.get("evidence_locator") or terminal_metadata.get("evidence_locator"),
+        "next_action": next_action,
+        "next_command": next_command,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": fallback_to,
+        **({"recovery_relative": recovery_relative} if recovery_relative else {}),
+    }
+
+
+def closeout_queue_status_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    issue_filters: list[int],
+    item_filters: list[str],
+    queue_file: str | None,
+) -> dict[str, Any]:
+    if not issue_filters and not item_filters and not queue_file:
+        return {
+            "command": "closeout-queue",
+            "operation": "status",
+            "schema_version": "loom-closeout-queue-status/v1",
+            "result": "block",
+            "mode": "blocked",
+            "summary": "closeout queue status requires an explicit queue input before scanning retained Work Items.",
+            "target": str(target_root),
+            "output": output_relative,
+            "mutates": False,
+            "host_mutations": False,
+            "carrier_mutations": False,
+            "item_count": 0,
+            "mode_counts": {
+                "auto_no_op": 0,
+                "light_carrier_sync": 0,
+                "batched_closeout": 0,
+                "full_closeout": 0,
+                "blocked": 0,
+            },
+            "items": [],
+            "diagnostics": [],
+            "missing_inputs": ["queue_input"],
+            "fallback_to": "manual-reconciliation",
+            "next_action": "provide --issue, --item, or --queue-file before reading closeout queue status",
+            "next_command": "loom closeout queue status --target <repo> --issue <issue> --json",
+        }
+    fixture_by_item, fixture_errors = closeout_queue_fixture_by_item(target_root, queue_file)
+    work_items_dir = target_root / ".loom" / "work-items"
+    items: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    if not work_items_dir.exists():
+        return {
+            "command": "closeout-queue",
+            "operation": "status",
+            "schema_version": "loom-closeout-queue-status/v1",
+            "result": "pass" if not fixture_errors else "block",
+            "mode": "auto_no_op" if not fixture_errors else "blocked",
+            "summary": "closeout queue status found no retained Work Items.",
+            "target": str(target_root),
+            "mutates": False,
+            "host_mutations": False,
+            "carrier_mutations": False,
+            "items": [],
+            "missing_inputs": fixture_errors,
+            "fallback_to": "manual-reconciliation" if fixture_errors else None,
+            "next_action": "none" if not fixture_errors else "fix closeout queue fixture inputs",
+            "next_command": None,
+        }
+
+    requested_items = set(item_filters)
+    requested_issues = set(issue_filters)
+    for work_item_path in sorted(work_items_dir.glob("*.md")):
+        work_item_relative = relative_to_root(work_item_path, target_root)
+        try:
+            work_item, work_item_errors = parse_work_item(work_item_path, target_root)
+        except OSError as exc:
+            diagnostics.append({"work_item_relative": work_item_relative, "status": "unreadable", "missing_inputs": [str(exc)]})
+            continue
+        if work_item_errors:
+            diagnostics.append({"work_item_relative": work_item_relative, "status": "parse_error", "missing_inputs": work_item_errors})
+            continue
+        item_id = str(work_item.get("item_id") or work_item_path.stem)
+        if requested_items and item_id not in requested_items:
+            continue
+        recovery_relative = str(work_item.get("recovery_entry") or "")
+        recovery_path = target_root / recovery_relative if recovery_relative else None
+        recovery_entry: dict[str, Any] = {}
+        recovery_errors: list[str] = []
+        recovery_text = ""
+        if recovery_path is None or not recovery_path.exists():
+            recovery_errors.append(f"missing recovery entry: {recovery_relative or '<missing>'}")
+        else:
+            recovery_text = recovery_path.read_text(encoding="utf-8")
+            recovery_entry, recovery_errors = parse_recovery_entry(recovery_path, target_root, recovery_relative)
+        fixture = fixture_by_item.get(item_id, {})
+        terminal_metadata = parse_terminal_closeout_metadata(recovery_path) if recovery_path is not None else {}
+        texts = [work_item_path.read_text(encoding="utf-8"), recovery_text]
+        issue_number = (
+            parse_optional_number(fixture.get("issue_number"))
+            or parse_optional_number(terminal_metadata.get("issue"))
+            or extract_single_number(GITHUB_ISSUE_URL_RE, texts)
+            or extract_single_number(GITHUB_ISSUE_REF_RE, texts)
+            or (int(item_id.removeprefix("WI-")) if re.fullmatch(r"WI-\d+", item_id) else None)
+        )
+        pr_number = (
+            parse_optional_number(fixture.get("pr_number"))
+            or parse_optional_number(terminal_metadata.get("pr"))
+            or extract_single_number(GITHUB_PR_URL_RE, texts)
+            or extract_single_number(GITHUB_PR_REF_RE, texts)
+        )
+        if requested_issues and issue_number not in requested_issues:
+            continue
+        host_completion = normalize_host_completion(fixture.get("host_completion"), terminal_metadata)
+        if recovery_errors:
+            host_completion["result"] = "block"
+            host_completion["missing_inputs"] = dedupe_strings([*host_completion.get("missing_inputs", []), *recovery_errors])
+        item_payload = classify_closeout_queue_item(
+            item_id=item_id,
+            work_item_relative=work_item_relative,
+            recovery_relative=recovery_relative or None,
+            checkpoint=str(recovery_entry.get("current_checkpoint") or ""),
+            terminal_metadata=terminal_metadata,
+            host_completion=host_completion,
+            issue_number=issue_number,
+            pr_number=pr_number,
+        )
+        items.append(item_payload)
+
+    mode_rank = {
+        "blocked": 5,
+        "full_closeout": 4,
+        "batched_closeout": 3,
+        "light_carrier_sync": 2,
+        "auto_no_op": 1,
+    }
+    actionable_items = [item for item in items if item.get("closeout_mode") != "auto_no_op"]
+    blocked_items = [item for item in items if item.get("closeout_mode") == "blocked"]
+    unmatched_filters: list[str] = []
+    matched_item_ids = {str(item.get("item_id")) for item in items if item.get("item_id")}
+    matched_issue_numbers = {item.get("issue_number") for item in items if item.get("issue_number") is not None}
+    for requested_item in sorted(requested_items):
+        if requested_item not in matched_item_ids:
+            unmatched_filters.append(f"item not found: {requested_item}")
+    for requested_issue in sorted(requested_issues):
+        if requested_issue not in matched_issue_numbers:
+            unmatched_filters.append(f"issue not found: {requested_issue}")
+
+    if fixture_errors:
+        mode = "blocked"
+        next_action = "fix closeout queue fixture inputs"
+        next_command = None
+    elif unmatched_filters:
+        mode = "blocked"
+        next_action = "correct closeout queue filters before treating the queue as empty"
+        next_command = None
+    elif not items or not actionable_items:
+        mode = "auto_no_op"
+        next_action = "none"
+        next_command = None
+    elif blocked_items:
+        mode = "blocked"
+        next_action = "resolve blocked queue items before applying closeout sync"
+        next_command = None
+    elif len(actionable_items) > 1:
+        mode = "batched_closeout"
+        next_action = "process actionable queue items in listed order"
+        next_command = "review items[].next_command"
+    else:
+        only = actionable_items[0]
+        mode = str(only.get("closeout_mode"))
+        next_action = str(only.get("next_action"))
+        next_command = only.get("next_command")
+    result = "block" if mode == "blocked" else "pass"
+    missing_inputs = dedupe_strings(
+        [
+            *fixture_errors,
+            *unmatched_filters,
+            *[
+                f"{item.get('item_id')}: {message}"
+                for item in items
+                for message in item.get("missing_inputs", [])
+                if item.get("closeout_mode") == "blocked"
+            ],
+        ]
+    )
+    return {
+        "command": "closeout-queue",
+        "operation": "status",
+        "schema_version": "loom-closeout-queue-status/v1",
+        "result": result,
+        "mode": mode,
+        "summary": (
+            "closeout queue status found no post-merge residue requiring action."
+            if mode == "auto_no_op"
+            else "closeout queue status classified retained post-merge residue."
+            if result == "pass"
+            else "closeout queue status is blocked until required retained host inputs are available."
+        ),
+        "target": str(target_root),
+        "output": output_relative,
+        "mutates": False,
+        "host_mutations": False,
+        "carrier_mutations": False,
+        "item_count": len(items),
+        "mode_counts": {name: sum(1 for item in items if item.get("closeout_mode") == name) for name in sorted(mode_rank, key=mode_rank.get)},
+        "items": items,
+        "diagnostics": diagnostics,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "manual-reconciliation" if result == "block" else None,
+        "next_action": next_action,
+        "next_command": next_command,
+    }
+
+
+def handle_closeout_queue(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    payload = closeout_queue_status_payload(
+        target_root=target_root,
+        output_relative=args.output,
+        issue_filters=args.issue,
+        item_filters=args.item,
+        queue_file=args.queue_file,
+    )
+    return emit(payload)
+
+
 def handle_repair(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     return emit(
@@ -24145,6 +24621,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_host_lifecycle(args)
     if args.command == "closeout":
         return handle_closeout(args)
+    if args.command == "closeout-queue":
+        return handle_closeout_queue(args)
     if args.command == "reconciliation":
         return handle_reconciliation(args)
     if args.command == "shadow-parity":

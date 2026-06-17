@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1542
-- Goal: Add a pre-start active carrier drift audit foundation by making retained Work Item lookup prefer canonical issue ownership evidence over historical recovery text references.
-- Scope: Issue #1542 only: adjust retained Work Item lookup ranking, add a focused regression, and regenerate skills runtime copies. Do not implement closeout queue UX, hosted admission, classifier, release, or closeout profile semantics.
-- Execution Path: issue #1542 -> branch work/1542-retained-item-lookup -> retained lookup implementation -> focused regression -> closeout check readback -> PR metadata/readback -> review/merge-ready
+- Item ID: WI-1543
+- Goal: Add a read-only post-merge closeout residue queue/status entrypoint so operators can classify retained host-complete but repo-carrier-stale Work Items before milestone closeout.
+- Scope: Issue #1543 only: implement `loom closeout queue status`, expose a machine-readable queue/status payload, cover closeout mode classification and read-only guards with deterministic CLI contract fixtures, update generated skills runtime copies, and document the CLI command matrix. Do not implement apply/sync behavior, hosted admission, classifier taxonomy, release/no-release closeout, or closeout freeze profile semantics.
+- Execution Path: issue #1543 -> branch work/1543-closeout-queue-status -> read-only closeout queue/status CLI -> deterministic governance closeout fixture -> generated skills runtime sync -> PR metadata/readback -> review/merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1542.md
-- Review Entry: .loom/reviews/WI-1542.json
-- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py; python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract; git diff --check; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/skills_surface.py check --surface package-metadata
-- Closing Condition: PR for #1542 is merged, issue #1542 remains available for any remaining active-carrier audit UX scope or is explicitly split/closed, and milestone/12 downstream closeout checks can consume canonical retained Work Item lookup without historical recovery text ambiguity.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1542 retained Work Item lookup implementation is closed out post-merge: PR #1550 merged at 5ee3eb5ccc7d846b6fd79daabc3d14feb86784ba, terminal carrier metadata is recorded below, PR #1551 now includes the minimal terminal closeout gate compatibility fix for hosted-only old review/spec heads, and remaining active-carrier audit UX must move to a split/follow-up issue before new implementation work starts.
-- Next Step: None for the WI-1542 retained lookup slice; split any remaining active-carrier audit UX to a follow-up issue before binding a new active Work Item.
+- Recovery Entry: .loom/progress/WI-1543.md
+- Review Entry: .loom/reviews/WI-1543.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/loom_flow.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface package-metadata; git diff --check
+- Closing Condition: PR for #1543 is merged, issue #1543 is closed or explicitly split for later apply/sync behavior, and milestone/12 closeout can consume `loom closeout queue status` as a read-only queue/status entrypoint without treating broad historical carriers as actionable residue.
+- Current Checkpoint: merge checkpoint
+- Current Stop: PR #1552 is open for WI-1543 on branch work/1543-closeout-queue-status; hosted demo-bootstrap, repo-local-cli, and loom-check failures were classified as demo bootstrap stable fixture drift; fixture sync is committed at head 58be86cc9b2c20590561d2a3c413acc2c2e0070b and local targeted validation passed.
+- Next Step: Push this review/status carrier sync, update PR #1552 body head_sha to the new PR head, rerun PR metadata readback and PR gate, then wait for hosted checks.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T15:46Z WI-1542 terminal closeout sync, hosted old-review-head compatibility, demo bootstrap fixture, shadow parity refresh, and aggregate release-judgment regression validation passed at head d932b689f87e9539d022f8f2634da9ff7b125fe5: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.
-- Recovery Boundary: WI-1542/#1542 only. Do not implement #1543 closeout queue UX, #1510 gate freeze carrier shadow, #1512 hosted freeze admission, #1513 classifier vocabulary, #1532/#1533 closeout freeze profile behavior, #1534 docs convergence, or #1515 final closeout.
-- Current Lane: milestone-12-wi-1542-retained-item-lookup
+- Latest Validation Summary: 2026-06-17T16:22Z WI-1543 targeted validation passed at head 58be86cc9b2c20590561d2a3c413acc2c2e0070b: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/loom_flow.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py tools/check_demo_bootstrap_fixture.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `git diff --check`.
+- Recovery Boundary: WI-1543/#1543 only. Do not implement #1510 gate freeze carrier shadow, #1512 hosted freeze admission, #1513 classifier vocabulary, #1532/#1533 closeout freeze profile behavior, #1534 docs convergence, or #1515 final closeout.
+- Current Lane: milestone-12-wi-1543-closeout-queue-status
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-17 WI-1542 retained lookup implementation and #1544 closeout readback
+- Run Entry: 2026-06-17 WI-1543 closeout queue/status implementation and guard validation
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1542 fixes retained Work Item lookup ambiguity by ranking canonical issue ownership evidence above historical recovery text references; PR #1550 merge is now reflected as terminal closed_out repo-local carrier metadata; PR #1551 also preserves terminal closeout consumption when hosted checkout cannot diff a retained old review/spec head.
-- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.
-- Lane Entry: milestone-12-wi-1542-retained-item-lookup
+- Diagnostics Entry: WI-1543 adds an explicit read-only queue/status entrypoint and fail-closed guards for broad scans, filter misses, and missing targets.
+- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/loom_flow.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1543 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1543 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1543 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py closeout queue status --target . --item WI-1542 --json`; `git diff --check`.
+- Lane Entry: milestone-12-wi-1543-closeout-queue-status
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1542.md
-- Dynamic Truth: .loom/progress/WI-1542.md
+- Static Truth: .loom/work-items/WI-1543.md
+- Dynamic Truth: .loom/progress/WI-1543.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
