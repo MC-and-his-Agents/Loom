@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1554.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; closeout/gate closeout --item smoke; git diff --check
 - Closing Condition: PR #1562 is merged, issue #1554 is closed after closeout evidence confirms merge and closeout wrapper/runtime contract coverage, and #1514/#1534/#1515 can consume #1554 as complete.
-- Current Checkpoint: merge
-- Current Stop: PR #1562 is ready for merge gate consumption at head e48ca5ed9ecbc374e68a641d6cb63313902c27a7: wrapper/runtime parameter contract implementation, spec review, implementation review, PR metadata readback, and targeted validation are aligned.
-- Next Step: Wait for hosted checks on PR #1562 head e48ca5ed9ecbc374e68a641d6cb63313902c27a7, then run controlled merge only after required checks and Loom merge gate are green.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1554 is closed out after PR #1562 merged into main at b6d47f239ad3399243d417657889cbf55b3cb78d and GitHub issue #1554 closed at 2026-06-17T21:10:12Z.
+- Next Step: Consume #1554 as complete in #1514/#1534/#1515 milestone/12 convergence readback.
 - Blockers: None
 - Latest Validation Summary: 2026-06-17T20:52Z merge-ready carrier readback for PR #1562 head e48ca5ed9ecbc374e68a641d6cb63313902c27a7: PR metadata preflight/readback passed; authored implementation review was refreshed for the current recovery summary; suite evidence/carrier validation passed during review record; local checkpoint merge and PR gate were rerun after removing stale first-slice terminal metadata; targeted CLI validation from 2026-06-17T20:45Z remains unchanged for implementation files.
-- Recovery Boundary: Current slice is limited to CLI wrapper/runtime parameter contract hardening for #1554. It does not implement #1555 one-shot post-merge closeout run, hosted admission, release/no-release closeout, or closeout gate semantic changes.
-- Current Lane: milestone-12-wave0-cli-wrapper-contract
+- Recovery Boundary: Current closeout sync only consumes completed #1554 facts and updates repo carriers. It does not implement #1555 one-shot post-merge closeout run, hosted admission, release/no-release closeout changes, or closeout gate semantic changes.
+- Current Lane: milestone-12-wave0-cli-wrapper-contract-closeout
 
 ## Runtime Evidence
 
