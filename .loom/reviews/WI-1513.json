@@ -1,0 +1,81 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1513",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1513 implementation is approved for the current classifier slice. Main-thread review accepted Meitner's blockers after fixing demo bootstrap fixture drift, refreshing WI-1513 carriers, and making failure_classifier_payload emit classifier-specific next_action values for real gate freeze payloads. No hosted admission, closeout-specific gate, PR metadata renderer, or release closeout behavior was changed.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-17T22:08:50Z",
+  "reviewed_head": "ba211d1f730f0df3d98e2810f1b823e512b4db34",
+  "reviewed_validation_summary": "2026-06-17T22:06Z validation passed for PR #1564 implementation head 276db6d3ea87f2dacc5299f1220b3dacc41fdbc2: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface generation; direct failure_classifier_payload next_action override check; git diff --check.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "#1512 consumes the stable categories in hosted freeze admission.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-2",
+      "summary": "#1533/#1534 consume classifier-specific next_action in closeout gate/docs later.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1512 consumes the stable categories in hosted freeze admission.",
+    "#1533/#1534 consume classifier-specific next_action in closeout gate/docs later."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1513.md",
+    "recovery_entry": ".loom/progress/WI-1513.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1513-failure-classifier-v2/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1513-failure-classifier-v2 --item WI-1513 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1513-failure-classifier-v2/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1513-failure-classifier-v2 --item WI-1513 --json",
+    "suite_evidence_map": ".loom/specs/WI-1513/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1513/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
