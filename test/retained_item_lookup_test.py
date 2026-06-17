@@ -160,6 +160,31 @@ class RetainedItemLookupTest(unittest.TestCase):
             self.assertEqual(lookup["item_id"], "RECOVERY-EVIDENCE-CARRIER")
             self.assertEqual(lookup["missing_inputs"], [])
 
+    def test_prefers_canonical_wi_over_recovery_issue_mentions(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            write_work_item(root, "WI-1544")
+            write_work_item(
+                root,
+                "WI-1529",
+                issue=1544,
+                metadata_issue=False,
+                recovery_issue=True,
+            )
+            write_work_item(
+                root,
+                "WI-1540",
+                issue=1544,
+                metadata_issue=False,
+                recovery_issue=True,
+            )
+
+            lookup = loom_flow.closeout_expected_item_lookup(root, 1544)
+
+            self.assertEqual(lookup["item_id"], "WI-1544")
+            self.assertEqual(lookup["work_item_relative"], ".loom/work-items/WI-1544.md")
+            self.assertEqual(lookup["missing_inputs"], [])
+
     def test_ambiguous_retained_issue_matches_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
