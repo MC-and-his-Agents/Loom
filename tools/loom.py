@@ -2891,7 +2891,7 @@ def handle_pr(argv: list[str]) -> int:
 def handle_merge(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom merge")
     parser.add_argument("action", choices=("check", "run"))
-    parser.add_argument("pr")
+    parser.add_argument("pr", metavar="pr-number", type=int)
     parser.add_argument("--head-sha")
     parser.add_argument("--work-item")
     parser.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="merge")
@@ -2912,7 +2912,7 @@ def handle_merge(argv: list[str]) -> int:
         "--target",
         ".",
         "--pr",
-        args.pr,
+        str(args.pr),
         "--merge-method",
         args.merge_method,
     ]
