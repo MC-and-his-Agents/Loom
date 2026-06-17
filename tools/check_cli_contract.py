@@ -3180,6 +3180,21 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     ):
         raise AssertionError(f"terminal closeout pr-gate fixture did not pass: {closeout_payload.get('missing_inputs')}")
 
+    spec_review_path = target / ".loom" / "reviews" / f"{item}.spec.json"
+    spec_review = json.loads(spec_review_path.read_text(encoding="utf-8"))
+    spec_review["reviewed_head"] = "0" * 40
+    spec_review_path.write_text(json.dumps(spec_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, f".loom/reviews/{item}.spec.json", "fixture unreachable spec review head")
+    unreachable_spec_head_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        unreachable_spec_head_payload.get("result") != "pass"
+        or unreachable_spec_head_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
+    ):
+        raise AssertionError(
+            "terminal closeout pr-gate did not tolerate hosted-only retained spec review head unreachability: "
+            f"{unreachable_spec_head_payload.get('missing_inputs')}"
+        )
+
     append_pr_metadata_surface(target, fixture, surface="merge_ready")
     merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture)
     if merge_ready_payload.get("result") == "pass" or merge_ready_payload.get("terminal_closeout_consumption", {}).get("result") != "block":

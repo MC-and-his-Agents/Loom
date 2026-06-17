@@ -17072,7 +17072,10 @@ def pr_gate_payload(
             non_review_checkpoint_missing = [
                 message
                 for message in merge_checkpoint_missing
-                if "review artifact is stale" not in message and "reviewed_head" not in message and "head binding" not in message
+                if "review artifact is stale" not in message
+                and "reviewed_head" not in message
+                and "head binding" not in message
+                and "review HEAD comparison failed" not in message
             ]
             terminal_closeout_missing.extend(non_review_checkpoint_missing)
             terminal_closeout_consumption = {
