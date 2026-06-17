@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1554
-- Goal: Harden the top-level Loom CLI wrapper to runtime argument contract for high-risk operator gates.
-- Scope: First implementation slice for issue #1554: fix `tools/loom.py merge check/run` so the wrapper requires a numeric PR argument, never forwards the literal placeholder `pr` to the runtime `--pr`, and covers that behavior with a focused CLI contract regression surface. Broader `closeout`, `gate closeout`, and `closeout --item` wrapper/runtime contract coverage remains in #1554 follow-up scope.
-- Execution Path: issue #1554 -> branch work/1554-cli-wrapper-contract -> merge wrapper PR-number contract -> focused CLI contract surface -> PR metadata/readback -> review/merge-ready
+- Item ID: WI-1510
+- Goal: Add carrier refresh and shadow freshness inputs to the gate freeze snapshot.
+- Scope: Implement the #1510 slice of milestone/12 by making `loom-gate-freeze/v1` consume carrier refresh dry-run results and shadow source-hash freshness, classify refreshable carrier/shadow drift, and avoid refresh suggestions for unsupported commands. This PR does not implement hosted admission #1512, failure classifier #1513 beyond the typed fields needed by this slice, closeout terminal profile behavior, PR metadata rendering, closeout item binding, or milestone closeout.
+- Execution Path: issue #1510 -> branch work/1510-carrier-shadow-freeze -> gate freeze carrier refresh binding -> shadow freshness binding -> generated runtime copies -> focused contract checks -> PR metadata/readback -> review/merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1554.md
-- Review Entry: .loom/reviews/WI-1554.json
-- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge check pr; git diff --check
-- Closing Condition: This PR is merged, #1554 remains open for the remaining wrapper/runtime contract surfaces, and milestone/12 can consume the merge wrapper bug fix without treating it as final #1554 closeout.
+- Recovery Entry: .loom/progress/WI-1510.md
+- Review Entry: .loom/reviews/WI-1510.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; git diff --check
+- Closing Condition: PR for #1510 is merged, hosted admission #1512 can consume stable `carrier_refresh` and `shadow_freshness` fields, and #1510 remains limited to generic freeze inputs without changing closeout profile semantics.
 - Current Checkpoint: merge
-- Current Stop: Merge wrapper PR argument fix, WI-1554 first-slice carriers, PR metadata readback, and review evidence are ready for merge-gate consumption on branch `work/1554-cli-wrapper-contract`.
-- Next Step: Wait for hosted checks to consume PR #1556 at current head, then run controlled merge only after required checks and merge gate pass.
+- Current Stop: Carrier refresh and shadow freshness freeze bindings, generated runtime copies, WI-1510 suite carriers, authored review records, and PR metadata readback are ready for merge gate consumption.
+- Next Step: Wait for hosted checks to consume PR #1557 at current head, then run controlled merge only after required checks and merge gate pass.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T16:56Z WI-1554 targeted validation passed at reviewed head `39db7bae33830e27daee885b6fb526b61009fa60`: `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge check pr` failed closed in the wrapper with `argument pr-number: invalid int value: 'pr'`; `git diff --check`.
-- Recovery Boundary: WI-1554 merge wrapper PR argument slice only. Do not implement retained Work Item parsing (#1494/#1495/#1496), `closeout --item`, `gate closeout`, #1555 one-shot closeout run, hosted admission, classifier taxonomy, closeout freeze profile semantics, release/no-release behavior, or final milestone/12 closeout.
-- Current Lane: milestone-12-wi-1554-cli-wrapper-contract
+- Latest Validation Summary: 2026-06-17T18:17Z WI-1510 targeted validation passed at reviewed head `6ecf7461c68ae74de77d309eac03f32df0f797d4` after rebasing onto main with PR #1558 merged: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` completed all 7 surfaces in 444.05s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`. PR metadata and release judgment remain PR-stage inputs to refresh after pushing the rebased head and updating PR #1557 body.
+- Recovery Boundary: WI-1510 carrier refresh and shadow freshness freeze input slice only. Do not implement hosted admission #1512, classifier overhaul #1513, PR metadata renderer #1541, closeout profile #1531-#1534, closeout item binding #1494, one-shot closeout run #1555, or final milestone/12 closeout #1515.
+- Current Lane: milestone-12-wi-1510-carrier-shadow-freeze
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-18 WI-1554 merge wrapper PR argument implementation slice
+- Run Entry: 2026-06-17 WI-1510 carrier refresh and shadow freshness freeze input implementation slice
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1554 first slice changes only the merge wrapper PR argument contract and leaves closeout wrapper/runtime surfaces pending under #1554.
-- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge check pr`; `git diff --check`.
-- Lane Entry: milestone-12-wi-1554-cli-wrapper-contract
+- Diagnostics Entry: WI-1510 adds `carrier_refresh` and `shadow_freshness` gate freeze input bindings and keeps closeout terminal profile semantics unchanged.
+- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.
+- Lane Entry: milestone-12-wi-1510-carrier-shadow-freeze
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1554.md
-- Dynamic Truth: .loom/progress/WI-1554.md
+- Static Truth: .loom/work-items/WI-1510.md
+- Dynamic Truth: .loom/progress/WI-1510.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
