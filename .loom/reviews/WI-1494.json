@@ -1,39 +1,81 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1494",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "451759e9465da3f2b0087bde64eba14bef00c220",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review approved for WI-1494. The runtime now accepts --item for closeout and reconciliation, resolves explicit retained Work Items directly, verifies consistency with --issue lookup, preserves ambiguous no-item fail-closed behavior, forwards tools/loom.py reconcile --work-item, and updates generated runtime copies plus focused retained lookup tests.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-17T18:56:12Z",
+  "reviewed_head": "fc8dd5253945e7a52852f39bc48210a3f0e1fa01",
+  "reviewed_validation_summary": "2026-06-17T18:55Z targeted validation passed: python3 test/retained_item_lookup_test.py; python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py test/retained_item_lookup_test.py; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-1494 --json; git diff --check; live closeout/reconciliation --item readback reached expected dependency drift checks without argparse or retained lookup ambiguity.",
+  "fallback_to": null,
   "findings": [
     {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
+      "id": "compat-follow-up-1",
+      "summary": "#1554 should still harden gate closeout target/default wrapper behavior and merge-method defaults.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
         "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-2",
+      "summary": "#1513 should add host API unreadable/anonymous rate-limit classification and token bridge next action.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
       }
     }
   ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
+  "blocking_issues": [],
   "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "#1554 should still harden gate closeout target/default wrapper behavior and merge-method defaults.",
+    "#1513 should add host API unreadable/anonymous rate-limit classification and token bridge next action."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1494.md",
+    "recovery_entry": ".loom/progress/WI-1494.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1494-closeout-item-binding/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1494-closeout-item-binding --item WI-1494 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1494-closeout-item-binding/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1494-closeout-item-binding --item WI-1494 --json",
+    "suite_evidence_map": ".loom/specs/WI-1494/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1494/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
