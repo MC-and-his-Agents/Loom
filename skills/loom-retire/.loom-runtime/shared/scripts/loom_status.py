@@ -406,6 +406,7 @@ def full_closeout_status_payload(
 
     payload, errors = closeout_payload(
         target_root=root,
+        expected_item=None,
         phase_number=phase_number,
         fr_number=fr_number,
         issue_number=issue_number,
