@@ -3,10 +3,10 @@
   "item_id": "WI-1554",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1554 PR #1562 is approved for the CLI wrapper/runtime parameter contract slice: merge check/run reject the literal placeholder and preserve runtime PR arguments; closeout forwards runtime-supported check parameters; gate closeout remains a read-only closeout check facade; suite validation, integrated build evidence, focused merge-wrapper and governance-closeout contract surfaces, PR metadata preflight/readback, and smoke checks passed. This review does not approve #1555 one-shot post-merge closeout run, hosted admission, release/no-release closeout, classifier taxonomy, closeout freeze profile semantics, or closeout gate semantic changes.",
+  "summary": "WI-1554 PR #1562 implementation is approved for the wrapper/runtime parameter contract slice: tools/loom.py now exposes and forwards runtime-supported closeout check parameters, merge check/run PR argument contract coverage rejects the placeholder literal and preserves numeric PR forwarding, and governance-closeout contract coverage exercises closeout plus gate closeout passthrough without changing closeout semantics or host writes.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T20:42:31Z",
-  "reviewed_head": "90c12dce0d134dc9e398284e2beb2788c5be1e74",
+  "authored_at": "2026-06-17T20:47:39Z",
+  "reviewed_head": "7e02767cbf4e21318dc21971bffe00f054bdb10f",
   "reviewed_validation_summary": "2026-06-17T20:45Z targeted validation passed for PR #1562 head 90c12dce0d134dc9e398284e2beb2788c5be1e74 after spec/plan alignment: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py flow build --target . --item WI-1554 --build-evidence .loom/progress/WI-1554-build-evidence.json consumed integrated build evidence; closeout and gate closeout --item smokes reached closeout check and blocked only on issue is not closed; PR metadata preflight/readback compare passed for PR #1562; git diff --check.",
   "fallback_to": null,
   "findings": [
