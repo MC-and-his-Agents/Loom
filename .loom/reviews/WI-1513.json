@@ -3,39 +3,15 @@
   "item_id": "WI-1513",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1513 implementation is approved for the current classifier slice. Main-thread review accepted Meitner's blockers after fixing demo bootstrap fixture drift, refreshing WI-1513 carriers, and making failure_classifier_payload emit classifier-specific next_action values for real gate freeze payloads. No hosted admission, closeout-specific gate, PR metadata renderer, or release closeout behavior was changed.",
-  "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T22:08:50Z",
-  "reviewed_head": "ba211d1f730f0df3d98e2810f1b823e512b4db34",
-  "reviewed_validation_summary": "2026-06-17T22:06Z validation passed for PR #1564 implementation head 276db6d3ea87f2dacc5299f1220b3dacc41fdbc2: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface generation; direct failure_classifier_payload next_action override check; git diff --check.",
+  "summary": "WI-1513 implementation remains approved after checkpoint carrier advancement to merge. The only post-review changes are Loom carrier metadata for PR #1564 head 25a6efa21ba1f29911cff031a7c4b9d59b211751 and do not alter classifier runtime behavior, hosted admission, closeout gate behavior, PR metadata rendering, or release closeout scope.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-17T22:23:08Z",
+  "reviewed_head": "25a6efa21ba1f29911cff031a7c4b9d59b211751",
+  "reviewed_validation_summary": "2026-06-17T22:21Z validation passed for PR #1564 head 25a6efa21ba1f29911cff031a7c4b9d59b211751: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py status --target . --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PR body metadata preflight/readback for head 25a6efa21ba1f29911cff031a7c4b9d59b211751.",
   "fallback_to": null,
-  "findings": [
-    {
-      "id": "compat-follow-up-1",
-      "summary": "#1512 consumes the stable categories in hosted freeze admission.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-2",
-      "summary": "#1533/#1534 consume classifier-specific next_action in closeout gate/docs later.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    }
-  ],
+  "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "#1512 consumes the stable categories in hosted freeze admission.",
-    "#1533/#1534 consume classifier-specific next_action in closeout gate/docs later."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1513.md",
     "recovery_entry": ".loom/progress/WI-1513.md",
@@ -54,7 +30,7 @@
         "source": "github_host"
       }
     },
-    "engine_adapter": null,
+    "engine_adapter": "loom/default-codex-exec",
     "engine_evidence": null,
     "normalized_findings": null,
     "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1513-failure-classifier-v2/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1513-failure-classifier-v2 --item WI-1513 --json",
