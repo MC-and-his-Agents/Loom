@@ -3,10 +3,10 @@
   "item_id": "WI-1509",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Reviewed WI-1509 at head 9159c947 after the hosted loom-check github-api-budget failure. The only implementation change since the prior review removes the literal `gh pr view` recommendation from gate freeze repair guidance and replaces it with host PR body readback wording; synced runtime copies and root/demo manifests were refreshed. Focused validation passed for py_compile, git diff --check, root verify, runtime parity, demo verify, shadow parity, source distribution-regression, and source contract-only. No blocking correctness, scope, or test findings remain.",
+  "summary": "WI-1509 post-merge closeout carrier head 4d83d29 is approved: progress/status/bootstrap locator and shadow hashes now record the already merged PR #1526 and closed issue #1509 without changing runtime behavior.",
   "reviewer": "codex",
-  "authored_at": "2026-06-16T23:09:04Z",
-  "reviewed_head": "9159c947cdaa2cf723ce61735fba5d4c72c05b03",
+  "authored_at": "2026-06-17T03:50:00Z",
+  "reviewed_head": "4d83d29f2a0a91c6a86aebc143a2b1ac877e6067",
   "reviewed_validation_summary": "2026-06-16T23:07Z WI-1509 post-CI validation passed: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 examples/new-project/.loom/bin/loom_init.py verify --target examples/new-project`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface distribution-regression .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .`. The earlier hosted `loom-pr-merge-gate` failure on run 27653279714 was classified as PR body update/check-start timing drift; rerun job 81782191725 passed. The earlier hosted `loom-check` failure was classified as github-api-budget guard on a literal `gh pr view` recommendation in `loom_flow.py`; replacing it with host-API readback wording cleared local distribution-regression and contract-only checks.",
   "fallback_to": null,
   "findings": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored review approved the current terminal closeout carrier head for post-merge carrier consumption only; implementation merge-ready was consumed by PR #1526."
   }
 }
