@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1529
-- Goal: Productize SKILL reference integrity, path-base diagnostics, and source/install/runtime copy parity as an executable skills surface check.
-- Scope: Issue #1529 only: extend skills surface checks and fixtures for SKILL reference integrity and runtime copy parity. Do not change review, merge-ready, gate freeze, PR gate, hosted admission, closeout profile, release/no-release, or skill content semantics except where required by the checker.
-- Execution Path: issue #1529 -> branch work/1529-skill-reference-integrity -> skills surface implementation/tests -> local validation -> PR metadata/readback -> review/merge-ready
+- Item ID: WI-1544
+- Goal: Define a milestone lane orchestration and subagent write-boundary protocol for high-throughput milestone/FR work.
+- Scope: Issue #1544 only: add the lane orchestration harness contract, wire it into executable skill references, and keep implementation/runtime/gate/closeout behavior out of scope.
+- Execution Path: issue #1544 -> branch work/1544-lane-orchestration-protocol -> docs/skills protocol implementation -> local validation -> PR metadata/readback -> review/merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1529.md
-- Review Entry: .loom/reviews/WI-1529.json
-- Validation Entry: python3 tools/skills_surface.py check; python3 test/skills_surface_reference_integrity_test.py; git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .
-- Closing Condition: PR for #1529 is merged, issue #1529 is closed/completed, and the skills reference-integrity surface is consumed by milestone/12 release/no-release closeout.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1529/#1529 terminal facts have been consumed: PR #1546 merged into main at 2026-06-17T10:30:52Z with merge commit 9207db2c959f8f44c2893da76deca87ab115f50a; issue #1529 closed/completed at 2026-06-17T10:31:57Z; WI-1529 terminal metadata is recorded for milestone/12 release/no-release closeout consumption.
-- Next Step: None for WI-1529; resume milestone/12 with #1510, #1513, #1541, #1542, #1543, #1544, #1532, #1533, #1534, and final #1515 after required upstream surfaces stabilize.
-- Blockers: None
-- Latest Validation Summary: 2026-06-17T09:43Z WI-1529 validation passed after rebasing on main with WI-1540/#1545 terminal closeout consumed: `python3 tools/py_compile_clean.py tools/skills_surface.py test/skills_surface_reference_integrity_test.py`; `python3 test/skills_surface_reference_integrity_test.py`; `python3 tools/skills_surface.py check --surface reference-integrity`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1529 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.
-- Recovery Boundary: WI-1529/#1529 only. Do not change review, merge-ready, gate freeze, PR gate, hosted admission, closeout profile, release/no-release, or skill content semantics except where the checker exposes a true broken reference.
-- Current Lane: milestone-12-wi-1529-skill-reference-integrity
+- Recovery Entry: .loom/progress/WI-1544.md
+- Review Entry: .loom/reviews/WI-1544.json
+- Validation Entry: python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/skills_surface.py check --surface package-metadata; python3 tools/skills_surface.py check; git diff --check
+- Closing Condition: PR for #1544 is merged, issue #1544 is closed/completed, and the lane orchestration protocol is consumed by milestone/12 docs/skills/closeout convergence.
+- Current Checkpoint: review_ready
+- Current Stop: WI-1544 local docs/skills protocol implementation is committed at head 2257d8564494f4a80796541208de9372e114260d on branch work/1544-lane-orchestration-protocol; PR #1548 is open; PR metadata rendered/readback machine blocks match; local skills surface checks passed.
+- Next Step: Re-run PR gate after WI-1544 fact-chain/review carriers are committed and pushed; then consume hosted checks, review, merge-ready, controlled merge, and post-merge closeout.
+- Blockers: Current PR gate failure is classified as carrier admission/review evidence gap: PR metadata expects WI-1544 while repo fact-chain still pointed at closed_out WI-1529 and no WI-1544 review record existed before this carrier sync.
+- Latest Validation Summary: 2026-06-17T12:19Z local validation passed for WI-1544 before PR creation: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body local metadata preflight passed; PR #1548 readback metadata compare passed with head 2257d8564494f4a80796541208de9372e114260d.
+- Recovery Boundary: WI-1544/#1544 only. Do not implement #1541, #1542, #1543, #1510, #1512, #1513, #1514, #1532, #1533, #1534, or #1515 behavior in this PR. Do not change hosted gate, closeout profile, failure classifier, release/no-release, or runtime command semantics.
+- Current Lane: milestone-12-wi-1544-lane-orchestration-protocol
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-17 WI-1529 branch and carrier initialization
+- Run Entry: 2026-06-17 WI-1544 branch and carrier initialization
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1529 adds the `reference-integrity` skills surface, path-base diagnostics, and source/install/runtime copy parity checks for SKILL package references.
-- Verification Entry: `python3 tools/py_compile_clean.py tools/skills_surface.py test/skills_surface_reference_integrity_test.py`; `python3 test/skills_surface_reference_integrity_test.py`; `python3 tools/skills_surface.py check --surface reference-integrity`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`.
-- Lane Entry: milestone-12-wi-1529-skill-reference-integrity
+- Diagnostics Entry: WI-1544 adds the lane orchestration protocol and generated skill references for high-throughput milestone/subagent work boundaries.
+- Verification Entry: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body local metadata preflight; PR #1548 rendered/readback metadata compare.
+- Lane Entry: milestone-12-wi-1544-lane-orchestration-protocol
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1529.md
-- Dynamic Truth: .loom/progress/WI-1529.md
+- Static Truth: .loom/work-items/WI-1544.md
+- Dynamic Truth: .loom/progress/WI-1544.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
