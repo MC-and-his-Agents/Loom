@@ -2438,6 +2438,13 @@ def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
         or "carrier-only" not in str(carrier_binding.get("next_action"))
     ):
         raise AssertionError(f"gate freeze carrier-only review binding did not pass with path evidence: {carrier_binding}")
+    carrier_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        carrier_pr_gate_payload.get("result") != "pass"
+        or carrier_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "carrier-only"
+        or carrier_pr_gate_payload.get("governance_lint", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"pr-gate did not consume carrier-only review drift: {carrier_pr_gate_payload.get('missing_inputs')}")
 
     (target / "implementation-drift.txt").write_text("unreviewed drift\n", encoding="utf-8")
     commit_fixture_file(target, "implementation-drift.txt", "fixture implementation drift after freeze review")
@@ -4944,6 +4951,8 @@ def run_aggregate_cli_contract() -> None:
     try:
         freeze_item = active_work_item_id()
         branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=REPO_ROOT, text=True).strip()
+        if not branch:
+            branch = "work/cli-contract-fixture"
         body = governance_metadata_body(item=freeze_item, branch=branch, head_sha=head_sha)
         rendered_pr_body.write_text(body, encoding="utf-8")
         readback_pr_body.write_text(body, encoding="utf-8")

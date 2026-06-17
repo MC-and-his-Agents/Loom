@@ -16738,7 +16738,14 @@ def approval_boundary_lint_status(
     status = review_approval.get("status")
     review_kind = review_approval.get("kind")
     reviewed_head = review_approval.get("reviewed_head")
+    head_binding = review_approval.get("head_binding") if isinstance(review_approval.get("head_binding"), dict) else {}
     stale_taxonomy = {"review_stale", "head_binding_drift", "validation_summary_drift"} & set(failure_taxonomy)
+    if (
+        status == "approved"
+        and head_binding.get("status") == "carrier-only"
+        and head_binding.get("stale") is False
+    ):
+        stale_taxonomy.discard("head_binding_drift")
     base_result = {
         "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
         "id": "authored_review_approval_boundary",
