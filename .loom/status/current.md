@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1494
-- Goal: 为 closeout check/sync 增加显式 Work Item 绑定
-- Scope: 实现 issue #1494：为 closeout 与 reconciliation runtime 增加 --item 显式 retained Work Item 绑定，校验 --item 与 --issue 的一致性，并保留无 --item 时的 retained lookup fail-closed 行为。不实现一键 post-merge closeout run，不改变 release flow 或 closeout evidence 语义。
-- Execution Path: issue #1494 -> branch work/1494-closeout-item-binding -> runtime closeout/reconciliation --item binding -> retained lookup tests -> generated runtime parity -> PR gate
+- Item ID: WI-1554
+- Goal: Harden the top-level Loom CLI wrapper to runtime argument contract for high-risk operator gates.
+- Scope: Complete issue #1554 remaining wrapper/runtime contract surfaces: keep merge check/run numeric PR argument coverage, forward runtime-supported closeout check parameters from tools/loom.py, and add focused contract coverage for closeout and gate closeout without changing closeout gate semantics or one-shot post-merge closeout orchestration. Write ownership is limited to WI-1554 carriers/specs, `tools/loom.py`, and `tools/check_cli_contract.py`.
+- Execution Path: issue #1554 -> branch work/1554-wrapper-closeout-contract -> closeout wrapper/runtime parameter forwarding -> focused merge-wrapper and governance-closeout contract surfaces -> PR metadata/readback -> review/merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1494.md
-- Review Entry: .loom/reviews/WI-1494.json
-- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift
-- Closing Condition: Issue #1494 closed after PR merge and closeout evidence confirms closeout/reconciliation --item binding works.
-- Current Checkpoint: merge
-- Current Stop: Closeout/reconciliation --item binding, closeout carrier sync, demo fixture sync, and targeted CI failure surfaces are ready for current-head implementation review; PR metadata and hosted checks need refresh after the new head is pushed.
-- Next Step: Record current-head implementation review, refresh carrier/shadow evidence, update PR #1560 body for the new head, rerun PR gate and hosted checks, then controlled merge after required checks pass.
+- Recovery Entry: .loom/progress/WI-1554.md
+- Review Entry: .loom/reviews/WI-1554.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; closeout/gate closeout --item smoke; git diff --check
+- Closing Condition: PR #1562 is merged, issue #1554 is closed after closeout evidence confirms merge and closeout wrapper/runtime contract coverage, and #1514/#1534/#1515 can consume #1554 as complete.
+- Current Checkpoint: build
+- Current Stop: PR #1562 contains the complete #1554 wrapper/runtime contract slice: merge check/run, closeout, and gate closeout wrapper argument contracts are implemented, spec/plan/evidence are aligned, focused validation passed, and build evidence is integrated.
+- Next Step: Record current-head implementation review for 90c12dce0d134dc9e398284e2beb2788c5be1e74, update PR #1562 with the carrier/review head, rerun PR metadata preflight and PR gate, then move the PR out of draft when gates are clean.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T19:08Z targeted validation passed after CI failure classification: make loom-demo-new-project-check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 tools/check_cli_contract.py --surface governance-closeout --surface aggregate; prior retained item tests, py_compile_clean, generated-tree-drift, suite validate/evidence/carrier validate, and live closeout/reconciliation --item readback remained valid for the implementation slice.
-- Recovery Boundary: WI-1494 implementation remains limited to explicit retained Work Item binding for closeout/reconciliation. Additional committed carrier changes are closeout carrier sync for host-complete WI-1510/WI-1554 and generated demo fixture sync required by hosted gates; no release flow, one-shot closeout run, hosted admission, or closeout evidence semantics changed.
-- Current Lane: milestone-12-wave0-closeout-item-binding
+- Latest Validation Summary: 2026-06-17T20:45Z targeted validation passed for PR #1562 head 90c12dce0d134dc9e398284e2beb2788c5be1e74 after spec/plan alignment: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py flow build --target . --item WI-1554 --build-evidence .loom/progress/WI-1554-build-evidence.json consumed integrated build evidence; closeout and gate closeout --item smokes reached closeout check and blocked only on issue is not closed; PR metadata preflight/readback compare passed for PR #1562; git diff --check.
+- Recovery Boundary: Current slice is limited to CLI wrapper/runtime parameter contract hardening for #1554. It does not implement #1555 one-shot post-merge closeout run, hosted admission, release/no-release closeout, or closeout gate semantic changes.
+- Current Lane: milestone-12-wave0-cli-wrapper-contract
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1494.md
-- Dynamic Truth: .loom/progress/WI-1494.md
+- Static Truth: .loom/work-items/WI-1554.md
+- Dynamic Truth: .loom/progress/WI-1554.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
