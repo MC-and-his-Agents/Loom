@@ -7,6 +7,7 @@
 
 - spec.md: required / present
 - plan.md: required / present
+- implementation-contract.md: required / present
 - research.md: conditional / present
 - contracts.md: conditional / present
 - readiness-checklist.md: conditional / present
