@@ -2950,6 +2950,8 @@ def handle_reconcile(argv: list[str]) -> int:
         flow_args.extend(["--issue", args.issue])
     if args.pr:
         flow_args.extend(["--pr", args.pr])
+    if args.work_item:
+        flow_args.extend(["--item", args.work_item])
     return emit_flow("reconcile", flow_args, fallback_to=["manual-reconciliation"])
 
 

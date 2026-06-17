@@ -21365,6 +21365,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
 
     payload, errors = closeout_payload(
         target_root=target_root,
+        expected_item=args.item,
         phase_number=args.phase,
         fr_number=args.fr,
         issue_number=args.issue,
@@ -21482,6 +21483,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
 
     refreshed_payload, errors = closeout_payload(
         target_root=target_root,
+        expected_item=args.item,
         phase_number=args.phase,
         fr_number=args.fr,
         issue_number=args.issue,

@@ -17181,6 +17181,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             loom_flow_module.run_process = lambda *_args, **_kwargs: FakeGateResult()
             payload, closeout_errors = loom_flow_module.closeout_payload(
                 target_root=repo_declared_gate_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=None,
@@ -17199,6 +17200,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 failures.append(Failure("adversarial-adoption", "default closeout payload must expose closeout-contract profile"))
             heavy_payload, heavy_errors = loom_flow_module.closeout_payload(
                 target_root=repo_declared_gate_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=None,
@@ -17322,6 +17324,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             )
             closeout_target_branch_payload, closeout_errors = loom_flow_module.closeout_payload(
                 target_root=closeout_target_branch_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=1,
@@ -17356,6 +17359,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 return failures
             closeout_missing_base_payload, closeout_errors = loom_flow_module.closeout_payload(
                 target_root=closeout_missing_base_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=1,
@@ -17477,6 +17481,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             def closeout_backlink_payload(target: Path, fixture_files: dict[str, str | None]) -> dict[str, object]:
                 payload, errors = loom_flow_module.closeout_payload(
                     target_root=target,
+                    expected_item=None,
                     phase_number=None,
                     fr_number=None,
                     issue_number=1,
