@@ -4,7 +4,7 @@
 
 - Item ID: WI-1513
 - Goal: Add a stable gate failure classifier vocabulary and next-action contract for gate freeze and downstream hosted/closeout consumers.
-- Scope: Implement the #1513 milestone/12 slice by mapping existing gate freeze and validation failure kinds into stable classifier categories, including PR metadata drift, carrier refresh needed, shadow stale, review stale, host API unreadable, permission, hosted snapshot mismatch, suite evidence contract invalid, task carrier contract invalid, unsupported command surface, and release evidence phase errors. Keep hosted admission, closeout gate behavior, PR metadata rendering, and release/no-release closeout out of scope.
+- Scope: Implement the #1513 milestone/12 slice by mapping existing gate freeze and validation failure kinds into stable classifier categories, including PR metadata drift, carrier refresh needed, shadow stale, review stale, host API unreadable, permission, hosted snapshot mismatch, suite evidence contract invalid, task carrier contract invalid, unsupported command surface, and release evidence phase errors. Write ownership is limited to WI-1513 carriers/specs, shared `loom_flow.py` runtime copies, and `tools/check_cli_contract.py`; keep hosted admission, closeout gate behavior, PR metadata rendering, and release/no-release closeout out of scope.
 - Execution Path: issue #1513 -> branch work/1513-failure-classifier-v2 -> failure classifier vocabulary -> gate freeze payload normalization -> focused CLI contract checks -> PR metadata/readback -> review/merge-ready
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1513.md
