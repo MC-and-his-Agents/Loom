@@ -2445,6 +2445,15 @@ def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
         or carrier_pr_gate_payload.get("governance_lint", {}).get("result") != "pass"
     ):
         raise AssertionError(f"pr-gate did not consume carrier-only review drift: {carrier_pr_gate_payload.get('missing_inputs')}")
+    append_governance_intensity_metadata_body(target, fixture, include_legacy_bindings=False)
+    machine_only_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        machine_only_pr_gate_payload.get("result") != "pass"
+        or machine_only_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "carrier-only"
+    ):
+        raise AssertionError(
+            f"pr-gate did not consume machine-carrier-only PR binding: {machine_only_pr_gate_payload.get('missing_inputs')}"
+        )
 
     (target / "implementation-drift.txt").write_text("unreviewed drift\n", encoding="utf-8")
     commit_fixture_file(target, "implementation-drift.txt", "fixture implementation drift after freeze review")
@@ -2626,6 +2635,7 @@ def governance_metadata_body(
     item: str = "WI-1321",
     branch: str = "work/1321-governance-intensity-metadata-carrier",
     head_sha: str = "1111111111111111111111111111111111111111",
+    include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
 ) -> str:
     fields: dict[str, Any] = {
@@ -2657,14 +2667,14 @@ def governance_metadata_body(
         "source": {"rendered_hash": "sha256:fixture"},
         "parser_version": "loom-pr-metadata-parser/v1",
     }
-    return (
+    legacy_binding = (
         f"Loom Work Item: {item}\n"
         f"Branch: {branch}\n"
         f"Head SHA: {head_sha}\n\n"
-        "<!-- loom:repo-pr-metadata\n"
-        f"{json.dumps(envelope, indent=2)}\n"
-        "-->\n"
+        if include_legacy_bindings
+        else f"Loom Work Item: {item}\n\n"
     )
+    return legacy_binding + "<!-- loom:repo-pr-metadata\n" + f"{json.dumps(envelope, indent=2)}\n" + "-->\n"
 
 
 def governance_metadata_preflight_payload(target: Path, body_name: str, *, expect: int = 0) -> dict[str, Any]:
@@ -2822,6 +2832,7 @@ def append_governance_intensity_metadata_body(
     target: Path,
     fixture: dict[str, str],
     *,
+    include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
 ) -> None:
     pr_path = target / fixture["pr_file"]
@@ -2830,6 +2841,7 @@ def append_governance_intensity_metadata_body(
         item=fixture["item"],
         branch=fixture["branch"],
         head_sha=payload["headRefOid"],
+        include_legacy_bindings=include_legacy_bindings,
         fields_override=fields_override,
     )
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

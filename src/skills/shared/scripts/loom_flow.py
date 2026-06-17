@@ -14812,6 +14812,35 @@ def pr_body_field_value(body: Any, label: str) -> str | None:
     return value or None
 
 
+def pr_body_governance_metadata_fields(body: Any) -> dict[str, Any]:
+    if not isinstance(body, str):
+        return {}
+    for block in pr_metadata_html_comment_blocks(body, "loom:repo-pr-metadata"):
+        try:
+            envelope = json.loads(block["raw"])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(envelope, dict):
+            continue
+        if envelope.get("metadata_contract_id") != GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID:
+            continue
+        fields = envelope.get("fields")
+        if isinstance(fields, dict):
+            return fields
+    return {}
+
+
+def pr_body_binding_value(body: Any, *, label: str, metadata_field: str) -> str | None:
+    legacy_value = pr_body_field_value(body, label)
+    if legacy_value:
+        return legacy_value
+    fields = pr_body_governance_metadata_fields(body)
+    value = fields.get(metadata_field)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     if not isinstance(body, str):
         return False
@@ -16915,12 +16944,12 @@ def pr_gate_payload(
             missing_inputs.append("PR is draft")
         if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
             missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
-        body_head = pr_body_field_value(pr_payload.get("body"), "Head SHA")
+        body_head = pr_body_binding_value(pr_payload.get("body"), label="Head SHA", metadata_field="head_sha")
         if not body_head:
             missing_inputs.append("PR body Head SHA is missing from PR machine carrier")
         elif pr_head and body_head != pr_head:
             missing_inputs.append("PR body Head SHA does not match PR payload headRefOid")
-        body_branch = pr_body_field_value(pr_payload.get("body"), "Branch")
+        body_branch = pr_body_binding_value(pr_payload.get("body"), label="Branch", metadata_field="branch")
         payload_branch = pr_payload.get("headRefName")
         expected_branch = payload_branch if isinstance(payload_branch, str) and payload_branch else branch_name
         if not body_branch:
