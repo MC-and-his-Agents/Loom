@@ -3,11 +3,11 @@
   "item_id": "WI-1531",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1531 docs-only closeout terminal profile contract is approved pending validation refresh: the patch defines `loom-closeout-freeze/v1` and fixture inventory without changing runtime behavior or weakening closeout/review/release gates.",
+  "summary": "WI-1531 docs-only closeout terminal profile contract is approved: the patch defines `loom-closeout-freeze/v1`, uses formal suite `not_applicable` with rationale, and leaves runtime/hosted/closeout behavior to downstream issues.",
   "reviewer": "codex",
-  "authored_at": "2026-06-17T04:31:44Z",
-  "reviewed_head": "2326a10ad291898780fdbaa2a2805d15154d0244",
-  "reviewed_validation_summary": "2026-06-17T04:31Z WI-1531 local validation passed on head 2326a10ad291898780fdbaa2a2805d15154d0244: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`.",
+  "authored_at": "2026-06-17T04:43:00Z",
+  "reviewed_head": "6f67b5c9b035b761d1c4dfcb1705b5cad96b4a40",
+  "reviewed_validation_summary": "2026-06-17T04:43Z WI-1531 local validation passed after formal suite `not_applicable` correction on head 6f67b5c9b035b761d1c4dfcb1705b5cad96b4a40: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1531 --json`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -29,11 +29,11 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Docs-only contract patch stays within #1531 and leaves implementation, hosted admission, closeout gate behavior, classifier names, and release closeout to dependent issues."
+    "reason": "Docs-only contract patch stays within #1531, uses formal suite not_applicable with required rationale, and leaves implementation, hosted admission, closeout gate behavior, classifier names, and release closeout to dependent issues."
   },
   "head_binding": {
-    "reviewed_head": "2326a10ad291898780fdbaa2a2805d15154d0244",
-    "current_head": "2326a10ad291898780fdbaa2a2805d15154d0244",
+    "reviewed_head": "6f67b5c9b035b761d1c4dfcb1705b5cad96b4a40",
+    "current_head": "6f67b5c9b035b761d1c4dfcb1705b5cad96b4a40",
     "status": "fresh",
     "stale": false,
     "changed_paths": [],
