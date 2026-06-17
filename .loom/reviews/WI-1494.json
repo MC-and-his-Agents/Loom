@@ -3,50 +3,15 @@
   "item_id": "WI-1494",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review approved for WI-1494 at the current CI-fix head. The runtime changes remain scoped to explicit --item binding for closeout and reconciliation, with generated runtime parity and retained lookup fixtures. Additional carrier-only changes synchronize host-complete WI-1510/WI-1554 recovery checkpoints and demo bootstrap fixtures required by hosted gates; they do not change closeout admission, release flow, or one-shot post-merge closeout behavior.",
+  "summary": "Allow current head 09407d271e8fb7f0fba882442e629a932595e211 for WI-1494 after reviewing the closeout payload expected_item fixture/runtime fix. Scope is limited to adding expected_item at closeout_payload callers in loom_check/status, syncing installed/demo/generated runtime copies, and refreshing bootstrap manifests. Validation passed: source-self-fixture, py_compile_clean targeted runtime files, generated-tree-drift, demo bootstrap fixture.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T19:08:24Z",
-  "reviewed_head": "d780b41ffa5bd7d526abdae806699552d2db2c28",
+  "authored_at": "2026-06-17T19:41:45Z",
+  "reviewed_head": "09407d271e8fb7f0fba882442e629a932595e211",
   "reviewed_validation_summary": "2026-06-17T19:08Z targeted validation passed after CI failure classification: make loom-demo-new-project-check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 tools/check_cli_contract.py --surface governance-closeout --surface aggregate; prior retained item tests, py_compile_clean, generated-tree-drift, suite validate/evidence/carrier validate, and live closeout/reconciliation --item readback remained valid for the implementation slice.",
   "fallback_to": null,
-  "findings": [
-    {
-      "id": "compat-follow-up-1",
-      "summary": "#1554 should still harden remaining wrapper/runtime contract surfaces beyond the merged first slice.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-2",
-      "summary": "#1555 remains responsible for one-shot post-merge closeout orchestration after #1494 and #1543 are consumable.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-3",
-      "summary": "#1513 should add host API unreadable/anonymous rate-limit classification and token bridge next action.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    }
-  ],
+  "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "#1554 should still harden remaining wrapper/runtime contract surfaces beyond the merged first slice.",
-    "#1555 remains responsible for one-shot post-merge closeout orchestration after #1494 and #1543 are consumable.",
-    "#1513 should add host API unreadable/anonymous rate-limit classification and token bridge next action."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1494.md",
     "recovery_entry": ".loom/progress/WI-1494.md",
