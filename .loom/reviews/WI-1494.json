@@ -3,16 +3,16 @@
   "item_id": "WI-1494",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review approved for WI-1494. The runtime now accepts --item for closeout and reconciliation, resolves explicit retained Work Items directly, verifies consistency with --issue lookup, preserves ambiguous no-item fail-closed behavior, forwards tools/loom.py reconcile --work-item, and updates generated runtime copies plus focused retained lookup tests.",
+  "summary": "Implementation review approved for WI-1494 at the current CI-fix head. The runtime changes remain scoped to explicit --item binding for closeout and reconciliation, with generated runtime parity and retained lookup fixtures. Additional carrier-only changes synchronize host-complete WI-1510/WI-1554 recovery checkpoints and demo bootstrap fixtures required by hosted gates; they do not change closeout admission, release flow, or one-shot post-merge closeout behavior.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T18:56:12Z",
-  "reviewed_head": "fc8dd5253945e7a52852f39bc48210a3f0e1fa01",
-  "reviewed_validation_summary": "2026-06-17T18:55Z targeted validation passed: python3 test/retained_item_lookup_test.py; python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py test/retained_item_lookup_test.py; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-1494 --json; git diff --check; live closeout/reconciliation --item readback reached expected dependency drift checks without argparse or retained lookup ambiguity.",
+  "authored_at": "2026-06-17T19:08:24Z",
+  "reviewed_head": "d780b41ffa5bd7d526abdae806699552d2db2c28",
+  "reviewed_validation_summary": "2026-06-17T19:08Z targeted validation passed after CI failure classification: make loom-demo-new-project-check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 tools/check_cli_contract.py --surface governance-closeout --surface aggregate; prior retained item tests, py_compile_clean, generated-tree-drift, suite validate/evidence/carrier validate, and live closeout/reconciliation --item readback remained valid for the implementation slice.",
   "fallback_to": null,
   "findings": [
     {
       "id": "compat-follow-up-1",
-      "summary": "#1554 should still harden gate closeout target/default wrapper behavior and merge-method defaults.",
+      "summary": "#1554 should still harden remaining wrapper/runtime contract surfaces beyond the merged first slice.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
@@ -22,6 +22,16 @@
     },
     {
       "id": "compat-follow-up-2",
+      "summary": "#1555 remains responsible for one-shot post-merge closeout orchestration after #1494 and #1543 are consumable.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-3",
       "summary": "#1513 should add host API unreadable/anonymous rate-limit classification and token bridge next action.",
       "severity": "warn",
       "rebuttal": null,
@@ -33,7 +43,8 @@
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "#1554 should still harden gate closeout target/default wrapper behavior and merge-method defaults.",
+    "#1554 should still harden remaining wrapper/runtime contract surfaces beyond the merged first slice.",
+    "#1555 remains responsible for one-shot post-merge closeout orchestration after #1494 and #1543 are consumable.",
     "#1513 should add host API unreadable/anonymous rate-limit classification and token bridge next action."
   ],
   "consumed_inputs": {
