@@ -12,11 +12,11 @@
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift
 - Closing Condition: Issue #1494 closed after PR merge and closeout evidence confirms closeout/reconciliation --item binding works.
 - Current Checkpoint: merge
-- Current Stop: closeout/reconciliation --item binding implemented; generated runtime copies are in sync; focused retained lookup validation passed; PR body/readback and hosted checks still pending.
-- Next Step: Create PR for issue #1494, preflight PR metadata, run PR gate and hosted checks, then controlled merge after required checks pass.
+- Current Stop: closeout/reconciliation --item binding, spec review, and gate evidence carriers are ready for implementation review; PR body/readback and hosted checks are still pending.
+- Next Step: Record implementation review, create PR for issue #1494, preflight PR metadata, run PR gate and hosted checks, then controlled merge after required checks pass.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T18:47Z targeted validation passed: python3 test/retained_item_lookup_test.py; python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py test/retained_item_lookup_test.py; python3 tools/skills_surface.py check --surface generated-tree-drift; tools/loom_flow.py reconciliation sync --item WI-1510 --issue 1510 --pr 1557 --dry-run passed without retained lookup ambiguity; tools/loom.py closeout --item WI-1510 --issue 1510 --pr 1557 reached closeout/reconciliation drift checks without argparse or retained lookup ambiguity.
-- Recovery Boundary: WI-1494 owns explicit retained Work Item binding for closeout/reconciliation only; it does not implement #1555 one-shot closeout run, release flow changes, or closeout evidence semantics.
+- Latest Validation Summary: 2026-06-17T18:55Z targeted validation passed: python3 test/retained_item_lookup_test.py; python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py test/retained_item_lookup_test.py; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-1494 --json; git diff --check; live closeout/reconciliation --item readback reached expected dependency drift checks without argparse or retained lookup ambiguity.
+- Recovery Boundary: WI-1494 owns explicit retained Work Item binding for closeout/reconciliation only; it does not implement #1555 one-shot post-merge closeout run, release flow changes, or closeout evidence semantics.
 - Current Lane: milestone-12-wave0-closeout-item-binding
 
 ## Runtime Evidence
