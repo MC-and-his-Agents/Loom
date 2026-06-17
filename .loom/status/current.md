@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1531.json
 - Validation Entry: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`
 - Closing Condition: PR for #1531 is merged, issue #1531 is closed/completed, and `loom-closeout-freeze/v1` is available as a documented terminal profile contract and fixture inventory while implementation remains deferred to #1532/#1533/#1534.
-- Current Checkpoint: merge
-- Current Stop: WI-1531/#1531 is ready for PR merge-gate evaluation: docs-only contract patch, formal suite `not_applicable` rationale, PR metadata/readback, and local fact-chain validation are aligned. The patch intentionally does not implement closeout freeze runtime behavior.
-- Next Step: Wait for hosted PR gate and required checks on PR #1535, then perform controlled merge only if current head remains unchanged. Downstream implementation remains in #1532/#1533/#1534 after #1510/#1512/#1513 surfaces stabilize.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1531/#1531 terminal facts have been consumed: PR #1535 merged into main at 2026-06-17T05:09:48Z with merge commit 5326d19216965ac0964cb0f08d7be7e02e868420; issue #1531 closed/completed at 2026-06-17T05:13:33Z; closeout-sync PR #1536 merged into main at 2026-06-17T05:29:08Z with merge commit 2626431ada409674cb7a6708ca1c42a0c4244451.
+- Next Step: None; continue milestone/12 with downstream Work Items #1532, #1533, #1534, and final #1515 after upstream surfaces stabilize.
 - Blockers: None
 - Latest Validation Summary: 2026-06-17T04:43Z WI-1531 local validation completed after formal suite `not_applicable` correction: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1531 --json` returned structured result `not_applicable`.
 - Recovery Boundary: WI-1531/#1531 only. Do not implement #1510 carrier/shadow freshness, #1512 hosted admission consumption, #1513 classifier mapping, #1532 local admission, #1533 closeout-specific gate, #1534 docs/skills executable convergence, #1515 release/no-release closeout, or unrelated runtime behavior.
@@ -23,8 +23,8 @@
 
 - Run Entry: 2026-06-17 WI-1531 branch and carrier initialization
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1531 is a docs-only contract slice for `loom-closeout-freeze/v1`; runtime implementation and executable fixture conversion remain in downstream issues.
-- Verification Entry: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`.
+- Diagnostics Entry: WI-1531 is terminally closed out; this carrier sync aligns the dynamic checkpoint with already-recorded terminal metadata and merged PR #1536 closeout evidence.
+- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py closeout check --target . --issue 1531 --pr 1535 --branch work/1531-closeout-freeze-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run`; `git diff --check`.
 - Lane Entry: milestone-12-wi-1531-closeout-freeze-contract
 
 ## Sources
