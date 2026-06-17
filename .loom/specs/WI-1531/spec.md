@@ -2,8 +2,9 @@
 
 ## Suite Path
 
-- Suite path: minimal
-- Full suite artifacts not_applicable: artifacts `suite-index.md`, `research.md`, `contracts.md`, and `readiness-checklist.md`; rationale: WI-1531 is a bounded docs-only contract freeze for the closeout terminal profile. It does not change runtime behavior, hosted workflows, host writes, release mechanics, security permissions, or persistence outside versioned documentation and fixture inventory. consumer boundary: #1532/#1533/#1534 may consume this contract, pending field inventory, and fixture inventory; PR gate, review, and closeout must still consume normal repo-local and host readback. recheck condition: require a full suite if #1531 expands into CLI behavior, hosted workflow behavior, release semantics, security/privacy behavior, migration behavior, or external visible actions.
+- Suite path: not_applicable
+
+- Formal-suite not_applicable: rationale: WI-1531 is a bounded docs-only governance contract slice that defines the `loom-closeout-freeze/v1` terminal profile and a non-executable fixture inventory. A formal spec/plan/implementation-contract suite would restate the same contract without adding a separate product/runtime implementation contract. consumer boundary: this decision only skips formal suite artifacts; fact-chain/status carriers, current-head review, PR metadata/readback, hosted checks, PR gate, no_release judgment, controlled merge, and post-merge closeout remain required. recheck condition: require a minimal or full suite if scope expands into CLI/runtime behavior, hosted workflow behavior, closeout-specific gate behavior, final #1510/#1513 field naming, executable fixtures, release mechanics, security/privacy behavior, migration behavior, or external visible actions. scope proof: `git diff origin/main...HEAD` must stay limited to WI-1531 carriers, `docs/methodology/harness/gate-freeze.md`, `docs/methodology/harness/closeout-gate.md`, and `docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`. review requirement: current-head review must consume the final docs/fixture diff, pending field inventory, dependency boundary for #1532/#1533/#1534, and proof that no runtime, hosted gate, release, or implementation behavior changed.
 
 ## Objective
 
