@@ -1,0 +1,5 @@
+# WI-1513 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1513 | Issue OPEN / branch work/1513-failure-classifier-v2 / failure classifier vocabulary slice | in_progress | primary | .loom/work-items/WI-1513.md | .loom/specs/WI-1513/plan.md#implementation-steps | .loom/specs/WI-1513/spec.md#acceptance-scenarios | .loom/specs/WI-1513/plan.md#validation | .loom/specs/WI-1513/plan.md#validation | GitHub issue #1513; milestone/12 classifier dependency for #1512/#1533/#1514/#1534 | Recheck PR body/head, current review, targeted CLI contract validation, suite validation, target branch, merge commit, and closeout evidence before merge-ready or milestone closeout. |
