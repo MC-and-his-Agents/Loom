@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1513.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; failure classifier targeted import check; git diff --check
 - Closing Condition: PR #1564 is merged, issue #1513 is closed after hosted/closeout consumers can rely on the stable classifier vocabulary and next-action fields, and #1512/#1533/#1534 can consume #1513 without inventing a duplicate schema.
-- Current Checkpoint: merge
-- Current Stop: Failure classifier vocabulary, review records, shadow carriers, and PR #1564 metadata are aligned for merge gate at head 25a6efa21ba1f29911cff031a7c4b9d59b211751.
-- Next Step: Rerun PR #1564 merge gate after checkpoint carrier and shadow refresh read back cleanly.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1513 is closed out after PR #1564 merged into main at 01ab9e167985d9afb9b84fa544bfde1192dc15a9 and GitHub issue #1513 closed at 2026-06-17T22:37:29Z.
+- Next Step: Consume #1513 as complete in #1512/#1533/#1514/#1534/#1515 milestone/12 convergence readback.
 - Blockers: None
 - Latest Validation Summary: 2026-06-17T22:21Z validation passed for PR #1564 head 25a6efa21ba1f29911cff031a7c4b9d59b211751: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py status --target . --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PR body metadata preflight/readback for head 25a6efa21ba1f29911cff031a7c4b9d59b211751.
-- Recovery Boundary: This slice only stabilizes classifier vocabulary and next-action mapping. It does not implement hosted freeze admission #1512, closeout-specific gate #1533, PR metadata render/update #1541, Work Item startup audit #1542, or milestone release closeout #1515.
-- Current Lane: milestone-12-wave0-failure-classifier
+- Recovery Boundary: Current closeout sync only consumes completed #1513 facts and updates repo carriers. It does not implement hosted freeze admission #1512, closeout-specific gate #1533, PR metadata render/update #1541, Work Item startup audit #1542, one-shot closeout run #1555, or milestone release closeout #1515.
+- Current Lane: milestone-12-wave0-failure-classifier-closeout
 
 ## Runtime Evidence
 
