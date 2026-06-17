@@ -3,11 +3,11 @@
   "item_id": "WI-1542",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1542 minimal suite is approved: spec, plan, implementation contract, evidence map, and task carrier cover retained lookup ranking, generated runtime parity, and #1544 closeout readback while excluding closeout queue UX, hosted admission, classifier vocabulary, closeout profile semantics, release behavior, and external host writes.",
+  "summary": "WI-1542 minimal suite is approved at head 7aad99218c574ef5aa407bc2f1caaad653a50051: spec, plan, implementation contract, evidence map, task carrier, and demo bootstrap fixture sync cover retained lookup ranking, generated runtime parity, and #1544 closeout readback while excluding closeout queue UX, hosted admission, classifier vocabulary, closeout profile semantics, release behavior, and external host writes.",
   "reviewer": "codex",
-  "authored_at": "2026-06-17T13:43:08Z",
-  "reviewed_head": "a549c3a75d74bba36bb7d4c1c6a6f6e6cb1f62b3",
-  "reviewed_validation_summary": "2026-06-17T13:37Z WI-1542 validation passed at head af506aaead25778bbaf29572879035157964dcba: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1542 --json`; `git diff --check`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`.",
+  "authored_at": "2026-06-17T13:50:24Z",
+  "reviewed_head": "7aad99218c574ef5aa407bc2f1caaad653a50051",
+  "reviewed_validation_summary": "2026-06-17T13:49Z WI-1542 validation passed at head 7aad99218c574ef5aa407bc2f1caaad653a50051: `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py examples/new-project/.loom/bin/loom_flow.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1542 --json`; `git diff --check`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`.",
   "fallback_to": null,
   "findings": [
     {
