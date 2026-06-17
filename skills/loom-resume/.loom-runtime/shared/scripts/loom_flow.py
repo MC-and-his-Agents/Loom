@@ -9811,6 +9811,25 @@ def text_mentions_issue_number(text: object, issue_number: int) -> bool:
     return any(re.search(pattern, text) for pattern in patterns)
 
 
+def exact_issue_locator_match(text: object, issue_number: int) -> bool:
+    if not isinstance(text, str):
+        return False
+    normalized = text.strip().strip("`").strip()
+    if not normalized:
+        return False
+    exact_values = {
+        f"#{issue_number}",
+        f"issue #{issue_number}",
+        f"github issue #{issue_number}",
+        f"github:issue/{issue_number}",
+        f"issue/{issue_number}",
+        f"issues/{issue_number}",
+        f"/issues/{issue_number}",
+        f"https://github.com/MC-and-his-Agents/Loom/issues/{issue_number}",
+    }
+    return normalized.casefold() in {value.casefold() for value in exact_values}
+
+
 def retained_item_candidate_reasons(
     *,
     target_root: Path,
@@ -9840,8 +9859,11 @@ def retained_item_candidate_reasons(
         reasons.append("work item title/body metadata references issue")
 
     artifacts = work_item.get("associated_artifacts")
-    if isinstance(artifacts, list) and any(text_mentions_issue_number(value, issue_number) for value in artifacts):
-        reasons.append("associated artifact references issue")
+    if isinstance(artifacts, list):
+        if any(exact_issue_locator_match(value, issue_number) for value in artifacts):
+            reasons.append("exact associated artifact issue locator")
+        elif any(text_mentions_issue_number(value, issue_number) for value in artifacts):
+            reasons.append("associated artifact references issue")
 
     recovery_relative = work_item.get("recovery_entry")
     if isinstance(recovery_relative, str) and recovery_relative:
@@ -9868,6 +9890,15 @@ def retained_item_candidate_reasons(
         seen.add(reason)
         deduped.append(reason)
     return deduped
+
+
+def retained_item_candidate_priority(reasons: list[str]) -> int:
+    strong_reasons = {
+        "canonical WI issue-number carrier path",
+        "canonical WI issue-number item id",
+        "exact associated artifact issue locator",
+    }
+    return 1 if any(reason in strong_reasons for reason in reasons) else 0
 
 
 def closeout_retained_item_lookup(target_root: Path, issue_number: int | None) -> dict[str, Any]:
@@ -9915,15 +9946,18 @@ def closeout_retained_item_lookup(target_root: Path, issue_number: int | None) -
                 "item_id": str(work_item["item_id"]),
                 "work_item_relative": work_item_relative,
                 "reasons": reasons,
+                "priority": retained_item_candidate_priority(reasons),
             }
         )
 
     if not candidates:
         return {"item_id": None, "work_item_relative": None, "missing_inputs": [], "diagnostics": diagnostics}
-    if len(candidates) > 1:
+    highest_priority = max(candidate["priority"] for candidate in candidates)
+    prioritized_candidates = [candidate for candidate in candidates if candidate["priority"] == highest_priority]
+    if len(prioritized_candidates) > 1:
         candidate_text = "; ".join(
             f"{candidate['item_id']} at {candidate['work_item_relative']} via {', '.join(candidate['reasons'])}"
-            for candidate in candidates
+            for candidate in prioritized_candidates
         )
         return {
             "item_id": None,
@@ -9933,12 +9967,12 @@ def closeout_retained_item_lookup(target_root: Path, issue_number: int | None) -
             ],
             "diagnostics": [*diagnostics, *candidates],
         }
-    candidate = candidates[0]
+    candidate = prioritized_candidates[0]
     return {
         "item_id": candidate["item_id"],
         "work_item_relative": candidate["work_item_relative"],
         "missing_inputs": [],
-        "diagnostics": [*diagnostics, candidate],
+        "diagnostics": [*diagnostics, *candidates],
     }
 
 
