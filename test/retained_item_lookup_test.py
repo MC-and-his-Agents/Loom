@@ -200,6 +200,88 @@ class RetainedItemLookupTest(unittest.TestCase):
             self.assertIn("GH-21-LOOM-UPGRADE-BASELINE", lookup["missing_inputs"][0])
             self.assertIn("LEGACY-ISSUE-21", lookup["missing_inputs"][0])
 
+    def test_explicit_item_disambiguates_weak_issue_mentions(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            write_work_item(root, "WI-1510", issue=1510)
+            write_work_item(
+                root,
+                "WI-1509",
+                issue=1510,
+                metadata_issue=False,
+                recovery_issue=True,
+            )
+            write_work_item(
+                root,
+                "WI-1511",
+                issue=1510,
+                metadata_issue=False,
+                recovery_issue=True,
+            )
+
+            lookup = loom_flow.closeout_expected_item_lookup(root, 1510, "WI-1510")
+
+            self.assertEqual(lookup["item_id"], "WI-1510")
+            self.assertEqual(lookup["work_item_relative"], ".loom/work-items/WI-1510.md")
+            self.assertEqual(lookup["missing_inputs"], [])
+
+    def test_explicit_item_conflicting_issue_lookup_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            write_work_item(root, "WI-22")
+            write_work_item(root, "WI-OTHER", issue=22)
+
+            lookup = loom_flow.closeout_expected_item_lookup(root, 22, "WI-OTHER")
+
+            self.assertIsNone(lookup["item_id"])
+            self.assertEqual(lookup["work_item_relative"], None)
+            self.assertEqual(len(lookup["missing_inputs"]), 1)
+            self.assertIn("does not match retained-item lookup for issue #22", lookup["missing_inputs"][0])
+
+    def test_explicit_unrelated_item_does_not_bypass_ambiguous_issue_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            write_work_item(root, "WI-UNRELATED")
+            write_work_item(root, "GH-23-ONE", issue=23)
+            write_work_item(root, "GH-23-TWO", issue=23)
+
+            lookup = loom_flow.closeout_expected_item_lookup(root, 23, "WI-UNRELATED")
+
+            self.assertIsNone(lookup["item_id"])
+            self.assertEqual(lookup["work_item_relative"], None)
+            self.assertEqual(len(lookup["missing_inputs"]), 1)
+            self.assertIn("could not be confirmed against issue #23", lookup["missing_inputs"][0])
+
+    def test_closeout_and_reconciliation_parse_explicit_item(self) -> None:
+        closeout_args = loom_flow.parse_args(
+            [
+                "closeout",
+                "check",
+                "--target",
+                ".",
+                "--item",
+                "WI-1510",
+                "--issue",
+                "1510",
+            ]
+        )
+        reconciliation_args = loom_flow.parse_args(
+            [
+                "reconciliation",
+                "sync",
+                "--target",
+                ".",
+                "--item",
+                "WI-1510",
+                "--issue",
+                "1510",
+                "--dry-run",
+            ]
+        )
+
+        self.assertEqual(closeout_args.item, "WI-1510")
+        self.assertEqual(reconciliation_args.item, "WI-1510")
+
 
 if __name__ == "__main__":
     unittest.main()
