@@ -1,0 +1,25 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1529",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1529 spec suite is approved: the minimal suite is appropriate for a bounded SKILL surface checker, the implementation contract defines owned files and forbidden scope, and suite validation passes with no blocking gaps. The suite covers reference diagnostics, source/install/runtime copy parity, non-file link handling, and release/closeout consumption boundaries without changing review, merge-ready, gate freeze, hosted admission, closeout profile, or release/no-release semantics.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-17T09:43:00Z",
+  "reviewed_head": "4204369320577a06d5a2801547d128ab2b526e7a",
+  "reviewed_validation_summary": "2026-06-17T09:43Z WI-1529 validation passed after rebasing on main with WI-1540/#1545 terminal closeout consumed: `python3 tools/py_compile_clean.py tools/skills_surface.py test/skills_surface_reference_integrity_test.py`; `python3 test/skills_surface_reference_integrity_test.py`; `python3 tools/skills_surface.py check --surface reference-integrity`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1529 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "spec": ".loom/specs/WI-1529/spec.md",
+    "plan": ".loom/specs/WI-1529/plan.md",
+    "implementation_contract": ".loom/specs/WI-1529/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1529/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1529/task-carrier.md",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1529 --json",
+    "work_item": ".loom/work-items/WI-1529.md",
+    "recovery_entry": ".loom/progress/WI-1529.md"
+  }
+}
