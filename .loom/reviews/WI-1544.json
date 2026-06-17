@@ -7,7 +7,7 @@
   "reviewer": "codex",
   "authored_at": "2026-06-17T12:21:23Z",
   "reviewed_head": "92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16",
-  "reviewed_validation_summary": "2026-06-17T12:19Z WI-1544 validation passed: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body metadata preflight passed; PR #1548 rendered/readback metadata compare passed at head 92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16.",
+  "reviewed_validation_summary": "2026-06-17T12:19Z WI-1544 validation passed: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body metadata preflight passed; PR #1548 rendered/readback metadata compare passed at review/carrier head 92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
