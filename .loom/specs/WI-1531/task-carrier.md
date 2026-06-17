@@ -1,0 +1,5 @@
+# WI-1531 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1531 | Issue OPEN / branch work/1531-closeout-freeze-contract / PR pending | in_progress | primary | .loom/work-items/WI-1531.md | .loom/specs/WI-1531/plan.md#implementation-steps | .loom/specs/WI-1531/spec.md#acceptance-scenarios | .loom/specs/WI-1531/plan.md#validation | .loom/specs/WI-1531/evidence-map.md | GitHub issue #1531 acceptance criteria; milestone/12 goal; branch work/1531-closeout-freeze-contract; local worktree `/Users/mc/dev/Loom-1531-closeout-freeze-contract` | Recheck issue #1531, PR head/body metadata, review record, hosted checks, merge-ready gate, target branch, merge commit, and closeout evidence before merge-ready or closeout; task carrier state is tracking-only and does not replace Work Item, review, PR gate, merge-ready, or closeout truth. |

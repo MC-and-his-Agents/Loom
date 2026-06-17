@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1509
-- Goal: Pin PR body rendered/readback hashes and machine metadata block fingerprints inside the gate freeze snapshot so stale PR body races block before hosted gate admission.
-- Scope: Issue #1509 only: consume existing `pr metadata-preflight` body-file evidence, record rendered body hash, readback body hash, machine metadata block raw excerpt hashes and fingerprints in `loom-gate-freeze/v1`, make `loom gate freeze check` block on rendered/readback mismatch and PR Work Item/head/branch carrier mismatch, surface a precise next action to re-run `gh pr edit --body-file`, read back the PR body, and rerun freeze. Do not rewrite the PR template, change the human PR body display layer, replace `pr metadata-preflight`, implement carrier/shadow freshness (#1510), review/head drift policy (#1511), hosted admission consumption (#1512), broad classifier expansion (#1513), docs milestone sweep (#1514), or release/no-release closeout (#1515).
-- Execution Path: issue #1509 -> branch `work/1509-pr-body-hash-pin` -> PR -> CLI/runtime contract checks -> local validation -> PR metadata/readback -> review/merge-ready.
+- Item ID: WI-1531
+- Goal: Define the `loom-closeout-freeze/v1` terminal profile contract so closeout-only PRs can carry already-produced terminal facts without weakening host/git/carrier readback, review, release/no-release, or closeout checks.
+- Scope: Issue #1531 only: document the closeout terminal profile schema, authority boundary, terminal subject and facts, carrier bindings, retained review and allowed paths rules, two-phase consumption, closeout modes, generic failure kinds, and non-executable fixture inventory. Do not implement `gate freeze --profile closeout`, hosted admission, closeout-specific gate behavior, #1510 carrier/shadow fields, #1513 classifier names, #1532/#1533 runtime behavior, #1534 executable docs/skills convergence, or #1515 release/no-release closeout.
+- Execution Path: issue #1531 -> branch `work/1531-closeout-freeze-contract` -> docs/fixture contract patch -> local validation -> PR metadata/readback -> review/merge-ready.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1509.md
-- Review Entry: .loom/reviews/WI-1509.json
-- Validation Entry: git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py gate freeze check --target . --item WI-1509 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1509 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1509 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1509 --json
-- Closing Condition: PR for #1509 is merged, issue #1509 is closed/completed, and gate freeze snapshots expose and enforce PR body hash/readback pins before hosted admission can consume stale PR body metadata.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1509/#1509 terminal closeout facts have been consumed: PR #1526 merged into main at 2026-06-16T23:24:29Z with merge commit 3860fc63ee928df5a89f7794a779a7d063354af4; issue #1509 closed/completed at 2026-06-16T23:27:10Z; Project status read back Done; stale native blocked-by edge from closed #1508 was removed and read back as blockedBy.nodes=[]; issue dependency text was normalized to satisfied predecessor wording; reconciliation audit and closeout check pass.
-- Next Step: None; continue milestone/12 with the remaining follow-on Work Items.
-- Blockers: None
-- Latest Validation Summary: 2026-06-16T23:07Z WI-1509 post-CI validation passed: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 examples/new-project/.loom/bin/loom_init.py verify --target examples/new-project`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface distribution-regression .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .`. The earlier hosted `loom-pr-merge-gate` failure on run 27653279714 was classified as PR body update/check-start timing drift; rerun job 81782191725 passed. The earlier hosted `loom-check` failure was classified as github-api-budget guard on a literal `gh pr view` recommendation in `loom_flow.py`; replacing it with host-API readback wording cleared local distribution-regression and contract-only checks.
-- Recovery Boundary: WI-1509/#1509 only. Do not implement #1510 carrier/shadow freshness, #1511 review/head policy, #1512 hosted admission consumption, #1513 milestone-wide classifier expansion, #1514 docs/skills sweep, #1515 release/no-release closeout, or unrelated runtime changes.
-- Current Lane: milestone-12-wi-1509-pr-body-hash-pin
+- Recovery Entry: .loom/progress/WI-1531.md
+- Review Entry: .loom/reviews/WI-1531.json
+- Validation Entry: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`
+- Closing Condition: PR for #1531 is merged, issue #1531 is closed/completed, and `loom-closeout-freeze/v1` is available as a documented terminal profile contract and fixture inventory while implementation remains deferred to #1532/#1533/#1534.
+- Current Checkpoint: review_ready
+- Current Stop: WI-1531/#1531 has a docs-only contract patch defining `loom-closeout-freeze/v1`, closeout terminal mode boundaries, pending field names, and fixture inventory. Local docs/JSON/fact-chain validation passes; the patch intentionally does not implement closeout freeze runtime behavior.
+- Next Step: Refresh review evidence for the current head, create/update PR metadata, then run PR gate and hosted checks.
+- Blockers: #1532/#1533/#1534 implementation and executable docs remain blocked by #1510/#1512/#1513 surfaces; they are not in WI-1531 scope.
+- Latest Validation Summary: 2026-06-17T04:31Z WI-1531 local validation passed: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`.
+- Recovery Boundary: WI-1531/#1531 only. Do not implement #1510 carrier/shadow freshness, #1512 hosted admission consumption, #1513 classifier mapping, #1532 local admission, #1533 closeout-specific gate, #1534 docs/skills executable convergence, #1515 release/no-release closeout, or unrelated runtime behavior.
+- Current Lane: milestone-12-wi-1531-closeout-freeze-contract
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-17 WI-1509 branch and carrier initialization
+- Run Entry: 2026-06-17 WI-1531 branch and carrier initialization
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1509 is closed out locally; runtime implementation and PR #1526 metadata readback have already merged, and PR #1527 now carries only post-merge terminal carrier facts for #1509.
-- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py reconciliation audit --target . --issue 1509`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py closeout check --target . --issue 1509 --pr 1526 --project 4 --branch main --skip-gate`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.
-- Lane Entry: milestone-12-wi-1509-pr-body-hash-pin
+- Diagnostics Entry: WI-1531 is a docs-only contract slice for `loom-closeout-freeze/v1`; runtime implementation and executable fixture conversion remain in downstream issues.
+- Verification Entry: `git diff --check`; `python3 -m json.tool docs/evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json`; `python3 -m json.tool .loom/bootstrap/init-result.json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`.
+- Lane Entry: milestone-12-wi-1531-closeout-freeze-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1509.md
-- Dynamic Truth: .loom/progress/WI-1509.md
+- Static Truth: .loom/work-items/WI-1531.md
+- Dynamic Truth: .loom/progress/WI-1531.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

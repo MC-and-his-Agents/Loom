@@ -234,7 +234,183 @@ global CLI smoke as present. If the change requires an actual release, the
 snapshot may only say release evidence is pending until the authorized post-merge
 release step completes.
 
-## 10. Positive Example
+## 10. Closeout Terminal Profile
+
+`loom-closeout-freeze/v1` is the terminal closeout profile of
+`loom-gate-freeze/v1`. It freezes already-produced completion facts so a
+closeout-only PR can transport terminal carrier sync without becoming the place
+where host/head/body/carrier/shadow/review drift is first discovered.
+
+This profile is a contract only. It does not implement `loom gate freeze
+--profile closeout`, does not change hosted gate behavior, does not create a
+new truth source, and does not weaken review, PR gate, controlled merge,
+release/no-release, closeout, or reconciliation. Host, git, and repo carrier
+truth must still be read back or recomputed by every consumer.
+
+### 10.1 Dependency Lane
+
+| Work item | Role | Minimum mergeable slice | Waits for |
+| --- | --- | --- | --- |
+| `#1531` | Define `loom-closeout-freeze/v1` | Schema, authority boundary, field sources, staleness rules, closeout modes, two-phase consumer contract, pending field list, and fixture inventory | `#1507`, `#1508`; consumes `#1509`, `#1511`; final shadow field names pending `#1510` |
+| `#1532` | Local closeout freeze admission | Read-only CLI design for `check/write --profile closeout`, admission inputs, snapshot/hash output, and next-action shape | `#1531`; `#1510` consumable carrier/shadow surface |
+| `#1533` | Closeout-specific hosted/repo-local gate | Snapshot/hash consumption, allowed paths, retained review, escalation verdict, and closeout-only gate output | `#1532`; `#1512` hosted admission surface |
+| `#1534` | Docs, skills, fixtures convergence | Closeout mode user docs, skills protocol, executable fixtures, and reference integrity | `#1533`; `#1513` final classifier mapping |
+
+`#1532` and `#1533` must not advance beyond design or fixture inventory until
+their `#1510` / `#1512` consumer surfaces are stable. `#1534` must wait for
+`#1533` and `#1513` before closing docs, skills, and executable fixtures.
+
+### 10.2 Envelope
+
+The profile is embedded under the standard gate freeze envelope:
+
+```json
+{
+  "schema_version": "loom-cli-output/v1",
+  "command": "gate freeze check",
+  "result": "pass|block",
+  "mutates": false,
+  "payload": {
+    "schema_version": "loom-closeout-freeze/v1",
+    "profile": "closeout",
+    "mode": "inline|auto_no_op|light|batched|full",
+    "snapshot_id": "sha256:<digest>",
+    "terminal_subject": {},
+    "terminal_facts": {},
+    "carrier_bindings": {},
+    "retained_review": {},
+    "release_boundary": {},
+    "allowed_paths": {},
+    "readiness": {},
+    "pending_contract_fields": []
+  }
+}
+```
+
+`check` is read-only. A future write surface may retain a runtime snapshot or a
+PR-body consumable hash, but it must not mutate GitHub, Project, PR, issue,
+release, branch, or versioned closeout carriers.
+
+### 10.3 Terminal Subject
+
+`terminal_subject` binds the terminal consumer:
+
+| Field | Required | Source |
+| --- | --- | --- |
+| `work_item` | yes | Fact-chain / progress carrier for the completed item. |
+| `parent_fr` | when present | Work Item or GitHub issue relation. |
+| `closeout_issue` | yes | GitHub issue readback, not PR body text alone. |
+| `implementation_pr` | yes | Merged implementation PR readback. |
+| `closeout_pr` | when PR-bound | Closeout-only PR number, branch, base, head SHA, and body readback. |
+| `merge_commit` | yes | Controlled merge basis or host PR readback. |
+| `target_branch` | yes | Target branch name plus readback SHA containing `merge_commit`. |
+| `workspace` | yes | Formal worktree locator used to produce the snapshot. |
+| `generated_at` | yes | Snapshot generation time. |
+| `source_commands` | yes | Exact local and host readback commands used. |
+
+Any disagreement between GitHub readback, git readback, fact-chain, PR body, or
+carrier fields is `closeout_terminal_subject_drift` and blocks closeout profile
+admission.
+
+### 10.4 Terminal Facts
+
+`terminal_facts` records the facts a closeout-only PR is allowed to carry:
+
+| Field | Required | Source and staleness rule |
+| --- | --- | --- |
+| `issue_state` | yes | GitHub issue readback. Must be `closed` only when closeout basis proves the same Work Item; otherwise block. |
+| `pr_merged` | yes | Implementation PR readback. Must include `mergedAt`, `headRefOid`, and merge commit. |
+| `target_contains_merge_commit` | yes | Git readback from target branch. Must be recomputed, not copied from prior output. |
+| `closed_at` | when issue closed | GitHub issue readback timestamp. |
+| `project_status` | when project-bound | Project readback. `Done` is advisory until closeout basis passes. |
+| `dependency_graph` | yes | Host binding inspector / native dependency readback. Open blockers or unreadable edges block. |
+| `fact_chain_idle` | after carrier sync | Fact-chain readback showing `idle` / `no_active_item`, when the mode claims terminal carrier sync is complete. |
+
+Closeout freeze must recompute host/git facts at admission time. It may retain
+hashes and locators, but it must not treat stale runtime artifacts as terminal
+truth.
+
+### 10.5 Carrier Bindings
+
+`carrier_bindings` must bind the same terminal facts across repo carriers:
+
+- `.loom/progress/<item>.md` terminal closeout metadata
+- `.loom/status/current.md` only as readback, never as a `#1531` write target
+- review record locator and retained decision
+- shadow freshness/parity, when declared by the profile
+- closeout evidence locator
+- release/no-release evidence locator
+
+The current contract leaves these fields pending until upstream surfaces settle:
+
+| Pending field | Blocked by | Interim handling |
+| --- | --- | --- |
+| Final carrier refresh result field name | `#1510` | Record as `pending_contract_field: carrier_refresh_result`; consumers must not guess. |
+| Final shadow source hash / parity field names | `#1510` | Record as `pending_contract_field: shadow_freshness`; consumers may only cite existing shadow locators. |
+| Hosted snapshot readback binding | `#1512` | Record as `pending_contract_field: hosted_snapshot_binding`; local admission cannot claim hosted consumption. |
+| Closeout-specific classifier names | `#1513` | Record compatible generic kinds and `pending_contract_field: failure_classifier_mapping`. |
+
+### 10.6 Retained Review And Allowed Paths
+
+`retained_review` may be consumed only when the implementation review was
+authored before merge, has `decision == allow`, is an implementation review
+kind, and remains bound to the merged PR head or to closeout-only carrier drift.
+
+`allowed_paths` for closeout-only PRs are limited to terminal metadata,
+carrier sync, shadow/hash refresh, readback evidence, no-release rationale, and
+closeout comments or records that do not change implementation behavior. Any
+change to implementation files, CLI behavior, skills behavior, templates,
+contracts, gate rules, release judgment semantics, or unclassified batch scope
+is `closeout_implementation_drift` and requires full review / guardian
+escalation.
+
+### 10.7 Two-Phase Consumption
+
+Closeout freeze has two consumers:
+
+1. Closeout PR admission before creating or updating a closeout-only PR.
+   Admission proves terminal facts are stable enough to carry and returns a
+   snapshot/hash that the PR body and later gate can read.
+2. Closeout PR consume/check before merging a closeout-only PR. The consumer
+   re-reads host/git/carrier facts, verifies the snapshot/hash still binds the
+   current PR head and body, checks allowed paths, and either passes closeout
+   profile or escalates to full review / guardian.
+
+Both phases fail closed. The second phase must not trust the first phase without
+readback.
+
+### 10.8 Closeout Modes
+
+| Mode | Meaning | Required consumer boundary |
+| --- | --- | --- |
+| `inline` | Terminal facts are consumed in the implementation PR flow; no separate closeout PR. | Must still retain merge, target branch, issue, release/no-release, and carrier evidence. |
+| `auto_no_op` | Host and repo carriers already agree; no PR body or carrier diff is needed. | Must prove no versioned carrier change is required. |
+| `light` | Single closeout-only PR carries terminal metadata or hash refresh. | Must pass allowed paths and retained review checks. |
+| `batched` | One closeout PR carries multiple terminal-only items. | Must prove every item independently passes; mixed risk escalates full. |
+| `full` | Closeout includes contract, behavior, implementation, release dispute, or classifier change. | Must run normal review / guardian and merge-ready gates. |
+
+### 10.9 Closeout Failure Kinds
+
+Until `#1513` freezes final classifier names, consumers must preserve these
+generic closeout profile kinds without treating them as automatic exemptions:
+
+| Failure kind | Default result | Next action |
+| --- | --- | --- |
+| `closeout_terminal_subject_drift` | block | Re-read issue, PR, merge commit, target branch, and carrier bindings. |
+| `closeout_host_git_mismatch` | block | Repair host/git readback or return to controlled merge evidence. |
+| `closeout_carrier_drift` | block | Run the supported carrier closeout sync path or repair the carrier. |
+| `closeout_shadow_stale` | block | Wait for `#1510` field names, then refresh shadow/hash evidence through supported commands. |
+| `closeout_release_evidence_gap` | block | Author release/no-release evidence with pre/post-merge boundary. |
+| `closeout_retained_review_unconsumable` | block | Rerun review or escalate to full review / guardian. |
+| `closeout_allowed_paths_violation` | block | Remove non-closeout changes or convert the PR to full review. |
+| `closeout_batch_mixed_risk` | block | Split safe terminal items from risky items or use full mode. |
+
+The initial fixture inventory for these modes and risks is
+[closeout-freeze-terminal-profile-fixtures.json](../../evidence/fixtures/closeout-freeze-terminal-profile-fixtures.json).
+That file is a contract fixture source for `#1531`; executable regression
+coverage remains owned by `#1534`.
+
+## 11. Positive Example
 
 ```json
 {
@@ -269,7 +445,45 @@ release step completes.
 }
 ```
 
-## 11. Negative Example
+## 12. Closeout Profile Example
+
+```json
+{
+  "schema_version": "loom-closeout-freeze/v1",
+  "profile": "closeout",
+  "mode": "light",
+  "snapshot_id": "sha256:<digest>",
+  "terminal_subject": {
+    "work_item": "WI-1531",
+    "parent_fr": "#1505",
+    "implementation_pr": "<merged-implementation-pr>",
+    "closeout_pr": null,
+    "merge_commit": "0123456789abcdef0123456789abcdef01234567",
+    "target_branch": "main",
+    "workspace": "/Users/mc/dev/Loom-1531-closeout-freeze-contract"
+  },
+  "terminal_facts": {
+    "issue_state": "closed",
+    "pr_merged": true,
+    "target_contains_merge_commit": true,
+    "dependency_graph": "pass",
+    "fact_chain_idle": "pending_until_carrier_sync"
+  },
+  "readiness": {
+    "result": "pass",
+    "closeout_pr_allowed": true,
+    "full_review_required": false
+  },
+  "pending_contract_fields": [
+    "carrier_refresh_result",
+    "shadow_freshness",
+    "hosted_snapshot_binding",
+    "failure_classifier_mapping"
+  ]
+}
+```
+
+## 13. Negative Example
 
 ```json
 {
@@ -297,12 +511,14 @@ release step completes.
 }
 ```
 
-## 12. Non-goals
+## 14. Non-goals
 
 - Do not implement the CLI in this contract Work Item.
 - Do not alter hosted workflow admission in this contract Work Item.
 - Do not update PR template behavior in this contract Work Item.
 - Do not weaken review, PR gate, controlled merge, release/no-release, or
   closeout semantics.
+- Do not let closeout-only PRs carry implementation drift, new product facts,
+  release judgment disputes, template or gate rule changes without full review.
 - Do not promote raw review output, shadow evidence, CI, GitHub review comments,
   or PR body summaries to authored Loom review approval.
