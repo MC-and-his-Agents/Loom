@@ -80,3 +80,7 @@ description: 负责恢复当前事项的执行入口。Use when Codex needs to t
 
 - [references/input-signals.md](./references/input-signals.md)
 - [references/output-contract.md](./references/output-contract.md)
+
+恢复当前 lane 与 lane 交接边界时，消费的共享合同见：
+
+- [lane-orchestration.md](.loom-runtime/shared/references/harness/lane-orchestration.md)

@@ -87,5 +87,6 @@ Build readiness 消费的共享合同见：
 - [spec-suite.md](../shared/references/templates/spec-suite.md)
 - [execution-breakdown.md](../shared/references/templates/execution-breakdown.md)
 - [task-carrier-contract.md](../shared/references/harness/task-carrier-contract.md)
+- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)
 - [evidence-map.md](../shared/references/templates/evidence-map.md)
 - [consistency-analysis.md](../shared/references/templates/consistency-analysis.md)
