@@ -3,11 +3,11 @@
   "item_id": "WI-1554",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1554 PR #1562 implementation is approved for the wrapper/runtime parameter contract slice: tools/loom.py now exposes and forwards runtime-supported closeout check parameters, merge check/run PR argument contract coverage rejects the placeholder literal and preserves numeric PR forwarding, and governance-closeout contract coverage exercises closeout plus gate closeout passthrough without changing closeout semantics or host writes.",
+  "summary": "WI-1554 PR #1562 implementation remains approved for the wrapper/runtime parameter contract slice: tools/loom.py exposes and forwards runtime-supported closeout check parameters, merge check/run PR argument contract coverage rejects the placeholder literal and preserves numeric PR forwarding, and governance-closeout contract coverage exercises closeout plus gate closeout passthrough without changing closeout semantics or host writes.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T20:47:39Z",
-  "reviewed_head": "7e02767cbf4e21318dc21971bffe00f054bdb10f",
-  "reviewed_validation_summary": "2026-06-17T20:45Z targeted validation passed for PR #1562 head 90c12dce0d134dc9e398284e2beb2788c5be1e74 after spec/plan alignment: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1554 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py flow build --target . --item WI-1554 --build-evidence .loom/progress/WI-1554-build-evidence.json consumed integrated build evidence; closeout and gate closeout --item smokes reached closeout check and blocked only on issue is not closed; PR metadata preflight/readback compare passed for PR #1562; git diff --check.",
+  "authored_at": "2026-06-17T20:51:34Z",
+  "reviewed_head": "e48ca5ed9ecbc374e68a641d6cb63313902c27a7",
+  "reviewed_validation_summary": "2026-06-17T20:52Z merge-ready carrier readback for PR #1562 head e48ca5ed9ecbc374e68a641d6cb63313902c27a7: PR metadata preflight/readback passed; authored implementation review was refreshed for the current recovery summary; suite evidence/carrier validation passed during review record; local checkpoint merge and PR gate were rerun after removing stale first-slice terminal metadata; targeted CLI validation from 2026-06-17T20:45Z remains unchanged for implementation files.",
   "fallback_to": null,
   "findings": [
     {
