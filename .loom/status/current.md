@@ -13,19 +13,19 @@
 - Closing Condition: PR #1564 is merged, issue #1513 is closed after hosted/closeout consumers can rely on the stable classifier vocabulary and next-action fields, and #1512/#1533/#1534 can consume #1513 without inventing a duplicate schema.
 - Current Checkpoint: build
 - Current Stop: Failure classifier vocabulary and gate freeze payload normalization are implemented on branch work/1513-failure-classifier-v2 and draft PR #1564 is open for review.
-- Next Step: Add/refresh review evidence for PR #1564 head fcb196cc423cb63e76eed42d51116c93fdf0ca5d, then run PR gate/merge-ready checks after carrier and PR metadata readback stay aligned.
+- Next Step: Add/refresh review evidence for PR #1564 head 276db6d3ea87f2dacc5299f1220b3dacc41fdbc2, then run PR gate/merge-ready checks after carrier and PR metadata readback stay aligned.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T21:37Z validation passed for PR #1564 head fcb196cc423cb63e76eed42d51116c93fdf0ca5d: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; direct failure_classifier_payload import check; PR body metadata preflight/readback for PR #1564 passed.
+- Latest Validation Summary: 2026-06-17T22:06Z validation passed for PR #1564 implementation head 276db6d3ea87f2dacc5299f1220b3dacc41fdbc2: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface generation; direct failure_classifier_payload next_action override check; git diff --check.
 - Recovery Boundary: This slice only stabilizes classifier vocabulary and next-action mapping. It does not implement hosted freeze admission #1512, closeout-specific gate #1533, PR metadata render/update #1541, Work Item startup audit #1542, or milestone release closeout #1515.
 - Current Lane: milestone-12-wave0-failure-classifier
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-17 WI-1510 carrier refresh and shadow freshness freeze input implementation slice
+- Run Entry: 2026-06-17 WI-1513 gate failure classifier vocabulary and next-action implementation slice
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1510 adds `carrier_refresh` and `shadow_freshness` gate freeze input bindings and keeps closeout terminal profile semantics unchanged.
-- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.
-- Lane Entry: milestone-12-wi-1510-carrier-shadow-freeze
+- Diagnostics Entry: WI-1513 adds stable `loom-failure-classifier/v1` categories and classifier-owned `next_action` output for gate freeze consumers, while leaving hosted admission and closeout gate behavior unchanged.
+- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface generation`; direct failure_classifier_payload next_action override check; `git diff --check`.
+- Lane Entry: milestone-12-wave0-failure-classifier
 
 ## Sources
 
