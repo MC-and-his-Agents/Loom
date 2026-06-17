@@ -1,0 +1,5 @@
+# WI-1542 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1542 | Issue OPEN / branch work/1542-retained-item-lookup / retained lookup implementation | in_progress | primary | .loom/work-items/WI-1542.md | .loom/specs/WI-1542/plan.md#implementation-steps | .loom/specs/WI-1542/spec.md#acceptance-scenarios | .loom/specs/WI-1542/plan.md#validation | .loom/specs/WI-1542/evidence-map.md | GitHub issue #1542; #1544 closeout check failure; local branch work/1542-retained-item-lookup | Recheck PR body/head, current review, hosted checks, retained lookup regression, #1544 closeout readback, target branch, merge commit, and closeout evidence before merge-ready or closeout. |

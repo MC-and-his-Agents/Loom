@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1544
-- Goal: Define a milestone lane orchestration and subagent write-boundary protocol for high-throughput milestone/FR work.
-- Scope: Issue #1544 only: add the lane orchestration harness contract, wire it into executable skill references, and keep implementation/runtime/gate/closeout behavior out of scope.
-- Execution Path: issue #1544 -> branch work/1544-lane-orchestration-protocol -> docs/skills protocol implementation -> local validation -> PR metadata/readback -> review/merge-ready
+- Item ID: WI-1542
+- Goal: Add a pre-start active carrier drift audit foundation by making retained Work Item lookup prefer canonical issue ownership evidence over historical recovery text references.
+- Scope: Issue #1542 only: adjust retained Work Item lookup ranking, add a focused regression, and regenerate skills runtime copies. Do not implement closeout queue UX, hosted admission, classifier, release, or closeout profile semantics.
+- Execution Path: issue #1542 -> branch work/1542-retained-item-lookup -> retained lookup implementation -> focused regression -> closeout check readback -> PR metadata/readback -> review/merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1544.md
-- Review Entry: .loom/reviews/WI-1544.json
-- Validation Entry: python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/skills_surface.py check --surface package-metadata; python3 tools/skills_surface.py check; git diff --check
-- Closing Condition: PR for #1544 is merged, issue #1544 is closed/completed, and the lane orchestration protocol is consumed by milestone/12 docs/skills/closeout convergence.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1544 is closed out post-merge: PR #1548 merged at cc63e34f4b41227f3aa7b0f23368fa151a3d3efb, issue #1544 is closed/completed, and terminal carrier metadata is recorded below.
-- Next Step: None for WI-1544; downstream milestone/12 docs/skills and final closeout items may consume the lane orchestration protocol evidence.
+- Recovery Entry: .loom/progress/WI-1542.md
+- Review Entry: .loom/reviews/WI-1542.json
+- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py; python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract; git diff --check; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/skills_surface.py check --surface package-metadata
+- Closing Condition: PR for #1542 is merged, issue #1542 remains available for any remaining active-carrier audit UX scope or is explicitly split/closed, and milestone/12 downstream closeout checks can consume canonical retained Work Item lookup without historical recovery text ambiguity.
+- Current Checkpoint: merge checkpoint
+- Current Stop: WI-1542 retained Work Item lookup implementation is committed at head e30a23ed25eb4557036a7342ffbe8a918f5d1447 on branch work/1542-retained-item-lookup; focused retained lookup test passes; #1544 closeout check passes through repo-local runtime.
+- Next Step: Record current-head review, push PR, consume hosted checks, merge, then decide remaining #1542 UX scope or close/split.
 - Blockers: None
-- Latest Validation Summary: 2026-06-17T12:19Z WI-1544 validation passed: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body metadata preflight passed; PR #1548 rendered/readback metadata compare passed at review/carrier head 92f69d5685f7c39012ecaeeb7fbeb0d6fd012d16.
-- Recovery Boundary: WI-1544/#1544 only. Do not implement #1541, #1542, #1543, #1510, #1512, #1513, #1514, #1532, #1533, #1534, or #1515 behavior in this PR. Do not change hosted gate, closeout profile, failure classifier, release/no-release, or runtime command semantics.
-- Current Lane: milestone-12-wi-1544-lane-orchestration-protocol
+- Latest Validation Summary: 2026-06-17T13:24Z WI-1542 validation passed: `python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py`; `python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract`; `git diff --check`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`.
+- Recovery Boundary: WI-1542/#1542 only. Do not implement #1543 closeout queue UX, #1510 gate freeze carrier shadow, #1512 hosted freeze admission, #1513 classifier vocabulary, #1532/#1533 closeout freeze profile behavior, #1534 docs convergence, or #1515 final closeout.
+- Current Lane: milestone-12-wi-1542-retained-item-lookup
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-17 WI-1544 branch and carrier initialization
+- Run Entry: 2026-06-17 WI-1542 retained lookup implementation and #1544 closeout readback
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1544 adds the lane orchestration protocol and generated skill references for high-throughput milestone/subagent work boundaries.
-- Verification Entry: `python3 tools/skills_surface.py generate`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`; `python3 tools/skills_surface.py check`; `git diff --check`; PR body local metadata preflight; hosted checks passed; controlled merge passed; post-merge `carrier closeout-sync`, `shadow-parity --surface all --blocking`, and `closeout check --gate-profile closeout-contract` passed.
-- Lane Entry: milestone-12-wi-1544-lane-orchestration-protocol
+- Diagnostics Entry: WI-1542 fixes retained Work Item lookup ambiguity by ranking canonical issue ownership evidence above historical recovery text references.
+- Verification Entry: `python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py`; `python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract`; `git diff --check`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`.
+- Lane Entry: milestone-12-wi-1542-retained-item-lookup
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1544.md
-- Dynamic Truth: .loom/progress/WI-1544.md
+- Static Truth: .loom/work-items/WI-1542.md
+- Dynamic Truth: .loom/progress/WI-1542.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
