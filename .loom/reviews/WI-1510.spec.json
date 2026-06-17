@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1510",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1510 minimal suite is approved for the carrier refresh and shadow freshness freeze input slice. The suite covers carrier refresh dry-run binding, per-shadow source-hash freshness records, executable refresh suggestions, generated runtime copy synchronization, and the explicit boundary that hosted admission, closeout terminal profile behavior, PR metadata rendering, closeout item binding, and milestone closeout remain outside this PR.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-17T17:52:23Z",
+  "reviewed_head": "1fd629d89617210af6f7acbcc469f13ec5c5b5d5",
+  "reviewed_validation_summary": "2026-06-17T17:52Z WI-1510 targeted validation passed at reviewed head `1fd629d89617210af6f7acbcc469f13ec5c5b5d5`: `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1510 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1512 consumes the merged field shape.",
+    "#1513 owns broader taxonomy naming and host auth/rate-limit classifier work.",
+    "#1532/#1533/#1534 consume these fields later without changing closeout profile semantics here."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1510.md",
+    "recovery_entry": ".loom/progress/WI-1510.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1510 --json",
+    "suite_spec": ".loom/specs/WI-1510/spec.md",
+    "suite_plan": ".loom/specs/WI-1510/plan.md",
+    "suite_implementation_contract": ".loom/specs/WI-1510/implementation-contract.md",
+    "suite_evidence_map": ".loom/specs/WI-1510/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1510/task-carrier.md"
+    ]
+  }
+}
