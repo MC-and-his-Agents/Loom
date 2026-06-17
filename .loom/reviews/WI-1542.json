@@ -3,11 +3,11 @@
   "item_id": "WI-1542",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1542 terminal closeout sync is approved at head 29ae830e7c0deed3eea7617d1f8df4ed78fc90c1: PR #1551 terminalizes the repo-local WI-1542 carrier after PR #1550 merged and adds the minimal terminal closeout gate compatibility fix for hosted-only retained review/spec heads that are no longer reachable in checkout.",
+  "summary": "WI-1542 terminal closeout sync is approved at head 29ae830e45f19b4ed9571ad1b5ee00322270213d: PR #1551 terminalizes the repo-local WI-1542 carrier after PR #1550 merged and adds the minimal terminal closeout gate compatibility fix for hosted-only retained review/spec heads that are no longer reachable in checkout.",
   "reviewer": "codex",
   "authored_at": "2026-06-17T15:26:06Z",
-  "reviewed_head": "29ae830e7c0deed3eea7617d1f8df4ed78fc90c1",
-  "reviewed_validation_summary": "2026-06-17T15:26Z WI-1542 terminal closeout sync and hosted old-review-head compatibility validation passed at head 29ae830e7c0deed3eea7617d1f8df4ed78fc90c1: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `git diff --check`; dirty-tree `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr gate 1551 --work-item WI-1542 --head-sha b342f574f39b97c3cbc2125262173c9000f7ef88 --json` failed only on `purity`, confirming the terminal closeout old-head comparison blocker is no longer present before the carrier-only review commit.",
+  "reviewed_head": "29ae830e45f19b4ed9571ad1b5ee00322270213d",
+  "reviewed_validation_summary": "2026-06-17T15:26Z WI-1542 terminal closeout sync and hosted old-review-head compatibility validation passed at head 29ae830e45f19b4ed9571ad1b5ee00322270213d: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `git diff --check`; dirty-tree `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr gate 1551 --work-item WI-1542 --head-sha b342f574f39b97c3cbc2125262173c9000f7ef88 --json` failed only on `purity`, confirming the terminal closeout old-head comparison blocker is no longer present before the carrier-only review commit.",
   "fallback_to": null,
   "findings": [
     {
@@ -46,8 +46,8 @@
     "local_pr_gate": "pass",
     "terminal_closeout_consumption": "pass",
     "head_binding": {
-      "reviewed_head": "29ae830e7c0deed3eea7617d1f8df4ed78fc90c1",
-      "current_head": "29ae830e7c0deed3eea7617d1f8df4ed78fc90c1",
+      "reviewed_head": "29ae830e45f19b4ed9571ad1b5ee00322270213d",
+      "current_head": "29ae830e45f19b4ed9571ad1b5ee00322270213d",
       "status": "fresh",
       "stale": false
     }
