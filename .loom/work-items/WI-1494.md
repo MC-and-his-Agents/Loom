@@ -6,7 +6,7 @@
 - Goal: 为 closeout check/sync 增加显式 Work Item 绑定
 - Scope: 实现 issue #1494：为 closeout 与 reconciliation runtime 增加 --item 显式 retained Work Item 绑定，校验 --item 与 --issue 的一致性，并保留无 --item 时的 retained lookup fail-closed 行为。不实现一键 post-merge closeout run，不改变 release flow 或 closeout evidence 语义。
 - Execution Path: issue #1494 -> branch work/1494-closeout-item-binding -> runtime closeout/reconciliation --item binding -> retained lookup tests -> generated runtime parity -> PR gate
-- Workspace Entry: /Users/mc/dev/Loom-1494-closeout-item-binding
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1494.md
 - Review Entry: .loom/reviews/WI-1494.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift
