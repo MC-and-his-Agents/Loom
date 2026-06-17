@@ -14812,6 +14812,35 @@ def pr_body_field_value(body: Any, label: str) -> str | None:
     return value or None
 
 
+def pr_body_governance_metadata_fields(body: Any) -> dict[str, Any]:
+    if not isinstance(body, str):
+        return {}
+    for block in pr_metadata_html_comment_blocks(body, "loom:repo-pr-metadata"):
+        try:
+            envelope = json.loads(block["raw"])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(envelope, dict):
+            continue
+        if envelope.get("metadata_contract_id") != GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID:
+            continue
+        fields = envelope.get("fields")
+        if isinstance(fields, dict):
+            return fields
+    return {}
+
+
+def pr_body_binding_value(body: Any, *, label: str, metadata_field: str) -> str | None:
+    legacy_value = pr_body_field_value(body, label)
+    if legacy_value:
+        return legacy_value
+    fields = pr_body_governance_metadata_fields(body)
+    value = fields.get(metadata_field)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     if not isinstance(body, str):
         return False
@@ -15677,11 +15706,21 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None)
         review_file=review_relative,
     )
     binding: dict[str, Any] = {
+        "schema_version": "loom-gate-freeze-review-binding/v1",
         "result": "block",
         "locator": review_path,
+        "source_locator": review_path,
         "review_record": review_record,
+        "decision": None,
+        "kind": None,
+        "reviewed_head": None,
+        "current_head": git_head_sha(context["target_root"]),
+        "pr_head": head_sha,
+        "binding_status": "unknown",
+        "semantic_review_disposition": None,
         "head_binding": None,
         "missing_inputs": [],
+        "next_action": "run authored Loom review for the current PR head before freezing gate inputs.",
     }
     if review_errors:
         binding["missing_inputs"] = review_errors
@@ -15689,6 +15728,9 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None)
     if review_record is None:
         binding["missing_inputs"] = [f"review artifact missing: {review_path}"]
         return binding
+    binding["decision"] = review_record.get("decision")
+    binding["kind"] = review_record.get("kind")
+    binding["reviewed_head"] = review_record.get("reviewed_head")
     head_binding, head_errors = review_head_binding_for_head(
         context["target_root"],
         reviewed_head=review_record.get("reviewed_head") if isinstance(review_record.get("reviewed_head"), str) else None,
@@ -15696,11 +15738,47 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None)
         allowed_paths=allowed_post_review_carrier_paths(context, review_path),
     )
     binding["head_binding"] = head_binding
-    binding["missing_inputs"] = head_errors
+    binding["current_head"] = head_binding.get("current_head")
+    binding["pr_head"] = head_sha or head_binding.get("current_head")
+    binding["binding_status"] = head_binding.get("status")
+    disposition, disposition_errors = semantic_review_disposition_payload(
+        review_record=review_record,
+        review_path=review_path,
+        pr_head=head_sha or head_binding.get("current_head"),
+        head_binding=head_binding,
+        current_validation_summary=context.get("latest_validation_summary"),
+    )
+    binding["semantic_review_disposition"] = disposition
+    binding["missing_inputs"] = [*head_errors, *disposition_errors]
     if review_record.get("decision") != "allow":
         binding["missing_inputs"].append("review artifact decision is not allow")
+    if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+        binding["missing_inputs"].append("review artifact kind is not an implementation review")
     binding["result"] = "pass" if not binding["missing_inputs"] else "block"
+    binding["next_action"] = gate_freeze_review_binding_next_action(binding)
     return binding
+
+
+def gate_freeze_review_binding_next_action(binding: dict[str, Any]) -> str | None:
+    if binding.get("result") == "pass":
+        if binding.get("binding_status") == "carrier-only":
+            return "carrier-only drift is allowed for this review binding; refresh carrier evidence if operator-facing metadata must be repinned."
+        return None
+
+    messages = [str(message).lower() for message in binding.get("missing_inputs", []) if str(message).strip()]
+    head_binding = binding.get("head_binding") if isinstance(binding.get("head_binding"), dict) else {}
+    disallowed_paths = head_binding.get("disallowed_paths") if isinstance(head_binding, dict) else None
+    if isinstance(disallowed_paths, list) and disallowed_paths:
+        return "rerun authored Loom review for the current PR head; disallowed post-review paths changed."
+    if any("validation summary" in message for message in messages):
+        return "refresh validation evidence and rerun authored Loom review for the current recovery summary."
+    if any("reviewed_head" in message or "target head" in message or "head comparison failed" in message for message in messages):
+        return "fix the review record or PR head binding, then rerun gate freeze."
+    if any("decision" in message or "kind" in message or "review artifact missing" in message for message in messages):
+        return "run or refresh authored Loom implementation review for the current PR head."
+    if any("semantic_review_disposition" in message for message in messages):
+        return "fix the authored review record semantic_review_disposition, then rerun gate freeze."
+    return "refresh review binding inputs and rerun `loom gate freeze check --target <repo> --json`."
 
 
 def gate_freeze_shadow_binding(target_root: Path, governance_surface: dict[str, Any]) -> dict[str, Any]:
@@ -16689,7 +16767,14 @@ def approval_boundary_lint_status(
     status = review_approval.get("status")
     review_kind = review_approval.get("kind")
     reviewed_head = review_approval.get("reviewed_head")
+    head_binding = review_approval.get("head_binding") if isinstance(review_approval.get("head_binding"), dict) else {}
     stale_taxonomy = {"review_stale", "head_binding_drift", "validation_summary_drift"} & set(failure_taxonomy)
+    if (
+        status == "approved"
+        and head_binding.get("status") == "carrier-only"
+        and head_binding.get("stale") is False
+    ):
+        stale_taxonomy.discard("head_binding_drift")
     base_result = {
         "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
         "id": "authored_review_approval_boundary",
@@ -16859,12 +16944,12 @@ def pr_gate_payload(
             missing_inputs.append("PR is draft")
         if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
             missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
-        body_head = pr_body_field_value(pr_payload.get("body"), "Head SHA")
+        body_head = pr_body_binding_value(pr_payload.get("body"), label="Head SHA", metadata_field="head_sha")
         if not body_head:
             missing_inputs.append("PR body Head SHA is missing from PR machine carrier")
         elif pr_head and body_head != pr_head:
             missing_inputs.append("PR body Head SHA does not match PR payload headRefOid")
-        body_branch = pr_body_field_value(pr_payload.get("body"), "Branch")
+        body_branch = pr_body_binding_value(pr_payload.get("body"), label="Branch", metadata_field="branch")
         payload_branch = pr_payload.get("headRefName")
         expected_branch = payload_branch if isinstance(payload_branch, str) and payload_branch else branch_name
         if not body_branch:

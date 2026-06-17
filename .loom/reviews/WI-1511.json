@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1511",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1511 current head 711f8a4 is approved: merge checkpoint/status and shadow carriers now reflect completed implementation, current PR metadata/readback, and pending hosted checks without changing runtime behavior.",
+  "reviewer": "Codex main",
+  "authored_at": "2026-06-17T03:03:44Z",
+  "reviewed_head": "711f8a47533fa3ecd35dc4a3059120dabe5c50ee",
+  "reviewed_validation_summary": "2026-06-17T02:52Z WI-1511 PR gate machine-carrier fix validation passed: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3.11 tools/check_cli_contract.py --surface aggregate` passed in 291.43s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift --show-surface-evidence`. Fixes cover PR gate consumption of governance machine carrier `head_sha`/`branch` when legacy PR body binding lines are absent, carrier-only review/head drift consumption, runtime copy sync, and bootstrap hash sync.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1511.md",
+    "recovery_entry": ".loom/progress/WI-1511.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1511-review-head-freeze/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1511-review-head-freeze --item WI-1511 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1511-review-head-freeze/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1511-review-head-freeze --item WI-1511 --json",
+    "suite_evidence_map": ".loom/specs/WI-1511/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1511/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

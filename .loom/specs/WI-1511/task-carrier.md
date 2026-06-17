@@ -1,0 +1,5 @@
+# WI-1511 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1511 | Issue OPEN / branch work/1511-review-head-freeze / PR pending | in_progress | primary | .loom/work-items/WI-1511.md | .loom/specs/WI-1511/plan.md#phases | .loom/specs/WI-1511/spec.md#acceptance-scenarios | .loom/specs/WI-1511/plan.md#validation | .loom/specs/WI-1511/evidence-map.md | GitHub issue #1511 acceptance criteria; milestone/12 goal; branch work/1511-review-head-freeze; local worktree `/Users/mc/dev/Loom-1511-review-head-freeze` | Recheck issue #1511, PR head/body metadata, review record, hosted checks, merge-ready gate, target branch, merge commit, and closeout evidence before merge-ready or closeout; task carrier state is tracking-only and does not replace Work Item, review, PR gate, merge-ready, or closeout truth. |

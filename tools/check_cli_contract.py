@@ -2357,6 +2357,139 @@ def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> d
     return payload
 
 
+def gate_freeze_fixture_payload(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
+    _, payload = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+        ]
+    )
+    return payload
+
+
+def record_current_fixture_review(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
+    _, record_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--review-file",
+            fixture["review_path"],
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Fixture implementation review approves the current head.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    if record_payload.get("result") != "pass":
+        raise AssertionError(f"review record fixture failed: {record_payload.get('missing_inputs')}")
+    return record_payload
+
+
+def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
+    target = tmp / "gate-freeze-review-binding"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+
+    record_payload = record_current_fixture_review(target, fixture)
+    recorded_disposition = record_payload.get("review", {}).get("record", {}).get("semantic_review_disposition", {})
+    if recorded_disposition.get("status") != "passed":
+        raise AssertionError("review record did not write passed semantic_review_disposition")
+
+    fresh_payload = gate_freeze_fixture_payload(target, fixture)
+    fresh_binding = fresh_payload.get("input_bindings", {}).get("review_binding")
+    if not isinstance(fresh_binding, dict) or fresh_binding.get("schema_version") != "loom-gate-freeze-review-binding/v1":
+        raise AssertionError("gate freeze did not emit review binding schema")
+    if (
+        fresh_binding.get("result") != "pass"
+        or fresh_binding.get("decision") != "allow"
+        or fresh_binding.get("kind") != "code_review"
+        or fresh_binding.get("binding_status") != "fresh"
+        or fresh_binding.get("semantic_review_disposition", {}).get("consumable") is not True
+    ):
+        raise AssertionError(f"gate freeze fresh review binding did not pass: {fresh_binding}")
+    if not fresh_binding.get("reviewed_head") or fresh_binding.get("reviewed_head") != fresh_binding.get("current_head"):
+        raise AssertionError("gate freeze fresh review binding did not expose reviewed/current head")
+
+    commit_fixture_file(target, fixture["review_path"], "fixture review carrier-only drift")
+    update_fixture_pr_head(target, fixture)
+    carrier_payload = gate_freeze_fixture_payload(target, fixture)
+    carrier_binding = carrier_payload.get("input_bindings", {}).get("review_binding")
+    carrier_head = carrier_binding.get("head_binding", {}) if isinstance(carrier_binding, dict) else {}
+    if (
+        not isinstance(carrier_binding, dict)
+        or carrier_binding.get("result") != "pass"
+        or carrier_binding.get("binding_status") != "carrier-only"
+        or fixture["review_path"] not in carrier_head.get("changed_paths", [])
+        or carrier_head.get("disallowed_paths") != []
+        or "carrier-only" not in str(carrier_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze carrier-only review binding did not pass with path evidence: {carrier_binding}")
+    carrier_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        carrier_pr_gate_payload.get("result") != "pass"
+        or carrier_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "carrier-only"
+        or carrier_pr_gate_payload.get("governance_lint", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"pr-gate did not consume carrier-only review drift: {carrier_pr_gate_payload.get('missing_inputs')}")
+    append_governance_intensity_metadata_body(target, fixture, include_legacy_bindings=False)
+    machine_only_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        machine_only_pr_gate_payload.get("result") != "pass"
+        or machine_only_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "carrier-only"
+    ):
+        raise AssertionError(
+            f"pr-gate did not consume machine-carrier-only PR binding: {machine_only_pr_gate_payload.get('missing_inputs')}"
+        )
+
+    (target / "implementation-drift.txt").write_text("unreviewed drift\n", encoding="utf-8")
+    commit_fixture_file(target, "implementation-drift.txt", "fixture implementation drift after freeze review")
+    update_fixture_pr_head(target, fixture)
+    stale_payload = gate_freeze_fixture_payload(target, fixture)
+    stale_binding = stale_payload.get("input_bindings", {}).get("review_binding")
+    stale_head = stale_binding.get("head_binding", {}) if isinstance(stale_binding, dict) else {}
+    if (
+        not isinstance(stale_binding, dict)
+        or stale_binding.get("result") != "block"
+        or stale_binding.get("binding_status") not in {"stale", "implementation-drift-only"}
+        or "implementation-drift.txt" not in stale_head.get("disallowed_paths", [])
+        or "rerun authored Loom review" not in str(stale_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze stale review binding did not block with rerun action: {stale_binding}")
+
+    invalid_target = tmp / "gate-freeze-invalid-disposition"
+    invalid_target.mkdir()
+    invalid_fixture = write_semantic_review_pr_gate_fixture(invalid_target)
+    record_current_fixture_review(invalid_target, invalid_fixture)
+    review_path = invalid_target / invalid_fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["semantic_review_disposition"] = {"status": "commented"}
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    invalid_payload = gate_freeze_fixture_payload(invalid_target, invalid_fixture)
+    invalid_binding = invalid_payload.get("input_bindings", {}).get("review_binding")
+    if (
+        not isinstance(invalid_binding, dict)
+        or invalid_binding.get("result") != "block"
+        or invalid_binding.get("semantic_review_disposition", {}).get("status") != "commented"
+        or "semantic_review_disposition" not in " ".join(invalid_binding.get("missing_inputs", []))
+        or "semantic_review_disposition" not in str(invalid_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze invalid semantic disposition did not fail closed: {invalid_binding}")
+
+
 def assert_pr_gate_blocks(
     target: Path,
     fixture: dict[str, str],
@@ -2502,6 +2635,7 @@ def governance_metadata_body(
     item: str = "WI-1321",
     branch: str = "work/1321-governance-intensity-metadata-carrier",
     head_sha: str = "1111111111111111111111111111111111111111",
+    include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
 ) -> str:
     fields: dict[str, Any] = {
@@ -2533,14 +2667,14 @@ def governance_metadata_body(
         "source": {"rendered_hash": "sha256:fixture"},
         "parser_version": "loom-pr-metadata-parser/v1",
     }
-    return (
+    legacy_binding = (
         f"Loom Work Item: {item}\n"
         f"Branch: {branch}\n"
         f"Head SHA: {head_sha}\n\n"
-        "<!-- loom:repo-pr-metadata\n"
-        f"{json.dumps(envelope, indent=2)}\n"
-        "-->\n"
+        if include_legacy_bindings
+        else f"Loom Work Item: {item}\n\n"
     )
+    return legacy_binding + "<!-- loom:repo-pr-metadata\n" + f"{json.dumps(envelope, indent=2)}\n" + "-->\n"
 
 
 def governance_metadata_preflight_payload(target: Path, body_name: str, *, expect: int = 0) -> dict[str, Any]:
@@ -2698,6 +2832,7 @@ def append_governance_intensity_metadata_body(
     target: Path,
     fixture: dict[str, str],
     *,
+    include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
 ) -> None:
     pr_path = target / fixture["pr_file"]
@@ -2706,6 +2841,7 @@ def append_governance_intensity_metadata_body(
         item=fixture["item"],
         branch=fixture["branch"],
         head_sha=payload["headRefOid"],
+        include_legacy_bindings=include_legacy_bindings,
         fields_override=fields_override,
     )
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -3064,28 +3200,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         if loom_flow.pr_work_item_from_body(body) != expected:
             raise AssertionError(f"PR body Work Item parser did not preserve `{expected}`")
 
-    _, record_payload = run_flow_json(
-        [
-            "review",
-            "record",
-            "--target",
-            str(target),
-            "--item",
-            fixture["item"],
-            "--review-file",
-            fixture["review_path"],
-            "--decision",
-            "allow",
-            "--kind",
-            "code_review",
-            "--summary",
-            "Fixture implementation review approves the current head.",
-            "--reviewer",
-            "contract-test",
-        ]
-    )
-    if record_payload.get("result") != "pass":
-        raise AssertionError(f"review record fixture failed: {record_payload.get('missing_inputs')}")
+    record_payload = record_current_fixture_review(target, fixture)
     recorded_disposition = record_payload.get("review", {}).get("record", {}).get("semantic_review_disposition", {})
     if recorded_disposition.get("status") != "passed":
         raise AssertionError("review record did not write passed semantic_review_disposition")
@@ -3098,6 +3213,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("pr-gate did not consume passed semantic_review_disposition")
     if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
+    assert_gate_freeze_review_binding_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
 
@@ -4845,8 +4961,11 @@ def run_aggregate_cli_contract() -> None:
     readback_pr_body_drift = runtime_pr_dir / "cli-contract-readback-drift.md"
     carrier_drift_body = runtime_pr_dir / "cli-contract-carrier-drift.md"
     try:
-        branch = "work/1509-pr-body-hash-pin"
-        body = governance_metadata_body(item="WI-1509", branch=branch, head_sha=head_sha)
+        freeze_item = active_work_item_id()
+        branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=REPO_ROOT, text=True).strip()
+        if not branch:
+            branch = "work/cli-contract-fixture"
+        body = governance_metadata_body(item=freeze_item, branch=branch, head_sha=head_sha)
         rendered_pr_body.write_text(body, encoding="utf-8")
         readback_pr_body.write_text(body, encoding="utf-8")
         _, body_pin_payload = run_json(
@@ -4857,7 +4976,9 @@ def run_aggregate_cli_contract() -> None:
                 "--target",
                 str(REPO_ROOT),
                 "--item",
-                "WI-1509",
+                freeze_item,
+                "--head-sha",
+                head_sha,
                 "--branch",
                 branch,
                 "--body-file",
@@ -4885,7 +5006,9 @@ def run_aggregate_cli_contract() -> None:
                 "--target",
                 str(REPO_ROOT),
                 "--item",
-                "WI-1509",
+                freeze_item,
+                "--head-sha",
+                head_sha,
                 "--branch",
                 branch,
                 "--body-file",
@@ -4910,7 +5033,7 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("gate freeze PR body pin block must include the gh pr edit/readback next action")
 
         carrier_drift_body.write_text(
-            governance_metadata_body(item="WI-1509", branch=branch, head_sha="2" * 40),
+            governance_metadata_body(item=freeze_item, branch=branch, head_sha="2" * 40),
             encoding="utf-8",
         )
         _, carrier_drift_payload = run_json(
@@ -4921,7 +5044,7 @@ def run_aggregate_cli_contract() -> None:
                 "--target",
                 str(REPO_ROOT),
                 "--item",
-                "WI-1509",
+                freeze_item,
                 "--head-sha",
                 head_sha,
                 "--branch",
