@@ -3,11 +3,11 @@
   "item_id": "WI-1511",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1511 current head 711f8a4 is approved: merge checkpoint/status and shadow carriers now reflect completed implementation, current PR metadata/readback, and pending hosted checks without changing runtime behavior.",
+  "summary": "WI-1511 post-merge closeout carrier head 49626af is approved: progress/status terminal checkpoint and shadow hashes record the already merged PR #1528 and closed issue #1511 without changing runtime behavior.",
   "reviewer": "Codex main",
-  "authored_at": "2026-06-17T03:03:44Z",
-  "reviewed_head": "711f8a47533fa3ecd35dc4a3059120dabe5c50ee",
-  "reviewed_validation_summary": "2026-06-17T02:52Z WI-1511 PR gate machine-carrier fix validation passed: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3.11 tools/check_cli_contract.py --surface aggregate` passed in 291.43s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift --show-surface-evidence`. Fixes cover PR gate consumption of governance machine carrier `head_sha`/`branch` when legacy PR body binding lines are absent, carrier-only review/head drift consumption, runtime copy sync, and bootstrap hash sync.",
+  "authored_at": "2026-06-17T03:30:00Z",
+  "reviewed_head": "49626af1688cd56ddfe24e67765040b1d2d0fcad",
+  "reviewed_validation_summary": "2026-06-17T03:20Z WI-1511 post-merge carrier closeout sync validation passed: `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1511 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py closeout check --target .`; `git diff --check`. Terminal metadata consumes PR #1528 merge commit 5cd30fbf1db3e48a31342a91f9e7b4ad9f54a2d1 and issue #1511 completed closeout evidence.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored review approved the current terminal closeout carrier head for post-merge carrier consumption only; implementation merge-ready was consumed by PR #1528."
   }
 }
