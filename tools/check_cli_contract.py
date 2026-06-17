@@ -297,6 +297,7 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
     captured: dict[str, Any] = {}
 
     def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
         captured["command"] = command
         captured["flow_args"] = flow_args
         captured["fallback_to"] = fallback_to
@@ -305,9 +306,9 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
     original_emit_flow = module.emit_flow
     module.emit_flow = fake_emit_flow
     try:
-        status = module.handle_merge(
-            [
-                "check",
+        for action, runtime_action in (("check", "check"), ("run", "merge")):
+            args = [
+                action,
                 "1288",
                 "--work-item",
                 "WI-1287",
@@ -316,24 +317,30 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
                 "--merge-method",
                 "squash",
             ]
-        )
-        if status != 0:
-            raise AssertionError("merge wrapper regression did not complete")
-        if captured.get("command") != "merge check":
-            raise AssertionError("merge wrapper did not preserve merge check command label")
-        flow_args = captured.get("flow_args")
-        if not isinstance(flow_args, list):
-            raise AssertionError("merge wrapper did not delegate to controlled-merge")
-        try:
-            pr_index = flow_args.index("--pr")
-        except ValueError as exc:
-            raise AssertionError("merge wrapper did not pass --pr to controlled-merge") from exc
-        if flow_args[pr_index + 1] != "1288":
-            raise AssertionError("merge wrapper passed the subcommand placeholder instead of the PR number")
-        if "pr" in flow_args:
-            raise AssertionError("merge wrapper leaked the literal `pr` placeholder to controlled-merge")
-        if "--merge-method" not in flow_args or flow_args[flow_args.index("--merge-method") + 1] != "squash":
-            raise AssertionError("merge wrapper did not preserve merge method")
+            if action == "run":
+                args.append("--apply")
+            status = module.handle_merge(args)
+            if status != 0:
+                raise AssertionError(f"merge {action} wrapper regression did not complete")
+            if captured.get("command") != f"merge {action}":
+                raise AssertionError(f"merge {action} wrapper did not preserve command label")
+            flow_args = captured.get("flow_args")
+            if not isinstance(flow_args, list):
+                raise AssertionError(f"merge {action} wrapper did not delegate to controlled-merge")
+            if flow_args[:2] != ["controlled-merge", runtime_action]:
+                raise AssertionError(f"merge {action} wrapper delegated to the wrong runtime operation")
+            try:
+                pr_index = flow_args.index("--pr")
+            except ValueError as exc:
+                raise AssertionError(f"merge {action} wrapper did not pass --pr to controlled-merge") from exc
+            if flow_args[pr_index + 1] != "1288":
+                raise AssertionError(f"merge {action} wrapper passed the subcommand placeholder instead of the PR number")
+            if "pr" in flow_args:
+                raise AssertionError(f"merge {action} wrapper leaked the literal `pr` placeholder to controlled-merge")
+            if "--merge-method" not in flow_args or flow_args[flow_args.index("--merge-method") + 1] != "squash":
+                raise AssertionError(f"merge {action} wrapper did not preserve merge method")
+            if action == "run" and "--execute" not in flow_args:
+                raise AssertionError("merge run --apply did not delegate to controlled-merge --execute")
         try:
             module.handle_merge(["check", "pr"])
         except SystemExit as exc:
@@ -343,6 +350,135 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
             raise AssertionError("merge wrapper accepted literal `pr` as a PR number")
     finally:
         module.emit_flow = original_emit_flow
+
+
+def assert_closeout_wrapper_argument_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for closeout wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return {"command": command}
+
+    def fake_emit(_payload: dict[str, Any]) -> int:
+        return 0
+
+    original_emit_flow = module.emit_flow
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    module.emit_flow = fake_emit_flow
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_scenario(
+            "closeout",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1554",
+                "--issue",
+                "1554",
+                "--pr",
+                "1562",
+                "--project",
+                "4",
+                "--phase",
+                "1504",
+                "--fr",
+                "1505",
+                "--branch",
+                "work/1554-wrapper-closeout-contract",
+                "--goal-completion",
+                ".loom/goal-completion.json",
+                "--gate-profile",
+                "closeout-contract",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--comment",
+                "closeout comment",
+                "--issue-payload-file",
+                ".loom/fixtures/issue.json",
+                "--pr-payload-file",
+                ".loom/fixtures/pr.json",
+                "--project-payload-file",
+                ".loom/fixtures/project.json",
+                "--status-checks-file",
+                ".loom/fixtures/checks.json",
+                "--branch-protection-file",
+                ".loom/fixtures/protection.json",
+                "--ruleset-file",
+                ".loom/fixtures/ruleset.json",
+                "--skip-gate",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout wrapper regression did not complete")
+        if captured.get("command") != "closeout":
+            raise AssertionError("closeout wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:2] != ["closeout", "check"]:
+            raise AssertionError("closeout wrapper did not delegate to closeout check")
+        expected_pairs = {
+            "--item": "WI-1554",
+            "--issue": "1554",
+            "--pr": "1562",
+            "--project": "4",
+            "--phase": "1504",
+            "--fr": "1505",
+            "--branch": "work/1554-wrapper-closeout-contract",
+            "--goal-completion": ".loom/goal-completion.json",
+            "--gate-profile": "closeout-contract",
+            "--owner": "MC-and-his-Agents",
+            "--repo": "Loom",
+            "--comment": "closeout comment",
+            "--issue-payload-file": ".loom/fixtures/issue.json",
+            "--pr-payload-file": ".loom/fixtures/pr.json",
+            "--project-payload-file": ".loom/fixtures/project.json",
+            "--status-checks-file": ".loom/fixtures/checks.json",
+            "--branch-protection-file": ".loom/fixtures/protection.json",
+            "--ruleset-file": ".loom/fixtures/ruleset.json",
+        }
+        for flag, expected in expected_pairs.items():
+            if flag not in flow_args:
+                raise AssertionError(f"closeout wrapper did not pass {flag} to runtime")
+            if flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout wrapper changed {flag} value")
+        if "--skip-gate" not in flow_args:
+            raise AssertionError("closeout wrapper did not pass --skip-gate to runtime")
+
+        status = module.handle_gate(["closeout", "--target", ".", "--item", "WI-1554", "--issue", "1554"])
+        if status != 0:
+            raise AssertionError("gate closeout wrapper regression did not complete")
+        if captured.get("command") != "gate closeout":
+            raise AssertionError("gate closeout wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:2] != ["closeout", "check"]:
+            raise AssertionError("gate closeout wrapper did not delegate to closeout check")
+        for flag, expected in (("--item", "WI-1554"), ("--issue", "1554")):
+            if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"gate closeout wrapper did not preserve {flag}")
+    finally:
+        module.emit_flow = original_emit_flow
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
 
 
 def retained_closeout_work_item_id() -> str | None:
@@ -5206,6 +5342,7 @@ def assert_idle_root_self_governance_direct_contract() -> None:
 
 def run_governance_closeout_contract() -> None:
     assert_governance_closeout_help_contract()
+    assert_closeout_wrapper_argument_contract()
     active_item = active_work_item_id()
     assert_active_closeout_contract(active_item)
     assert_idle_root_self_governance_direct_contract()
@@ -5237,6 +5374,7 @@ def run_merge_wrapper_surface() -> None:
 
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
+    assert_closeout_wrapper_argument_contract()
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
     commands = set(matrix)

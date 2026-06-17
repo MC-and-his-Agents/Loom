@@ -3,48 +3,79 @@
   "item_id": "WI-1554",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1554 first slice is approved for PR: the merge wrapper now exposes a numeric pr-number argument, rejects the old literal placeholder before runtime delegation, preserves existing merge options, and adds a focused merge-wrapper CLI contract regression surface. Broader closeout wrapper/runtime contract work remains explicitly out of scope for this PR and stays tracked by #1554/#1555 dependencies.",
+  "summary": "WI-1554 PR #1562 implementation remains approved for the wrapper/runtime parameter contract slice: tools/loom.py exposes and forwards runtime-supported closeout check parameters, merge check/run PR argument contract coverage rejects the placeholder literal and preserves numeric PR forwarding, and governance-closeout contract coverage exercises closeout plus gate closeout passthrough without changing closeout semantics or host writes.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T16:56:00Z",
-  "reviewed_head": "39db7bae33830e27daee885b6fb526b61009fa60",
-  "reviewed_validation_summary": "2026-06-17T16:56Z WI-1554 targeted validation passed at reviewed head `39db7bae33830e27daee885b6fb526b61009fa60`: `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge check pr` failed closed in the wrapper with `argument pr-number: invalid int value: 'pr'`; `git diff --check`.",
+  "authored_at": "2026-06-17T20:51:34Z",
+  "reviewed_head": "e48ca5ed9ecbc374e68a641d6cb63313902c27a7",
+  "reviewed_validation_summary": "2026-06-17T20:52Z merge-ready carrier readback for PR #1562 head e48ca5ed9ecbc374e68a641d6cb63313902c27a7: PR metadata preflight/readback passed; authored implementation review was refreshed for the current recovery summary; suite evidence/carrier validation passed during review record; local checkpoint merge and PR gate were rerun after removing stale first-slice terminal metadata; targeted CLI validation from 2026-06-17T20:45Z remains unchanged for implementation files.",
   "fallback_to": null,
   "findings": [
     {
-      "id": "follow-up-closeout-wrapper-contract",
-      "summary": "#1554 still needs wrapper/runtime contract coverage for `closeout`, `gate closeout`, and `closeout --item` after this merge wrapper slice.",
+      "id": "compat-follow-up-1",
+      "summary": "#1555 remains responsible for one-shot post-merge closeout orchestration.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
         "status": "deferred",
-        "summary": "This PR is intentionally marked Part of #1554 and must not close the issue."
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-2",
+      "summary": "#1514/#1534/#1515 must readback #1554 PR #1562 merge and closeout evidence before milestone/12 convergence.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
       }
     }
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "#1554 remains open for closeout wrapper/runtime contract coverage.",
-    "#1555 remains separate for one-shot post-merge closeout run after #1494 and #1543 are consumable.",
-    "#1514/#1534/#1515 must readback final #1554/#1555 state before milestone/12 closeout."
+    "#1555 remains responsible for one-shot post-merge closeout orchestration.",
+    "#1514/#1534/#1515 must readback #1554 PR #1562 merge and closeout evidence before milestone/12 convergence."
   ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1554.md",
     "recovery_entry": ".loom/progress/WI-1554.md",
     "status_surface": ".loom/status/current.md",
-    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json",
-    "suite_evidence_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1554 --json",
-    "suite_carrier_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1554 --json",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1554-cli-wrapper-contract/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1554-cli-wrapper-contract --item WI-1554 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1554-cli-wrapper-contract/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1554-cli-wrapper-contract --item WI-1554 --json",
     "suite_evidence_map": ".loom/specs/WI-1554/evidence-map.md",
+    "suite_consistency_analysis": null,
     "suite_task_carriers": [
       ".loom/specs/WI-1554/task-carrier.md"
     ],
-    "same_class_review": {
-      "result": "pass",
-      "summary": "Checked merge wrapper argument parsing, runtime delegation argument construction, merge method preservation, placeholder rejection, and explicit exclusion boundaries for closeout wrapper surfaces."
-    }
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current WI-1554 merge wrapper slice for PR."
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }

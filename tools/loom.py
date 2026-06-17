@@ -3373,7 +3373,29 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     parser.add_argument("--pr", type=int)
     parser.add_argument("--pr-payload-file")
     parser.add_argument("--project", type=int)
+    parser.add_argument("--phase", type=int)
+    parser.add_argument("--fr", type=int)
     parser.add_argument("--branch")
+    parser.add_argument("--goal-completion")
+    parser.add_argument(
+        "--gate-profile",
+        choices=(
+            "auto",
+            "closeout-contract",
+            "source-self-fixture",
+            "bootstrap-regression",
+            "distribution-regression",
+            "strong-profile-full-gate",
+        ),
+        default="auto",
+    )
+    parser.add_argument("--comment")
+    parser.add_argument("--issue-payload-file")
+    parser.add_argument("--project-payload-file")
+    parser.add_argument("--status-checks-file")
+    parser.add_argument("--branch-protection-file")
+    parser.add_argument("--ruleset-file")
+    parser.add_argument("--skip-gate", action="store_true")
     parser.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -3442,12 +3464,30 @@ def handle_scenario(command: str, argv: list[str]) -> int:
 
     if command == "closeout":
         flow_args = ["closeout", "check", "--target", str(target)]
-        if args.item:
-            flow_args.extend(["--item", args.item])
-        if args.issue is not None:
-            flow_args.extend(["--issue", str(args.issue)])
-        if args.pr is not None:
-            flow_args.extend(["--pr", str(args.pr)])
+        for flag, value in (
+            ("--item", args.item),
+            ("--issue", args.issue),
+            ("--pr", args.pr),
+            ("--project", args.project),
+            ("--phase", args.phase),
+            ("--fr", args.fr),
+            ("--branch", args.branch),
+            ("--goal-completion", args.goal_completion),
+            ("--gate-profile", args.gate_profile if args.gate_profile != "auto" else None),
+            ("--owner", args.owner),
+            ("--repo", args.repo_name),
+            ("--comment", args.comment),
+            ("--issue-payload-file", args.issue_payload_file),
+            ("--pr-payload-file", args.pr_payload_file),
+            ("--project-payload-file", args.project_payload_file),
+            ("--status-checks-file", args.status_checks_file),
+            ("--branch-protection-file", args.branch_protection_file),
+            ("--ruleset-file", args.ruleset_file),
+        ):
+            if value is not None:
+                flow_args.extend([flag, str(value)])
+        if args.skip_gate:
+            flow_args.append("--skip-gate")
         payload = flow_payload(command, flow_args, fallback_to=["loom merge check <pr> --json", "loom reconcile --issue <issue> --pr <pr> --json"])
         payload.setdefault("schema_version", SCENARIO_SCHEMA)
         if payload.get("command") and payload.get("command") != command:
