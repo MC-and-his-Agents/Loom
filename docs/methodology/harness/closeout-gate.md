@@ -14,6 +14,12 @@ closeout gate 用来回答两件事：
 在 installed-skills 或 `.loom/bin` carrier 下，`reconciliation audit|sync` 与 `closeout check|sync` 必须先消费 `runtime-state`。
 若 install layout、shared runtime、shared references 或 bootstrap manifest 漂移，入口必须直接 `block`。
 
+Closeout-only PRs may consume the `loom-closeout-freeze/v1` terminal profile
+defined in [gate-freeze.md](./gate-freeze.md#10-closeout-terminal-profile).
+That profile freezes terminal facts for admission and closeout-specific gate
+consumption; it is not a second closeout truth source and does not replace the
+host/git/carrier readback performed by this file.
+
 ## 2. 稳定入口
 
 - `python3 skills/shared/scripts/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
@@ -57,6 +63,13 @@ closeout 本地 gate 分为五层：
 | `strong-profile-full-gate` | strong governance 或 repo-declared profile 显式 opt-in | 执行完整本地 gate；必须声明 owner、fallback、override path 与 authority-of-truth |
 
 `--gate-profile auto` 等价普通 closeout 的 `closeout-contract`。`--skip-gate` 只允许跳过显式 heavy profile 的本地 `loom_check` 执行；它不得跳过 `closeout-contract` 的 retained evidence、backlink、PR、merge commit、target branch 或 reconciliation 检查。
+
+When `closeout-contract` consumes a retained closeout freeze snapshot, it must
+still re-read the current issue, PR, merge commit, target branch, carrier
+bindings, release/no-release evidence, allowed paths, and retained review
+disposition. Snapshot/hash mismatch, behavior or implementation drift, contract
+or gate rule changes, release judgment disputes, mixed-risk batches, or allowed
+paths violations require full review / guardian escalation.
 
 review record backlink 使用与 merge checkpoint 相同的 head-binding 语义：PR head 与 reviewed head 完全一致时通过；差异仅限允许的 recovery/status/review/shadow/runtime carrier 时通过并输出 `head_binding.status == carrier-only`；任何实现文件漂移、schema drift、validation summary drift 或 unreadable head comparison 必须 fail closed。
 
