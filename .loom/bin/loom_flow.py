@@ -13672,6 +13672,7 @@ def refresh_shadow_evidence_actions(target_root: Path) -> list[dict[str, Any]]:
                 "path": relative,
                 "kind": "shadow-evidence",
                 "status": "current" if current == refreshed else "refresh-needed",
+                "current_source_sha256": current if isinstance(current, dict) else None,
                 "expected_source_sha256": refreshed,
             }
         )
@@ -15803,6 +15804,145 @@ def gate_freeze_shadow_binding(target_root: Path, governance_surface: dict[str, 
     }
 
 
+def gate_freeze_shadow_locator_index(target_root: Path, governance_surface: dict[str, Any]) -> tuple[dict[str, dict[str, str]], list[str]]:
+    repo_interop = governance_surface.get("repo_interop")
+    interop_payload, interop_errors = load_repo_interop_contract(repo_interop, target_root=target_root)
+    if interop_errors or not isinstance(interop_payload, dict):
+        return {}, interop_errors or ["repo interop contract is unreadable"]
+    shadow_surfaces = interop_payload.get("shadow_surfaces")
+    if not isinstance(shadow_surfaces, dict):
+        return {}, ["repo interop contract must expose shadow_surfaces"]
+
+    locators: dict[str, dict[str, str]] = {}
+    for surface, entry in shadow_surfaces.items():
+        if not isinstance(surface, str) or not isinstance(entry, dict):
+            continue
+        for side, key in (("loom", "loom_locator"), ("repo", "repo_locator")):
+            locator = entry.get(key)
+            if isinstance(locator, str) and locator.strip():
+                locators[locator.strip()] = {"surface": surface, "side": side}
+    return locators, []
+
+
+def gate_freeze_shadow_freshness_binding(target_root: Path, governance_surface: dict[str, Any]) -> dict[str, Any]:
+    locator_index, locator_errors = gate_freeze_shadow_locator_index(target_root, governance_surface)
+    records: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    if locator_errors:
+        missing_inputs.extend(locator_errors)
+
+    for action in refresh_shadow_evidence_actions(target_root):
+        if action.get("kind") != "shadow-evidence":
+            continue
+        relative = str(action.get("path") or "")
+        locator = locator_index.get(relative, {})
+        status = str(action.get("status") or "unknown")
+        current_sha = action.get("current_source_sha256") if isinstance(action.get("current_source_sha256"), dict) else None
+        expected_sha = action.get("expected_source_sha256") if isinstance(action.get("expected_source_sha256"), dict) else None
+        action_missing = [str(message) for message in action.get("missing_inputs", [])]
+        if status == "current":
+            freshness = "present"
+            drift_kind = None
+            refreshable = False
+            next_action = None
+        elif status == "refresh-needed":
+            freshness = "stale"
+            drift_kind = "shadow_source_hash_drift"
+            refreshable = True
+            next_action = "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+            missing_inputs.append(f"shadow source hash drift: {relative}")
+        else:
+            freshness = "missing" if action_missing else "conflict"
+            drift_kind = "shadow_source_hash_unreadable"
+            refreshable = False
+            next_action = "restore readable declared shadow source files, then rerun gate freeze."
+            missing_inputs.extend(action_missing or [f"shadow source hash freshness could not be evaluated: {relative}"])
+        records.append(
+            {
+                "path": relative,
+                "surface": locator.get("surface", "unknown"),
+                "side": locator.get("side", "unknown"),
+                "freshness": freshness,
+                "drift_kind": drift_kind,
+                "refreshable": refreshable,
+                "next_action": next_action,
+                "current_source_sha256": current_sha,
+                "expected_source_sha256": expected_sha,
+                "missing_inputs": action_missing,
+            }
+        )
+
+    missing_inputs = dedupe_strings(missing_inputs)
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": "loom-gate-freeze-shadow-freshness/v1",
+        "result": result,
+        "summary": (
+            "shadow source hashes are fresh for declared freeze surfaces."
+            if result == "pass"
+            else "shadow source hashes are stale or unreadable for declared freeze surfaces."
+        ),
+        "source_locator": ".loom/shadow/*.json",
+        "records": records,
+        "missing_inputs": missing_inputs,
+        "failure_kind": "shadow_source_hash_drift"
+        if any(record.get("drift_kind") == "shadow_source_hash_drift" for record in records)
+        else "missing_or_stale_gate_input",
+        "category": "drift",
+        "severity": "block",
+        "subject": "shadow_freshness",
+        "why_blocking": "hosted admission cannot consume shadow evidence until source hashes match their declared inputs.",
+        "fallback_to": "carrier_refresh",
+        "refresh_suggestion": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        if any(record.get("refreshable") for record in records)
+        else None,
+        "next_action": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        if any(record.get("refreshable") for record in records)
+        else "restore readable declared shadow source files, then rerun gate freeze."
+        if result == "block"
+        else None,
+    }
+
+
+def gate_freeze_carrier_refresh_binding(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
+    dry_run_payload = carrier_refresh_payload(target_root, output_relative, expected_item, dry_run=True)
+    refresh_needed = [
+        action for action in dry_run_payload.get("refresh_needed", []) if isinstance(action, dict)
+    ]
+    missing_inputs = [str(message) for message in dry_run_payload.get("missing_inputs", [])]
+    for action in refresh_needed:
+        relative = action.get("path")
+        if relative:
+            missing_inputs.append(f"carrier refresh pending: {relative}")
+    missing_inputs = dedupe_strings(missing_inputs)
+    result = "pass" if dry_run_payload.get("result") == "pass" and not refresh_needed and not missing_inputs else "block"
+    return {
+        "schema_version": "loom-gate-freeze-carrier-refresh/v1",
+        "result": result,
+        "summary": (
+            "carrier refresh dry-run found no pending carrier updates."
+            if result == "pass"
+            else "carrier refresh dry-run found stale or blocking carrier inputs."
+        ),
+        "source_locator": ".loom/bootstrap/init-result.json",
+        "dry_run_payload": dry_run_payload,
+        "refresh_needed": refresh_needed,
+        "missing_inputs": missing_inputs,
+        "failure_kind": "carrier_refresh_stale" if refresh_needed else "missing_or_stale_gate_input",
+        "category": "stale",
+        "severity": "block",
+        "subject": "carrier_refresh",
+        "why_blocking": "hosted admission cannot trust a frozen snapshot while carrier refresh dry-run reports pending updates.",
+        "fallback_to": "carrier_refresh",
+        "refresh_suggestion": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        if refresh_needed
+        else None,
+        "next_action": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        if refresh_needed
+        else dry_run_payload.get("fallback_to"),
+    }
+
+
 def gate_freeze_release_binding(pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
     fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
     release_judgment = fields.get("release_judgment")
@@ -15918,20 +16058,46 @@ def gate_freeze_blocking_inputs(input_bindings: dict[str, Any]) -> list[dict[str
         messages = binding.get("missing_inputs")
         if not isinstance(messages, list):
             messages = []
+        failure_kind = str(binding.get("failure_kind") or "missing_or_stale_gate_input")
         blocking.append(
             {
                 "id": f"{key}-not-ready",
                 "input": key,
-                "failure_kind": "missing_or_stale_gate_input",
+                "failure_kind": failure_kind,
+                "category": binding.get("category") or "gate_failure",
+                "kind": failure_kind,
+                "severity": binding.get("severity") or "block",
+                "subject": binding.get("subject") or key,
                 "result": result or "block",
                 "source_locator": binding.get("locator") or binding.get("source_locator"),
-                "consumer_impact": "hosted gate admission cannot trust a frozen snapshot until this input is refreshed.",
+                "consumer_impact": binding.get("consumer_impact")
+                or "hosted gate admission cannot trust a frozen snapshot until this input is refreshed.",
+                "why_blocking": binding.get("why_blocking")
+                or "hosted gate admission cannot trust a frozen snapshot until this input is refreshed.",
+                "fallback_to": binding.get("fallback_to"),
+                "evidence": binding.get("evidence")
+                or binding.get("refresh_needed")
+                or binding.get("records")
+                or binding.get("reports"),
                 "messages": [str(message) for message in messages],
                 "next_action": binding.get("next_action")
                 or "refresh the source input and rerun `loom gate freeze check --target <repo> --json`.",
             }
         )
     return blocking
+
+
+def gate_freeze_refresh_suggestions(input_bindings: dict[str, Any]) -> list[str]:
+    suggestions: list[str] = []
+    for binding in input_bindings.values():
+        if not isinstance(binding, dict) or binding.get("result") in {"pass", "not_applicable", "advisory"}:
+            continue
+        suggestion = binding.get("refresh_suggestion")
+        if isinstance(suggestion, str) and suggestion.strip():
+            suggestions.append(suggestion.strip())
+        elif isinstance(suggestion, list):
+            suggestions.extend(str(entry).strip() for entry in suggestion if str(entry).strip())
+    return dedupe_strings(suggestions)
 
 
 def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
@@ -16030,6 +16196,8 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
         "pr_body_pin": gate_freeze_pr_body_pin_binding(pr_metadata),
         "review_binding": gate_freeze_review_binding(context, head_sha=head_sha),
         "shadow_parity": gate_freeze_shadow_binding(target_root, governance_surface),
+        "carrier_refresh": gate_freeze_carrier_refresh_binding(target_root, args.output, context["item_id"]),
+        "shadow_freshness": gate_freeze_shadow_freshness_binding(target_root, governance_surface),
         "suite_validation": suite_validation,
         "suite_evidence_validation": suite_evidence_validation,
         "suite_carrier_validation": suite_carrier_validation,
@@ -16038,17 +16206,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
     }
     blocking_inputs = gate_freeze_blocking_inputs(input_bindings)
     result = "pass" if not blocking_inputs else "block"
-    refresh_suggestions = dedupe_strings(
-        [
-            "loom pr metadata-preflight --surface merge_ready --target <repo> --json",
-            "gh pr edit --body-file <rendered-pr-body.md>; read back the PR body into <readback-pr-body.md>; loom gate freeze check --target <repo> --body-file <rendered-pr-body.md> --compare-body-file <readback-pr-body.md> --json",
-            "loom shadow-parity --target <repo> --surface all --blocking --json",
-            "loom suite validate --target <repo> --item <item> --json",
-            "loom review --target <repo> --json",
-        ]
-        if blocking_inputs
-        else []
-    )
+    refresh_suggestions = gate_freeze_refresh_suggestions(input_bindings) if blocking_inputs else []
     snapshot_subject = {
         "item_id": context["item_id"],
         "workspace_entry": context["workspace_entry"],

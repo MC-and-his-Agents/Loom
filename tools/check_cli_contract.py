@@ -655,6 +655,87 @@ def load_loom_flow_module() -> Any:
     return module
 
 
+def assert_gate_freeze_carrier_shadow_bindings_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    with tempfile.TemporaryDirectory(prefix="loom-freeze-shadow-") as raw_tmp:
+        target = Path(raw_tmp)
+        source = target / "shadow-source.md"
+        source.write_text("current shadow source\n", encoding="utf-8")
+        interop = target / ".loom" / "companion" / "interop.json"
+        interop.parent.mkdir(parents=True, exist_ok=True)
+        shadow_dir = target / ".loom" / "shadow"
+        shadow_dir.mkdir(parents=True, exist_ok=True)
+        interop.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-repo-interop/v1",
+                    "host_adapters": [],
+                    "repo_native_carriers": [],
+                    "shadow_surfaces": {
+                        "review": {
+                            "loom_locator": ".loom/shadow/review-loom.json",
+                            "repo_locator": ".loom/shadow/review-repo.json",
+                        }
+                    },
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        stale_payload = {
+            "result": "match",
+            "source_files": ["shadow-source.md"],
+            "source_sha256": {"shadow-source.md": "0" * 64},
+        }
+        fresh_payload = {
+            "result": "match",
+            "source_files": ["shadow-source.md"],
+            "source_sha256": {"shadow-source.md": loom_flow.sha256_file(source)},
+        }
+        (shadow_dir / "review-loom.json").write_text(json.dumps(stale_payload, indent=2) + "\n", encoding="utf-8")
+        (shadow_dir / "review-repo.json").write_text(json.dumps(fresh_payload, indent=2) + "\n", encoding="utf-8")
+        governance_surface = {
+            "repo_interop": {
+                "availability": "present",
+                "contract": {"locator": ".loom/companion/interop.json"},
+            }
+        }
+
+        binding = loom_flow.gate_freeze_shadow_freshness_binding(target, governance_surface)
+        if binding.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1":
+            raise AssertionError("gate freeze shadow freshness binding schema drifted")
+        if binding.get("result") != "block" or binding.get("failure_kind") != "shadow_source_hash_drift":
+            raise AssertionError(f"gate freeze shadow freshness did not block source hash drift: {binding}")
+        drift_record = next(
+            (
+                record
+                for record in binding.get("records", [])
+                if isinstance(record, dict) and record.get("path") == ".loom/shadow/review-loom.json"
+            ),
+            None,
+        )
+        if not isinstance(drift_record, dict):
+            raise AssertionError("gate freeze shadow freshness did not expose the stale shadow path")
+        expected_record_fields = {
+            "surface": "review",
+            "freshness": "stale",
+            "drift_kind": "shadow_source_hash_drift",
+            "refreshable": True,
+        }
+        for key, expected in expected_record_fields.items():
+            if drift_record.get(key) != expected:
+                raise AssertionError(f"gate freeze shadow freshness {key} drifted: {drift_record}")
+        if not drift_record.get("current_source_sha256") or not drift_record.get("expected_source_sha256"):
+            raise AssertionError("gate freeze shadow freshness must expose current and expected source hashes")
+        suggestions = loom_flow.gate_freeze_refresh_suggestions({"shadow_freshness": binding})
+        if not suggestions or any("loom shadow-parity" in suggestion for suggestion in suggestions):
+            raise AssertionError(f"gate freeze refresh suggestions must use existing refresh paths: {suggestions}")
+        blocking_inputs = loom_flow.gate_freeze_blocking_inputs({"shadow_freshness": binding})
+        if not any(finding.get("failure_kind") == "shadow_source_hash_drift" for finding in blocking_inputs):
+            raise AssertionError(f"gate freeze blocking inputs did not preserve source-hash drift taxonomy: {blocking_inputs}")
+
+
 def assert_reconciliation_suite_taxonomy_contract() -> None:
     loom_flow = load_loom_flow_module()
     suite_gate = {
@@ -5218,10 +5299,20 @@ def run_aggregate_cli_contract() -> None:
     if "input_bindings" not in freeze_payload or "readiness" not in freeze_payload:
         raise AssertionError("gate freeze check must expose input_bindings and readiness diagnostics")
     subject = freeze_payload.get("snapshot_subject")
-    pr_metadata = freeze_payload.get("input_bindings", {}).get("pr_metadata")
-    pr_body_pin = freeze_payload.get("input_bindings", {}).get("pr_body_pin")
+    input_bindings = freeze_payload.get("input_bindings", {})
+    pr_metadata = input_bindings.get("pr_metadata") if isinstance(input_bindings, dict) else None
+    pr_body_pin = input_bindings.get("pr_body_pin") if isinstance(input_bindings, dict) else None
+    carrier_refresh = input_bindings.get("carrier_refresh") if isinstance(input_bindings, dict) else None
+    shadow_freshness = input_bindings.get("shadow_freshness") if isinstance(input_bindings, dict) else None
     if not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1":
         raise AssertionError("gate freeze check must expose a PR body pin binding")
+    if not isinstance(carrier_refresh, dict) or carrier_refresh.get("schema_version") != "loom-gate-freeze-carrier-refresh/v1":
+        raise AssertionError("gate freeze check must expose a carrier refresh binding")
+    if not isinstance(shadow_freshness, dict) or shadow_freshness.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1":
+        raise AssertionError("gate freeze check must expose a shadow freshness binding")
+    refresh_suggestions = freeze_payload.get("readiness", {}).get("refresh_suggestions", [])
+    if any("loom shadow-parity" in str(suggestion) for suggestion in refresh_suggestions):
+        raise AssertionError("gate freeze refresh suggestions must not reference an unsupported loom shadow-parity command")
     if isinstance(subject, dict) and isinstance(pr_metadata, dict) and pr_metadata.get("result") == "pass":
         for contract in pr_metadata.get("metadata_contracts", []):
             if not isinstance(contract, dict):
@@ -5352,6 +5443,7 @@ def run_aggregate_cli_contract() -> None:
         for path in (rendered_pr_body, readback_pr_body, readback_pr_body_drift, carrier_drift_body):
             if path.exists():
                 path.unlink()
+    assert_gate_freeze_carrier_shadow_bindings_contract()
     outside_freeze_path = REPO_ROOT / ".loom" / "runtime" / "gate-freeze-outside" / "probe.json"
     if outside_freeze_path.exists():
         outside_freeze_path.unlink()
