@@ -3185,6 +3185,8 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     spec_review["reviewed_head"] = "0" * 40
     spec_review_path.write_text(json.dumps(spec_review, indent=2) + "\n", encoding="utf-8")
     commit_fixture_file(target, f".loom/reviews/{item}.spec.json", "fixture unreachable spec review head")
+    update_fixture_pr_head(target, fixture)
+    append_pr_metadata_surface(target, fixture, surface="closeout")
     unreachable_spec_head_payload = semantic_pr_gate_fixture_payload(target, fixture)
     if (
         unreachable_spec_head_payload.get("result") != "pass"
