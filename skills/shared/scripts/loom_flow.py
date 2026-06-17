@@ -16592,12 +16592,15 @@ def pr_metadata_render_payload(
 
 
 def gh_pr_view_body(root: Path, pr_number: int) -> tuple[str | None, list[str]]:
-    payload, errors = gh_json(root, ["pr", "view", str(pr_number), "--json", "body"])
+    owner, repo_name = detect_github_repo(root)
+    if not owner or not repo_name:
+        return None, ["owner/repo"]
+    payload, errors = github_pr_payload(root, owner, repo_name, pr_number)
     if errors or payload is None:
         return None, errors
     body = payload.get("body")
     if not isinstance(body, str):
-        return None, [f"gh pr view {pr_number} --json body is missing `body`"]
+        return None, [f"gh api repos/{owner}/{repo_name}/pulls/{pr_number} is missing `body`"]
     return body, []
 
 
