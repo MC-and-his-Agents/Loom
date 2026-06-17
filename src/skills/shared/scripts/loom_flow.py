@@ -137,9 +137,13 @@ CLOSEOUT_HEAVY_PROFILES = {
     "strong-profile-full-gate",
 }
 PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
+PR_METADATA_RENDER_SCHEMA = "loom-pr-metadata-render/v1"
+PR_METADATA_READBACK_SCHEMA = "loom-pr-metadata-readback/v1"
+PR_METADATA_UPDATE_SCHEMA = "loom-pr-metadata-update/v1"
 PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
 PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
+PR_METADATA_RENDERER_ID = "renderer:loom-pr-metadata-render/v1"
 GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
 FAILURE_CLASSIFIER_SCHEMA = "loom-failure-classifier/v1"
 FAILURE_CLASSIFIER_CATEGORIES = (
@@ -733,23 +737,38 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
 
-    pr_metadata = subparsers.add_parser("pr-metadata", help="Validate repo-specific PR metadata machine carriers")
-    pr_metadata.add_argument("operation", choices=("preflight",))
+    pr_metadata = subparsers.add_parser("pr-metadata", help="Render, update, read back, or validate repo-specific PR metadata machine carriers")
+    pr_metadata.add_argument("operation", choices=("render", "update", "readback", "preflight"))
     pr_metadata.add_argument("--target", required=True, help="Target repository root")
     pr_metadata.add_argument(
         "--surface",
-        choices=("pre_review", "review", "merge_ready"),
+        choices=("pre_review", "review", "merge_ready", "closeout"),
         required=True,
         help="Gate surface that consumes the metadata preflight",
     )
     pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--item", help="Expected Loom Work Item id for render, update, or readback binding")
     pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
     pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
     pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    pr_metadata.add_argument("--output-file", default=".loom/runtime/pr/metadata-rendered.md", help="Repo-relative rendered PR body artifact output path")
+    pr_metadata.add_argument("--readback-file", default=".loom/runtime/pr/metadata-readback.md", help="Repo-relative readback artifact output path when reading the current host PR body")
+    pr_metadata.add_argument("--base-body-file", default=".github/PULL_REQUEST_TEMPLATE.md", help="Repo-relative PR body template or existing body artifact to update during render")
     pr_metadata.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
     pr_metadata.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
+    pr_metadata.add_argument("--governance-intensity", choices=tuple(sorted(GOVERNANCE_INTENSITY_VALUES)), default="standard")
+    pr_metadata.add_argument("--change-class", choices=tuple(sorted(GOVERNANCE_CHANGE_CLASS_VALUES)), default="contract")
+    pr_metadata.add_argument("--suite-path", choices=tuple(sorted(GOVERNANCE_SUITE_PATH_VALUES)), default="minimal")
+    pr_metadata.add_argument("--review-requirement", choices=tuple(sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES)), default="current_head_review_required")
+    pr_metadata.add_argument("--release-judgment", choices=tuple(sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES)), default="no_release")
+    pr_metadata.add_argument("--upgrade-trigger", action="append", default=[], help="Repeatable governance upgrade trigger string")
+    pr_metadata.add_argument("--suite-na-rationale")
+    pr_metadata.add_argument("--suite-na-consumer-boundary")
+    pr_metadata.add_argument("--suite-na-recheck-condition")
+    pr_metadata.add_argument("--suite-na-scope-proof")
+    pr_metadata.add_argument("--suite-na-review-requirement")
 
     gate_freeze = subparsers.add_parser("gate-freeze", help="Generate or validate hosted gate input freeze snapshots")
     gate_freeze.add_argument("operation", choices=("check", "write"))
@@ -15409,6 +15428,49 @@ def load_optional_text_fixture(target_root: Path, fixture: str | None, *, label:
         return None, [f"invalid {label} `{fixture}`: {exc}"]
 
 
+def pr_metadata_replace_or_insert_binding_line(body: str, *, label: str, value: str, insert_after: str | None = None) -> str:
+    pattern = re.compile(rf"(?im)^([ \t]*[-*]?[ \t]*{re.escape(label)}[ \t]*:[ \t]*)(`?[^`\n]*`?)[ \t]*$")
+    if pattern.search(body):
+        return pattern.sub(lambda match: f"{match.group(1)}{value}", body, count=1)
+
+    lines = body.splitlines()
+    insert_at: int | None = None
+    if insert_after:
+        anchor_pattern = re.compile(rf"(?im)^[ \t]*[-*]?[ \t]*{re.escape(insert_after)}[ \t]*:")
+        for index, line in enumerate(lines):
+            if anchor_pattern.search(line):
+                insert_at = index + 1
+                break
+    if insert_at is None:
+        in_related = False
+        for index, line in enumerate(lines):
+            if line.startswith("## "):
+                if line.strip() == "## Related Work":
+                    in_related = True
+                    continue
+                if in_related:
+                    insert_at = index
+                    break
+            if in_related and line.strip().startswith("- "):
+                insert_at = index + 1
+        if insert_at is None and in_related:
+            insert_at = len(lines)
+    if insert_at is None:
+        lines.extend(["", "## Related Work", ""])
+        insert_at = len(lines)
+    lines.insert(insert_at, f"- {label}: {value}")
+    return "\n".join(lines) + ("\n" if body.endswith("\n") else "")
+
+
+def pr_metadata_replace_machine_block(body: str, *, marker: str, rendered_block: str) -> str:
+    pattern = re.compile(rf"<!--\s*{re.escape(marker)}\s*.*?-->", flags=re.DOTALL)
+    if pattern.search(body):
+        updated = pattern.sub(rendered_block.rstrip(), body, count=1)
+    else:
+        updated = body.rstrip() + "\n\n" + rendered_block.rstrip() + "\n"
+    return updated if updated.endswith("\n") else updated + "\n"
+
+
 def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
     if not isinstance(payload, dict):
         return None, ["PR payload fixture must be a JSON object"]
@@ -15475,9 +15537,9 @@ def pr_work_item_from_body(body: Any) -> str | None:
         return None
     work_item_id = r"(?:[A-Z]+-\d+(?:-\d+)*|INIT-\d+)"
     patterns = (
-        rf"(?im)^\s*[-*]?\s*Loom Work Item\s*:\s*`?({work_item_id})`?\s*$",
-        rf"(?im)^\s*[-*]?\s*Work Item\s*:\s*`?({work_item_id})`?\s*$",
-        rf"(?im)^\s*[-*]?\s*Loom-Work-Item\s*:\s*`?({work_item_id})`?\s*$",
+        rf"(?im)^[ \t]*[-*]?[ \t]*Loom Work Item[ \t]*:[ \t]*`?({work_item_id})`?[ \t]*$",
+        rf"(?im)^[ \t]*[-*]?[ \t]*Work Item[ \t]*:[ \t]*`?({work_item_id})`?[ \t]*$",
+        rf"(?im)^[ \t]*[-*]?[ \t]*Loom-Work-Item[ \t]*:[ \t]*`?({work_item_id})`?[ \t]*$",
     )
     for pattern in patterns:
         match = re.search(pattern, body)
@@ -15489,7 +15551,7 @@ def pr_work_item_from_body(body: Any) -> str | None:
 def pr_body_field_value(body: Any, label: str) -> str | None:
     if not isinstance(body, str):
         return None
-    pattern = rf"(?im)^\s*[-*]?\s*{re.escape(label)}\s*:\s*`?([^`\n]+?)`?\s*$"
+    pattern = rf"(?im)^[ \t]*[-*]?[ \t]*{re.escape(label)}[ \t]*:[ \t]*`?([^`\n]+?)`?[ \t]*$"
     match = re.search(pattern, body)
     if not match:
         return None
@@ -15566,7 +15628,7 @@ def pr_metadata_expected_format(marker: str) -> str:
         "{\n"
         '  "schema_version": "loom-repo-pr-metadata/v1",\n'
         '  "metadata_contract_id": "<repo-specific-id>",\n'
-        '  "surface": "review|merge_ready",\n'
+        '  "surface": "review|merge_ready|closeout",\n'
         '  "fields": {"<repo-field>": "<value>"},\n'
         '  "source": {"rendered_hash": "<sha256-or-repo-renderer-hash>"},\n'
         '  "parser_version": "loom-pr-metadata-parser/v1"\n'
@@ -15632,9 +15694,13 @@ def applicable_pr_metadata_contracts(
         machine_carrier = field.get("machine_carrier")
         if not isinstance(machine_carrier, dict):
             continue
+        carrier_surface = pr_metadata_contract_surface(field)
         preflight = machine_carrier.get("preflight")
         required_before = preflight.get("required_before") if isinstance(preflight, dict) else None
         if isinstance(required_before, list) and surface in required_before:
+            contracts.append(field)
+            continue
+        if surface == "closeout" and carrier_surface == "merge_ready":
             contracts.append(field)
     return contracts
 
@@ -15644,7 +15710,9 @@ def pr_metadata_effective_contract_surface(field: dict[str, Any], requested_surf
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     preflight = machine_carrier.get("preflight") if isinstance(machine_carrier.get("preflight"), dict) else {}
     required_before = preflight.get("required_before")
-    if requested_surface in {"review", "pre_review"} and carrier_surface == "merge_ready":
+    if requested_surface == "closeout" and carrier_surface == "merge_ready":
+        return "merge_ready"
+    if requested_surface in {"review", "pre_review", "closeout"} and carrier_surface == "merge_ready":
         if isinstance(required_before, list) and requested_surface in required_before:
             return "merge_ready"
     return requested_surface
@@ -16312,6 +16380,527 @@ def pr_metadata_preflight_payload(
         },
         "body_artifact": body_artifact_result,
         "inferences": inferences,
+    }
+
+
+def render_governance_intensity_metadata_body(
+    *,
+    base_body: str,
+    field: dict[str, Any],
+    requested_surface: str,
+    item_id: str,
+    branch_name: str,
+    head_sha: str,
+    governance_intensity: str,
+    change_class: str,
+    suite_path: str,
+    review_requirement: str,
+    release_judgment: str,
+    upgrade_triggers: list[str],
+    suite_not_applicable: dict[str, str] | None,
+) -> tuple[str, dict[str, Any], list[str]]:
+    contract_id = str(field.get("id") or GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID)
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    effective_surface = pr_metadata_effective_contract_surface(field, requested_surface)
+    fields = {
+        "loom_work_item": item_id,
+        "branch": branch_name,
+        "head_sha": head_sha,
+        "governance_intensity": governance_intensity,
+        "change_class": change_class,
+        "suite_path": suite_path,
+        "suite_not_applicable": suite_not_applicable if suite_path == "not_applicable" else None,
+        "review_requirement": review_requirement,
+        "fact_chain_required": True,
+        "pr_gate_required": True,
+        "release_judgment": release_judgment,
+        "closeout_required": True,
+        "upgrade_triggers": upgrade_triggers,
+    }
+    missing_inputs = validate_governance_intensity_metadata_fields(fields)
+    if missing_inputs:
+        return base_body, {}, missing_inputs
+    envelope = {
+        "schema_version": PR_METADATA_MACHINE_SCHEMA,
+        "metadata_contract_id": contract_id,
+        "surface": effective_surface,
+        "fields": fields,
+        "source": {"rendered_hash": PR_METADATA_RENDERER_ID},
+        "parser_version": PR_METADATA_PARSER_VERSION,
+    }
+    rendered_block = "<!-- " + marker + "\n" + json.dumps(envelope, indent=2, ensure_ascii=False) + "\n-->\n"
+    updated = pr_metadata_replace_or_insert_binding_line(base_body, label="Loom Work Item", value=item_id)
+    updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
+    updated = pr_metadata_replace_or_insert_binding_line(updated, label="Head SHA", value=head_sha, insert_after="Branch")
+    updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
+    return updated, envelope, []
+
+
+def pr_metadata_render_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    output_file: str,
+    base_body_file: str,
+    item_id: str | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    governance_intensity: str,
+    change_class: str,
+    suite_path: str,
+    review_requirement: str,
+    release_judgment: str,
+    upgrade_triggers: list[str],
+    suite_na_rationale: str | None,
+    suite_na_consumer_boundary: str | None,
+    suite_na_recheck_condition: str | None,
+    suite_na_scope_proof: str | None,
+    suite_na_review_requirement: str | None,
+) -> dict[str, Any]:
+    base_body, base_errors = load_optional_text_fixture(target_root, base_body_file, label="PR metadata render base body")
+    output_path, output_errors = resolve_repo_relative_path(target_root, output_file, label="PR metadata render output")
+    current_head = head_sha or git_head_sha(target_root)
+    current_branch = branch_name or git_branch(target_root)
+    effective_item = item_id
+    if not effective_item:
+        init_result = target_root / ".loom" / "bootstrap" / "init-result.json"
+        if init_result.exists():
+            try:
+                payload = load_json_file(init_result)
+                fact_chain = payload.get("fact_chain") if isinstance(payload, dict) else None
+                entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+                current_item = entry_points.get("current_item_id") if isinstance(entry_points, dict) else None
+                if isinstance(current_item, str) and current_item not in {"", "no_active_item"}:
+                    effective_item = current_item
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
+
+    missing_inputs = list(base_errors) + list(output_errors)
+    if not effective_item:
+        missing_inputs.append("pass --item <WI-...> or provide a readable current Loom Work Item carrier")
+    if not current_branch:
+        missing_inputs.append("branch is unavailable; pass --branch <work/...>")
+    if not current_head:
+        missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
+
+    suite_not_applicable: dict[str, str] | None = None
+    if suite_path == "not_applicable":
+        suite_not_applicable = {
+            "rationale": suite_na_rationale or "",
+            "consumer_boundary": suite_na_consumer_boundary or "",
+            "recheck_condition": suite_na_recheck_condition or "",
+            "scope_proof": suite_na_scope_proof or "",
+            "review_requirement": suite_na_review_requirement or review_requirement,
+        }
+
+    governance_surface = build_governance_surface(target_root)
+    fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
+    contracts = applicable_pr_metadata_contracts(fields, surface=surface)
+    missing_inputs.extend(str(message) for message in contract_errors)
+    contract = next((field for field in contracts if field.get("id") == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID), None)
+    if contract is None and not contract_errors:
+        missing_inputs.append(f"no applicable PR metadata machine carrier is declared for surface {surface}")
+    if missing_inputs:
+        return {
+            "command": "pr-metadata",
+            "operation": "render",
+            "schema_version": PR_METADATA_RENDER_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata render is missing required bindings, carrier declarations, or output locators.",
+            "missing_inputs": dedupe_strings(missing_inputs),
+            "fallback_to": "adoption" if contract is None else "manual_pr_metadata_inputs",
+            "source_locator": source_locator,
+        }
+
+    assert base_body is not None
+    assert output_path is not None
+    rendered_body, envelope, render_errors = render_governance_intensity_metadata_body(
+        base_body=base_body,
+        field=contract,
+        requested_surface=surface,
+        item_id=effective_item or "",
+        branch_name=current_branch or "",
+        head_sha=current_head or "",
+        governance_intensity=governance_intensity,
+        change_class=change_class,
+        suite_path=suite_path,
+        review_requirement=review_requirement,
+        release_judgment=release_judgment,
+        upgrade_triggers=[entry for entry in upgrade_triggers if isinstance(entry, str) and entry.strip()],
+        suite_not_applicable=suite_not_applicable,
+    )
+    if render_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "render",
+            "schema_version": PR_METADATA_RENDER_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata render inputs do not satisfy the governance metadata contract.",
+            "missing_inputs": dedupe_strings(render_errors),
+            "fallback_to": "manual_pr_metadata_inputs",
+            "source_locator": source_locator,
+        }
+
+    write_runtime_text_artifact(output_path, rendered_body)
+    relative_output = relative_to_root(output_path, target_root)
+    preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface=surface,
+        body_file=relative_output,
+        expected_item=effective_item,
+        expected_head_sha=current_head,
+        expected_branch=current_branch,
+        governance_surface=governance_surface,
+    )
+    result = "pass" if preflight.get("result") == "pass" else "block"
+    return {
+        "command": "pr-metadata",
+        "operation": "render",
+        "schema_version": PR_METADATA_RENDER_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": (
+            "PR metadata render produced a repo-relative PR body artifact and validated it with local preflight."
+            if result == "pass"
+            else "PR metadata render produced an artifact but local preflight still found blocking diagnostics."
+        ),
+        "missing_inputs": preflight.get("missing_inputs", []),
+        "fallback_to": preflight.get("fallback_to"),
+        "source_locator": source_locator,
+        "rendered_body": {
+            "body_file": relative_output,
+            "body_sha256": hashlib.sha256(rendered_body.encode("utf-8")).hexdigest(),
+            "base_body_file": base_body_file,
+            "legacy_bindings": {
+                "loom_work_item": effective_item,
+                "branch": current_branch,
+                "head_sha": current_head,
+            },
+        },
+        "metadata_contract_id": envelope.get("metadata_contract_id"),
+        "effective_carrier_surface": envelope.get("surface"),
+        "envelope": envelope,
+        "preflight": preflight,
+        "next_actions": [
+            f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(relative_output)} --json",
+            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --json",
+        ],
+    }
+
+
+def gh_pr_view_body(root: Path, pr_number: int) -> tuple[str | None, list[str]]:
+    owner, repo_name = detect_github_repo(root)
+    if not owner or not repo_name:
+        return None, ["owner/repo"]
+    payload, errors = github_pr_payload(root, owner, repo_name, pr_number)
+    if errors or payload is None:
+        return None, errors
+    body = payload.get("body")
+    if not isinstance(body, str):
+        return None, [f"gh api repos/{owner}/{repo_name}/pulls/{pr_number} is missing `body`"]
+    return body, []
+
+
+def gh_pr_edit_body_file(root: Path, pr_number: int, body_path: Path) -> list[str]:
+    try:
+        result = run_process(["gh", "pr", "edit", str(pr_number), "--body-file", str(body_path)], root, timeout_seconds=30)
+    except FileNotFoundError:
+        return ["gh command is unavailable in PATH"]
+    except subprocess.TimeoutExpired:
+        return [f"gh pr edit {pr_number} --body-file timed out after 30s"]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh pr edit failed"
+        return [detail]
+    return []
+
+
+def pr_metadata_readback_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    owner: str | None = None,
+    repo_name: str | None = None,
+    pr_number: int | None = None,
+    head_sha: str | None = None,
+    branch_name: str | None = None,
+    pr_payload_file: str | None = None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
+    readback_file: str | None = None,
+    expected_item: str | None = None,
+) -> dict[str, Any]:
+    governance_surface = build_governance_surface(target_root)
+    effective_body_file = body_file
+    effective_compare_file = compare_body_file
+    source_body: str | None = None
+    effective_pr = pr_number
+    host_errors: list[str] = []
+    inferences: list[dict[str, Any]] = []
+
+    if effective_body_file is None and effective_compare_file is None:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        pr_payload, inferred_pr, payload_errors, payload_inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner or detected_owner,
+            repo_name=repo_name or detected_repo,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=branch_name,
+            pr_payload_file=pr_payload_file,
+        )
+        effective_pr = inferred_pr
+        inferences.extend(payload_inferences)
+        if payload_errors:
+            host_errors.extend(f"pr: {message}" for message in payload_errors)
+        elif isinstance(pr_payload, dict):
+            source_body = pr_payload.get("body") if isinstance(pr_payload.get("body"), str) else None
+        if source_body is None and effective_pr is not None:
+            source_body, view_errors = gh_pr_view_body(target_root, effective_pr)
+            host_errors.extend(view_errors)
+        if source_body is not None and readback_file:
+            readback_path, path_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
+            if path_errors:
+                host_errors.extend(path_errors)
+            else:
+                assert readback_path is not None
+                write_runtime_text_artifact(readback_path, source_body)
+                effective_body_file = relative_to_root(readback_path, target_root)
+
+    preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface=surface,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=effective_body_file,
+        compare_body_file=effective_compare_file,
+        governance_surface=governance_surface,
+        expected_item=expected_item,
+        expected_head_sha=head_sha,
+        expected_branch=branch_name,
+    )
+    body = source_body
+    if effective_compare_file:
+        body, _ = load_optional_text_fixture(target_root, effective_compare_file, label="post-edit PR body file")
+    elif effective_body_file:
+        body, _ = load_optional_text_fixture(target_root, effective_body_file, label="PR body file")
+    result = "pass" if preflight.get("result") == "pass" and isinstance(body, str) and not host_errors else "block"
+    missing_inputs = [*host_errors, *[str(message) for message in preflight.get("missing_inputs", [])]]
+    return {
+        "command": "pr-metadata",
+        "operation": "readback",
+        "schema_version": PR_METADATA_READBACK_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": (
+            "PR metadata readback parsed the current body artifact and matched the declared machine carrier."
+            if result == "pass"
+            else "PR metadata readback could not prove the current body artifact matches the declared machine carrier."
+        ),
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": preflight.get("fallback_to"),
+        "pr": effective_pr,
+        "body_file": effective_compare_file or effective_body_file,
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest() if isinstance(body, str) else None,
+        "legacy_bindings": {
+            "loom_work_item": pr_body_binding_value(body, label="Loom Work Item", metadata_field="loom_work_item") if isinstance(body, str) else None,
+            "branch": pr_body_binding_value(body, label="Branch", metadata_field="branch") if isinstance(body, str) else None,
+            "head_sha": pr_body_binding_value(body, label="Head SHA", metadata_field="head_sha") if isinstance(body, str) else None,
+        },
+        "machine_surface": pr_body_machine_surface(body) if isinstance(body, str) else None,
+        "governance_fields": pr_body_governance_metadata_fields(body) if isinstance(body, str) else {},
+        "preflight": preflight,
+        "inferences": inferences,
+        "next_actions": [
+            f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(effective_compare_file or effective_body_file or '<body-file>')} --json",
+        ],
+    }
+
+
+def pr_metadata_update_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    output_file: str,
+    readback_file: str,
+    base_body_file: str,
+    item_id: str | None,
+    governance_intensity: str,
+    change_class: str,
+    suite_path: str,
+    review_requirement: str,
+    release_judgment: str,
+    upgrade_triggers: list[str],
+    suite_na_rationale: str | None,
+    suite_na_consumer_boundary: str | None,
+    suite_na_recheck_condition: str | None,
+    suite_na_scope_proof: str | None,
+    suite_na_review_requirement: str | None,
+) -> dict[str, Any]:
+    render_payload = pr_metadata_render_payload(
+        target_root=target_root,
+        surface=surface,
+        output_file=output_file,
+        base_body_file=base_body_file,
+        item_id=item_id,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        governance_intensity=governance_intensity,
+        change_class=change_class,
+        suite_path=suite_path,
+        review_requirement=review_requirement,
+        release_judgment=release_judgment,
+        upgrade_triggers=upgrade_triggers,
+        suite_na_rationale=suite_na_rationale,
+        suite_na_consumer_boundary=suite_na_consumer_boundary,
+        suite_na_recheck_condition=suite_na_recheck_condition,
+        suite_na_scope_proof=suite_na_scope_proof,
+        suite_na_review_requirement=suite_na_review_requirement,
+    )
+    if render_payload.get("result") != "pass":
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update did not start because render/preflight prerequisites are still blocking.",
+            "missing_inputs": render_payload.get("missing_inputs", []),
+            "fallback_to": render_payload.get("fallback_to"),
+            "render": render_payload,
+        }
+
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    pr_payload, effective_pr, payload_errors, inferences = load_pr_payload_for_gate(
+        target_root=target_root,
+        owner=owner or detected_owner,
+        repo_name=repo_name or detected_repo,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=None,
+    )
+    missing_inputs = [str(message) for message in payload_errors]
+    if effective_pr is None:
+        missing_inputs.append("unable to determine target PR for metadata update")
+    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
+    rendered_path = None
+    if isinstance(rendered_relative, str):
+        rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
+        missing_inputs.extend(rendered_errors)
+    else:
+        missing_inputs.append("render output path is unavailable")
+    if missing_inputs:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update is missing the rendered body artifact or a resolvable target PR.",
+            "missing_inputs": dedupe_strings(missing_inputs),
+            "fallback_to": "manual_pr_metadata_inputs",
+            "render": render_payload,
+            "inferences": inferences,
+        }
+
+    assert rendered_path is not None
+    update_errors = gh_pr_edit_body_file(target_root, effective_pr, rendered_path)
+    if update_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update could not write the rendered body to the host PR.",
+            "missing_inputs": update_errors,
+            "fallback_to": "gh_pr_edit_body_file_readback",
+            "render": render_payload,
+            "pr": effective_pr,
+            "inferences": inferences,
+        }
+
+    host_body, view_errors = gh_pr_view_body(target_root, effective_pr)
+    if view_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update wrote the host PR body but could not read it back for verification.",
+            "missing_inputs": view_errors,
+            "fallback_to": "gh_pr_edit_body_file_readback",
+            "render": render_payload,
+            "pr": effective_pr,
+            "inferences": inferences,
+        }
+    readback_path, readback_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
+    if readback_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update wrote the host PR body but could not persist the readback artifact.",
+            "missing_inputs": readback_errors,
+            "fallback_to": "gh_pr_edit_body_file_readback",
+            "render": render_payload,
+            "pr": effective_pr,
+            "inferences": inferences,
+        }
+    assert readback_path is not None
+    write_runtime_text_artifact(readback_path, host_body)
+    readback_relative = relative_to_root(readback_path, target_root)
+
+    readback_payload = pr_metadata_readback_payload(
+        target_root=target_root,
+        surface=surface,
+        owner=owner or detected_owner,
+        repo_name=repo_name or detected_repo,
+        pr_number=effective_pr,
+        head_sha=head_sha or (pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else None),
+        branch_name=branch_name or (pr_payload.get("headRefName") if isinstance(pr_payload, dict) else None),
+        pr_payload_file=None,
+        body_file=rendered_relative,
+        compare_body_file=readback_relative,
+        readback_file=readback_relative,
+        expected_item=item_id,
+    )
+    result = "pass" if readback_payload.get("result") == "pass" else "block"
+    return {
+        "command": "pr-metadata",
+        "operation": "update",
+        "schema_version": PR_METADATA_UPDATE_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": (
+            "PR metadata update rendered, wrote, read back, and revalidated the host PR body."
+            if result == "pass"
+            else "PR metadata update wrote the host PR body but readback or revalidation still found blocking drift."
+        ),
+        "missing_inputs": readback_payload.get("missing_inputs", []),
+        "fallback_to": readback_payload.get("fallback_to"),
+        "pr": effective_pr,
+        "render": render_payload,
+        "readback": readback_payload,
+        "inferences": inferences,
+        "next_actions": [
+            f"loom pr metadata-readback {effective_pr} --surface {surface} --body-file {shlex.quote(rendered_relative)} --readback-file {shlex.quote(readback_file)} --json",
+        ],
     }
 
 
@@ -18212,6 +18801,73 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
 
 def handle_pr_metadata(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    if args.operation == "render":
+        return emit(
+            pr_metadata_render_payload(
+                target_root=target_root,
+                surface=args.surface,
+                output_file=args.output_file,
+                base_body_file=args.base_body_file,
+                item_id=args.item,
+                head_sha=args.head_sha,
+                branch_name=args.branch,
+                governance_intensity=args.governance_intensity,
+                change_class=args.change_class,
+                suite_path=args.suite_path,
+                review_requirement=args.review_requirement,
+                release_judgment=args.release_judgment,
+                upgrade_triggers=args.upgrade_trigger,
+                suite_na_rationale=args.suite_na_rationale,
+                suite_na_consumer_boundary=args.suite_na_consumer_boundary,
+                suite_na_recheck_condition=args.suite_na_recheck_condition,
+                suite_na_scope_proof=args.suite_na_scope_proof,
+                suite_na_review_requirement=args.suite_na_review_requirement,
+            )
+        )
+    if args.operation == "update":
+        return emit(
+            pr_metadata_update_payload(
+                target_root=target_root,
+                surface=args.surface,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                pr_number=args.pr,
+                head_sha=args.head_sha,
+                branch_name=args.branch,
+                output_file=args.output_file,
+                readback_file=args.readback_file,
+                base_body_file=args.base_body_file,
+                item_id=args.item,
+                governance_intensity=args.governance_intensity,
+                change_class=args.change_class,
+                suite_path=args.suite_path,
+                review_requirement=args.review_requirement,
+                release_judgment=args.release_judgment,
+                upgrade_triggers=args.upgrade_trigger,
+                suite_na_rationale=args.suite_na_rationale,
+                suite_na_consumer_boundary=args.suite_na_consumer_boundary,
+                suite_na_recheck_condition=args.suite_na_recheck_condition,
+                suite_na_scope_proof=args.suite_na_scope_proof,
+                suite_na_review_requirement=args.suite_na_review_requirement,
+            )
+        )
+    if args.operation == "readback":
+        return emit(
+            pr_metadata_readback_payload(
+                target_root=target_root,
+                surface=args.surface,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                pr_number=args.pr,
+                head_sha=args.head_sha,
+                branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
+                body_file=args.body_file,
+                compare_body_file=args.compare_body_file,
+                readback_file=args.readback_file,
+                expected_item=args.item,
+            )
+        )
     return emit(
         pr_metadata_preflight_payload(
             target_root=target_root,
@@ -18224,6 +18880,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
             pr_payload_file=args.pr_payload_file,
             body_file=args.body_file,
             compare_body_file=args.compare_body_file,
+            expected_item=args.item,
             expected_head_sha=args.head_sha,
             expected_branch=args.branch,
         )

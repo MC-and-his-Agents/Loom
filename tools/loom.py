@@ -251,6 +251,9 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "project status", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "project reconcile", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "pr inspect", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "pr metadata-render", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "pr metadata-readback", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "pr metadata-update", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "pr metadata-preflight", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "pr gate", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "merge check", "domain": "delivery", "status": "implemented", "json": True},
@@ -2849,30 +2852,146 @@ def handle_project(argv: list[str]) -> int:
 
 def handle_pr(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom pr")
-    parser.add_argument("action", choices=("inspect", "metadata-preflight", "gate"))
+    parser.add_argument("action", choices=("inspect", "metadata-render", "metadata-readback", "metadata-update", "metadata-preflight", "gate"))
     parser.add_argument("pr", nargs="?")
     parser.add_argument("--head-sha")
     parser.add_argument("--work-item")
-    parser.add_argument("--surface", choices=("pre_review", "review", "merge_ready"), default="merge_ready")
+    parser.add_argument("--surface", choices=("pre_review", "review", "merge_ready", "closeout"), default="merge_ready")
+    parser.add_argument("--item")
+    parser.add_argument("--branch")
     parser.add_argument("--body-file")
+    parser.add_argument("--output-file")
+    parser.add_argument("--readback-file")
+    parser.add_argument("--base-body-file")
     parser.add_argument("--compare-body-file")
     parser.add_argument("--pr-payload-file")
+    parser.add_argument("--governance-intensity")
+    parser.add_argument("--change-class")
+    parser.add_argument("--suite-path")
+    parser.add_argument("--review-requirement")
+    parser.add_argument("--release-judgment")
+    parser.add_argument("--upgrade-trigger", action="append")
+    parser.add_argument("--suite-na-rationale")
+    parser.add_argument("--suite-na-consumer-boundary")
+    parser.add_argument("--suite-na-recheck-condition")
+    parser.add_argument("--suite-na-scope-proof")
+    parser.add_argument("--suite-na-review-requirement")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     command = f"pr {args.action}"
-    if not args.pr and not (args.action == "metadata-preflight" and args.body_file):
+    if not args.pr and not (
+        args.action in {"metadata-render", "metadata-readback", "metadata-update"}
+        or args.action == "metadata-preflight" and args.body_file
+    ):
         return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="PR command requires a PR number.", failed_layer="pr-input", fail_closed_reason="missing PR number", fallback_to=["loom help --json"]))
     if args.action == "inspect":
         flow_args = ["host-binding", "inspect", "--target", ".", "--pr", args.pr]
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
         return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "manual-reconciliation"])
+    if args.action == "metadata-render":
+        flow_args = ["pr-metadata", "render", "--target", ".", "--surface", args.surface]
+        if args.item:
+            flow_args.extend(["--item", args.item])
+        if args.head_sha:
+            flow_args.extend(["--head-sha", args.head_sha])
+        if args.branch:
+            flow_args.extend(["--branch", args.branch])
+        if args.output_file:
+            flow_args.extend(["--output-file", args.output_file])
+        if args.base_body_file:
+            flow_args.extend(["--base-body-file", args.base_body_file])
+        if args.governance_intensity:
+            flow_args.extend(["--governance-intensity", args.governance_intensity])
+        if args.change_class:
+            flow_args.extend(["--change-class", args.change_class])
+        if args.suite_path:
+            flow_args.extend(["--suite-path", args.suite_path])
+        if args.review_requirement:
+            flow_args.extend(["--review-requirement", args.review_requirement])
+        if args.release_judgment:
+            flow_args.extend(["--release-judgment", args.release_judgment])
+        for trigger in args.upgrade_trigger or []:
+            flow_args.extend(["--upgrade-trigger", trigger])
+        if args.suite_na_rationale:
+            flow_args.extend(["--suite-na-rationale", args.suite_na_rationale])
+        if args.suite_na_consumer_boundary:
+            flow_args.extend(["--suite-na-consumer-boundary", args.suite_na_consumer_boundary])
+        if args.suite_na_recheck_condition:
+            flow_args.extend(["--suite-na-recheck-condition", args.suite_na_recheck_condition])
+        if args.suite_na_scope_proof:
+            flow_args.extend(["--suite-na-scope-proof", args.suite_na_scope_proof])
+        if args.suite_na_review_requirement:
+            flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
+        return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
+    if args.action == "metadata-readback":
+        flow_args = ["pr-metadata", "readback", "--target", ".", "--surface", args.surface]
+        if args.pr:
+            flow_args.extend(["--pr", args.pr])
+        if args.item:
+            flow_args.extend(["--item", args.item])
+        if args.head_sha:
+            flow_args.extend(["--head-sha", args.head_sha])
+        if args.branch:
+            flow_args.extend(["--branch", args.branch])
+        if args.body_file:
+            flow_args.extend(["--body-file", args.body_file])
+        if args.readback_file:
+            flow_args.extend(["--readback-file", args.readback_file])
+        if args.compare_body_file:
+            flow_args.extend(["--compare-body-file", args.compare_body_file])
+        if args.pr_payload_file:
+            flow_args.extend(["--pr-payload-file", args.pr_payload_file])
+        return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
+    if args.action == "metadata-update":
+        flow_args = ["pr-metadata", "update", "--target", ".", "--surface", args.surface]
+        if args.pr:
+            flow_args.extend(["--pr", args.pr])
+        if args.item:
+            flow_args.extend(["--item", args.item])
+        if args.head_sha:
+            flow_args.extend(["--head-sha", args.head_sha])
+        if args.branch:
+            flow_args.extend(["--branch", args.branch])
+        if args.output_file:
+            flow_args.extend(["--output-file", args.output_file])
+        if args.readback_file:
+            flow_args.extend(["--readback-file", args.readback_file])
+        if args.base_body_file:
+            flow_args.extend(["--base-body-file", args.base_body_file])
+        if args.governance_intensity:
+            flow_args.extend(["--governance-intensity", args.governance_intensity])
+        if args.change_class:
+            flow_args.extend(["--change-class", args.change_class])
+        if args.suite_path:
+            flow_args.extend(["--suite-path", args.suite_path])
+        if args.review_requirement:
+            flow_args.extend(["--review-requirement", args.review_requirement])
+        if args.release_judgment:
+            flow_args.extend(["--release-judgment", args.release_judgment])
+        for trigger in args.upgrade_trigger or []:
+            flow_args.extend(["--upgrade-trigger", trigger])
+        if args.suite_na_rationale:
+            flow_args.extend(["--suite-na-rationale", args.suite_na_rationale])
+        if args.suite_na_consumer_boundary:
+            flow_args.extend(["--suite-na-consumer-boundary", args.suite_na_consumer_boundary])
+        if args.suite_na_recheck_condition:
+            flow_args.extend(["--suite-na-recheck-condition", args.suite_na_recheck_condition])
+        if args.suite_na_scope_proof:
+            flow_args.extend(["--suite-na-scope-proof", args.suite_na_scope_proof])
+        if args.suite_na_review_requirement:
+            flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
+        return emit_flow(command, flow_args, fallback_to=["loom pr metadata-render --surface merge_ready --json", "loom pr metadata-readback --surface merge_ready --pr <number> --json"])
     if args.action == "metadata-preflight":
         flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", args.surface]
         if args.pr:
             flow_args.extend(["--pr", args.pr])
+        if args.item:
+            flow_args.extend(["--item", args.item])
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
+        if args.branch:
+            flow_args.extend(["--branch", args.branch])
         if args.body_file:
             flow_args.extend(["--body-file", args.body_file])
         if args.compare_body_file:
