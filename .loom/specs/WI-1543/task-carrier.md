@@ -1,0 +1,5 @@
+# WI-1543 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1543 | Issue OPEN / branch work/1543-closeout-queue-status / read-only closeout queue status implementation | in_progress | primary | .loom/work-items/WI-1543.md | .loom/specs/WI-1543/plan.md#implementation-steps | .loom/specs/WI-1543/spec.md#acceptance-scenarios | .loom/specs/WI-1543/plan.md#validation | .loom/specs/WI-1543/evidence-map.md | GitHub issue #1543; milestone/12 closeout residue blocker history; local branch work/1543-closeout-queue-status | Recheck PR body/head, current review, hosted checks, command matrix, generated runtime drift, closeout queue guard commands, target branch, merge commit, and closeout evidence before merge-ready or closeout. |

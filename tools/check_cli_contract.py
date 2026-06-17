@@ -3590,10 +3590,10 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
 
 
 def write_terminal_carrier_target(target: Path, item: str) -> None:
-    (target / ".loom" / "bootstrap").mkdir(parents=True)
-    (target / ".loom" / "work-items").mkdir(parents=True)
-    (target / ".loom" / "progress").mkdir(parents=True)
-    (target / ".loom" / "status").mkdir(parents=True)
+    (target / ".loom" / "bootstrap").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "work-items").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "progress").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "status").mkdir(parents=True, exist_ok=True)
     goal = "Fixture for explicit carrier closeout sync."
     scope = "Versioned carrier metadata only; no host mutation."
     execution_path = "fixture -> carrier closeout-sync"
@@ -4139,6 +4139,210 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
         or "ambiguous" not in str(ambiguous_plan.get("fail_closed_reason", ""))
     ):
         raise AssertionError("repair plan did not refuse ambiguous retained item matches")
+
+
+def append_terminal_closeout_metadata(
+    target: Path,
+    item: str,
+    *,
+    issue: int,
+    pr: int,
+    merge_commit: str,
+    target_branch: str = "main",
+    closed_at: str = "2026-06-14T00:00:00Z",
+    evidence_locator: str = "fixture closeout evidence",
+) -> None:
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    progress.write_text(
+        progress.read_text(encoding="utf-8").rstrip()
+        + "\n\n"
+        "## Terminal Closeout Metadata\n\n"
+        "- Terminal State: closed_out\n"
+        f"- Issue: {issue}\n"
+        f"- PR: {pr}\n"
+        f"- Merge Commit: {merge_commit}\n"
+        f"- Target Branch: {target_branch}\n"
+        f"- Closed At: {closed_at}\n"
+        f"- Evidence Locator: {evidence_locator}\n",
+        encoding="utf-8",
+    )
+
+
+def assert_closeout_queue_status_contract(tmp: Path) -> None:
+    target = tmp / "closeout-queue-status"
+    target.mkdir()
+    for item in ("WI-9101", "WI-9102", "WI-9103", "WI-9104", "WI-9105"):
+        write_terminal_carrier_target(target, item)
+    append_terminal_closeout_metadata(
+        target,
+        "WI-9101",
+        issue=9101,
+        pr=9201,
+        merge_commit="merge9101",
+        evidence_locator="fixture auto no-op evidence",
+    )
+    for item in ("WI-9103",):
+        progress = target / ".loom" / "progress" / f"{item}.md"
+        status = target / ".loom" / "status" / "current.md"
+        progress.write_text(
+            progress.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+        status.write_text(
+            status.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+    queue_file = target / "closeout-queue-fixture.json"
+    queue_file.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "item_id": "WI-9102",
+                        "issue_number": 9102,
+                        "pr_number": 9202,
+                        "host_completion": {
+                            "issue_closed": True,
+                            "pr_merged": True,
+                            "merge_commit": "merge9102",
+                            "target_branch": "main",
+                            "closed_at": "2026-06-14T00:02:00Z",
+                            "evidence_locator": "fixture light carrier sync",
+                        },
+                    },
+                    {
+                        "item_id": "WI-9103",
+                        "issue_number": 9103,
+                        "pr_number": 9203,
+                        "host_completion": {
+                            "issue_closed": True,
+                            "pr_merged": True,
+                            "merge_commit": "merge9103",
+                            "target_branch": "main",
+                            "closed_at": "2026-06-14T00:03:00Z",
+                            "evidence_locator": "fixture batched closeout",
+                        },
+                    },
+                    {
+                        "item_id": "WI-9104",
+                        "issue_number": 9104,
+                        "pr_number": 9204,
+                        "host_completion": {
+                            "issue_closed": False,
+                            "pr_merged": True,
+                            "merge_commit": "merge9104",
+                            "target_branch": "main",
+                            "closed_at": "2026-06-14T00:04:00Z",
+                            "evidence_locator": "fixture full closeout",
+                        },
+                    },
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    before = snapshot_tree(target)
+    status_code, payload = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--queue-file", "closeout-queue-fixture.json", "--json"]
+    )
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError("closeout queue status mutated the fixture target")
+    if (
+        status_code == 0
+        or payload.get("command") != "closeout queue status"
+        or payload.get("wrapped_command") != "closeout-queue"
+        or payload.get("schema_version") != "loom-closeout-queue-status/v1"
+        or payload.get("result") != "block"
+        or payload.get("mode") != "blocked"
+        or payload.get("mutates") is not False
+        or payload.get("host_mutations") is not False
+        or payload.get("carrier_mutations") is not False
+    ):
+        raise AssertionError("closeout queue status envelope drifted")
+    by_item = {item.get("item_id"): item for item in payload.get("items", []) if isinstance(item, dict)}
+    expected_modes = {
+        "WI-9101": "auto_no_op",
+        "WI-9102": "light_carrier_sync",
+        "WI-9103": "batched_closeout",
+        "WI-9104": "full_closeout",
+        "WI-9105": "blocked",
+    }
+    actual_modes = {item: by_item.get(item, {}).get("closeout_mode") for item in expected_modes}
+    if actual_modes != expected_modes:
+        raise AssertionError(f"closeout queue status modes drifted: {actual_modes}")
+    if by_item["WI-9101"].get("next_command") is not None:
+        raise AssertionError("auto_no_op queue item must not suggest a next command")
+    if "loom carrier closeout-sync" not in str(by_item["WI-9102"].get("next_command")):
+        raise AssertionError("light_carrier_sync item did not suggest carrier closeout-sync")
+    if by_item["WI-9103"].get("next_command") != "loom repair plan --target <repo> --issue 9103 --json":
+        raise AssertionError("batched_closeout item did not suggest repair plan")
+    if by_item["WI-9104"].get("next_command") != "loom closeout --target <repo> --issue 9104 --pr 9204 --json":
+        raise AssertionError("full_closeout item did not suggest closeout check")
+    if "host_completion" not in by_item["WI-9105"].get("missing_inputs", []):
+        raise AssertionError("blocked item did not report missing host_completion")
+
+    _, light_only = run_json(
+        [
+            "closeout",
+            "queue",
+            "status",
+            "--target",
+            str(target),
+            "--queue-file",
+            "closeout-queue-fixture.json",
+            "--item",
+            "WI-9102",
+            "--json",
+        ],
+        expect=0,
+    )
+    if light_only.get("mode") != "light_carrier_sync" or "loom carrier closeout-sync" not in str(light_only.get("next_command")):
+        raise AssertionError("filtered light_carrier_sync queue status did not expose the item next command")
+
+    status_code, missing_input = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--json"],
+        expect=1,
+    )
+    if (
+        status_code == 0
+        or missing_input.get("mode") != "blocked"
+        or "queue_input" not in missing_input.get("missing_inputs", [])
+        or missing_input.get("mutates") is not False
+        or missing_input.get("host_mutations") is not False
+        or missing_input.get("carrier_mutations") is not False
+    ):
+        raise AssertionError("closeout queue status must require an explicit queue input before scanning retained carriers")
+
+    status_code, missing_item = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--item", "WI-does-not-exist", "--json"],
+        expect=1,
+    )
+    if status_code == 0 or missing_item.get("mode") != "blocked" or "item not found: WI-does-not-exist" not in missing_item.get("missing_inputs", []):
+        raise AssertionError("closeout queue status must block explicit missing item filters")
+
+    status_code, missing_issue = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--issue", "999999", "--json"],
+        expect=1,
+    )
+    if status_code == 0 or missing_issue.get("mode") != "blocked" or "issue not found: 999999" not in missing_issue.get("missing_inputs", []):
+        raise AssertionError("closeout queue status must block explicit missing issue filters")
+
+    status_code, missing_target = run_json(
+        ["closeout", "queue", "status", "--target", str(tmp / "missing-target"), "--json"],
+        expect=1,
+    )
+    if (
+        status_code == 0
+        or missing_target.get("schema_version") != "loom-closeout-queue-status/v1"
+        or missing_target.get("mode") != "blocked"
+        or missing_target.get("mutates") is not False
+        or missing_target.get("host_mutations") is not False
+        or missing_target.get("carrier_mutations") is not False
+    ):
+        raise AssertionError("closeout queue status missing-target envelope drifted")
 
 
 def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
@@ -4821,7 +5025,7 @@ def assert_suite_carrier_aggregate_fixtures(tmp: Path) -> None:
 def assert_governance_closeout_help_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
-    for command in ("reconcile", "gate closeout", "closeout"):
+    for command in ("reconcile", "gate closeout", "closeout", "closeout queue status"):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for governance closeout")
     if matrix["carrier closeout-sync"]["status"] != "implemented" or matrix["carrier closeout-sync"]["domain"] != "harness":
@@ -4873,6 +5077,7 @@ def run_governance_closeout_contract() -> None:
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
         assert_repair_apply_carrier_closeout_contract(tmp)
+        assert_closeout_queue_status_contract(tmp)
         assert_hotcp_stale_active_closeout_regression_fixture(tmp)
         assert_idle_read_surface_contract(tmp)
 
@@ -5120,6 +5325,7 @@ def run_aggregate_cli_contract() -> None:
         "build",
         "pre-review",
         "closeout",
+        "closeout queue status",
         "handoff",
         "retire",
     ):

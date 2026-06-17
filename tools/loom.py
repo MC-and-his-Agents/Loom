@@ -196,6 +196,13 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Check closeout readiness; host closeout sync remains separate from local retire and carrier closeout-sync.",
     },
+    {
+        "command": "closeout queue status",
+        "domain": "scenario",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read retained post-merge closeout residue queue status and suggest the next read-only command.",
+    },
     {"command": "resume", "domain": "scenario", "status": "delegated", "json": True},
     {"command": "handoff", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "retire", "domain": "scenario", "status": "implemented", "json": True},
@@ -3302,6 +3309,56 @@ def handle_gate(argv: list[str]) -> int:
     return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Unsupported gate name.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate name: {gate}", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
 
 
+def handle_closeout_queue_status(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom closeout queue status")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--issue", type=int, action="append", default=[])
+    parser.add_argument("--item", action="append", default=[])
+    parser.add_argument("--queue-file")
+    parser.add_argument("--output")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        payload = block_target("closeout queue status", target, "target path does not exist")
+        payload.update(
+            {
+                "schema_version": "loom-closeout-queue-status/v1",
+                "operation": "status",
+                "mode": "blocked",
+                "mutates": False,
+                "host_mutations": False,
+                "carrier_mutations": False,
+                "item_count": 0,
+                "items": [],
+                "next_action": "provide an existing target repository before reading closeout queue status",
+                "next_command": None,
+            }
+        )
+        return emit(payload)
+    flow_args = ["closeout-queue", "status", "--target", str(target)]
+    for issue in args.issue:
+        flow_args.extend(["--issue", str(issue)])
+    for item in args.item:
+        flow_args.extend(["--item", item])
+    for flag, value in (
+        ("--queue-file", args.queue_file),
+        ("--output", args.output),
+    ):
+        if value is not None:
+            flow_args.extend([flag, value])
+    payload = flow_payload(
+        "closeout queue status",
+        flow_args,
+        fallback_to=["loom closeout --target <repo> --json", "loom reconcile --issue <issue> --pr <pr> --json"],
+    )
+    payload.setdefault("schema_version", SCENARIO_SCHEMA)
+    if payload.get("command") and payload.get("command") != "closeout queue status":
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = "closeout queue status"
+    return emit(payload)
+
+
 def handle_scenario(command: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=f"loom {command}")
     parser.add_argument("--target", default=".")
@@ -6240,6 +6297,8 @@ def main(argv: list[str]) -> int:
     if command == "gate" or command.startswith("gate "):
         gate_args = command.split()[1:] + forwarded if command.startswith("gate ") else forwarded
         return handle_gate(gate_args)
+    if command == "closeout queue status":
+        return handle_closeout_queue_status(forwarded)
     if command in {"story", "spec", "plan", "build", "pre-review", "closeout", "handoff", "retire"}:
         return handle_scenario(command, forwarded)
     if command in COMMAND_ROUTES:
