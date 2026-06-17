@@ -116,6 +116,9 @@ REQUIRED_COMMANDS = {
     "project status",
     "project reconcile",
     "pr inspect",
+    "pr metadata-render",
+    "pr metadata-readback",
+    "pr metadata-update",
     "pr metadata-preflight",
     "pr gate",
     "merge check",
@@ -2912,6 +2915,7 @@ def governance_metadata_body(
     head_sha: str = "1111111111111111111111111111111111111111",
     include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
+    surface: str = "merge_ready",
 ) -> str:
     fields: dict[str, Any] = {
         "loom_work_item": item,
@@ -2937,7 +2941,7 @@ def governance_metadata_body(
     envelope = {
         "schema_version": "loom-repo-pr-metadata/v1",
         "metadata_contract_id": "loom-governance-intensity",
-        "surface": "merge_ready",
+        "surface": surface,
         "fields": fields,
         "source": {"rendered_hash": "sha256:fixture"},
         "parser_version": "loom-pr-metadata-parser/v1",
@@ -2967,6 +2971,153 @@ def governance_metadata_preflight_payload(target: Path, body_name: str, *, expec
         expect=expect,
     )
     return payload
+
+
+def assert_pr_metadata_wrapper_argument_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for pr metadata wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    original_emit_flow = module.emit_flow
+    module.emit_flow = fake_emit_flow
+    try:
+        status = module.handle_pr(
+            [
+                "metadata-update",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--head-sha",
+                "1" * 40,
+                "--branch",
+                "work/1541-pr-metadata-update-v2",
+                "--output-file",
+                ".loom/runtime/pr/rendered.md",
+                "--readback-file",
+                ".loom/runtime/pr/readback.md",
+                "--base-body-file",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+                "--governance-intensity",
+                "standard",
+                "--change-class",
+                "contract",
+                "--suite-path",
+                "minimal",
+                "--review-requirement",
+                "current_head_review_required",
+                "--release-judgment",
+                "no_release",
+                "--upgrade-trigger",
+                "fixture",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("pr metadata-update wrapper regression did not complete")
+        if captured.get("command") != "pr metadata-update":
+            raise AssertionError("pr metadata-update wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:3] != ["pr-metadata", "update", "--target"]:
+            raise AssertionError("pr metadata-update wrapper did not delegate to pr-metadata update")
+        expected_pairs = {
+            "--surface": "closeout",
+            "--item": "WI-1541",
+            "--head-sha": "1" * 40,
+            "--branch": "work/1541-pr-metadata-update-v2",
+            "--output-file": ".loom/runtime/pr/rendered.md",
+            "--readback-file": ".loom/runtime/pr/readback.md",
+            "--base-body-file": ".github/PULL_REQUEST_TEMPLATE.md",
+            "--governance-intensity": "standard",
+            "--change-class": "contract",
+            "--suite-path": "minimal",
+            "--review-requirement": "current_head_review_required",
+            "--release-judgment": "no_release",
+            "--upgrade-trigger": "fixture",
+        }
+        for flag, expected in expected_pairs.items():
+            if flag not in flow_args:
+                raise AssertionError(f"pr metadata-update wrapper did not pass {flag}")
+            if flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"pr metadata-update wrapper changed {flag} value")
+    finally:
+        module.emit_flow = original_emit_flow
+
+
+def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
+    target = tmp / "governance-metadata-render-readback"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+    (target / ".github").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md", target / ".github" / "PULL_REQUEST_TEMPLATE.md")
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "checkout", "-b", "work/1541-render"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.com"], cwd=target, check=True)
+    (target / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+
+    _, render_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "render",
+            "--target",
+            str(target),
+            "--surface",
+            "closeout",
+            "--item",
+            "WI-1541",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1541-render",
+            "--output-file",
+            ".loom/runtime/pr/rendered.md",
+        ]
+    )
+    if render_payload.get("result") != "pass":
+        raise AssertionError(f"render payload failed: {render_payload.get('missing_inputs')}")
+    if render_payload.get("effective_carrier_surface") != "merge_ready":
+        raise AssertionError("closeout render should keep the declared merge_ready carrier surface")
+    rendered = target / ".loom" / "runtime" / "pr" / "rendered.md"
+    if not rendered.exists():
+        raise AssertionError("render did not write the repo-relative body artifact")
+
+    _, readback_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "readback",
+            "--target",
+            str(target),
+            "--surface",
+            "closeout",
+            "--item",
+            "WI-1541",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1541-render",
+            "--body-file",
+            ".loom/runtime/pr/rendered.md",
+        ]
+    )
+    if readback_payload.get("result") != "pass":
+        raise AssertionError(f"readback payload failed: {readback_payload.get('missing_inputs')}")
+    governance_fields = readback_payload.get("governance_fields")
+    if not isinstance(governance_fields, dict) or governance_fields.get("head_sha") != head_sha:
+        raise AssertionError("readback did not expose parsed governance fields")
 
 
 def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
@@ -3046,6 +3197,20 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     )
     if review_surface_payload.get("result") != "pass":
         raise AssertionError("review surface did not consume the declared merge_ready governance metadata carrier")
+    _, closeout_surface_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "closeout",
+            "--body-file",
+            "docs-governance-lite.md",
+        ]
+    )
+    if closeout_surface_payload.get("result") != "pass":
+        raise AssertionError("closeout surface did not consume the declared merge_ready governance metadata carrier")
 
     readback_drift = target / "docs-governance-lite-readback-drift.md"
     readback_drift.write_text(
@@ -5372,9 +5537,20 @@ def run_merge_wrapper_surface() -> None:
     print("merge wrapper surface checks passed")
 
 
+def run_pr_metadata_surface() -> None:
+    assert_pr_metadata_wrapper_argument_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_governance_metadata_render_readback_fixture(tmp)
+        assert_governance_intensity_metadata_preflight_fixture(tmp)
+
+    print("pr metadata surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
+    assert_pr_metadata_wrapper_argument_contract()
     loom_flow = load_loom_flow_module()
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -5710,20 +5886,58 @@ def run_aggregate_cli_contract() -> None:
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
         raise AssertionError("version output did not include repo version context")
 
-    _, body_file_preflight = run_json(
+    _, render_payload = run_json(
         [
             "pr",
-            "metadata-preflight",
+            "metadata-render",
             "--surface",
-            "merge_ready",
+            "closeout",
+            "--item",
+            "WI-1541",
+            "--branch",
+            "work/1541-pr-metadata-update-v2",
+            "--head-sha",
+            "1" * 40,
+            "--json",
+        ],
+        expect=0,
+    )
+    if render_payload.get("result") != "pass" or render_payload.get("effective_carrier_surface") != "merge_ready":
+        raise AssertionError("pr metadata-render must support closeout surface and preserve merge_ready carrier surface")
+
+    _, readback_payload = run_json(
+        [
+            "pr",
+            "metadata-readback",
+            "--surface",
+            "closeout",
             "--body-file",
             ".github/PULL_REQUEST_TEMPLATE.md",
             "--json",
         ],
         expect=0,
     )
-    if body_file_preflight.get("result") != "pass" or "body_artifact" not in body_file_preflight:
-        raise AssertionError("pr metadata-preflight must support PR body-file artifact validation without requiring a live PR")
+    if readback_payload.get("schema_version") != "loom-pr-metadata-readback/v1" or readback_payload.get("result") != "pass":
+        raise AssertionError("pr metadata-readback must emit a passing loom-pr-metadata-readback/v1 payload for readable body artifacts")
+
+    _, body_file_preflight = run_json(
+        [
+            "pr",
+            "metadata-preflight",
+            "--surface",
+            "closeout",
+            "--body-file",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        body_file_preflight.get("schema_version") != "loom-pr-metadata-preflight/v1"
+        or body_file_preflight.get("result") != "pass"
+        or "body_artifact" not in body_file_preflight
+    ):
+        raise AssertionError("pr metadata-preflight must support closeout surface body-file artifact validation without requiring a live PR")
 
     with tempfile.TemporaryDirectory(prefix="loom-cli-contract-") as raw_tmp:
         tmp = Path(raw_tmp)
@@ -6859,6 +7073,7 @@ def run_aggregate_cli_contract() -> None:
         assert_active_closeout_contract(active_item)
         assert_reconciliation_suite_taxonomy_contract()
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
+        assert_governance_metadata_render_readback_fixture(tmp)
         assert_governance_intensity_metadata_preflight_fixture(tmp)
         assert_semantic_review_disposition_pr_gate_fixture(tmp)
         assert_governance_chain_closeout_fixture(tmp)
@@ -7485,6 +7700,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="merge-wrapper",
             fixture_group="merge-wrapper",
             run=run_merge_wrapper_surface,
+        ),
+        SurfaceCheck(
+            name="pr-metadata",
+            fixture_group="pr-metadata",
+            run=run_pr_metadata_surface,
         ),
         SurfaceCheck(
             name="aggregate",
