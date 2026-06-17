@@ -50,6 +50,14 @@ GENERATED_TREE_DRIFT_SURFACE = "generated-tree-drift"
 PACKAGE_METADATA_SURFACE = "package-metadata"
 CACHE_ARTIFACTS_SURFACE = "cache-artifacts"
 LAUNCHER_SMOKE_SURFACE = "launcher-smoke"
+REFERENCE_INTEGRITY_SURFACE = "reference-integrity"
+RUNTIME_COPY_PARITY_FILES = (
+    "registry.json",
+    "install-layout.json",
+    "upgrade-contract.json",
+    "route-matrix.md",
+    "distribution-and-adapter-contract.md",
+)
 
 
 @dataclass(frozen=True)
@@ -176,6 +184,63 @@ def write_wrapper(skill_id: str, target: Path) -> None:
 
 def relative_posix(from_dir: Path, target: Path) -> str:
     return os.path.relpath(target, from_dir).replace(os.sep, "/")
+
+
+def _inside(path: Path, root: Path) -> tuple[bool, str | None]:
+    try:
+        return True, str(path.resolve().relative_to(root.resolve()))
+    except Exception:
+        return False, None
+
+
+def _reference_target_base(path: Path, package_root: Path, runtime_root: Path) -> tuple[str, str]:
+    for label, root in (
+        ("runtime", runtime_root),
+        ("install", package_root),
+    ):
+        is_inside, relative = _inside(path, root)
+        if is_inside and relative is not None:
+            return label, relative
+    return "outside", path.as_posix()
+
+
+def is_markdown_file_reference(target: str) -> bool:
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
+        return False
+    return bool(target.strip())
+
+
+def is_json_file_reference(value: str) -> bool:
+    file_reference_prefixes = (
+        "../",
+        "./",
+        ".loom-runtime/",
+        "references/",
+        "scripts/",
+        "assets/",
+        "agents/",
+    )
+    return value.startswith(file_reference_prefixes)
+
+
+def validate_local_reference(path: Path, target: str, package_root: Path, runtime_root: Path, *, source: str) -> list[str]:
+    errors: list[str] = []
+    clean_target = target.split("#", 1)[0]
+    if not clean_target:
+        return errors
+    resolved = (path.parent / clean_target).resolve()
+    base, base_relative = _reference_target_base(resolved, package_root, runtime_root)
+    if base == "outside":
+        errors.append(
+            f"{path.relative_to(package_root)} {source} outside install/runtime (base={base}); "
+            f"target={target}"
+        )
+    elif not resolved.exists():
+        errors.append(
+            f"{path.relative_to(package_root)} {source} missing {base}:{base_relative}; "
+            f"target={target}"
+        )
+    return errors
 
 
 MARKDOWN_LINK_RE = re.compile(r"(!?\[[^\]]*\]\()([^)#][^) ]*)([^)]*\))")
@@ -416,11 +481,79 @@ def check_cache_artifacts_surface() -> None:
         )
 
 
+def compare_source_install_runtime_parity(source_root: Path, package_root: Path) -> list[str]:
+    errors: list[str] = []
+    for required in RUNTIME_COPY_PARITY_FILES:
+        source_path = source_root / required
+        install_path = package_root / required
+        if not source_path.is_file():
+            errors.append(f"missing source parity asset: {required}")
+            continue
+        if not install_path.is_file():
+            errors.append(f"missing install parity asset: {required}")
+            continue
+        if not filecmp.cmp(source_path, install_path, shallow=False):
+            errors.append(f"install parity drift: {required} differs from source/skills")
+    return errors
+
+
+def validate_reference_copy_parity(source_root: Path, package_root: Path, runtime_root: Path) -> list[str]:
+    errors: list[str] = []
+    for required in RUNTIME_COPY_PARITY_FILES:
+        source_path = source_root / required
+        runtime_path = runtime_root / required
+        if not source_path.is_file():
+            errors.append(f"missing source parity asset: {required}")
+            continue
+        if not runtime_path.is_file():
+            errors.append(f"{package_root.name}: runtime parity missing {required}")
+            continue
+        if not filecmp.cmp(source_path, runtime_path, shallow=False):
+            errors.append(f"{package_root.name}: runtime parity drift for {required}")
+    return errors
+
+
+def validate_reference_target_base(
+    package_root: Path,
+    metadata: dict[str, Any],
+) -> list[str]:
+    runtime_root = package_root / str(metadata.get("runtime_root", PRIVATE_RUNTIME_DIR))
+    if not runtime_root.is_dir():
+        return []
+    return assert_no_package_external_links(package_root, runtime_root)
+
+
+def check_reference_integrity_surface() -> None:
+    errors: list[str] = []
+    errors.extend(compare_source_install_runtime_parity(SOURCE_ROOT, TARGET_ROOT))
+    for entry in public_skill_entries(TARGET_ROOT):
+        package_root = TARGET_ROOT / entry["id"]
+        if not package_root.is_dir():
+            errors.append(f"missing generated package directory: {entry['id']}")
+            continue
+        metadata_path = package_root / "loom-package.json"
+        if not metadata_path.is_file():
+            errors.append(f"{entry['id']}: missing loom-package.json")
+            continue
+        metadata = read_json(metadata_path)
+        runtime_root = package_root / str(metadata.get("runtime_root", PRIVATE_RUNTIME_DIR))
+        errors.extend(validate_reference_copy_parity(SOURCE_ROOT, package_root, runtime_root))
+        errors.extend(validate_reference_target_base(package_root, metadata))
+
+    if errors:
+        raise SurfaceFailure(
+            surface_label=REFERENCE_INTEGRITY_SURFACE,
+            failure_name="skills_reference_integrity_invalid",
+            evidence_locator="src/skills; skills; skills/*/.loom-runtime",
+            details=errors,
+        )
+
+
 def iter_text_files(root: Path) -> list[Path]:
     return [path for path in root.rglob("*") if path.is_file() and path.suffix in TEXT_SUFFIXES]
 
 
-def assert_no_package_external_links(package_root: Path) -> list[str]:
+def assert_no_package_external_links(package_root: Path, runtime_root: Path) -> list[str]:
     errors: list[str] = []
     for path in iter_text_files(package_root):
         if PRIVATE_RUNTIME_DIR in path.parts:
@@ -428,34 +561,56 @@ def assert_no_package_external_links(package_root: Path) -> list[str]:
         text = path.read_text(encoding="utf-8")
         for match in MARKDOWN_LINK_RE.finditer(text):
             target = match.group(2)
-            if not target.startswith("../"):
+            if not is_markdown_file_reference(target):
                 continue
-            clean_target = target.split("#", 1)[0]
-            resolved = (path.parent / clean_target).resolve()
-            try:
-                resolved.relative_to(package_root.resolve())
-            except ValueError:
-                errors.append(f"{path.relative_to(package_root)} links outside package: {target}")
+            errors.extend(validate_local_reference(path, target, package_root, runtime_root, source="links"))
         if path.suffix == ".json":
-            payload = json.loads(text)
-            errors.extend(assert_json_paths_inside_package(payload, path, package_root))
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError as exc:
+                errors.append(f"{path.relative_to(package_root)} invalid JSON for reference scan: {exc.msg}")
+                continue
+            errors.extend(
+                assert_json_paths_inside_package(
+                    payload,
+                    path,
+                    package_root=package_root,
+                    runtime_root=runtime_root,
+                )
+            )
     return errors
 
 
-def assert_json_paths_inside_package(payload: Any, path: Path, package_root: Path) -> list[str]:
+def assert_json_paths_inside_package(
+    payload: Any,
+    path: Path,
+    *,
+    package_root: Path,
+    runtime_root: Path,
+) -> list[str]:
     errors: list[str] = []
     if isinstance(payload, dict):
         for value in payload.values():
-            errors.extend(assert_json_paths_inside_package(value, path, package_root))
+            errors.extend(
+                assert_json_paths_inside_package(
+                    value,
+                    path,
+                    package_root=package_root,
+                    runtime_root=runtime_root,
+                )
+            )
     elif isinstance(payload, list):
         for value in payload:
-            errors.extend(assert_json_paths_inside_package(value, path, package_root))
-    elif isinstance(payload, str) and payload.startswith("../"):
-        resolved = (path.parent / payload).resolve()
-        try:
-            resolved.relative_to(package_root.resolve())
-        except ValueError:
-            errors.append(f"{path.relative_to(package_root)} references outside package: {payload}")
+            errors.extend(
+                assert_json_paths_inside_package(
+                    value,
+                    path,
+                    package_root=package_root,
+                    runtime_root=runtime_root,
+                )
+            )
+    elif isinstance(payload, str) and is_json_file_reference(payload):
+        errors.extend(validate_local_reference(path, payload, package_root, runtime_root, source="JSON reference"))
     return errors
 
 
@@ -488,7 +643,8 @@ def validate_skill_package(package_root: Path, skill_id: str) -> list[str]:
     for required in ("registry.json", "install-layout.json", "upgrade-contract.json", "route-matrix.md"):
         if not (package_root / str(runtime_root) / required).exists():
             errors.append(f"{skill_id}: runtime missing {required}")
-    errors.extend(f"{skill_id}: {error}" for error in assert_no_package_external_links(package_root))
+    runtime_path = package_root / str(runtime_root) if isinstance(runtime_root, str) else package_root / PRIVATE_RUNTIME_DIR
+    errors.extend(f"{skill_id}: {error}" for error in assert_no_package_external_links(package_root, runtime_path))
     return errors
 
 
@@ -650,6 +806,12 @@ def available_surface_definitions() -> tuple[SurfaceDefinition, ...]:
             evidence_locator="skills/<skill-id>/loom-package.json; skills/<skill-id>/<launcher>",
             run=check_launcher_smoke_surface,
         ),
+        SurfaceDefinition(
+            label=REFERENCE_INTEGRITY_SURFACE,
+            failure_name="skills_reference_integrity_invalid",
+            evidence_locator="src/skills; skills; skills/*/.loom-runtime",
+            run=lambda _skill_ids: check_reference_integrity_surface(),
+        ),
     )
 
 
@@ -699,6 +861,7 @@ def check_surface(selected_surfaces: list[str] | None = None, *, skill_ids: tupl
     check_selected_surfaces([CACHE_ARTIFACTS_SURFACE], emit_success=False)
     check_selected_surfaces([GENERATED_TREE_DRIFT_SURFACE], emit_success=False)
     check_selected_surfaces([PACKAGE_METADATA_SURFACE], emit_success=False)
+    check_selected_surfaces([REFERENCE_INTEGRITY_SURFACE], emit_success=False)
     check_selected_surfaces([LAUNCHER_SMOKE_SURFACE], emit_success=False)
 
 
