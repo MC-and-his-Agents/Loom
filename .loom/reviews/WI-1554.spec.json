@@ -1,0 +1,42 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1554",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1554 minimal suite is approved for the first merge wrapper PR argument slice: it fixes the `loom merge check/run` positional PR contract, validates placeholder rejection and numeric PR forwarding, and explicitly excludes retained Work Item parsing, closeout wrapper/runtime surfaces, hosted admission, classifier taxonomy, closeout freeze semantics, release behavior, and final milestone closeout.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-17T16:56:00Z",
+  "reviewed_head": "39db7bae33830e27daee885b6fb526b61009fa60",
+  "reviewed_validation_summary": "2026-06-17T16:56Z WI-1554 targeted validation passed at reviewed head `39db7bae33830e27daee885b6fb526b61009fa60`: `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1554 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge check pr` failed closed in the wrapper with `argument pr-number: invalid int value: 'pr'`; `git diff --check`.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "follow-up-remaining-1554-surfaces",
+      "summary": "#1554 remains open for `closeout`, `gate closeout`, and `closeout --item` wrapper/runtime contract coverage.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "This first slice only approves the merge wrapper PR argument contract."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1554 follow-up must cover closeout wrapper/runtime surfaces before issue closeout.",
+    "#1555 remains separate and blocked by #1494/#1543 consumption."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1554.md",
+    "recovery_entry": ".loom/progress/WI-1554.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1554 --json",
+    "suite_spec": ".loom/specs/WI-1554/spec.md",
+    "suite_plan": ".loom/specs/WI-1554/plan.md",
+    "suite_implementation_contract": ".loom/specs/WI-1554/implementation-contract.md",
+    "suite_evidence_map": ".loom/specs/WI-1554/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1554/task-carrier.md"
+    ]
+  }
+}

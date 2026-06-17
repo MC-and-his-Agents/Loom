@@ -287,6 +287,64 @@ def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None 
     return completed.returncode, payload
 
 
+def assert_merge_wrapper_pr_argument_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for merge wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    original_emit_flow = module.emit_flow
+    module.emit_flow = fake_emit_flow
+    try:
+        status = module.handle_merge(
+            [
+                "check",
+                "1288",
+                "--work-item",
+                "WI-1287",
+                "--head-sha",
+                "fixture-head",
+                "--merge-method",
+                "squash",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("merge wrapper regression did not complete")
+        if captured.get("command") != "merge check":
+            raise AssertionError("merge wrapper did not preserve merge check command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list):
+            raise AssertionError("merge wrapper did not delegate to controlled-merge")
+        try:
+            pr_index = flow_args.index("--pr")
+        except ValueError as exc:
+            raise AssertionError("merge wrapper did not pass --pr to controlled-merge") from exc
+        if flow_args[pr_index + 1] != "1288":
+            raise AssertionError("merge wrapper passed the subcommand placeholder instead of the PR number")
+        if "pr" in flow_args:
+            raise AssertionError("merge wrapper leaked the literal `pr` placeholder to controlled-merge")
+        if "--merge-method" not in flow_args or flow_args[flow_args.index("--merge-method") + 1] != "squash":
+            raise AssertionError("merge wrapper did not preserve merge method")
+        try:
+            module.handle_merge(["check", "pr"])
+        except SystemExit as exc:
+            if exc.code == 0:
+                raise AssertionError("merge wrapper accepted literal `pr` as a PR number")
+        else:
+            raise AssertionError("merge wrapper accepted literal `pr` as a PR number")
+    finally:
+        module.emit_flow = original_emit_flow
+
+
 def retained_closeout_work_item_id() -> str | None:
     candidates: list[tuple[str, str, str]] = []
     for path in sorted((REPO_ROOT / ".loom" / "progress").glob("WI-*.md")):
@@ -5091,7 +5149,13 @@ def run_adoption_host_metadata_surface() -> None:
     print("adoption host metadata surface checks passed")
 
 
+def run_merge_wrapper_surface() -> None:
+    assert_merge_wrapper_pr_argument_contract()
+    print("merge wrapper surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
+    assert_merge_wrapper_pr_argument_contract()
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
     commands = set(matrix)
@@ -7123,6 +7187,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="adoption-host-metadata",
             fixture_group="adoption-host-metadata",
             run=run_adoption_host_metadata_surface,
+        ),
+        SurfaceCheck(
+            name="merge-wrapper",
+            fixture_group="merge-wrapper",
+            run=run_merge_wrapper_surface,
         ),
         SurfaceCheck(
             name="aggregate",
