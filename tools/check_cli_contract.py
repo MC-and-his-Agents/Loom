@@ -5375,6 +5375,7 @@ def run_merge_wrapper_surface() -> None:
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
+    loom_flow = load_loom_flow_module()
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
     commands = set(matrix)
@@ -5436,6 +5437,40 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError("gate freeze check must remain read-only")
     if "input_bindings" not in freeze_payload or "readiness" not in freeze_payload:
         raise AssertionError("gate freeze check must expose input_bindings and readiness diagnostics")
+    classifier_payload = loom_flow.failure_classifier_payload(
+        [
+            {"input": "carrier_refresh", "failure_kind": "carrier_refresh_stale"},
+            {"input": "shadow_freshness", "failure_kind": "shadow_source_hash_drift"},
+            {"input": "review_binding", "failure_kind": "head_binding_drift"},
+            {"input": "suite_evidence_validation", "failure_kind": "stale_evidence"},
+            {"input": "suite_carrier_validation", "failure_kind": "carrier_truth_conflict"},
+            {"input": "command_surface", "failure_kind": "unsupported_command_surface"},
+            {"input": "release_requiredness", "failure_kind": "release_evidence_phase_error"},
+            {"input": "host_readback", "failure_kind": "host_api_unreadable"},
+            {"input": "host_readback", "failure_kind": "permission"},
+            {"input": "hosted_admission", "failure_kind": "hosted_snapshot_mismatch"},
+        ]
+    )
+    required_classifiers = {
+        "carrier_refresh_needed",
+        "shadow_stale",
+        "review_stale",
+        "suite_evidence_contract_invalid",
+        "task_carrier_contract_invalid",
+        "unsupported_command_surface",
+        "release_evidence_phase_error",
+        "host_api_unreadable",
+        "permission",
+        "hosted_snapshot_mismatch",
+    }
+    supported_classifiers = set(classifier_payload.get("supported_classifiers", []))
+    if required_classifiers - supported_classifiers:
+        raise AssertionError(f"failure classifier supported vocabulary missing {sorted(required_classifiers - supported_classifiers)}")
+    observed_classifiers = {finding.get("classifier") for finding in classifier_payload.get("findings", [])}
+    if required_classifiers - observed_classifiers:
+        raise AssertionError(f"failure classifier mapping missing {sorted(required_classifiers - observed_classifiers)}")
+    if not all(finding.get("next_action") for finding in classifier_payload.get("findings", [])):
+        raise AssertionError("failure classifier findings must include next_action")
     subject = freeze_payload.get("snapshot_subject")
     input_bindings = freeze_payload.get("input_bindings", {})
     pr_metadata = input_bindings.get("pr_metadata") if isinstance(input_bindings, dict) else None
@@ -5546,6 +5581,13 @@ def run_aggregate_cli_contract() -> None:
             if isinstance(blocking, dict)
         ):
             raise AssertionError("gate freeze PR body pin block must include the gh pr edit/readback next action")
+        body_hash_drift_classifiers = {
+            finding.get("classifier")
+            for finding in body_hash_drift_payload.get("failure_classifier", {}).get("findings", [])
+            if isinstance(finding, dict)
+        }
+        if "pr_metadata_drift" not in body_hash_drift_classifiers:
+            raise AssertionError("gate freeze PR body hash drift must classify as pr_metadata_drift")
 
         carrier_drift_body.write_text(
             governance_metadata_body(item=freeze_item, branch=branch, head_sha="2" * 40),
@@ -5577,6 +5619,13 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("gate freeze PR body pin must block machine carrier binding drift")
         if not any("PR metadata preflight:" in str(message) for message in carrier_drift.get("missing_inputs", [])):
             raise AssertionError("gate freeze PR body pin must preserve preflight carrier mismatch messages")
+        carrier_drift_classifiers = {
+            finding.get("classifier")
+            for finding in carrier_drift_payload.get("failure_classifier", {}).get("findings", [])
+            if isinstance(finding, dict)
+        }
+        if "pr_metadata_drift" not in carrier_drift_classifiers:
+            raise AssertionError("gate freeze carrier binding drift must classify as pr_metadata_drift")
     finally:
         for path in (rendered_pr_body, readback_pr_body, readback_pr_body_drift, carrier_drift_body):
             if path.exists():
