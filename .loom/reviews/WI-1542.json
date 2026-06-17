@@ -3,11 +3,11 @@
   "item_id": "WI-1542",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1542 terminal closeout sync is approved at head 6656dd2cd7ca61d789d0d5b13d2fb8ce4376bd63: PR #1551 terminalizes the repo-local WI-1542 carrier after PR #1550 merged, adds the minimal terminal closeout gate compatibility fix for hosted-only retained review/spec heads, and refreshes the required demo bootstrap fixture plus root shadow evidence consumed by hosted checks.",
+  "summary": "WI-1542 terminal closeout sync is approved at head d932b689f87e9539d022f8f2634da9ff7b125fe5: PR #1551 terminalizes the repo-local WI-1542 carrier after PR #1550 merged, adds the minimal terminal closeout gate compatibility fix for hosted-only retained review/spec heads, refreshes the required demo bootstrap fixture plus root shadow evidence, and fixes the aggregate release-judgment fixture to keep PR head metadata synchronized after fixture commits.",
   "reviewer": "codex",
-  "authored_at": "2026-06-17T15:32:09Z",
-  "reviewed_head": "6656dd2cd7ca61d789d0d5b13d2fb8ce4376bd63",
-  "reviewed_validation_summary": "2026-06-17T15:32Z WI-1542 terminal closeout sync, hosted old-review-head compatibility, demo bootstrap fixture, and shadow parity refresh validation passed at head 6656dd2cd7ca61d789d0d5b13d2fb8ce4376bd63: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`; pre-review `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` correctly blocked only on stale review for the newly refreshed demo fixture files, so review is refreshed at this head.",
+  "authored_at": "2026-06-17T15:46:09Z",
+  "reviewed_head": "d932b689f87e9539d022f8f2634da9ff7b125fe5",
+  "reviewed_validation_summary": "2026-06-17T15:46Z WI-1542 terminal closeout sync, hosted old-review-head compatibility, demo bootstrap fixture, shadow parity refresh, and aggregate release-judgment regression validation passed at head d932b689f87e9539d022f8f2634da9ff7b125fe5: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.",
   "fallback_to": null,
   "findings": [
     {
@@ -46,8 +46,8 @@
     "local_pr_gate": "pass",
     "terminal_closeout_consumption": "pass",
     "head_binding": {
-      "reviewed_head": "6656dd2cd7ca61d789d0d5b13d2fb8ce4376bd63",
-      "current_head": "6656dd2cd7ca61d789d0d5b13d2fb8ce4376bd63",
+            "reviewed_head": "d932b689f87e9539d022f8f2634da9ff7b125fe5",
+            "current_head": "d932b689f87e9539d022f8f2634da9ff7b125fe5",
       "status": "fresh",
       "stale": false
     }
