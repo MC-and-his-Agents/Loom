@@ -1,0 +1,43 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1542",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1542 retained Work Item lookup ranking is approved: canonical issue-number carrier path, canonical item id, and exact associated artifact issue locator now outrank historical recovery text mentions; true same-strength ambiguity remains fail-closed; generated skills runtime copies and focused regression coverage are present.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-17T13:30:00Z",
+  "reviewed_head": "95dcb534a6fc96a3da1a02751b6dc0b1402b1710",
+  "reviewed_validation_summary": "2026-06-17T13:24Z WI-1542 validation passed: `python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py`; `python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract`; `git diff --check`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/skills_surface.py check --surface package-metadata`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1543 can build closeout queue/status UX on top of the retained lookup ranking.",
+    "#1515 should consume the #1544 closeout readback after WI-1542 lands."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1542.md",
+    "recovery_entry": ".loom/progress/WI-1542.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "minimal",
+    "suite_evidence_map": ".loom/specs/WI-1542/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1542/task-carrier.md"
+    ],
+    "implementation": "src/skills/shared/scripts/loom_flow.py",
+    "regression": "test/retained_item_lookup_test.py",
+    "generated_surface_validation": "python3 tools/skills_surface.py check --surface generated-tree-drift"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "The patch is limited to retained lookup ranking, generated runtime parity, and focused tests; it leaves closeout queue UX, hosted admission, classifier vocabulary, closeout profile semantics, release behavior, and external host writes out of scope."
+  },
+  "head_binding": {
+    "reviewed_head": "95dcb534a6fc96a3da1a02751b6dc0b1402b1710",
+    "current_head": "95dcb534a6fc96a3da1a02751b6dc0b1402b1710",
+    "status": "current",
+    "stale": false,
+    "changed_paths": [],
+    "disallowed_paths": []
+  }
+}
