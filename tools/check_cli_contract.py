@@ -291,6 +291,25 @@ def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None 
     return completed.returncode, payload
 
 
+def assert_repo_local_closeout_runtime_argument_contract() -> None:
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    completed = subprocess.run(
+        [sys.executable, str(REPO_ROOT / ".loom" / "bin" / "loom_flow.py"), "closeout", "check", "--help"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(f"repo-local closeout runtime help failed\n{completed.stderr}\n{completed.stdout}")
+    help_text = completed.stdout + completed.stderr
+    if "--item" not in help_text:
+        raise AssertionError("repo-local closeout runtime must accept --item for wrapper/runtime contract parity")
+
+
 def assert_merge_wrapper_pr_argument_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -3932,6 +3951,8 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
         "check",
         "--target",
         str(pass_target),
+        "--item",
+        fixture["item"],
         "--issue",
         fixture["issue"],
         "--pr",
@@ -4000,6 +4021,40 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     )
     if reconciliation_payload.get("result") != "pass" or reconciliation_payload.get("findings"):
         raise AssertionError("governance chain reconciliation pass fixture drifted")
+
+    mismatched_item = "WI-closeout-mismatch"
+    (pass_target / ".loom" / "work-items" / f"{mismatched_item}.md").write_text(
+        "# WI-closeout-mismatch\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {mismatched_item}\n"
+        "- Goal: Fixture wrong retained item for closeout item mismatch.\n"
+        "- Scope: Closeout mismatch regression only.\n"
+        "- Execution Path: issue #9999 -> branch fixture -> PR #9999.\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{mismatched_item}.md\n"
+        f"- Review Entry: .loom/reviews/{mismatched_item}.json\n"
+        "- Validation Entry: closeout mismatch fixture\n"
+        "- Closing Condition: closeout must reject issue/item mismatch.\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{mismatched_item}.md`\n"
+        "- `https://github.com/owner/repo/issues/9999`\n",
+        encoding="utf-8",
+    )
+    mismatched_item_command = command.copy()
+    mismatched_item_command[mismatched_item_command.index("--item") + 1] = mismatched_item
+    _, mismatched_item_payload = run_flow_json(mismatched_item_command, expect=1)
+    missing_inputs = mismatched_item_payload.get("missing_inputs", [])
+    if (
+        mismatched_item_payload.get("result") != "block"
+        or not isinstance(missing_inputs, list)
+        or not any(
+            isinstance(entry, str)
+            and entry.startswith("retained-item lookup:")
+            and "does not match retained-item lookup for issue" in entry
+            for entry in missing_inputs
+        )
+    ):
+        raise AssertionError("closeout --item mismatch did not fail closed through retained-item lookup")
 
     review_path = pass_target / ".loom" / "reviews" / f"{fixture['item']}.json"
     review_payload = json.loads(review_path.read_text(encoding="utf-8"))
@@ -5558,6 +5613,7 @@ def assert_idle_root_self_governance_direct_contract() -> None:
 def run_governance_closeout_contract() -> None:
     assert_governance_closeout_help_contract()
     assert_closeout_wrapper_argument_contract()
+    assert_repo_local_closeout_runtime_argument_contract()
     active_item = active_work_item_id()
     assert_active_closeout_contract(active_item)
     assert_idle_root_self_governance_direct_contract()
