@@ -3,11 +3,11 @@
   "item_id": "WI-1532",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head review allow: WI-1532 head f33d8b34 refreshes closeout merge containment to fetch the explicit target branch before local ancestry checks, syncs source/shared/runtime/demo fixture surfaces, and preserves the local closeout freeze admission scope. Validation passed: source-self-fixture including adversarial-adoption, make py-compile, make loom-demo-new-project-check, git diff --check, and full make loom-check with 45 source/distribution surfaces.",
+  "summary": "Current-head review allow: WI-1532 head 56848eec preserves explicit target-branch freshness while adding git fetch --no-write-fetch-head so closeout freeze check no longer mutates FETCH_HEAD. Source/shared runtime, skill runtime copies, and demo bootstrap manifest hashes are synchronized. Validation passed: targeted closeout freeze profile fixture, py-compile, demo bootstrap fixture drift, git diff --check, and full tools/check_cli_contract.py all 9 surfaces in 553.57s.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-18T09:09:12Z",
-  "reviewed_head": "f33d8b34b89389ae55e47a397f4d664ef5424931",
-  "reviewed_validation_summary": "2026-06-18T09:00Z-09:16Z validation passed for WI-1532 branch work/1532-closeout-freeze-admission head f33d8b34b89389ae55e47a397f4d664ef5424931: python3 src/skills/shared/scripts/loom_check.py --profile source --source-surface source-self-fixture passed with adversarial-adoption failures=0; make py-compile passed; make loom-demo-new-project-check passed after committed fixture sync; git diff --check passed; make loom-check passed full source_surface=full with 45 source/distribution surfaces.",
+  "authored_at": "2026-06-18T09:47:26Z",
+  "reviewed_head": "56848eecf64120cfcd2bd898dcf2f9cd3e1d8f98",
+  "reviewed_validation_summary": "2026-06-18T09:27Z-09:46Z validation passed for WI-1532 branch work/1532-closeout-freeze-admission head 56848eecf64120cfcd2bd898dcf2f9cd3e1d8f98: targeted closeout freeze profile fixture passed; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py passed; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed; git diff --check passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py passed all 9 CLI contract surfaces in 553.57s.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
