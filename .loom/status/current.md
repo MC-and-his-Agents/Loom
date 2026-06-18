@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1533
-- Goal: Implement the closeout-specific gate output contract so closeout-only PRs can expose a stable verdict, escalation reason, and next action while failing closed to full review / guardian when risk signals appear.
-- Scope: Issue #1533 only: add `loom-closeout-specific-gate/v1` output to closeout freeze and closeout-surface PR gate payloads; preserve existing closeout freeze / PR gate pass-block semantics; add targeted fixtures and sync generated runtime copies. Do not implement #1534 docs/skills convergence, #1515 release/no-release closeout, #1555 closeout run changes, host writes, or batch closeout behavior.
-- Execution Path: issue #1533 -> branch work/1533-closeout-specific-gate -> closeout-specific gate runtime output -> generated runtime parity -> targeted fixture validation -> PR.
+- Item ID: WI-1578
+- Goal: Fix PR metadata closeout surface rendering so closeout-only carrier PRs can be recognized by PR gate.
+- Scope: Issue #1578 only: make `loom pr metadata-render/readback/preflight/update --surface closeout` emit and consume a `closeout` PR metadata machine surface while preserving `merge_ready` compatibility for review and pre-review consumers. Keep #1577 carrier content, hosted checks, controlled merge, release/no-release closeout, and one-shot closeout run out of scope.
+- Execution Path: issue #1578 -> branch work/1578-pr-metadata-closeout-surface -> PR metadata closeout surface runtime -> focused pr-metadata contract check -> generated runtime parity -> PR
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1533.md
-- Review Entry: .loom/reviews/WI-1533.json
-- Validation Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py`; `git diff --check`; suite evidence/carrier validation.
-- Closing Condition: PR for #1533 is merged, issue #1533 is closed/completed, and #1534/#1515 can consume the closeout-specific gate verdict fields as stable.
-- Current Checkpoint: review
-- Current Stop: Current-head spec review and implementation review recorded for WI-1533 at 047e2673 after subagent blocker fixes. Implementation contract, review carriers, targeted fixtures, generated runtime parity, suite evidence/carrier validation, and shadow parity are ready for PR metadata/readback.
-- Next Step: Commit review/carrier artifacts, push branch, render/readback PR metadata, then run local and hosted PR gates.
+- Recovery Entry: .loom/progress/WI-1578.md
+- Review Entry: .loom/reviews/WI-1578.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; git diff --check
+- Closing Condition: PR for #1578 is merged, issue #1578 is closed, and PR #1577 can regenerate/readback closeout metadata with `surface=closeout`.
+- Current Checkpoint: closed_out
+- Current Stop: Host readback consumed: PR #1579 merged into main at 6dd205e70b2dd49517b5fb0c1454a4736568030d, and issue #1578 is closed.
+- Next Step: No further action for this carrier; retained as terminal evidence for milestone/12 convergence.
 - Blockers: None
-- Latest Validation Summary: 2026-06-18T19:06Z validation passed for WI-1533 branch work/1533-closeout-specific-gate at head 047e2673: subagent review allow; spec review record allow; implementation review record allow; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout passed; python3 tools/skills_surface.py check --surface generated-tree-drift passed; python3 tools/loom.py suite validate --target . --item WI-1533 --json passed; python3 tools/loom.py suite evidence validate --target . --item WI-1533 --json passed; python3 tools/loom.py suite carrier validate --target . --item WI-1533 --json passed; python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py passed; git diff --check passed.
-- Recovery Boundary: WI-1533/#1533 only. Do not implement #1534 docs/skills convergence, #1515 release/no-release final closeout, #1555 closeout run changes, host writes, or batch closeout behavior.
-- Current Lane: milestone-12-wave2-closeout-specific-gate
+- Latest Validation Summary: 2026-06-18T12:42Z validation passed for WI-1578 head 9ed1fc07: make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; direct closeout metadata render/readback/preflight fixture; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/check_cli_contract.py; make loom-check; PR #1579 metadata readback surface merge_ready head_sha 9ed1fc07; code/spec review records refreshed to 9ed1fc07.
+- Recovery Boundary: WI-1578/#1578 only. Do not modify #1577 closeout-only carrier files, hosted workflow semantics, controlled merge behavior, release/no-release closeout, or one-shot post-merge closeout run.
+- Current Lane: milestone-12-pr-metadata-closeout-surface-fix
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1533.md
-- Dynamic Truth: .loom/progress/WI-1533.md
+- Static Truth: .loom/work-items/WI-1578.md
+- Dynamic Truth: .loom/progress/WI-1578.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
