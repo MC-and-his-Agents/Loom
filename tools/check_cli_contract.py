@@ -4059,6 +4059,7 @@ def append_governance_intensity_metadata_body(
     *,
     include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
+    surface: str = "merge_ready",
 ) -> None:
     pr_path = target / fixture["pr_file"]
     payload = json.loads(pr_path.read_text(encoding="utf-8"))
@@ -4068,6 +4069,7 @@ def append_governance_intensity_metadata_body(
         head_sha=payload["headRefOid"],
         include_legacy_bindings=include_legacy_bindings,
         fields_override=fields_override,
+        surface=surface,
     )
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -4355,6 +4357,17 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     target.mkdir()
     fixture = write_semantic_review_pr_gate_fixture(target)
     item = fixture["item"]
+    write_hosted_freeze_admission_inputs(target)
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture terminal closeout hosted admission inputs"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
     progress_path = target / ".loom" / "progress" / f"{item}.md"
     status_path = target / ".loom" / "status" / "current.md"
     task_carrier_path = target / ".loom" / "specs" / item / "task-carrier.md"
@@ -4395,7 +4408,7 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     commit_fixture_file(target, ".loom/status/current.md", "fixture terminal closeout status")
     commit_fixture_file(target, f".loom/specs/{item}/task-carrier.md", "fixture terminal closeout task carrier")
     update_fixture_pr_head(target, fixture)
-    append_pr_metadata_surface(target, fixture, surface="closeout")
+    append_governance_intensity_metadata_body(target, fixture, surface="closeout")
     closeout_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
     checkpoint_step = next(
         (
@@ -4421,6 +4434,84 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
             "terminal closeout pr-gate fixture did not pass: "
             f"{closeout_payload.get('missing_inputs')}; steps={step_names}"
         )
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    hosted_body_file = f".loom/fixtures/{item}/closeout-hosted-pr-body.md"
+    (target / hosted_body_file).write_text(pr_payload["body"], encoding="utf-8")
+    hosted_closeout_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        surface="closeout",
+        body_file=hosted_body_file,
+        compare_body_file=hosted_body_file,
+    )
+    hosted_admission = hosted_closeout_payload.get("hosted_freeze_admission", {})
+    hosted_freeze_surface = (
+        hosted_admission.get("recomputed_freeze", {})
+        .get("snapshot_subject", {})
+        .get("surface")
+    )
+    hosted_carrier_refresh = (
+        hosted_admission.get("recomputed_freeze", {})
+        .get("input_bindings", {})
+        .get("carrier_refresh", {})
+    )
+    if (
+        hosted_closeout_payload.get("result") != "pass"
+        or hosted_admission.get("result") != "pass"
+        or hosted_freeze_surface != "closeout"
+        or hosted_carrier_refresh.get("result") != "pass"
+    ):
+        raise AssertionError(
+            "terminal closeout hosted admission did not preserve closeout surface: "
+            f"result={hosted_closeout_payload.get('result')}; "
+            f"admission={hosted_admission.get('result')}; "
+            f"freeze_surface={hosted_freeze_surface}; "
+            f"carrier_refresh={hosted_carrier_refresh.get('result')}; "
+            f"missing={hosted_closeout_payload.get('missing_inputs')}"
+        )
+    _, direct_carrier_refresh = run_flow_json(
+        [
+            "carrier",
+            "refresh",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--surface",
+            "closeout",
+        ]
+    )
+    if direct_carrier_refresh.get("result") != "pass" or direct_carrier_refresh.get("surface") != "closeout":
+        raise AssertionError(
+            "carrier refresh --surface closeout did not consume terminal closeout carrier paths: "
+            f"{direct_carrier_refresh.get('missing_inputs')}"
+        )
+    _, direct_gate_freeze = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--surface",
+            "closeout",
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--body-file",
+            hosted_body_file,
+            "--compare-body-file",
+            hosted_body_file,
+        ]
+    )
+    if (
+        direct_gate_freeze.get("result") != "pass"
+        or direct_gate_freeze.get("snapshot_subject", {}).get("surface") != "closeout"
+    ):
+        raise AssertionError(
+            "gate-freeze --surface closeout did not emit a hosted closeout freeze snapshot: "
+            f"{direct_gate_freeze.get('missing_inputs')}"
+        )
 
     spec_review_path = target / ".loom" / "reviews" / f"{item}.spec.json"
     spec_review = json.loads(spec_review_path.read_text(encoding="utf-8"))
@@ -4428,7 +4519,7 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     spec_review_path.write_text(json.dumps(spec_review, indent=2) + "\n", encoding="utf-8")
     commit_fixture_file(target, f".loom/reviews/{item}.spec.json", "fixture unreachable spec review head")
     update_fixture_pr_head(target, fixture)
-    append_pr_metadata_surface(target, fixture, surface="closeout")
+    append_governance_intensity_metadata_body(target, fixture, surface="closeout")
     unreachable_spec_head_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
     if (
         unreachable_spec_head_payload.get("result") != "pass"
@@ -4439,7 +4530,7 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
             f"{unreachable_spec_head_payload.get('missing_inputs')}"
         )
 
-    append_pr_metadata_surface(target, fixture, surface="merge_ready")
+    append_governance_intensity_metadata_body(target, fixture, surface="merge_ready")
     merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="merge_ready")
     if merge_ready_payload.get("result") == "pass" or merge_ready_payload.get("terminal_closeout_consumption", {}).get("result") != "block":
         raise AssertionError("terminal closeout retained review bypassed a non-closeout PR metadata surface")
