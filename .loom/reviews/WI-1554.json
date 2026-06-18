@@ -3,42 +3,52 @@
   "item_id": "WI-1554",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1554 PR #1570 implementation is approved for the reopened wrapper/runtime parameter contract slice: runtime pr-gate now accepts an explicit metadata surface, defaults to the PR body machine surface when present, and only falls back to merge_ready otherwise; tools/loom.py forwards `loom pr --surface closeout gate <pr>` to runtime; focused wrapper, pr-metadata, governance-closeout, generated-tree, demo bootstrap, compile, and diff checks passed.",
+  "summary": "WI-1554 PR #1571 is approved for the reopened closeout runtime item contract slice: repo-local closeout now accepts --item, explicit retained-item lookup is checked against issue lookup, bootstrap manifest/init-result hashes are refreshed, and governance-closeout regression covers parser exposure plus item mismatch. This review does not approve #1555 one-shot closeout or #1494 retained item expansion.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-18T02:04:31Z",
-  "reviewed_head": "26558c2a7f2fba00f83647579f05144d2d6be785",
-  "reviewed_validation_summary": "2026-06-18T02:04Z targeted validation passed for PR #1570 carrier-aligned head 26558c2a7f2fba00f83647579f05144d2d6be785: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py skills/loom-adopt/.loom-runtime/shared/scripts/loom_flow.py skills/loom-build/.loom-runtime/shared/scripts/loom_flow.py skills/loom-handoff/.loom-runtime/shared/scripts/loom_flow.py skills/loom-init/.loom-runtime/shared/scripts/loom_flow.py skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_flow.py skills/loom-pre-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-resume/.loom-runtime/shared/scripts/loom_flow.py skills/loom-retire/.loom-runtime/shared/scripts/loom_flow.py skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1554; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1554 --dry-run --output .loom/bootstrap/init-result.json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-readback 1570 --surface merge_ready --readback-file .loom/runtime/pr/WI-1554-pr-gate-closeout-surface-readback.md --json; git diff --check.",
+  "authored_at": "2026-06-18T02:43:21Z",
+  "reviewed_head": "2b0dc891ec6f16e47cac6517d7780f163b994f8c",
+  "reviewed_validation_summary": "2026-06-18T02:40Z targeted validation passed for PR #1571 head 2b0dc891ec6f16e47cac6517d7780f163b994f8c: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile .loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py runtime-state --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-readback 1571 --surface merge_ready --readback-file .loom/runtime/pr/WI-1554-closeout-item-runtime-contract-readback.md --json; CODEX_EXPORT_GH_TOKEN=1 PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py closeout check --target . --item WI-1554 --issue 1554 --pr 1570 --branch work/1554-pr-gate-closeout-surface reached expected business closeout blocker instead of runtime crash; git diff --check.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "#1541/#1555 can still improve closeout PR body authoring and one-shot post-merge closeout orchestration; this review covers only pr-gate surface consumption and wrapper passthrough.",
-    "#1514/#1534/#1515 must read back #1554 PR #1570 merge and closeout evidence before milestone/12 convergence."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1554.md",
     "recovery_entry": ".loom/progress/WI-1554.md",
     "status_surface": ".loom/status/current.md",
-    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1570",
-    "local_validation": [
-      "PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py skills/loom-adopt/.loom-runtime/shared/scripts/loom_flow.py skills/loom-build/.loom-runtime/shared/scripts/loom_flow.py skills/loom-handoff/.loom-runtime/shared/scripts/loom_flow.py skills/loom-init/.loom-runtime/shared/scripts/loom_flow.py skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_flow.py skills/loom-pre-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-resume/.loom-runtime/shared/scripts/loom_flow.py skills/loom-retire/.loom-runtime/shared/scripts/loom_flow.py skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py",
-      "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata",
-      "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout",
-      "PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift",
-      "make loom-demo-new-project-check",
-      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .",
-      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1554",
-      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1554 --dry-run --output .loom/bootstrap/init-result.json",
-      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking",
-      "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-readback 1570 --surface merge_ready --readback-file .loom/runtime/pr/WI-1554-pr-gate-closeout-surface-readback.md --json",
-      "git diff --check"
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1554-closeout-item-runtime-contract/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1554-closeout-item-runtime-contract --item WI-1554 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1554-closeout-item-runtime-contract/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1554-closeout-item-runtime-contract --item WI-1554 --json",
+    "suite_evidence_map": ".loom/specs/WI-1554/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1554/task-carrier.md"
     ],
-    "head_binding": {
-      "reviewed_head": "26558c2a7f2fba00f83647579f05144d2d6be785",
-      "current_head": "26558c2a7f2fba00f83647579f05144d2d6be785",
-      "status": "fresh",
-      "stale": false
-    }
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
   },
   "semantic_review_disposition": {
     "status": "passed",
