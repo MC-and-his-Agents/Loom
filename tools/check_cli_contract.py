@@ -99,6 +99,7 @@ REQUIRED_COMMANDS = {
     "gate freeze check",
     "gate freeze write",
     "gate closeout",
+    "closeout run",
     "host list",
     "host doctor",
     "host install",
@@ -383,6 +384,8 @@ def assert_closeout_wrapper_argument_contract() -> None:
     spec.loader.exec_module(module)
 
     captured: dict[str, Any] = {}
+    flow_payload_calls: list[dict[str, Any]] = []
+    emitted_payloads: list[dict[str, Any]] = []
 
     def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
         captured.clear()
@@ -396,9 +399,31 @@ def assert_closeout_wrapper_argument_contract() -> None:
         captured["command"] = command
         captured["flow_args"] = flow_args
         captured["fallback_to"] = fallback_to
-        return {"command": command}
+        flow_payload_calls.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
+        payload: dict[str, Any] = {"command": command, "result": "pass"}
+        if flow_args[:2] == ["closeout", "check"]:
+            payload.update(
+                {
+                    "issue": {
+                        "number": 1555,
+                        "state": "CLOSED",
+                        "closedAt": "2026-06-18T10:00:00Z",
+                        "url": "https://github.com/MC-and-his-Agents/Loom/issues/1555",
+                    },
+                    "pr": {
+                        "number": 1563,
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "mergedAt": "2026-06-18T09:55:00Z",
+                        "url": "https://github.com/MC-and-his-Agents/Loom/pull/1563",
+                        "mergeCommit": {"oid": "fixture-merge-sha"},
+                    },
+                }
+            )
+        return payload
 
     def fake_emit(_payload: dict[str, Any]) -> int:
+        emitted_payloads.append(_payload)
         return 0
 
     original_emit_flow = module.emit_flow
@@ -498,6 +523,194 @@ def assert_closeout_wrapper_argument_contract() -> None:
         for flag, expected in (("--item", "WI-1554"), ("--issue", "1554")):
             if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
                 raise AssertionError(f"gate closeout wrapper did not preserve {flag}")
+
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1555",
+                "--issue",
+                "1555",
+                "--pr",
+                "1563",
+                "--project",
+                "4",
+                "--phase",
+                "1504",
+                "--fr",
+                "1505",
+                "--branch",
+                "work/1555-one-shot-closeout-run",
+                "--goal-completion",
+                ".loom/goal-completion.json",
+                "--gate-profile",
+                "closeout-contract",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--comment",
+                "closeout comment",
+                "--issue-payload-file",
+                ".loom/fixtures/issue.json",
+                "--pr-payload-file",
+                ".loom/fixtures/pr.json",
+                "--project-payload-file",
+                ".loom/fixtures/project.json",
+                "--status-checks-file",
+                ".loom/fixtures/checks.json",
+                "--branch-protection-file",
+                ".loom/fixtures/protection.json",
+                "--ruleset-file",
+                ".loom/fixtures/ruleset.json",
+                "--skip-gate",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run wrapper regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [["reconciliation", "sync"], ["closeout", "check"], ["carrier", "closeout-sync"]]:
+            raise AssertionError(f"closeout run dry-run delegated unexpected runtime sequence: {call_heads}")
+        reconciliation_args = flow_payload_calls[0]["flow_args"]
+        closeout_args = flow_payload_calls[1]["flow_args"]
+        carrier_args = flow_payload_calls[2]["flow_args"]
+        for flag, expected in {
+            "--item": "WI-1555",
+            "--issue": "1555",
+            "--pr": "1563",
+            "--project": "4",
+            "--phase": "1504",
+            "--fr": "1505",
+            "--branch": "work/1555-one-shot-closeout-run",
+            "--owner": "MC-and-his-Agents",
+            "--repo": "Loom",
+            "--comment": "closeout comment",
+            "--issue-payload-file": ".loom/fixtures/issue.json",
+            "--pr-payload-file": ".loom/fixtures/pr.json",
+            "--project-payload-file": ".loom/fixtures/project.json",
+        }.items():
+            if flag not in reconciliation_args or reconciliation_args[reconciliation_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run reconciliation step did not preserve {flag}")
+        if "--dry-run" not in reconciliation_args or "--apply" in reconciliation_args:
+            raise AssertionError("closeout run dry-run did not delegate reconciliation sync as dry-run")
+        for flag, expected in {
+            "--goal-completion": ".loom/goal-completion.json",
+            "--gate-profile": "closeout-contract",
+            "--status-checks-file": ".loom/fixtures/checks.json",
+            "--branch-protection-file": ".loom/fixtures/protection.json",
+            "--ruleset-file": ".loom/fixtures/ruleset.json",
+        }.items():
+            if flag not in closeout_args or closeout_args[closeout_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run closeout-check step did not preserve {flag}")
+        if "--skip-gate" not in closeout_args:
+            raise AssertionError("closeout run closeout-check step did not preserve --skip-gate")
+        for flag, expected in {
+            "--item": "WI-1555",
+            "--terminal-state": "closed_out",
+            "--issue": "1555",
+            "--pr": "1563",
+            "--merge-commit": "fixture-merge-sha",
+            "--target-branch": "main",
+            "--closed-at": "2026-06-18T10:00:00Z",
+            "--evidence-locator": "https://github.com/MC-and-his-Agents/Loom/issues/1555;https://github.com/MC-and-his-Agents/Loom/pull/1563",
+        }.items():
+            if flag not in carrier_args or carrier_args[carrier_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run carrier step did not preserve inferred {flag}")
+        if "--dry-run" not in carrier_args or "--apply" in carrier_args:
+            raise AssertionError("closeout run dry-run did not delegate carrier closeout-sync as dry-run")
+        if not emitted_payloads or emitted_payloads[-1].get("schema_version") != "loom-closeout-run/v1":
+            raise AssertionError("closeout run must emit loom-closeout-run/v1")
+
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1555",
+                "--issue",
+                "1555",
+                "--pr",
+                "1563",
+                "--branch",
+                "work/1555-one-shot-closeout-run",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run apply wrapper regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [
+            ["reconciliation", "sync"],
+            ["closeout", "check"],
+            ["carrier", "closeout-sync"],
+            ["recovery", "writeback"],
+            ["carrier", "refresh"],
+            ["carrier", "refresh"],
+            ["closeout", "check"],
+        ]:
+            raise AssertionError(f"closeout run apply delegated unexpected runtime sequence: {call_heads}")
+        if "--apply" not in flow_payload_calls[0]["flow_args"] or "--dry-run" in flow_payload_calls[0]["flow_args"]:
+            raise AssertionError("closeout run apply did not delegate reconciliation sync as apply")
+        if "--apply" not in flow_payload_calls[2]["flow_args"] or "--dry-run" in flow_payload_calls[2]["flow_args"]:
+            raise AssertionError("closeout run apply did not delegate carrier closeout-sync as apply")
+        recovery_args = flow_payload_calls[3]["flow_args"]
+        for flag, expected in {
+            "--item": "WI-1555",
+            "--current-checkpoint": "closed_out",
+            "--current-lane": "post-merge-closeout-run",
+        }.items():
+            if flag not in recovery_args or recovery_args[recovery_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run recovery writeback did not preserve {flag}")
+        payload = emitted_payloads[-1] if emitted_payloads else {}
+        if payload.get("result") != "pass" or payload.get("apply") is not True:
+            raise AssertionError("closeout run apply did not emit a passing apply payload")
+
+        def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            flow_payload_calls.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
+            if flow_args[:2] == ["closeout", "check"]:
+                return {
+                    "command": command,
+                    "result": "block",
+                    "missing_inputs": ["issue is not closed"],
+                    "issue": {"number": 1555, "state": "OPEN"},
+                    "pr": {"number": 1563, "state": "MERGED", "mergeCommit": {"oid": "fixture-merge-sha"}},
+                }
+            return {"command": command, "result": "pass"}
+
+        module.flow_payload = blocking_flow_payload
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1555",
+                "--issue",
+                "1555",
+                "--pr",
+                "1563",
+                "--branch",
+                "work/1555-one-shot-closeout-run",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run apply-block wrapper regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [["reconciliation", "sync"], ["closeout", "check"]]:
+            raise AssertionError(f"closeout run apply must stop before carrier mutation when closeout-check blocks: {call_heads}")
+        payload = emitted_payloads[-1] if emitted_payloads else {}
+        if payload.get("result") != "block" or payload.get("failure_classifier") != "issue_not_closed":
+            raise AssertionError("closeout run apply block did not classify the first blocking step")
 
         status = module.handle_pr(["gate", "1569", "--surface", "closeout", "--work-item", "WI-1542"])
         if status != 0:
@@ -6469,6 +6682,11 @@ def run_merge_wrapper_surface() -> None:
     print("merge wrapper surface checks passed")
 
 
+def run_closeout_wrapper_surface() -> None:
+    assert_closeout_wrapper_argument_contract()
+    print("closeout wrapper surface checks passed")
+
+
 def run_work_item_audit_surface() -> None:
     assert_workspace_audit_wrapper_contract()
     _, payload = run_json(["workspace", "audit", "--target", str(REPO_ROOT), "--json"], expect=None)
@@ -8658,6 +8876,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="merge-wrapper",
             fixture_group="merge-wrapper",
             run=run_merge_wrapper_surface,
+        ),
+        SurfaceCheck(
+            name="closeout-wrapper",
+            fixture_group="closeout-wrapper",
+            run=run_closeout_wrapper_surface,
         ),
         SurfaceCheck(
             name="work-item-audit",
