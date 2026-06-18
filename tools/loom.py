@@ -239,6 +239,13 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "workspace locate", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace check", "domain": "host-control", "status": "implemented", "json": True},
     {
+        "command": "workspace audit",
+        "domain": "host-control",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read active carrier drift before starting a Work Item; does not mutate host state or repo carriers.",
+    },
+    {
         "command": "workspace retire",
         "domain": "host-control",
         "status": "implemented",
@@ -2798,12 +2805,22 @@ def workspace_payload(action: str, args: argparse.Namespace) -> dict[str, Any]:
             payload["wrapped_command"] = payload.get("command")
         payload["command"] = command
         return payload
+    if action == "audit":
+        payload = flow_payload(
+            command,
+            ["work-item-audit", "--target", str(target), *item_args],
+            fallback_to=["loom carrier closeout-sync --target <repo> --item <item> --dry-run --json", "loom workspace check --target <repo> --json"],
+        )
+        if payload.get("command") and payload.get("command") != command:
+            payload["wrapped_command"] = payload.get("command")
+        payload["command"] = command
+        return payload
     return output(command, "block", schema=WORKSPACE_SCHEMA, summary="Unsupported workspace action.", failed_layer="cli-router", fail_closed_reason=action, fallback_to=["loom help --json"])
 
 
 def handle_workspace(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom workspace")
-    parser.add_argument("action", choices=("create", "locate", "check", "retire"))
+    parser.add_argument("action", choices=("create", "locate", "check", "audit", "retire"))
     parser.add_argument("--target", default=".")
     parser.add_argument("--path")
     parser.add_argument("--branch")

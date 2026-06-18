@@ -109,6 +109,7 @@ REQUIRED_COMMANDS = {
     "workspace create",
     "workspace locate",
     "workspace check",
+    "workspace audit",
     "workspace retire",
     "issue inspect",
     "issue bind",
@@ -482,6 +483,40 @@ def assert_closeout_wrapper_argument_contract() -> None:
         module.emit_flow = original_emit_flow
         module.flow_payload = original_flow_payload
         module.emit = original_emit
+
+
+def assert_workspace_audit_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for workspace audit wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return {"command": "work-item-audit", "result": "pass"}
+
+    original_flow_payload = module.flow_payload
+    module.flow_payload = fake_flow_payload
+    try:
+        payload = module.workspace_payload(
+            "audit",
+            argparse.Namespace(target=".", item="WI-1542"),
+        )
+        if payload.get("command") != "workspace audit":
+            raise AssertionError("workspace audit wrapper did not preserve command label")
+        if payload.get("wrapped_command") != "work-item-audit":
+            raise AssertionError("workspace audit wrapper did not record wrapped runtime command")
+        flow_args = captured.get("flow_args")
+        if flow_args != ["work-item-audit", "--target", str(REPO_ROOT), "--item", "WI-1542"]:
+            raise AssertionError(f"workspace audit wrapper delegated unexpected runtime args: {flow_args}")
+    finally:
+        module.flow_payload = original_flow_payload
 
 
 def retained_closeout_work_item_id() -> str | None:
@@ -5537,6 +5572,24 @@ def run_merge_wrapper_surface() -> None:
     print("merge wrapper surface checks passed")
 
 
+def run_work_item_audit_surface() -> None:
+    assert_workspace_audit_wrapper_contract()
+    _, payload = run_json(["workspace", "audit", "--target", str(REPO_ROOT), "--json"], expect=None)
+    if payload.get("schema_version") != "loom-active-carrier-audit/v1":
+        raise AssertionError("workspace audit must emit loom-active-carrier-audit/v1")
+    if payload.get("command") != "workspace audit":
+        raise AssertionError("workspace audit must preserve the public command label")
+    if payload.get("wrapped_command") != "work-item-audit":
+        raise AssertionError("workspace audit must expose the wrapped runtime command")
+    if payload.get("result") not in {"pass", "block"}:
+        raise AssertionError("workspace audit result drifted")
+    if not isinstance(payload.get("findings"), list):
+        raise AssertionError("workspace audit must expose findings")
+    if "shadow_freshness" not in payload:
+        raise AssertionError("workspace audit must expose shadow freshness")
+    print("work item audit surface checks passed")
+
+
 def run_pr_metadata_surface() -> None:
     assert_pr_metadata_wrapper_argument_contract()
     with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-") as raw_tmp:
@@ -5550,6 +5603,7 @@ def run_pr_metadata_surface() -> None:
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
+    assert_workspace_audit_wrapper_contract()
     assert_pr_metadata_wrapper_argument_contract()
     loom_flow = load_loom_flow_module()
     _, help_payload = run_json(["help", "--json"], expect=0)
@@ -7700,6 +7754,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="merge-wrapper",
             fixture_group="merge-wrapper",
             run=run_merge_wrapper_surface,
+        ),
+        SurfaceCheck(
+            name="work-item-audit",
+            fixture_group="work-item-audit",
+            run=run_work_item_audit_surface,
         ),
         SurfaceCheck(
             name="pr-metadata",
