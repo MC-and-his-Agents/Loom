@@ -745,6 +745,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    pr_gate.add_argument(
+        "--surface",
+        choices=("pre_review", "review", "merge_ready", "closeout"),
+        default=None,
+        help="PR metadata surface consumed by this gate; defaults to the PR body machine surface or merge_ready",
+    )
 
     pr_metadata = subparsers.add_parser("pr-metadata", help="Render, update, read back, or validate repo-specific PR metadata machine carriers")
     pr_metadata.add_argument("operation", choices=("render", "update", "readback", "preflight"))
@@ -18514,6 +18520,7 @@ def pr_gate_payload(
     head_sha: str | None,
     branch_name: str | None,
     pr_payload_file: str | None,
+    surface: str | None = None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
@@ -18751,10 +18758,11 @@ def pr_gate_payload(
     else:
         raw_evidence_present = False
 
+    metadata_surface = surface or body_surface or "merge_ready"
     governance_surface = build_governance_surface(target_root)
     pr_metadata_preflight = pr_metadata_preflight_payload(
         target_root=target_root,
-        surface="merge_ready",
+        surface=metadata_surface,
         owner=owner,
         repo_name=repo_name,
         pr_number=effective_pr,
@@ -18968,6 +18976,7 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
             head_sha=args.head_sha,
             branch_name=args.branch,
             pr_payload_file=args.pr_payload_file,
+            surface=args.surface,
         )
     )
 

@@ -3,76 +3,42 @@
   "item_id": "WI-1554",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1554 PR #1562 implementation remains approved for the wrapper/runtime parameter contract slice: tools/loom.py exposes and forwards runtime-supported closeout check parameters, merge check/run PR argument contract coverage rejects the placeholder literal and preserves numeric PR forwarding, and governance-closeout contract coverage exercises closeout plus gate closeout passthrough without changing closeout semantics or host writes.",
+  "summary": "WI-1554 PR #1570 implementation is approved for the reopened wrapper/runtime parameter contract slice: runtime pr-gate now accepts an explicit metadata surface, defaults to the PR body machine surface when present, and only falls back to merge_ready otherwise; tools/loom.py forwards `loom pr --surface closeout gate <pr>` to runtime; focused wrapper, pr-metadata, governance-closeout, generated-tree, demo bootstrap, compile, and diff checks passed.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-17T20:51:34Z",
-  "reviewed_head": "e48ca5ed9ecbc374e68a641d6cb63313902c27a7",
-  "reviewed_validation_summary": "2026-06-17T20:52Z merge-ready carrier readback for PR #1562 head e48ca5ed9ecbc374e68a641d6cb63313902c27a7: PR metadata preflight/readback passed; authored implementation review was refreshed for the current recovery summary; suite evidence/carrier validation passed during review record; local checkpoint merge and PR gate were rerun after removing stale first-slice terminal metadata; targeted CLI validation from 2026-06-17T20:45Z remains unchanged for implementation files.",
+  "authored_at": "2026-06-18T02:04:31Z",
+  "reviewed_head": "26558c2a7f2fba00f83647579f05144d2d6be785",
+  "reviewed_validation_summary": "2026-06-18T02:04Z targeted validation passed for PR #1570 carrier-aligned head 26558c2a7f2fba00f83647579f05144d2d6be785: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py skills/loom-adopt/.loom-runtime/shared/scripts/loom_flow.py skills/loom-build/.loom-runtime/shared/scripts/loom_flow.py skills/loom-handoff/.loom-runtime/shared/scripts/loom_flow.py skills/loom-init/.loom-runtime/shared/scripts/loom_flow.py skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_flow.py skills/loom-pre-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-resume/.loom-runtime/shared/scripts/loom_flow.py skills/loom-retire/.loom-runtime/shared/scripts/loom_flow.py skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1554; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1554 --dry-run --output .loom/bootstrap/init-result.json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-readback 1570 --surface merge_ready --readback-file .loom/runtime/pr/WI-1554-pr-gate-closeout-surface-readback.md --json; git diff --check.",
   "fallback_to": null,
-  "findings": [
-    {
-      "id": "compat-follow-up-1",
-      "summary": "#1555 remains responsible for one-shot post-merge closeout orchestration.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-2",
-      "summary": "#1514/#1534/#1515 must readback #1554 PR #1562 merge and closeout evidence before milestone/12 convergence.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    }
-  ],
+  "findings": [],
   "blocking_issues": [],
   "follow_ups": [
-    "#1555 remains responsible for one-shot post-merge closeout orchestration.",
-    "#1514/#1534/#1515 must readback #1554 PR #1562 merge and closeout evidence before milestone/12 convergence."
+    "#1541/#1555 can still improve closeout PR body authoring and one-shot post-merge closeout orchestration; this review covers only pr-gate surface consumption and wrapper passthrough.",
+    "#1514/#1534/#1515 must read back #1554 PR #1570 merge and closeout evidence before milestone/12 convergence."
   ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1554.md",
     "recovery_entry": ".loom/progress/WI-1554.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "budget_risk": {
-      "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
-      "enforcement": "advisory",
-      "highest_risk": "none",
-      "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
-      "adapter_evidence_locator": "",
-      "provenance": {
-        "source": "github_host"
-      }
-    },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1554-cli-wrapper-contract/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1554-cli-wrapper-contract --item WI-1554 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1554-cli-wrapper-contract/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1554-cli-wrapper-contract --item WI-1554 --json",
-    "suite_evidence_map": ".loom/specs/WI-1554/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1554/task-carrier.md"
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1570",
+    "local_validation": [
+      "PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py skills/loom-adopt/.loom-runtime/shared/scripts/loom_flow.py skills/loom-build/.loom-runtime/shared/scripts/loom_flow.py skills/loom-handoff/.loom-runtime/shared/scripts/loom_flow.py skills/loom-init/.loom-runtime/shared/scripts/loom_flow.py skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_flow.py skills/loom-pre-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-resume/.loom-runtime/shared/scripts/loom_flow.py skills/loom-retire/.loom-runtime/shared/scripts/loom_flow.py skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift",
+      "make loom-demo-new-project-check",
+      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .",
+      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1554",
+      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1554 --dry-run --output .loom/bootstrap/init-result.json",
+      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-readback 1570 --surface merge_ready --readback-file .loom/runtime/pr/WI-1554-pr-gate-closeout-surface-readback.md --json",
+      "git diff --check"
     ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "head_binding": {
+      "reviewed_head": "26558c2a7f2fba00f83647579f05144d2d6be785",
+      "current_head": "26558c2a7f2fba00f83647579f05144d2d6be785",
+      "status": "fresh",
+      "stale": false
+    }
   },
   "semantic_review_disposition": {
     "status": "passed",

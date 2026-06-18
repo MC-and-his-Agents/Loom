@@ -3017,6 +3017,8 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--pr-payload-file", args.pr_payload_file])
         return emit_flow(command, flow_args, fallback_to=["update PR body", "loom pr inspect <pr> --json"])
     flow_args = ["pr-gate", "check", "--target", ".", "--pr", args.pr]
+    if args.surface:
+        flow_args.extend(["--surface", args.surface])
     if args.head_sha:
         flow_args.extend(["--head-sha", args.head_sha])
     if args.work_item:

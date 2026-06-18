@@ -432,7 +432,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "a1f417cc23a07ff36c067f8eac089bf09fda9081cf3e9171b7f4b0d506cf70cd"
+      "sha256": "62d03bd5dea4ec2f1757e56743cf405680f6fb8d1039516e274bcdc8720ac668"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -714,9 +714,9 @@
       ],
       "pr_reviews": "not_required",
       "rulesets": {
-        "status": "unverified",
-        "enforced": "unknown",
-        "count": "unknown"
+        "status": "verified",
+        "enforced": false,
+        "count": 0
       },
       "ci_check_presence": {
         "schema_version": "loom-ci-check-presence/v1",
@@ -738,13 +738,13 @@
         "required_checks": true,
         "workflow_exists": true,
         "check_ran": true,
-        "verification_status": "unverified"
+        "verification_status": "verified"
       },
       "api_snapshot": {
         "schema_version": "loom-host-api-snapshot/v1",
         "read_mode": "cached_non_merge",
-        "verification_status": "unverified",
-        "fallback_status": "host_unavailable",
+        "verification_status": "verified",
+        "fallback_status": null,
         "cache_scope": "process",
         "requests": [
           {
@@ -773,18 +773,15 @@
             "purpose": "branch ruleset enforcement"
           }
         ],
-        "errors": [
-          "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": unexpected EOF"
-        ],
+        "errors": [],
         "budget": {
           "schema_version": "loom-execution-budget/v1",
-          "status": "unavailable",
+          "status": "not_applicable",
           "enforcement": "advisory",
-          "summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": unexpected EOF",
+          "summary": "execution budget is not collected for this invocation.",
           "dimensions": [],
           "provenance": {
-            "source": "github_control_plane",
-            "error_count": 1
+            "source": "github_host"
           },
           "adapter_evidence_locator": ""
         }
@@ -1335,17 +1332,10 @@
         "current": "light",
         "judgment": {
           "schema_version": "loom-github-profile-maturity-judgment/v1",
-          "judgment": "blocked",
+          "judgment": "light",
           "current": "light",
-          "blocked": true,
-          "blockers": [
-            {
-              "id": "github_host_signals_unreadable",
-              "reason": "GitHub host signals could not be read reliably",
-              "source_locator": "github_control_plane.api_snapshot.errors",
-              "fallback_to": "github-profile-binding"
-            }
-          ],
+          "blocked": false,
+          "blockers": [],
           "evidence": [
             {
               "id": "work_item",
@@ -1385,13 +1375,13 @@
             },
             {
               "id": "github_api_snapshot",
-              "status": "unverified",
+              "status": "verified",
               "locator": "github_control_plane.api_snapshot",
               "authority": "github"
             },
             {
               "id": "host_enforcement",
-              "status": "unverified",
+              "status": "verified",
               "locator": "github_control_plane.host_enforcement",
               "authority": "github"
             },
@@ -1426,7 +1416,7 @@
               "authority": "loom + host"
             }
           ],
-          "summary": "GitHub profile maturity is blocked by unreadable or conflicting required signals."
+          "summary": "GitHub profile maturity judgment is `light`."
         },
         "achieved": [
           "light"
