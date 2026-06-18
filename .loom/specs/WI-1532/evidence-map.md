@@ -1,0 +1,9 @@
+# WI-1532 Evidence Map
+
+| Evidence ID | Evidence Type | Source Locator | Consumes | Binding | Freshness | Consumer Boundary | Remediation Direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | `src/skills/shared/scripts/loom_flow.py` | `.loom/specs/WI-1532/spec.md` S1 S2 S3 S4 S5 | closeout freeze profile runtime behavior and machine-readable readiness contract | present | review, PR gate, hosted checks, #1533/#1534/#1515 consumers | Re-run targeted fixture and parity checks after runtime changes. |
+| EV-002 | parity_evidence | `skills/shared/scripts/loom_flow.py`; `skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py` | EV-001 | source, shared, and generated runtime copy consistency | present | generated skills and installed/runtime consumers | Re-run `/usr/bin/cmp` parity after runtime sync. |
+| EV-003 | test_evidence | `tools/check_cli_contract.py` | `.loom/specs/WI-1532/spec.md` S1 S2 S3 S4 S5 | deterministic closeout freeze fixture coverage for pass and fail-closed inputs | present | local targeted validation and hosted checks | Extend fixture when input bindings or failure vocabulary changes. |
+| EV-004 | cli_surface_evidence | `tools/loom.py` | `.loom/specs/WI-1532/spec.md` S1 S2 S3 | CLI matrix summary exposes hosted and closeout freeze admission scope | present | operator help, docs, PR review | Re-run CLI contract checks after wrapper/help changes. |
+| EV-005 | fresh_verification_input | `2026-06-18T07:55Z validation summary in .loom/progress/WI-1532.md` | EV-001; EV-002; EV-003; EV-004 | branch work/1532-closeout-freeze-admission targeted validation for head 2433355806b6c1bd10018d0b89aebfa8ce32016e | present | review, merge-ready, PR gate, hosted checks, milestone closeout | Re-run validation after code, fixture, PR metadata, review, or carrier input changes. |
