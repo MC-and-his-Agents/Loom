@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1512.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; git diff --check
 - Closing Condition: PR #1572 passes targeted local validation and hosted gate checks, is merged, and issue #1512 can be consumed by #1532/#1533 closeout freeze work.
-- Current Checkpoint: merge
-- Current Stop: PR #1572 head c2edf420 contains the hosted freeze admission implementation, the tracked EV-004 locator repair, and the release aggregate fixture step-name repair; local targeted evidence validation has passed for the current head.
-- Next Step: Refresh authored spec and implementation review records for the current head, refresh PR metadata, rerun local PR gate, push, then consume hosted checks.
-- Blockers: None recorded.
+- Current Checkpoint: closed_out
+- Current Stop: PR #1572 merged into main at 2026-06-18T04:56:42Z with merge commit 3345938450d14efeb3116087893cfe2f5f56076f; issue #1512 closed at 2026-06-18T05:02:56Z; terminal closeout metadata and task carrier now consume the hosted freeze admission completion facts.
+- Next Step: Downstream consumers may proceed through #1532/#1533/#1514/#1534/#1515 according to milestone/12 dependency graph; #1512 itself has no remaining implementation work.
+- Blockers: None recorded for WI-1512 closeout.
 - Latest Validation Summary: 2026-06-18T04:45Z current-head validation for PR #1572 head c2edf420c9a32adbe14fd572a11ded745389d2e2: `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate --fixture-group check-cli-contract` passed in 365.59s after the terminal closeout fixture now locates `checkpoint-merge` by step name; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1512 --json` passed with EV-004 `source_exists=true` and freshness head `c2edf420c9a32adbe14fd572a11ded745389d2e2`.
-- Recovery Boundary: Current #1512 slice is limited to hosted PR gate freeze admission, PR body/readback/snapshot consumption, generated runtime sync, demo fixture refresh, and the minimum WI-1512 fact-chain carriers needed for PR #1572. It does not implement #1532/#1533 closeout freeze profiles, #1534 docs convergence, #1555 one-shot closeout run, or #1515 release/no-release closeout.
-- Current Lane: milestone-12-wave1-hosted-freeze-admission
+- Recovery Boundary: WI-1512 closeout sync is limited to hosted freeze admission terminal carrier/status/task-carrier truth for PR #1572 and issue #1512. It does not implement #1532/#1533 closeout freeze profiles, #1534 docs convergence, #1555 one-shot closeout run, or #1515 release/no-release closeout.
+- Current Lane: milestone-12-wave1-hosted-freeze-admission-closeout
 
 ## Runtime Evidence
 
