@@ -3,10 +3,10 @@
   "item_id": "WI-1578",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1578 spec is approved for the minimal PR metadata closeout surface contract: closeout render/readback/preflight must use surface=closeout, review/pre-review merge_ready compatibility remains intact, and the scope excludes hosted admission, controlled merge, release/no-release closeout, #1577 carrier content, and one-shot closeout run behavior.",
+  "summary": "WI-1578 spec remains approved at head 9ed1fc07: the post-review aggregate fixture change only aligns validation coverage with the frozen closeout-surface contract; no scope expansion into hosted admission, controlled merge, #1577 carrier content, release/no-release closeout, or one-shot closeout run behavior.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-06-18T12:06:00Z",
-  "reviewed_head": "19b3d8eadeb0eed58239d746b0e0f5403ec32654",
+  "authored_at": "2026-06-18T12:42:26Z",
+  "reviewed_head": "9ed1fc07ce22dc903c7477e893d14726458977b0",
   "reviewed_validation_summary": "2026-06-18T11:51Z validation passed for WI-1578 branch work/1578-pr-metadata-closeout-surface: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1578 --write; git diff --check.",
   "fallback_to": null,
   "findings": [],
@@ -16,12 +16,30 @@
     "work_item": ".loom/work-items/WI-1578.md",
     "recovery_entry": ".loom/progress/WI-1578.md",
     "status_surface": ".loom/status/current.md",
-    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1578 --json",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom-pr-metadata-closeout-surface/tools/loom.py",
     "suite_validator_mode": "repo-local-cli",
     "suite_spec": ".loom/specs/WI-1578/spec.md",
     "suite_plan": ".loom/specs/WI-1578/plan.md",
-    "suite_implementation_contract": ".loom/specs/WI-1578/implementation-contract.md",
     "suite_evidence_map": ".loom/specs/WI-1578/evidence-map.md",
+    "suite_consistency_analysis": null,
     "suite_task_carriers": [
       ".loom/specs/WI-1578/task-carrier.md"
     ],
@@ -29,9 +47,5 @@
       "docs/methodology/harness/full-spec-suite-cli-surface.md",
       "docs/methodology/templates/spec-suite.md"
     ]
-  },
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored spec review approved the minimal suite contract for implementation review consumption."
   }
 }
