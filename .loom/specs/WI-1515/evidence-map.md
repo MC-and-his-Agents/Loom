@@ -1,0 +1,12 @@
+# WI-1515 Evidence Map
+
+| Evidence ID | Evidence Type | Source Locator | Consumes | Binding | Freshness | Consumer Boundary | Remediation Direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | https://github.com/MC-and-his-Agents/Loom/issues/1505 | #1505 parent FR state and child issue graph | milestone/12 parent closeout truth | present | #1515 final closeout | Re-read before closing #1505. |
+| EV-002 | behavior_evidence | https://github.com/MC-and-his-Agents/Loom/issues/1515 | #1515 release/no-release closeout issue | final closeout scope and completion criteria | present | #1515 final closeout | Re-read before PR merge and issue close. |
+| EV-003 | behavior_evidence | https://github.com/MC-and-his-Agents/Loom/pull/1590 | #1534 post-merge carrier sync | terminal closeout carrier evidence consumed by #1515 | present | #1515 final closeout | Re-read if main or PR #1590 changes. |
+| EV-004 | behavior_evidence | .loom/progress/WI-1515.md | release/no-release judgment | `release_required` retained with explicit authorization boundary | present | #1505/#1515 closeout | Replace with completed release evidence after publish or record an authoritative waiver before closeout. |
+| EV-005 | test_evidence | .loom/status/current.md | active fact chain and shadow freshness | repo carrier readback for final closeout | present | PR gate and closeout check | Refresh after carrier writes. |
+| EV-006 | behavior_evidence | https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.14.1 | latest published Loom CLI release | current release baseline is older than #1554/#1555 CLI/runtime changes | present | release-required closeout | Publish and read back a new Loom CLI release, or record an explicit release waiver with authority. |
+| EV-007 | contract_evidence | docs/adoption/loom-cli-release-surface.md | Loom CLI release surface | `tools/loom.py`, `skills/shared/scripts/`, `src/skills/`, and `skills/` are CLI publish behavior | present | release/no-release judgment | Re-read if release surface contract changes. |
+| EV-008 | fresh_verification_input | docs/evidence/v0.14.2-release-readiness.md | EV-001; EV-002; EV-003; EV-004; EV-005; EV-006; EV-007; release surface validation commands | release-required closeout evidence and pre-merge release readiness for WI-1515 | present | #1515 release PR review and merge-ready | Refresh after full release validation, PR head binding, hosted checks, and post-merge release readback. |

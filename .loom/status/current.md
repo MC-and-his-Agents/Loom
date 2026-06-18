@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1534
-- Goal: Align closeout mode documentation, skill protocols, and regression fixtures so milestone/12 operators consume closeout freeze, closeout-specific gate, queue/status, and closeout run surfaces consistently before final #1515 closeout.
-- Scope: Issue #1534 only: update closeout docs, closeout-related skills/protocol references, and targeted fixture/documentation assertions for inline, auto no-op, light, batched, and full closeout modes; consume #1533/#1555/#1543/#1541 stable fields. Do not implement runtime behavior, host mutation, release/no-release final closeout, issue closure, PR merge, Project mutation, or batch closeout execution.
-- Execution Path: issue #1534 -> branch work/1534-closeout-mode-docs -> docs/skills/fixture convergence -> review -> PR -> closeout.
+- Item ID: WI-1515
+- Goal: Complete milestone/12 release/no-release closeout for gate input freeze, hosted admission, closeout orchestration, wrapper, SKILL integrity, and docs/fixtures convergence.
+- Scope: Issue #1515 only: read back milestone/12 child issues, PRs, merge commits, target branch, hosted checks, release/no-release evidence, closeout freeze terminal evidence, and repo/GitHub carriers; terminalize #1515 and parent #1505 after evidence is consistent. Do not add new gate behavior implementation.
+- Execution Path: issue #1515 -> branch work/1515-release-closeout -> release/no-release evidence -> final closeout PR -> parent #1505 closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1534.md
-- Review Entry: .loom/reviews/WI-1534.json
-- Validation Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; suite evidence/carrier validation; fact-chain; shadow parity.
-- Closing Condition: PR for #1534 is merged, issue #1534 is closed/completed, and #1515 can consume closeout mode docs/skills/fixtures as stable milestone closeout evidence.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1534 closed out post-merge: PR #1589 merged at 92bb6e9b15ec365a5751e18427a1c29b1633d328, issue #1534 closed at 2026-06-18T21:19:31Z, and terminal carrier metadata written.
-- Next Step: No further WI-1534 implementation work remains.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19 local validation passed for WI-1534 head f06410d27d72b0e3e141dc0255d392a0936580ad: git diff --check; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom.py suite validate --target . --item WI-1534 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1534 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1534 --json; python3 tools/loom.py fact-chain --target . --item WI-1534 --json; python3 src/skills/shared/scripts/loom_flow.py shadow-parity --target . --surface all --blocking; python3 src/skills/shared/scripts/loom_flow.py work-item-audit --target .; python3 tools/py_compile_clean.py tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface contract-only . reached markdown-links failures=0 and only retained pre-existing local skill registry/manifest diagnostics. Read-only subagent scope review returned warn only for expected main-thread carrier ownership and found no generated-tree/source-skill drift.
-- Recovery Boundary: Branch `work/1534-closeout-mode-docs` in `/Users/mc/dev/Loom-1534-closeout-mode-docs`; base `c9307c4903e1e333674439aee898cbd3a3442222`; scope limited to #1534 docs/skills/fixtures plus Loom carrier evidence.
-- Current Lane: post-merge-closeout-run
+- Recovery Entry: .loom/progress/WI-1515.md
+- Review Entry: .loom/reviews/WI-1515.json
+- Validation Entry: work-item-audit; milestone issue/PR readback; release/no-release evidence readback; closeout check; fact-chain; shadow parity; hosted PR checks
+- Closing Condition: Milestone/12 #1515 and parent #1505 are closed only after no-release/release judgment, GitHub issue/PR states, target branch, repo .loom carriers, shadow evidence, and closeout evidence are consistent.
+- Current Checkpoint: release_pr_ready_pending_review_and_authorization
+- Current Stop: Prepared v0.14.2 release-required closeout evidence for milestone/12. Local pre-merge release validation passed, including version/release/npm/package/skills/CLI contract/suite/fact-chain/audit checks.
+- Next Step: Open the #1515 release PR for review and hosted checks. Do not merge the release PR or trigger publish-capable release actions until the user explicitly approves publishing v0.14.2.
+- Blockers: Publication remains blocked on explicit user approval and post-merge release evidence. #1515/#1505 closeout reconciliation must run only after the v0.14.2 release evidence is visible and read back.
+- Latest Validation Summary: 2026-06-19 pre-merge release validation passed: version_surface_check; check_release_surface; check_npm_package for @mc-and-his-agents/loom@0.14.2 payload_file_count=2288; npm run test:package 4 tests; npm pack --dry-run entryCount=2288; node bin/loom.mjs version --json repo_version=v0.14.2; tools/loom.py skills release-check; skills_surface.py check; tools/check_cli_contract.py all 10 surfaces in 416.11s; suite validate result not_applicable with valid formal-suite rationale; suite evidence/carrier validate; fact-chain; work-item-audit; git diff --check.
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-1515.md`.
+- Current Lane: milestone-12-release-closeout
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1534.md
-- Dynamic Truth: .loom/progress/WI-1534.md
+- Static Truth: .loom/work-items/WI-1515.md
+- Dynamic Truth: .loom/progress/WI-1515.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
