@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1554
-- Goal: Harden the top-level Loom CLI wrapper to runtime argument contract for high-risk operator gates.
-- Scope: Reopened #1554 regression slice: pass `--surface` through `loom pr gate`, let runtime `pr-gate` consume explicit or PR-body metadata surface for terminal closeout carrier PRs, refresh generated/demo runtime surfaces, and add focused wrapper plus governance-closeout regressions. Do not implement #1555 one-shot closeout run, hosted admission, release/no-release closeout, classifier taxonomy, or closeout profile semantics.
-- Execution Path: issue #1554 -> branch work/1554-pr-gate-closeout-surface -> pr-gate surface passthrough/runtime consumption -> generated/demo runtime sync -> focused merge-wrapper/pr-metadata/governance-closeout contract surfaces -> PR #1570 metadata/readback -> review/merge-ready
+- Item ID: WI-1512
+- Goal: Hosted PR gate admission consumes gate freeze inputs and fails closed on stale hosted readback or snapshot drift.
+- Scope: Add hosted freeze admission to pr-gate/runtime and workflow readback inputs for #1512; consume #1510 freeze fields and #1513 classifier output without changing closeout profile semantics or #1555 one-shot closeout run.
+- Execution Path: issue #1512 -> branch work/1512-hosted-freeze-admission-v2 -> hosted pr-gate readback -> gate freeze recomputation -> CI workflow consumption -> PR #1572
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1554.md
-- Review Entry: .loom/reviews/WI-1554.json
-- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py skills/loom-adopt/.loom-runtime/shared/scripts/loom_flow.py skills/loom-build/.loom-runtime/shared/scripts/loom_flow.py skills/loom-handoff/.loom-runtime/shared/scripts/loom_flow.py skills/loom-init/.loom-runtime/shared/scripts/loom_flow.py skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_flow.py skills/loom-pre-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-resume/.loom-runtime/shared/scripts/loom_flow.py skills/loom-retire/.loom-runtime/shared/scripts/loom_flow.py skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; git diff --check
-- Closing Condition: PR #1570 is merged, issue #1554 is closed after PR gate surface contract evidence and closeout carrier sync are read back, and #1514/#1534/#1515 can consume #1554 as complete.
-- Current Checkpoint: merge
-- Current Stop: PR #1571 is open at carrier-aligned head d14c3af49f949401356f44c0244407eb609bd17a for the reopened closeout runtime `--item` contract slice: repo-local closeout parser, retained-item lookup, bootstrap manifest hash, review evidence, and focused governance-closeout regressions are updated; PR metadata readback is fresh.
-- Next Step: Refresh review evidence for PR #1571 current head, then wait for hosted checks and run merge gate before controlled merge.
-- Blockers: None
-- Latest Validation Summary: 2026-06-18T02:53Z targeted validation passed for PR #1571 carrier-aligned head d14c3af49f949401356f44c0244407eb609bd17a: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile .loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py runtime-state --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-readback 1571 --surface merge_ready --readback-file .loom/runtime/pr/WI-1554-closeout-item-runtime-contract-readback.md --json; CODEX_EXPORT_GH_TOKEN=1 PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py closeout check --target . --item WI-1554 --issue 1554 --pr 1570 --branch work/1554-pr-gate-closeout-surface reached expected business closeout blocker instead of runtime crash; git diff --check.
-- Recovery Boundary: Current reopened #1554 slice is limited to CLI wrapper/runtime PR gate surface contract and generated/demo runtime sync. It does not implement #1555 one-shot post-merge closeout run, hosted admission, release/no-release closeout, classifier taxonomy, closeout freeze/profile behavior, or closeout gate semantic changes.
-- Current Lane: milestone-12-wave0-cli-wrapper-closeout-item-runtime
+- Recovery Entry: .loom/progress/WI-1512.md
+- Review Entry: .loom/reviews/WI-1512.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; git diff --check
+- Closing Condition: PR #1572 passes targeted local validation and hosted gate checks, is merged, and issue #1512 can be consumed by #1532/#1533 closeout freeze work.
+- Current Checkpoint: build
+- Current Stop: Hosted freeze admission runtime, workflow readback wiring, generated runtime copies, demo fixture refresh, and WI-1512 fact-chain carriers are staged in PR #1572.
+- Next Step: Run targeted local validation, commit the implementation/carrier update, then record formal review for the resulting head.
+- Blockers: None recorded.
+- Latest Validation Summary: Pending post-carrier validation for WI-1512 after fact-chain restoration and demo fixture refresh.
+- Recovery Boundary: Current #1512 slice is limited to hosted PR gate freeze admission, PR body/readback/snapshot consumption, generated runtime sync, demo fixture refresh, and the minimum WI-1512 fact-chain carriers needed for PR #1572. It does not implement #1532/#1533 closeout freeze profiles, #1534 docs convergence, #1555 one-shot closeout run, or #1515 release/no-release closeout.
+- Current Lane: milestone-12-wave1-hosted-freeze-admission
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-18 WI-1554 closeout runtime item contract regression slice; PR #1571
+- Run Entry: 2026-06-18 WI-1512 hosted freeze admission implementation; PR #1572
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1554 reopened to fix pr-gate metadata surface consumption after #1542 closeout carrier PR exposed merge_ready preflight drift for closeout-only PR bodies.
-- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile .loom/bin/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py runtime-state --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-readback 1571 --surface merge_ready --readback-file .loom/runtime/pr/WI-1554-closeout-item-runtime-contract-readback.md --json`; `CODEX_EXPORT_GH_TOKEN=1 PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py closeout check --target . --item WI-1554 --issue 1554 --pr 1570 --branch work/1554-pr-gate-closeout-surface`; `git diff --check`.
-- Lane Entry: milestone-12-wave0-cli-wrapper-closeout-item-runtime
+- Diagnostics Entry: PR #1572 initially blocked because the worktree fact-chain still pointed to WI-1554; WI-1512 carriers were restored and activated by the main thread before merge-ready validation.
+- Verification Entry: pending targeted validation after WI-1512 carrier restoration.
+- Lane Entry: milestone-12-wave1-hosted-freeze-admission
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1554.md
-- Dynamic Truth: .loom/progress/WI-1554.md
+- Static Truth: .loom/work-items/WI-1512.md
+- Dynamic Truth: .loom/progress/WI-1512.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
