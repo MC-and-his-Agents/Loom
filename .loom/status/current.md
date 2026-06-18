@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1578.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; git diff --check
 - Closing Condition: PR for #1578 is merged, issue #1578 is closed, and PR #1577 can regenerate/readback closeout metadata with `surface=closeout`.
-- Current Checkpoint: build
-- Current Stop: Closeout surface metadata rendering now emits `surface=closeout`; focused pr-metadata contract, suite validate, suite evidence validate, suite carrier validate, py_compile, generated runtime parity, carrier refresh, and diff whitespace checks passed locally.
-- Next Step: Record current-head review, update PR metadata after PR creation, run PR gate, then merge when hosted checks pass.
+- Current Checkpoint: merge
+- Current Stop: PR #1579 is open with reviewed head and spec review evidence recorded; local metadata readback and focused validation passed, and PR body must be refreshed whenever head changes.
+- Next Step: Update/readback PR #1579 metadata for the final head, rerun local PR gate, then wait for hosted checks before merge-ready.
 - Blockers: None
 - Latest Validation Summary: 2026-06-18T11:51Z validation passed for WI-1578 branch work/1578-pr-metadata-closeout-surface: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1578 --write; git diff --check.
 - Recovery Boundary: WI-1578/#1578 only. Do not modify #1577 closeout-only carrier files, hosted workflow semantics, controlled merge behavior, release/no-release closeout, or one-shot post-merge closeout run.
