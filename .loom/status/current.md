@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1582
-- Goal: 修复 closeout-only terminal carrier PR 在 hosted gate admission 中的 closeout surface / retained review / carrier refresh 消费缺口。
-- Scope: Issue #1582 only: preserve surface=closeout through hosted freeze recomputation, make terminal closeout review and carrier refresh bindings surface-aware, expose closeout surface CLI entry points, add targeted fixtures, and sync runtime copies. Do not reopen WI-1512, do not bind this work to WI-1578, do not mutate #1580 closeout-only carrier, and do not weaken merge_ready review semantics.
-- Execution Path: issue #1582 -> branch work/1582-closeout-hosted-admission -> closeout hosted admission runtime fix -> targeted closeout fixture -> generated/demo/runtime parity -> PR
+- Item ID: WI-1555
+- Goal: Productize a one-shot post-merge closeout run that turns the current manual reconciliation, terminal carrier sync, recovery status, shadow refresh, and final closeout check sequence into a single dry-run/apply CLI entry.
+- Scope: Issue #1555 only: add `loom closeout run` as a CLI facade over existing reconciliation, closeout check, carrier closeout-sync, recovery writeback, and carrier refresh runtime steps; add wrapper contract fixtures for dry-run, apply, and stop-before-mutation behavior. Do not implement #1532 closeout freeze admission, #1533 closeout-specific gate policy, #1534 docs/skills convergence, #1515 release/no-release closeout, or batch/mixed-risk closeout.
+- Execution Path: issue #1555 -> branch work/1555-one-shot-closeout-run -> tools/loom.py closeout run facade -> tools/check_cli_contract.py closeout-wrapper fixture -> PR #1585
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1582.md
-- Review Entry: .loom/reviews/WI-1582.json
-- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; make loom-check
-- Closing Condition: #1582 PR is merged or explicitly superseded; PR body, branch, head_sha, authored review, fact-chain, hosted checks, closeout freeze evidence, and issue status are read back consistently.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1582 closed out post-merge: PR #1583 merged into main at 15ff1eecc8731bd28ccfc4433791595b2f539896, issue #1582 closed, hosted checks passed, PR metadata readback/preflight passed, and closeout check passed with host_pr_checks fallback for missing retained merge-ready attempt. Post-merge evidence is closeout evidence only and does not replace the retained pre-merge review validation summary.
-- Next Step: No further WI-1582 implementation work remains. Continue milestone/12 with the next unclosed dependency lane.
+- Recovery Entry: .loom/progress/WI-1555.md
+- Review Entry: .loom/reviews/WI-1555.json
+- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/loom.py closeout run --target . --item WI-1582 --issue 1582 --pr 1583 --branch work/1582-closeout-hosted-admission --json; python3 tools/loom.py pr metadata-render/readback/preflight for PR #1585
+- Closing Condition: PR #1585 is reviewed, checks pass or are classified, merged or explicitly superseded, issue #1555 is closed/reconciled, and WI-1555 repo carrier is terminalized without changing release/no-release policy.
+- Current Checkpoint: merge
+- Current Stop: Current-head implementation review for PR #1585 is recorded at e224bc45414d1f26f3dc57e59e8b09bb794581c2; fact-chain, build checkpoint, suite not_applicable validation, closeout-wrapper contract, clean py compile, closeout run dry-run, and PR metadata readback/preflight have passed.
+- Next Step: Wait for hosted checks, then run merge-ready for PR #1585.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-18T15:38Z WI-1582 final local validation passed in /Users/mc/dev/Loom-1582-closeout-hosted-admission: make loom-check passed (profile source, source_surface full, checked 45 source/distribution surfaces); fact-chain pass; purity-check pass; checkpoint build pass; spec review allow; code review allow; carrier refresh --write pass; shadow-parity --surface all --blocking pass; adopt verify pass; prior py_compile, generated-tree-drift, targeted terminal closeout hosted fixture, pr-metadata, demo check, aggregate, and git diff check passed.
-- Recovery Boundary: WI-1582 owns closeout hosted admission runtime/fixture repair and its own .loom carriers only; WI-1512 and WI-1578 terminal truth are read-only evidence.
-- Current Lane: milestone-12-closeout-sync
+- Latest Validation Summary: 2026-06-18T17:10Z WI-1555 local validation in /Users/mc/dev/Loom-1555-one-shot-closeout-run: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper passed; python3 tools/loom.py closeout run --target . --item WI-1582 --issue 1582 --pr 1583 --branch work/1582-closeout-hosted-admission --json returned schema_version loom-closeout-run/v1, result pass, dry_run true, steps reconciliation-sync/closeout-check/carrier-closeout-sync, failure_classifier null; PR #1585 metadata render, readback, and compare preflight passed for head e224bc45414d1f26f3dc57e59e8b09bb794581c2; aggregate CLI contract was stopped after entering unrelated pre-review WI-924 live path.
+- Recovery Boundary: WI-1555 owns only the one-shot closeout run facade, closeout-wrapper fixture surface, and its own carrier/review metadata. It does not own #1532/#1533 gate semantics, #1534 docs/skills convergence, #1515 release/no-release closeout, or post-merge batch processing.
+- Current Lane: milestone-12-one-shot-closeout-run
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-18 WI-1582 closeout hosted admission terminal carrier fix
+- Run Entry: 2026-06-18 WI-1555 one-shot closeout run implementation
 - Logs Entry: local command output retained in current Codex milestone/12 thread
-- Diagnostics Entry: #1580 closeout-only hosted gate and #1581 draft repair exposed that terminal closeout freeze recomputation must preserve `surface=closeout` and consume retained closeout review/carrier freshness without weakening merge_ready review gates.
-- Verification Entry: fact-chain WI-1582 pass; suite evidence validate pass; suite carrier validate pass; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; targeted terminal closeout hosted fixture via assert_terminal_closeout_pr_gate_fixture(Path(tmp)); PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; make loom-demo-new-project-check; git diff --check
-- Lane Entry: milestone-12-closeout-hosted-admission-followup
+- Diagnostics Entry: WI-1582/#1583/#1584 closeout showed that manual post-merge closeout still required repeated PR readback, issue reconciliation, carrier terminalization, status/shadow refresh, and final closeout check.
+- Verification Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; closeout run dry-run against WI-1582/#1583; PR #1585 metadata render/readback/preflight.
+- Lane Entry: milestone-12-one-shot-closeout-run
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1582.md
-- Dynamic Truth: .loom/progress/WI-1582.md
+- Static Truth: .loom/work-items/WI-1555.md
+- Dynamic Truth: .loom/progress/WI-1555.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
