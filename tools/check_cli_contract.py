@@ -3825,14 +3825,30 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     update_fixture_pr_head(target, fixture)
     append_pr_metadata_surface(target, fixture, surface="closeout")
     closeout_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
+    checkpoint_step = next(
+        (
+            step
+            for step in closeout_payload.get("steps", [])
+            if isinstance(step, dict) and step.get("name") == "checkpoint-merge"
+        ),
+        {},
+    )
     if (
         closeout_payload.get("result") != "pass"
         or closeout_payload.get("review_approval", {}).get("status") != "terminal_closeout_retained"
         or closeout_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
         or closeout_payload.get("pr_metadata_preflight", {}).get("surface") != "closeout"
-        or closeout_payload.get("steps", [{}])[1].get("terminal_closed_checkpoint") is not True
+        or checkpoint_step.get("terminal_closed_checkpoint") is not True
     ):
-        raise AssertionError(f"terminal closeout pr-gate fixture did not pass: {closeout_payload.get('missing_inputs')}")
+        step_names = [
+            step.get("name")
+            for step in closeout_payload.get("steps", [])
+            if isinstance(step, dict)
+        ]
+        raise AssertionError(
+            "terminal closeout pr-gate fixture did not pass: "
+            f"{closeout_payload.get('missing_inputs')}; steps={step_names}"
+        )
 
     spec_review_path = target / ".loom" / "reviews" / f"{item}.spec.json"
     spec_review = json.loads(spec_review_path.read_text(encoding="utf-8"))
