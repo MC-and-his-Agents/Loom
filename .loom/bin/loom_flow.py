@@ -852,6 +852,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout = subparsers.add_parser("closeout", help="Check or sync Loom closeout state with GitHub control plane")
     closeout.add_argument("operation", choices=("check", "sync"))
     closeout.add_argument("--target", required=True, help="Target repository root")
+    closeout.add_argument("--item", help="Expected retained Loom Work Item id for closeout disambiguation")
     closeout.add_argument("--issue", type=int, help="GitHub issue number to validate or sync")
     closeout.add_argument("--pr", type=int, help="GitHub pull request number to validate or sync")
     closeout.add_argument("--project", type=int, help="GitHub project number to validate or sync")
@@ -9870,6 +9871,74 @@ def retained_item_candidate_reasons(
     return deduped
 
 
+def retained_item_candidate_priority(reasons: list[str]) -> int:
+    strong_reasons = {
+        "canonical WI issue-number carrier path",
+        "canonical WI issue-number item id",
+        "exact associated artifact issue locator",
+    }
+    return 1 if any(reason in strong_reasons for reason in reasons) else 0
+
+
+def explicit_retained_item_lookup(target_root: Path, item_id: str | None) -> dict[str, Any] | None:
+    if item_id is None:
+        return None
+    item_id = item_id.strip()
+    if not item_id:
+        return {
+            "item_id": None,
+            "work_item_relative": None,
+            "missing_inputs": ["explicit retained Work Item id is empty"],
+            "diagnostics": [],
+        }
+    work_item_relative = f".loom/work-items/{item_id}.md"
+    work_item_path = target_root / work_item_relative
+    if not work_item_path.exists():
+        return {
+            "item_id": None,
+            "work_item_relative": work_item_relative,
+            "missing_inputs": [f"explicit retained Work Item `{item_id}` is missing: {work_item_relative}"],
+            "diagnostics": [],
+        }
+    try:
+        work_item, work_item_errors = parse_work_item(work_item_path, target_root)
+    except OSError as exc:
+        return {
+            "item_id": None,
+            "work_item_relative": work_item_relative,
+            "missing_inputs": [f"explicit retained Work Item `{item_id}` is unreadable: {exc}"],
+            "diagnostics": [],
+        }
+    if work_item_errors:
+        return {
+            "item_id": None,
+            "work_item_relative": work_item_relative,
+            "missing_inputs": [f"explicit retained Work Item `{item_id}` parse error: {message}" for message in work_item_errors],
+            "diagnostics": [],
+        }
+    actual_item = str(work_item.get("item_id") or "")
+    if actual_item != item_id:
+        return {
+            "item_id": None,
+            "work_item_relative": work_item_relative,
+            "missing_inputs": [f"explicit retained Work Item id mismatch: expected `{item_id}`, got `{actual_item}`"],
+            "diagnostics": [],
+        }
+    return {
+        "item_id": item_id,
+        "work_item_relative": work_item_relative,
+        "missing_inputs": [],
+        "diagnostics": [
+            {
+                "item_id": item_id,
+                "work_item_relative": work_item_relative,
+                "reasons": ["explicit retained Work Item selector"],
+                "priority": 2,
+            }
+        ],
+    }
+
+
 def closeout_retained_item_lookup(target_root: Path, issue_number: int | None) -> dict[str, Any]:
     if issue_number is None:
         return {"item_id": None, "work_item_relative": None, "missing_inputs": [], "diagnostics": []}
@@ -9915,15 +9984,18 @@ def closeout_retained_item_lookup(target_root: Path, issue_number: int | None) -
                 "item_id": str(work_item["item_id"]),
                 "work_item_relative": work_item_relative,
                 "reasons": reasons,
+                "priority": retained_item_candidate_priority(reasons),
             }
         )
 
     if not candidates:
         return {"item_id": None, "work_item_relative": None, "missing_inputs": [], "diagnostics": diagnostics}
-    if len(candidates) > 1:
+    highest_priority = max(candidate["priority"] for candidate in candidates)
+    prioritized_candidates = [candidate for candidate in candidates if candidate["priority"] == highest_priority]
+    if len(prioritized_candidates) > 1:
         candidate_text = "; ".join(
             f"{candidate['item_id']} at {candidate['work_item_relative']} via {', '.join(candidate['reasons'])}"
-            for candidate in candidates
+            for candidate in prioritized_candidates
         )
         return {
             "item_id": None,
@@ -9933,12 +10005,56 @@ def closeout_retained_item_lookup(target_root: Path, issue_number: int | None) -
             ],
             "diagnostics": [*diagnostics, *candidates],
         }
-    candidate = candidates[0]
+    candidate = prioritized_candidates[0]
     return {
         "item_id": candidate["item_id"],
         "work_item_relative": candidate["work_item_relative"],
         "missing_inputs": [],
-        "diagnostics": [*diagnostics, candidate],
+        "diagnostics": [*diagnostics, *candidates],
+    }
+
+
+def closeout_expected_item_lookup(
+    target_root: Path,
+    issue_number: int | None,
+    explicit_item: str | None = None,
+) -> dict[str, Any]:
+    explicit_lookup = explicit_retained_item_lookup(target_root, explicit_item)
+    issue_lookup = closeout_retained_item_lookup(target_root, issue_number)
+    if explicit_lookup is None:
+        return issue_lookup
+    missing_inputs = list(explicit_lookup.get("missing_inputs", []))
+    explicit_item_id = retained_item_lookup_id(explicit_lookup)
+    issue_item_id = retained_item_lookup_id(issue_lookup)
+    if issue_number is not None and not missing_inputs:
+        issue_candidates = [
+            entry
+            for entry in issue_lookup.get("diagnostics", [])
+            if isinstance(entry, dict) and entry.get("item_id") == explicit_item_id
+        ]
+        if issue_item_id is not None and issue_item_id != explicit_item_id:
+            missing_inputs.append(
+                f"explicit retained Work Item `{explicit_item_id}` does not match retained-item lookup for issue #{issue_number}: `{issue_item_id}`"
+            )
+        elif issue_item_id is None and not issue_candidates:
+            missing_inputs.append(
+                f"explicit retained Work Item `{explicit_item_id}` could not be confirmed against issue #{issue_number}"
+            )
+    return {
+        "item_id": explicit_item_id if not missing_inputs else None,
+        "work_item_relative": retained_item_lookup_work_item_relative(explicit_lookup) if not missing_inputs else None,
+        "missing_inputs": missing_inputs,
+        "diagnostics": [
+            {
+                "kind": "explicit-retained-item-lookup",
+                "lookup": explicit_lookup,
+            },
+            {
+                "kind": "issue-retained-item-lookup",
+                "issue": issue_number,
+                "lookup": issue_lookup,
+            },
+        ],
     }
 
 
@@ -9948,10 +10064,6 @@ def closeout_expected_item_id(target_root: Path, issue_number: int | None) -> st
         return None
     item_id = lookup.get("item_id")
     return str(item_id) if isinstance(item_id, str) and item_id else None
-
-
-def closeout_expected_item_lookup(target_root: Path, issue_number: int | None) -> dict[str, Any]:
-    return closeout_retained_item_lookup(target_root, issue_number)
 
 
 def retained_item_lookup_missing_inputs(lookup: dict[str, Any]) -> list[str]:
@@ -20855,6 +20967,7 @@ def goal_completion_payload(target_root: Path, completion_file: str | None, cont
 def closeout_payload(
     *,
     target_root: Path,
+    expected_item: str | None,
     phase_number: int | None,
     fr_number: int | None,
     issue_number: int | None,
@@ -20875,7 +20988,7 @@ def closeout_payload(
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
     effective_profile = effective_closeout_gate_profile(gate_profile)
-    expected_closeout_lookup = closeout_expected_item_lookup(target_root, issue_number)
+    expected_closeout_lookup = closeout_expected_item_lookup(target_root, issue_number, expected_item)
     missing_inputs.extend(retained_item_lookup_missing_inputs(expected_closeout_lookup))
     expected_closeout_item = retained_item_lookup_id(expected_closeout_lookup)
     expected_closeout_work_item = retained_item_lookup_work_item_relative(expected_closeout_lookup)
