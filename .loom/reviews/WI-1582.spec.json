@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1582",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1582 minimal suite is approved: suite path is minimal with explicit full-suite not_applicable boundary, scenarios S1-S3 and acceptance A1-A5 map to validation evidence, and implementation contract constrains the closeout hosted admission repair without expanding into #1554/#1555/#1533.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-18T14:55:45Z",
+  "reviewed_head": "d5e2578bc7ac19128a1aabea1a964972ef1a61eb",
+  "reviewed_validation_summary": "2026-06-18T14:48Z validation passed in /Users/mc/dev/Loom-1582-closeout-hosted-admission: fact-chain WI-1582 pass; runtime-evidence WI-1582 pass; suite evidence validate pass; suite carrier validate pass; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; targeted terminal closeout hosted fixture via assert_terminal_closeout_pr_gate_fixture(Path(tmp)); PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1582.md",
+    "recovery_entry": ".loom/progress/WI-1582.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom-1582-closeout-hosted-admission/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1582/spec.md",
+    "suite_plan": ".loom/specs/WI-1582/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1582/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1582/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
