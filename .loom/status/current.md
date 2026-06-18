@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1534.json
 - Validation Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; suite evidence/carrier validation; fact-chain; shadow parity.
 - Closing Condition: PR for #1534 is merged, issue #1534 is closed/completed, and #1515 can consume closeout mode docs/skills/fixtures as stable milestone closeout evidence.
-- Current Checkpoint: implementation review recorded
-- Current Stop: Review artifacts `.loom/reviews/WI-1534.json` and `.loom/reviews/WI-1534.spec.json` allow implementation/docs head `f06410d27d72b0e3e141dc0255d392a0936580ad`; only review/carrier binding changes remain after that head.
-- Next Step: Commit review/carrier binding, push the branch, create the #1534 PR, and bind PR metadata to the pushed head.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1534 closed out post-merge: PR #1589 merged at 92bb6e9b15ec365a5751e18427a1c29b1633d328, issue #1534 closed at 2026-06-18T21:19:31Z, and terminal carrier metadata written.
+- Next Step: No further WI-1534 implementation work remains.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-19 local validation passed for WI-1534 head f06410d27d72b0e3e141dc0255d392a0936580ad: git diff --check; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom.py suite validate --target . --item WI-1534 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1534 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1534 --json; python3 tools/loom.py fact-chain --target . --item WI-1534 --json; python3 src/skills/shared/scripts/loom_flow.py shadow-parity --target . --surface all --blocking; python3 src/skills/shared/scripts/loom_flow.py work-item-audit --target .; python3 tools/py_compile_clean.py tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface contract-only . reached markdown-links failures=0 and only retained pre-existing local skill registry/manifest diagnostics. Read-only subagent scope review returned warn only for expected main-thread carrier ownership and found no generated-tree/source-skill drift.
 - Recovery Boundary: Branch `work/1534-closeout-mode-docs` in `/Users/mc/dev/Loom-1534-closeout-mode-docs`; base `c9307c4903e1e333674439aee898cbd3a3442222`; scope limited to #1534 docs/skills/fixtures plus Loom carrier evidence.
-- Current Lane: milestone-12-closeout-mode-docs
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
