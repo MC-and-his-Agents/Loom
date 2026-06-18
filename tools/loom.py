@@ -2881,6 +2881,7 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("--readback-file")
     parser.add_argument("--base-body-file")
     parser.add_argument("--compare-body-file")
+    parser.add_argument("--gate-freeze-snapshot-file")
     parser.add_argument("--pr-payload-file")
     parser.add_argument("--governance-intensity")
     parser.add_argument("--change-class")
@@ -3023,6 +3024,14 @@ def handle_pr(argv: list[str]) -> int:
         flow_args.extend(["--head-sha", args.head_sha])
     if args.work_item:
         flow_args.extend(["--item", args.work_item])
+    if args.body_file:
+        flow_args.extend(["--body-file", args.body_file])
+    if args.compare_body_file:
+        flow_args.extend(["--compare-body-file", args.compare_body_file])
+    if args.pr_payload_file:
+        flow_args.extend(["--pr-payload-file", args.pr_payload_file])
+    if args.gate_freeze_snapshot_file:
+        flow_args.extend(["--gate-freeze-snapshot-file", args.gate_freeze_snapshot_file])
     return emit_flow(command, flow_args, fallback_to=["loom pr inspect <pr> --json", "manual-reconciliation"])
 
 

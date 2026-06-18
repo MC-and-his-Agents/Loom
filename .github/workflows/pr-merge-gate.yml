@@ -28,7 +28,26 @@ jobs:
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          args=(pr-gate check --target . --head-sha "$PR_HEAD_SHA" --branch "$PR_HEAD_REF")
+          mkdir -p .loom/runtime/pr
+          gh pr view "$PR_NUMBER" \
+            --json body,number,state,isDraft,headRefName,headRefOid,baseRefName,url,mergeStateStatus,reviewDecision \
+            > .loom/runtime/pr/pr-readback.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path(".loom/runtime/pr/pr-readback.json").read_text(encoding="utf-8"))
+          Path(".loom/runtime/pr/pr-body-readback.md").write_text(payload.get("body") or "", encoding="utf-8")
+          PY
+          args=(
+            pr-gate check
+            --target .
+            --head-sha "$PR_HEAD_SHA"
+            --branch "$PR_HEAD_REF"
+            --pr-payload-file .loom/runtime/pr/pr-readback.json
+            --body-file .loom/runtime/pr/pr-body-readback.md
+            --compare-body-file .loom/runtime/pr/pr-body-readback.md
+          )
           if [ -n "$PR_NUMBER" ]; then
             args+=(--pr "$PR_NUMBER")
           fi
