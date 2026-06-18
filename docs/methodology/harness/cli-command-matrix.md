@@ -139,6 +139,17 @@ Idle closeout recovery is intentionally split into explicit layers:
 
 `closeout queue status` is read-only. It reports retained Work Items, host completion evidence when provided by a queue fixture or terminal metadata, carrier checkpoint state, closeout mode, next action, and next command. It does not replace `closeout check`, `reconciliation audit|sync`, or `carrier closeout-sync`.
 
+Queue/status closeout modes are operational diagnostics over the canonical
+closeout mode protocol in [closeout-gate.md](./closeout-gate.md#21-closeout-mode-protocol):
+
+| queue/status mode | Canonical closeout mode | Next command boundary |
+| --- | --- | --- |
+| `auto_no_op` | `auto_no_op` | No command; host and repo terminal evidence already agree. |
+| `light_carrier_sync` | `light` | `loom carrier closeout-sync ... --apply` or a closeout-only PR; no host mutation. |
+| `batched_closeout` | `batched` | `loom repair plan ... --json` before any grouped carrier sync. |
+| `full_closeout` | `full` | `loom closeout --target <repo> --issue <n> --pr <n> --json` plus review / guardian escalation when signaled. |
+| `blocked` | `full` until repaired | Restore missing host completion, dependency graph, review, release/no-release, or carrier evidence first. |
+
 The HotCP-style stale carrier regression fixture covers this sequence: `workspace retire` stays `local_only`; `repair plan/apply` or `carrier closeout-sync` exposes repo-local `carrier_closeout_sync`; the final fact-chain reads `idle` with `current_item_id = no_active_item`.
 
 ## Carrier Commands

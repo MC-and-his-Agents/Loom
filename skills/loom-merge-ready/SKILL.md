@@ -33,6 +33,13 @@ description: 负责 merge 前统一放行。Use when Codex needs to confirm whet
   不手工重拼一条旁路检查链；若 freeze 返回 `pr_metadata_drift`、`shadow_stale`、
   `review_stale`、`hosted_snapshot_mismatch` 或 `unsupported_command_surface`，
   必须先回到 freeze repair path。
+- 当 PR 是 closeout-only carrier PR 时，merge-ready 只能消费
+  `loom-closeout-specific-gate/v1` 的 verdict 作为 closeout admission 信号：
+  `closeout_pr_allowed=true` 允许继续 closeout PR 路径，但不等于实现审查通过；
+  `full_review_required=true` 或 `escalation_required=true` 必须回到 full review /
+  guardian 或 blocker repair。Queue/status 的 `light_carrier_sync`、
+  `batched_closeout`、`full_closeout` 只是运行时分类，必须映射回
+  closeout-gate 的 `light`、`batched`、`full` canonical modes 后再判断。
 
 输入信号与输出合同见：
 

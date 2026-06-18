@@ -20,6 +20,12 @@ description: 负责清理并退休当前事项现场。Use when Codex needs to c
 - 不自动丢弃用户改动，不默认删除现场目录
 - `workspace retire` 是 post-merge local cleanup / runtime evidence，不写 `.loom/progress/**` 或 `.loom/status/current.md` 这类版本化 carrier
 - 版本化 closeout truth 必须在 merge 前由 closeout / reconciliation 路径形成，并在 merge 后由 closeout check / sync 消费；不能由本地 retire 追加生成
+- retire 不选择 closeout mode。若 closeout queue/status 指向
+  `auto_no_op`、`light_carrier_sync`、`batched_closeout`、`full_closeout` 或
+  `blocked`，先按 closeout-gate 的 `auto_no_op`、`light`、`batched`、`full`
+  mode 完成 host/repo carrier closeout，再执行本地 cleanup。`workspace retire`
+  只能保留 local-only evidence，不能替代 `carrier closeout-sync --apply`、
+  `reconciliation sync`、`closeout check` 或 closeout-only PR。
 
 输入信号与输出合同见：
 

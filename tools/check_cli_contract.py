@@ -5958,6 +5958,83 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
         raise AssertionError("closeout queue status missing-target envelope drifted")
 
 
+def assert_closeout_mode_docs_skill_protocol_contract() -> None:
+    closeout_gate = (REPO_ROOT / "docs/methodology/harness/closeout-gate.md").read_text(encoding="utf-8")
+    shared_reference = (REPO_ROOT / "skills/shared/references/harness/closeout-gate.md").read_text(encoding="utf-8")
+    src_reference = (REPO_ROOT / "src/skills/shared/references/harness/closeout-gate.md").read_text(encoding="utf-8")
+    if closeout_gate != shared_reference or closeout_gate != src_reference:
+        raise AssertionError("closeout gate docs and skill shared references drifted")
+
+    required_gate_snippets = [
+        "## 2.1 Closeout Mode Protocol",
+        "`inline`",
+        "`auto_no_op`",
+        "`light`",
+        "`batched`",
+        "`full`",
+        "`light_carrier_sync`",
+        "`batched_closeout`",
+        "`full_closeout`",
+        "`loom-closeout-specific-gate/v1`",
+        "`closeout_pr_allowed`",
+        "`full_review_required`",
+        "`escalation_required`",
+        "`blocking_inputs`",
+        "`next_action`",
+    ]
+    for snippet in required_gate_snippets:
+        if snippet not in closeout_gate:
+            raise AssertionError(f"closeout mode protocol docs missing `{snippet}`")
+
+    cli_matrix = (REPO_ROOT / "docs/methodology/harness/cli-command-matrix.md").read_text(encoding="utf-8")
+    required_matrix_snippets = [
+        "| `auto_no_op` | `auto_no_op` |",
+        "| `light_carrier_sync` | `light` |",
+        "| `batched_closeout` | `batched` |",
+        "| `full_closeout` | `full` |",
+        "| `blocked` | `full` until repaired |",
+    ]
+    for snippet in required_matrix_snippets:
+        if snippet not in cli_matrix:
+            raise AssertionError(f"closeout queue mode mapping docs missing `{snippet}`")
+
+    skill_expectations = {
+        "skills/loom-merge-ready/SKILL.md": [
+            "loom-closeout-specific-gate/v1",
+            "closeout_pr_allowed=true",
+            "full_review_required=true",
+            "escalation_required=true",
+            "light_carrier_sync",
+            "batched_closeout",
+            "full_closeout",
+        ],
+        "skills/loom-pre-review/SKILL.md": [
+            "closeout-only carrier PR",
+            "inline",
+            "auto_no_op",
+            "light",
+            "batched",
+            "full",
+            "full_review_required",
+            "escalation_required",
+        ],
+        "skills/loom-retire/SKILL.md": [
+            "retire 不选择 closeout mode",
+            "auto_no_op",
+            "light_carrier_sync",
+            "batched_closeout",
+            "full_closeout",
+            "workspace retire",
+            "carrier closeout-sync --apply",
+        ],
+    }
+    for relative_path, snippets in skill_expectations.items():
+        text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+        for snippet in snippets:
+            if snippet not in text:
+                raise AssertionError(f"{relative_path} missing closeout mode protocol snippet `{snippet}`")
+
+
 def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
     target = tmp / "hotcp-stale-active-root"
     target.mkdir()
@@ -6682,6 +6759,7 @@ def run_governance_closeout_contract() -> None:
     assert_governance_closeout_help_contract()
     assert_closeout_wrapper_argument_contract()
     assert_repo_local_closeout_runtime_argument_contract()
+    assert_closeout_mode_docs_skill_protocol_contract()
     active_item = active_work_item_id()
     assert_active_closeout_contract(active_item)
     assert_idle_root_self_governance_direct_contract()
