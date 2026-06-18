@@ -17673,15 +17673,6 @@ def closeout_freeze_target_contains_merge(
 ) -> tuple[bool | None, list[str]]:
     if not isinstance(merge_commit_sha, str) or not merge_commit_sha:
         return None, ["implementation PR merge commit is missing"]
-    candidate_refs = [
-        target_branch,
-        f"origin/{target_branch}",
-        f"refs/remotes/origin/{target_branch}",
-    ]
-    for ref in candidate_refs:
-        result = run_git(target_root, ["merge-base", "--is-ancestor", merge_commit_sha, ref])
-        if result is not None and result.returncode == 0:
-            return True, []
     if contains_merged_commit(target_root, merge_commit_sha, target_branch, owner=owner, repo_name=repo_name):
         return True, []
     return False, [f"target branch `{target_branch}` does not contain merge commit `{merge_commit_sha}`"]
@@ -21614,6 +21605,17 @@ def contains_merged_commit(
     owner: str | None = None,
     repo_name: str | None = None,
 ) -> bool:
+    target_branch = target_branch.strip()
+    if not target_branch:
+        return False
+    run_git(
+        root,
+        [
+            "fetch",
+            "origin",
+            f"refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
+        ],
+    )
     candidate_refs = (
         target_branch,
         f"origin/{target_branch}",
