@@ -21612,6 +21612,7 @@ def contains_merged_commit(
         root,
         [
             "fetch",
+            "--no-write-fetch-head",
             "origin",
             f"refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
         ],
