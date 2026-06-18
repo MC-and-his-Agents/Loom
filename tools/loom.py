@@ -219,14 +219,14 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "gate",
         "status": "implemented",
         "json": True,
-        "summary": "Read-only validation of the loom-gate-freeze/v1 hosted gate admission input snapshot.",
+        "summary": "Read-only validation of hosted loom-gate-freeze/v1 or closeout loom-closeout-freeze/v1 admission snapshots.",
     },
     {
         "command": "gate freeze write",
         "domain": "gate",
         "status": "implemented",
         "json": True,
-        "summary": "Write a repo-local loom-gate-freeze/v1 snapshot under .loom/runtime/gate-freeze without mutating host truth.",
+        "summary": "Write a repo-local hosted or closeout freeze snapshot under .loom/runtime/gate-freeze without mutating host truth.",
     },
     {
         "command": "gate closeout",

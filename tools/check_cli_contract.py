@@ -2864,6 +2864,559 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("hosted snapshot mismatch must carry classifier next action")
 
 
+def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
+    target = tmp / "closeout-freeze-profile"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    write_hosted_freeze_admission_inputs(target)
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture closeout freeze inputs"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    update_fixture_pr_head(
+        target,
+        fixture,
+        state="MERGED",
+        extra={
+            "mergedAt": "2026-06-18T00:00:00Z",
+            "mergeCommit": {"oid": head_sha},
+            "baseRefName": fixture["branch"],
+        },
+    )
+    append_governance_intensity_metadata_body(target, fixture)
+    pr_path = target / fixture["pr_file"]
+    fixture_dir = target / ".loom" / "fixtures" / fixture["item"]
+    release_evidence_file = fixture_dir / "no-release-evidence.md"
+    release_evidence_relative = f".loom/fixtures/{fixture['item']}/no-release-evidence.md"
+    release_evidence_file.write_text(
+        "# No-release Evidence\n\n"
+        "- Judgment: no_release\n"
+        "- Readback: fixture closeout lane changes only local checker/admission behavior and does not publish a release.\n",
+        encoding="utf-8",
+    )
+    pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    pr_payload["body"] = (
+        f"{pr_payload['body'].rstrip()}\n\n"
+        f"No-release evidence locator: {release_evidence_relative}\n"
+        "Closes #1532\n"
+    )
+    pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
+    issue_file = fixture_dir / "issue.json"
+    issue_file.write_text(
+        json.dumps(
+            {
+                "number": 1532,
+                "state": "closed",
+                "title": "closeout freeze fixture",
+                "closed_at": "2026-06-18T00:01:00Z",
+                "html_url": "https://github.com/owner/repo/issues/1532",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    issue_relative = f".loom/fixtures/{fixture['item']}/issue.json"
+    dependency_file = fixture_dir / "dependencies.json"
+    dependency_file.write_text(
+        json.dumps(
+            {
+                "availability": "present",
+                "checks": [],
+                "native_edges": [],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    dependency_relative = f".loom/fixtures/{fixture['item']}/dependencies.json"
+    body_file = f".loom/fixtures/{fixture['item']}/closeout-pr-body.md"
+    readback_drift_file = f".loom/fixtures/{fixture['item']}/closeout-pr-body-drift.md"
+    missing_release_pr_file = f".loom/fixtures/{fixture['item']}/pr-missing-release-evidence.json"
+    (target / body_file).write_text(pr_payload["body"], encoding="utf-8")
+    (target / readback_drift_file).write_text(pr_payload["body"] + "\nOperator drift after readback.\n", encoding="utf-8")
+    missing_release_pr_payload = dict(pr_payload)
+    missing_release_pr_payload["body"] = pr_payload["body"].replace(
+        f"No-release evidence locator: {release_evidence_relative}\n",
+        "",
+    )
+    (target / missing_release_pr_file).write_text(json.dumps(missing_release_pr_payload, indent=2) + "\n", encoding="utf-8")
+
+    def read_only_snapshot() -> dict[str, str]:
+        fetch_head = subprocess.check_output(["git", "rev-parse", "--git-path", "FETCH_HEAD"], cwd=target, text=True).strip()
+        fetch_path = target / fetch_head
+        return {
+            "status": subprocess.check_output(["git", "status", "--short"], cwd=target, text=True),
+            "refs": subprocess.check_output(["git", "for-each-ref", "--format=%(refname):%(objectname)"], cwd=target, text=True),
+            "fetch_head": fetch_path.read_text(encoding="utf-8") if fetch_path.exists() else "<missing>",
+        }
+
+    before_check = read_only_snapshot()
+    _, pass_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+            "--body-file",
+            body_file,
+            "--compare-body-file",
+            body_file,
+        ],
+        expect=0,
+    )
+    after_check = read_only_snapshot()
+    if after_check != before_check:
+        raise AssertionError("closeout freeze check must not mutate git status, refs, or FETCH_HEAD")
+    if pass_payload.get("schema_version") != "loom-closeout-freeze/v1":
+        raise AssertionError("closeout freeze check must emit loom-closeout-freeze/v1")
+    if pass_payload.get("result") != "pass" or pass_payload.get("profile") != "closeout":
+        raise AssertionError(f"closeout freeze positive fixture did not pass: {pass_payload.get('missing_inputs')}")
+    if not str(pass_payload.get("snapshot_id", "")).startswith("sha256:"):
+        raise AssertionError("closeout freeze snapshot_id must be sha256-prefixed")
+    base_snapshot = pass_payload.get("base_freeze_snapshot", {})
+    if base_snapshot.get("schema_version") != "loom-gate-freeze/v1":
+        raise AssertionError("closeout freeze must retain the reused hosted gate freeze snapshot surface")
+    reused_inputs = base_snapshot.get("input_bindings", {})
+    for key in ("carrier_refresh", "shadow_freshness", "readback", "failure_classifier"):
+        if key not in reused_inputs:
+            raise AssertionError(f"closeout freeze did not retain reused {key} input")
+    pending_fields = set(pass_payload.get("pending_contract_fields", []))
+    consumed_fields = set(pass_payload.get("consumed_contract_fields", []))
+    stable_fields = {
+        "carrier_refresh_result",
+        "shadow_freshness",
+        "hosted_snapshot_binding",
+        "failure_classifier_mapping",
+        "readback_drift",
+        "release_evidence_readback",
+    }
+    stale_pending = stable_fields.intersection(pending_fields)
+    if stale_pending:
+        raise AssertionError(f"closeout freeze still marks stable fields pending: {sorted(stale_pending)}")
+    missing_consumed = stable_fields.difference(consumed_fields)
+    if missing_consumed:
+        raise AssertionError(f"closeout freeze did not consume stable fields: {sorted(missing_consumed)}")
+    release_boundary = pass_payload.get("release_boundary", {})
+    if release_boundary.get("result") != "pass" or release_boundary.get("evidence_readback", {}).get("locator") != release_evidence_relative:
+        raise AssertionError("closeout freeze must consume no-release evidence readback instead of PR metadata alone")
+    if pass_payload.get("readiness", {}).get("closeout_pr_allowed") is not True:
+        raise AssertionError("closeout freeze positive fixture must allow closeout PR creation")
+
+    _, missing_release_evidence = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            missing_release_pr_file,
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if missing_release_evidence.get("readiness", {}).get("closeout_pr_allowed") is not False:
+        raise AssertionError("closeout freeze must fail closed when release/no-release evidence is missing")
+    if not any(
+        blocking.get("input") == "release_boundary"
+        and blocking.get("failure_kind") == "closeout_release_evidence_gap"
+        for blocking in missing_release_evidence.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze missing release/no-release evidence must be a blocking input")
+
+    _, readback_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+            "--body-file",
+            body_file,
+            "--compare-body-file",
+            readback_drift_file,
+        ],
+        expect=1,
+    )
+    if readback_drift.get("readiness", {}).get("closeout_pr_allowed") is not False:
+        raise AssertionError("closeout freeze must fail closed when PR body readback drifts")
+    if not any(
+        blocking.get("input") == "readback"
+        for blocking in readback_drift.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze readback drift must be a blocking input")
+
+    unrelated_issue_file = fixture_dir / "issue-unrelated.json"
+    unrelated_issue_file.write_text(
+        json.dumps(
+            {
+                "number": 9999,
+                "state": "closed",
+                "title": "unrelated closed issue",
+                "closed_at": "2026-06-18T00:01:00Z",
+                "html_url": "https://github.com/owner/repo/issues/9999",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, unrelated_subject = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "9999",
+            "--issue-payload-file",
+            f".loom/fixtures/{fixture['item']}/issue-unrelated.json",
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if not any(
+        blocking.get("failure_kind") == "closeout_terminal_subject_drift"
+        for blocking in unrelated_subject.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze must block unrelated closed issue plus merged PR pairing")
+
+    _, target_branch_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            "main",
+        ],
+        expect=1,
+    )
+    if target_branch_drift.get("terminal_facts", {}).get("target_contains_merge_commit") is not False:
+        raise AssertionError("closeout freeze must not fall back to HEAD for target branch merge containment")
+    if not any(
+        blocking.get("failure_kind") == "closeout_host_git_mismatch"
+        for blocking in target_branch_drift.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze target branch drift must be a blocking input")
+
+    dependency_drift_file = fixture_dir / "dependencies-open-blocker.json"
+    dependency_drift_file.write_text(
+        json.dumps(
+            {
+                "availability": "present",
+                "checks": [],
+                "native_edges": [
+                    {
+                        "source_issue": 1532,
+                        "blocking_issue": 9999,
+                        "direction": "blocked_by",
+                        "blocker_state": "open",
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, dependency_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            f".loom/fixtures/{fixture['item']}/dependencies-open-blocker.json",
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    dependency_binding = dependency_drift.get("carrier_bindings", {}).get("dependency_graph", {})
+    if dependency_binding.get("result") != "block":
+        raise AssertionError("closeout freeze must block dependency graph drift")
+    if not any(
+        finding.get("kind") == "open_blocker_executable_conflict"
+        for finding in dependency_binding.get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("closeout freeze dependency graph must expose the open blocker finding")
+    if not any(
+        finding.get("failure_kind") == "closeout_dependency_graph_drift"
+        for finding in dependency_drift.get("failure_classifier", {}).get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("closeout freeze dependency graph drift must carry a classifier finding")
+
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["semantic_review_disposition"] = {
+        "status": "failed",
+        "reason": "fixture retained review semantic drift",
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    _, review_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if not any(
+        blocking.get("input") == "retained_review"
+        for blocking in review_drift.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze must block retained review semantic drift")
+    review_payload["semantic_review_disposition"] = {
+        "status": "passed",
+        "reason": "fixture restored retained review semantic disposition",
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+
+    write_path = f".loom/runtime/gate-freeze/{fixture['item']}-closeout.json"
+    _, write_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "write",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+            "--write-path",
+            write_path,
+        ],
+        expect=0,
+    )
+    if write_payload.get("write_artifact", {}).get("locator") != write_path:
+        raise AssertionError("closeout freeze write must retain the closeout snapshot under .loom/runtime/gate-freeze")
+    written = json.loads((target / write_path).read_text(encoding="utf-8"))
+    if written.get("schema_version") != "loom-closeout-freeze/v1":
+        raise AssertionError("closeout freeze write artifact must preserve loom-closeout-freeze/v1")
+
+    task_carrier = target / ".loom" / "specs" / fixture["item"] / "task-carrier.md"
+    task_carrier.write_text(f"{task_carrier.read_text(encoding='utf-8').rstrip()}\n\n- Closeout carrier sync fixture.\n", encoding="utf-8")
+    commit_fixture_file(target, f".loom/specs/{fixture['item']}/task-carrier.md", "fixture closeout allowed carrier drift")
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["reviewed_head"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_payload["semantic_review_disposition"] = {
+        "status": "passed",
+        "reason": "fixture closeout carrier drift review refreshed",
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture closeout review refresh after carrier drift")
+    _, allowed_drift_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=0,
+    )
+    if allowed_drift_payload.get("allowed_paths", {}).get("violations") != []:
+        raise AssertionError("closeout freeze allowed paths must match terminal closeout carrier policy")
+    if f".loom/specs/{fixture['item']}/task-carrier.md" not in allowed_drift_payload.get("allowed_paths", {}).get("changed_paths", []):
+        raise AssertionError("closeout freeze allowed path fixture did not exercise task carrier drift")
+
+    (target / "tools").mkdir(exist_ok=True)
+    (target / "tools" / "loom.py").write_text("print('implementation drift')\n", encoding="utf-8")
+    commit_fixture_file(target, "tools/loom.py", "fixture implementation drift after closeout merge")
+    _, drift_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if drift_payload.get("result") != "block":
+        raise AssertionError("closeout freeze must block implementation drift after the merge commit")
+    allowed_paths = drift_payload.get("allowed_paths", {})
+    if "tools/loom.py" not in allowed_paths.get("violations", []):
+        raise AssertionError("closeout freeze allowed_paths must identify implementation drift")
+    if not any(
+        finding.get("failure_kind") == "closeout_allowed_paths_violation"
+        for finding in drift_payload.get("failure_classifier", {}).get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("closeout freeze implementation drift must carry a classifier finding")
+
+    companion_readme = target / ".loom" / "companion" / "README.md"
+    companion_readme.write_text("# Fixture Companion\n\nstale shadow source\n", encoding="utf-8")
+    _, stale_carrier_shadow = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if stale_carrier_shadow.get("readiness", {}).get("closeout_pr_allowed") is not False:
+        raise AssertionError("closeout freeze must fail closed when carrier refresh or shadow freshness is stale")
+    stale_inputs = {
+        blocking.get("input")
+        for blocking in stale_carrier_shadow.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    }
+    if not {"carrier_refresh", "shadow_freshness"}.issubset(stale_inputs):
+        raise AssertionError("closeout freeze stale carrier/shadow inputs must both block closeout admission")
+
+
 def record_current_fixture_review(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
     _, record_payload = run_flow_json(
         [
@@ -3902,6 +4455,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
     assert_gate_freeze_review_binding_fixture(tmp)
     assert_hosted_freeze_admission_pr_gate_fixture(tmp)
+    assert_closeout_freeze_profile_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
 
