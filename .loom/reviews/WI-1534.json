@@ -1,39 +1,57 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1534",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "c9307c4903e1e333674439aee898cbd3a3442222",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head review for WI-1534/#1534 at 30f6a3da40f93d5bbacd23c4438e037840d38a6d: closeout mode documentation, closeout-related skill protocol text, generated skill mirrors, shared closeout-gate references, and targeted contract assertions are allowed. The diff stays within #1534 docs/skills/fixture scope and does not implement runtime closeout behavior, host mutation, release/no-release judgment, issue closure, PR merge, Project mutation, or batch closeout execution.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-18T20:45:14Z",
+  "reviewed_head": "30f6a3da40f93d5bbacd23c4438e037840d38a6d",
+  "reviewed_validation_summary": "2026-06-19 local validation passed for WI-1534 head 30f6a3da: git diff --check; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom.py suite validate --target . --item WI-1534 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1534 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1534 --json; python3 tools/loom.py fact-chain --target . --item WI-1534 --json; python3 src/skills/shared/scripts/loom_flow.py shadow-parity --target . --surface all --blocking; python3 src/skills/shared/scripts/loom_flow.py work-item-audit --target .; python3 tools/py_compile_clean.py tools/check_cli_contract.py. Read-only subagent scope review returned warn only for expected main-thread carrier ownership and found no generated-tree/source-skill drift.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1534.md",
+    "recovery_entry": ".loom/progress/WI-1534.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1534 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1534 --json",
+    "suite_evidence_map": ".loom/specs/WI-1534/evidence-map.md",
+    "suite_consistency_analysis": "python3 tools/loom.py suite validate --target . --item WI-1534 --json",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1534/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/closeout-gate.md",
+      "docs/methodology/harness/cli-command-matrix.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/evidence-map.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }

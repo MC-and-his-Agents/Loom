@@ -11,20 +11,20 @@
 - Review Entry: .loom/reviews/WI-1534.json
 - Validation Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; suite evidence/carrier validation; fact-chain; shadow parity.
 - Closing Condition: PR for #1534 is merged, issue #1534 is closed/completed, and #1515 can consume closeout mode docs/skills/fixtures as stable milestone closeout evidence.
-- Current Checkpoint: implementation validation complete
-- Current Stop: Closeout mode docs, skill protocol text, generated skill mirrors, shared references, and targeted contract assertions are updated in `work/1534-closeout-mode-docs`.
-- Next Step: Run final readback/pre-review, commit the branch, create the #1534 PR, and bind PR metadata/review evidence to the pushed head.
+- Current Checkpoint: implementation review recorded
+- Current Stop: Review artifact `.loom/reviews/WI-1534.json` allows implementation head `30f6a3da40f93d5bbacd23c4438e037840d38a6d`; only review/carrier binding changes remain after that head.
+- Next Step: Commit review/carrier binding, push the branch, create the #1534 PR, and bind PR metadata to the pushed head.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19 local validation passed: `git diff --check`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/check_cli_contract.py --surface closeout-wrapper`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/loom.py suite validate --target . --item WI-1534 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1534 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1534 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1534 --json`; `python3 src/skills/shared/scripts/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 src/skills/shared/scripts/loom_flow.py work-item-audit --target .`; `python3 tools/py_compile_clean.py tools/check_cli_contract.py`.
+- Latest Validation Summary: 2026-06-19 local validation passed for implementation head `30f6a3da40f93d5bbacd23c4438e037840d38a6d`: `git diff --check`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/check_cli_contract.py --surface closeout-wrapper`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/loom.py suite validate --target . --item WI-1534 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1534 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1534 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1534 --json`; `python3 src/skills/shared/scripts/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 src/skills/shared/scripts/loom_flow.py work-item-audit --target .`; `python3 tools/py_compile_clean.py tools/check_cli_contract.py`; read-only subagent scope review found no generated-tree/source-skill drift.
 - Recovery Boundary: Branch `work/1534-closeout-mode-docs` in `/Users/mc/dev/Loom-1534-closeout-mode-docs`; base `c9307c4903e1e333674439aee898cbd3a3442222`; scope limited to #1534 docs/skills/fixtures plus Loom carrier evidence.
 - Current Lane: milestone-12-closeout-mode-docs
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-19 WI-1534 closeout mode docs/skills/fixtures implementation validation
+- Run Entry: 2026-06-19 WI-1534 closeout mode docs/skills/fixtures implementation review
 - Logs Entry: local command output retained in current Codex milestone/12 thread
 - Diagnostics Entry: #1534 starts after #1588 carrier sync merged; first execution pass must consume #1533 closeout-specific gate, #1555 closeout run, #1543 queue/status, and #1541 PR metadata surfaces.
-- Verification Entry: targeted local validation passed on branch `work/1534-closeout-mode-docs`; PR/hosted evidence pending PR creation.
+- Verification Entry: targeted local validation passed for implementation head `30f6a3da40f93d5bbacd23c4438e037840d38a6d`; review artifact recorded; PR/hosted evidence pending PR creation.
 - Lane Entry: milestone-12-closeout-mode-docs
 
 ## Sources
