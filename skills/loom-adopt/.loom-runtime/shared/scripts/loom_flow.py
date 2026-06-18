@@ -679,6 +679,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     carrier.add_argument("--dry-run", action="store_true", default=True, help="Preview refresh actions without writing files; this is the default")
     carrier.add_argument("--write", dest="dry_run", action="store_false", help="Write Loom-owned carrier metadata refreshes")
     carrier.add_argument("--apply", dest="dry_run", action="store_false", help="Apply explicit versioned carrier closeout metadata writes")
+    carrier.add_argument(
+        "--surface",
+        choices=("pre_review", "review", "merge_ready", "closeout"),
+        default="merge_ready",
+        help="Gate surface whose carrier refresh drift policy should be evaluated",
+    )
     carrier.add_argument("--terminal-state", choices=tuple(sorted(TERMINAL_CLOSEOUT_STATES)), help="Terminal closeout state to write")
     carrier.add_argument("--issue", help="Issue locator or number bound to terminal closeout")
     carrier.add_argument("--pr", help="PR locator or number bound to terminal closeout")
@@ -821,7 +827,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     gate_freeze.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
     gate_freeze.add_argument(
         "--surface",
-        choices=("pre_review", "review", "merge_ready"),
+        choices=("pre_review", "review", "merge_ready", "closeout"),
         default="merge_ready",
         help="Gate surface whose PR metadata contract is consumed by the snapshot",
     )
@@ -14144,7 +14150,14 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
             write_json_file(path, payload)
 
 
-def carrier_refresh_payload(target_root: Path, output_relative: str, expected_item: str | None, *, dry_run: bool) -> dict[str, Any]:
+def carrier_refresh_payload(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    *,
+    dry_run: bool,
+    surface: str = "merge_ready",
+) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     context, context_errors = load_context(target_root, output_relative, expected_item)
     idle_context = is_idle_context_errors(context_errors)
@@ -14196,7 +14209,13 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
         assert context
         review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
         spec_review_path = default_spec_review_path(context["item_id"])
-        allowed_paths = allowed_post_review_carrier_paths(context, review_path, spec_review_path)
+        normalized_checkpoint = normalize_checkpoint(str(context.get("current_checkpoint", "")))
+        terminal_closeout_surface = surface == "closeout" and normalized_checkpoint in TERMINAL_CHECKPOINTS
+        allowed_paths = (
+            allowed_terminal_closeout_carrier_paths(context, review_path, spec_review_path)
+            if terminal_closeout_surface
+            else allowed_post_review_carrier_paths(context, review_path, spec_review_path)
+        )
         if review_errors or review_record is None:
             review_status = {"status": "missing", "path": review_path, "missing_inputs": review_errors or [f"missing review artifact: {review_path}"]}
         else:
@@ -14205,7 +14224,17 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
                 reviewed_head=str(review_record.get("reviewed_head", "")),
                 allowed_paths=allowed_paths,
             )
-            review_status = {"path": review_path, "head_binding": binding, "missing_inputs": binding_errors}
+            review_status = {
+                "path": review_path,
+                "head_binding": binding,
+                "missing_inputs": binding_errors,
+                "surface": surface,
+                "allowed_paths_policy": (
+                    "terminal closeout carrier paths only; requires terminal checkpoint"
+                    if terminal_closeout_surface
+                    else "post-review carrier paths only"
+                ),
+            }
             if binding.get("status") in {"implementation-drift-only", "stale"}:
                 review_status["status"] = "block"
                 missing_inputs.append("review artifact is stale because non-carrier drift is present")
@@ -14238,6 +14267,7 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
         "missing_inputs": missing_inputs,
         "fallback_to": None if result == "pass" else "adoption",
         "dry_run": dry_run,
+        "surface": surface,
         "runtime_state": runtime_state,
         "actions": actions,
         "refresh_needed": refresh_needed,
@@ -15188,7 +15218,7 @@ def handle_carrier(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     if args.operation == "closeout-sync":
         return emit(carrier_closeout_sync_payload(target_root, args.output, args.item, args))
-    return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run))
+    return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run, surface=args.surface))
 
 
 def github_commit_pulls(root: Path, owner: str, repo_name: str, head_sha: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -17178,7 +17208,7 @@ def gate_freeze_command_surface(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None) -> dict[str, Any]:
+def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None, surface: str = "merge_ready") -> dict[str, Any]:
     review_entry = context.get("review_entry")
     review_relative = str(review_entry) if isinstance(review_entry, str) and review_entry else None
     review_record, review_path, review_errors = load_review_record(
@@ -17212,11 +17242,18 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None)
     binding["decision"] = review_record.get("decision")
     binding["kind"] = review_record.get("kind")
     binding["reviewed_head"] = review_record.get("reviewed_head")
+    normalized_checkpoint = normalize_checkpoint(str(context.get("current_checkpoint", "")))
+    terminal_closeout_surface = surface == "closeout" and normalized_checkpoint in TERMINAL_CHECKPOINTS
+    allowed_paths = (
+        allowed_terminal_closeout_carrier_paths(context, review_path)
+        if terminal_closeout_surface
+        else allowed_post_review_carrier_paths(context, review_path)
+    )
     head_binding, head_errors = review_head_binding_for_head(
         context["target_root"],
         reviewed_head=review_record.get("reviewed_head") if isinstance(review_record.get("reviewed_head"), str) else None,
         target_head=head_sha or git_head_sha(context["target_root"]),
-        allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+        allowed_paths=allowed_paths,
     )
     binding["head_binding"] = head_binding
     binding["current_head"] = head_binding.get("current_head")
@@ -17230,6 +17267,12 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None)
         current_validation_summary=context.get("latest_validation_summary"),
     )
     binding["semantic_review_disposition"] = disposition
+    binding["surface"] = surface
+    binding["allowed_paths_policy"] = (
+        "terminal closeout carrier paths only; requires terminal checkpoint"
+        if terminal_closeout_surface
+        else "post-review carrier paths only"
+    )
     binding["missing_inputs"] = [*head_errors, *disposition_errors]
     if review_record.get("decision") != "allow":
         binding["missing_inputs"].append("review artifact decision is not allow")
@@ -17384,8 +17427,17 @@ def gate_freeze_shadow_freshness_binding(target_root: Path, governance_surface: 
     }
 
 
-def gate_freeze_carrier_refresh_binding(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
-    dry_run_payload = carrier_refresh_payload(target_root, output_relative, expected_item, dry_run=True)
+def gate_freeze_carrier_refresh_binding(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    *,
+    surface: str = "merge_ready",
+) -> dict[str, Any]:
+    dry_run_payload = carrier_refresh_payload(target_root, output_relative, expected_item, dry_run=True, surface=surface)
+    refresh_command = "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+    if surface != "merge_ready":
+        refresh_command = f"{refresh_command} --surface {surface}"
     refresh_needed = [
         action for action in dry_run_payload.get("refresh_needed", []) if isinstance(action, dict)
     ]
@@ -17414,10 +17466,10 @@ def gate_freeze_carrier_refresh_binding(target_root: Path, output_relative: str,
         "subject": "carrier_refresh",
         "why_blocking": "hosted admission cannot trust a frozen snapshot while carrier refresh dry-run reports pending updates.",
         "fallback_to": "carrier_refresh",
-        "refresh_suggestion": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        "refresh_suggestion": refresh_command
         if refresh_needed
         else None,
-        "next_action": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        "next_action": refresh_command
         if refresh_needed
         else dry_run_payload.get("fallback_to"),
     }
@@ -18408,9 +18460,9 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
         "status_surface": status_binding,
         "pr_metadata": pr_metadata,
         "pr_body_pin": gate_freeze_pr_body_pin_binding(pr_metadata),
-        "review_binding": gate_freeze_review_binding(context, head_sha=head_sha),
+        "review_binding": gate_freeze_review_binding(context, head_sha=head_sha, surface=args.surface),
         "shadow_parity": gate_freeze_shadow_binding(target_root, governance_surface),
-        "carrier_refresh": gate_freeze_carrier_refresh_binding(target_root, args.output, context["item_id"]),
+        "carrier_refresh": gate_freeze_carrier_refresh_binding(target_root, args.output, context["item_id"], surface=args.surface),
         "shadow_freshness": gate_freeze_shadow_freshness_binding(target_root, governance_surface),
         "suite_validation": suite_validation,
         "suite_evidence_validation": suite_evidence_validation,
@@ -18591,7 +18643,7 @@ def hosted_freeze_admission_payload(
             "failure_classifier": failure_classifier_payload([]),
         }
 
-    freeze_surface = surface if surface in {"pre_review", "review", "merge_ready"} else "merge_ready"
+    freeze_surface = surface if surface in {"pre_review", "review", "merge_ready", "closeout"} else "merge_ready"
     freeze_args = argparse.Namespace(
         target=str(target_root),
         output=output_relative,
