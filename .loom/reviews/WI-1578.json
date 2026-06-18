@@ -1,0 +1,33 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1578",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1578 is approved for the PR metadata closeout surface contract fix: closeout metadata now emits and preflights surface=closeout, review/pre-review merge_ready compatibility remains covered, generated runtime copies are in parity, and scope stays limited to the #1578 unblocker for PR #1577.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-18T11:58:00Z",
+  "reviewed_head": "9df78a982555ec1d3212697cf4d283084c32f5a4",
+  "reviewed_validation_summary": "2026-06-18T11:51Z validation passed for WI-1578 branch work/1578-pr-metadata-closeout-surface: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1578 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1578 --write; git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1578.md",
+    "recovery_entry": ".loom/progress/WI-1578.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1578 --json",
+    "suite_evidence_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1578 --json",
+    "suite_carrier_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1578 --json",
+    "focused_pr_metadata_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata",
+    "generated_runtime_parity": "PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift",
+    "suite_evidence_map": ".loom/specs/WI-1578/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1578/task-carrier.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
