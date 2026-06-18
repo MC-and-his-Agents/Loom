@@ -6746,58 +6746,65 @@ def run_aggregate_cli_contract() -> None:
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
         raise AssertionError("version output did not include repo version context")
 
-    _, render_payload = run_json(
-        [
-            "pr",
-            "metadata-render",
-            "--surface",
-            "closeout",
-            "--item",
-            "WI-1541",
-            "--branch",
-            "work/1541-pr-metadata-update-v2",
-            "--head-sha",
-            "1" * 40,
-            "--json",
-        ],
-        expect=0,
-    )
-    if render_payload.get("result") != "pass" or render_payload.get("effective_carrier_surface") != "closeout":
-        raise AssertionError("pr metadata-render must support closeout surface and emit closeout carrier surface")
+    closeout_body = Path(".loom/runtime/check-cli-contract/closeout-body.md")
+    closeout_body.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _, render_payload = run_json(
+            [
+                "pr",
+                "metadata-render",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--branch",
+                "work/1541-pr-metadata-update-v2",
+                "--head-sha",
+                "1" * 40,
+                "--output-file",
+                str(closeout_body),
+                "--json",
+            ],
+            expect=0,
+        )
+        if render_payload.get("result") != "pass" or render_payload.get("effective_carrier_surface") != "closeout":
+            raise AssertionError("pr metadata-render must support closeout surface and emit closeout carrier surface")
 
-    _, readback_payload = run_json(
-        [
-            "pr",
-            "metadata-readback",
-            "--surface",
-            "closeout",
-            "--body-file",
-            ".github/PULL_REQUEST_TEMPLATE.md",
-            "--json",
-        ],
-        expect=0,
-    )
-    if readback_payload.get("schema_version") != "loom-pr-metadata-readback/v1" or readback_payload.get("result") != "pass":
-        raise AssertionError("pr metadata-readback must emit a passing loom-pr-metadata-readback/v1 payload for readable body artifacts")
+        _, readback_payload = run_json(
+            [
+                "pr",
+                "metadata-readback",
+                "--surface",
+                "closeout",
+                "--body-file",
+                str(closeout_body),
+                "--json",
+            ],
+            expect=0,
+        )
+        if readback_payload.get("schema_version") != "loom-pr-metadata-readback/v1" or readback_payload.get("result") != "pass":
+            raise AssertionError("pr metadata-readback must emit a passing loom-pr-metadata-readback/v1 payload for readable body artifacts")
 
-    _, body_file_preflight = run_json(
-        [
-            "pr",
-            "metadata-preflight",
-            "--surface",
-            "closeout",
-            "--body-file",
-            ".github/PULL_REQUEST_TEMPLATE.md",
-            "--json",
-        ],
-        expect=0,
-    )
-    if (
-        body_file_preflight.get("schema_version") != "loom-pr-metadata-preflight/v1"
-        or body_file_preflight.get("result") != "pass"
-        or "body_artifact" not in body_file_preflight
-    ):
-        raise AssertionError("pr metadata-preflight must support closeout surface body-file artifact validation without requiring a live PR")
+        _, body_file_preflight = run_json(
+            [
+                "pr",
+                "metadata-preflight",
+                "--surface",
+                "closeout",
+                "--body-file",
+                str(closeout_body),
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            body_file_preflight.get("schema_version") != "loom-pr-metadata-preflight/v1"
+            or body_file_preflight.get("result") != "pass"
+            or "body_artifact" not in body_file_preflight
+        ):
+            raise AssertionError("pr metadata-preflight must support closeout surface body-file artifact validation without requiring a live PR")
+    finally:
+        closeout_body.unlink(missing_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="loom-cli-contract-") as raw_tmp:
         tmp = Path(raw_tmp)
