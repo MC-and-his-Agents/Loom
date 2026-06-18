@@ -64,6 +64,11 @@ task-carrier 判定。
 4. 若 `review run` fail-closed，显式回到 manual review 写回同一 `review record`
 5. 用 `review record` 写入正式 review 结论，让 `merge gate` 可机械消费
 
+若 freeze 侧 PR metadata、head、carrier/shadow freshness、hosted admission 或
+release-boundary 输入已阻断，`loom-review` 必须先回到 freeze repair path，而不是
+绕过 `loom gate freeze check|write` 继续 review run。review 的语义结论不能覆盖
+freeze 侧的 metadata/head/shadow/release-boundary drift。
+
 这个 skill 不做以下事情：
 
 - 不替代 pre-review 预检
