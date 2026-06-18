@@ -3,26 +3,46 @@
   "item_id": "WI-1514",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head review allow: WI-1514 is a bounded docs/skills/evidence inventory slice. The diff is limited to gate freeze skill protocol wording, CLI command matrix troubleshooting, and regression surface inventory; it does not change runtime code, closeout profile behavior, hosted admission semantics, or one-shot closeout run behavior.",
+  "summary": "Current-head review allow: WI-1514 remains a bounded docs/skills/evidence inventory slice. The follow-up commit restores source-to-generated skill parity, adds WI-1514 evidence/task carriers, refreshes shadow source hashes, and makes gate freeze hosted inputs pass locally; it does not change runtime code, closeout profile behavior, hosted admission semantics, or one-shot closeout run behavior.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-18T06:20:00Z",
-  "reviewed_head": "0f2b0c3161dfacd46ba14e4e055c6348c1d54c12",
-  "reviewed_validation_summary": "2026-06-18T06:24Z validation for WI-1514 carrier head 0f2b0c3161dfacd46ba14e4e055c6348c1d54c12: git diff --check passed before carrier commit; rg readback confirmed loom gate freeze check|write and classifier vocabulary pr_metadata_drift, shadow_stale, unsupported_command_surface, hosted_snapshot_mismatch; python3 tools/loom.py pr metadata-readback 1574 --surface merge_ready --body-file .loom/runtime/pr/pr-1514-body.md --readback-file .loom/runtime/pr/pr-1514-readback.md --compare-body-file .loom/runtime/pr/pr-1514-readback.md --head-sha 775bf187532e45708d95c18544b76749a0f4ce27 --item WI-1514 --branch work/1514-gate-freeze-docs-skills --json passed; WI-1514 fact-chain carriers are present.",
+  "authored_at": "2026-06-18T06:45:14Z",
+  "reviewed_head": "6c79a800ef806c1bff4c6ff071a17f9e6558b2c2",
+  "reviewed_validation_summary": "2026-06-18T06:43Z validation for WI-1514 head 6c79a800ef806c1bff4c6ff071a17f9e6558b2c2: git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/loom.py suite evidence validate --target . --item WI-1514 --json passed; python3 tools/loom.py suite carrier validate --target . --item WI-1514 --json passed; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking passed; python3 tools/loom.py gate freeze check --target . --item WI-1514 --pr 1574 --surface merge_ready --json passed. python3 tools/loom.py suite validate --target . --item WI-1514 --json returned result not_applicable with no missing inputs or blocking gaps, matching the WI-1514 docs-only suite decision.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "#1534 must consume final closeout-mode docs/fixtures after #1532/#1533/#1555 stabilize."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1514.md",
     "recovery_entry": ".loom/progress/WI-1514.md",
     "status_surface": ".loom/status/current.md",
-    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1574",
-    "pr_metadata_readback": ".loom/runtime/pr/pr-1514-readback.md"
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored review approved the current head for merge checkpoint consumption."
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
