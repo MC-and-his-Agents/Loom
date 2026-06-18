@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1541
-- Goal: Add a PR metadata machine carrier render, update, and readback CLI surface so operators stop hand-editing PR bodies before review, merge-ready, and closeout gates.
-- Scope: Implement the #1541 milestone/12 slice by adding `loom pr metadata-render`, `loom pr metadata-readback`, and `loom pr metadata-update` wrapper/runtime paths, focused CLI contract coverage, PR template guidance, and generated runtime copy parity. Write ownership is limited to WI-1541 carriers/specs, PR metadata runtime/wrapper code, generated `loom_flow.py` runtime copies, `tools/check_cli_contract.py`, and `.github/PULL_REQUEST_TEMPLATE.md`; keep hosted admission #1512, closeout-specific gate #1533, one-shot closeout run #1555, and release/no-release closeout #1515 out of scope.
-- Execution Path: issue #1541 -> branch work/1541-pr-metadata-update-v2 -> PR metadata render/readback/update runtime -> focused contract checks -> PR metadata self-consumption -> review/merge-ready
+- Item ID: WI-1542
+- Goal: Add a read-only startup audit that detects active Work Item carrier drift before an operator starts a new lane.
+- Scope: Issue #1542 only: expose `loom workspace audit` through the wrapper, add the repo-local runtime `work-item-audit` payload, classify carrier/shadow freshness blockers with existing vocabulary, add focused regression coverage, refresh generated runtime/demo fixtures, and document the CLI matrix. Do not implement hosted freeze admission, one-shot post-merge closeout run, closeout queue UX, closeout profile semantics, release behavior, or host writes.
+- Execution Path: issue #1542 -> branch work/1542-active-carrier-audit -> runtime `work-item-audit` -> wrapper `workspace audit` -> focused tests/fixtures -> PR #1568 metadata/readback -> review/merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1541.md
-- Review Entry: .loom/reviews/WI-1541.json
-- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; git diff --check
-- Closing Condition: PR for #1541 is merged, issue #1541 is closed after render/update/readback host evidence is read back, and #1514/#1534 can consume the PR metadata surface without hand-editing PR body machine blocks.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1541 is closed out after PR #1566 merged into main at 553e0a1af0ae34b56e58defafa28dfbfdd33a3ff and GitHub issue #1541 closed at 2026-06-17T23:53:01Z.
-- Next Step: Consume #1541 as complete in #1514/#1534/#1515 milestone/12 convergence readback.
-- Blockers: None
-- Latest Validation Summary: 2026-06-17T23:11Z validation passed for #1541 head 5086086d88fca72e31a51f5660df483cc797bb5d: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; git diff --check.
-- Recovery Boundary: Current closeout sync only consumes completed #1541 facts and updates repo carriers. It does not implement hosted freeze admission #1512, closeout-specific gate #1533, one-shot post-merge closeout run #1555, Work Item startup audit #1542, docs convergence #1514/#1534, or release/no-release closeout #1515.
-- Current Lane: milestone-12-wave0-pr-metadata-update-closeout
+- Recovery Entry: .loom/progress/WI-1542.md
+- Review Entry: .loom/reviews/WI-1542.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface work-item-audit; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py workspace audit --target . --json; git diff --check
+- Closing Condition: PR #1568 is merged, issue #1542 is closed after the startup audit CLI and runtime contract are consumed by milestone/12 closeout readback, and #1515 can verify active-carrier drift before final release/no-release closeout.
+- Current Checkpoint: build
+- Current Stop: WI-1542 active carrier startup audit implementation is staged on PR #1568 at branch `work/1542-active-carrier-audit`. Targeted local checks for the runtime payload, wrapper contract, generated runtime parity, demo bootstrap fixture, and compact JSON readback are being refreshed before review binding.
+- Next Step: Record current-head review evidence, update PR #1568 metadata to the pushed head, then rerun hosted checks and merge-ready.
+- Blockers: Hosted checks previously exposed stale WI carrier binding and demo bootstrap fixture drift; both are addressed in this branch before rerun. `workspace audit --target . --json` intentionally reports the existing WI-1494 terminal carrier residue as `carrier_closeout_required`; that is the product signal for the separate closeout-sync lane, not a WI-1542 implementation blocker.
+- Latest Validation Summary: 2026-06-18T08:28+08:00 pre-review targeted checks passed before carrier refresh: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py test/work_item_audit_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface work-item-audit`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py workspace audit --target . --json`.
+- Recovery Boundary: WI-1542/#1542 only. Do not implement hosted freeze admission #1512, one-shot post-merge closeout run #1555, closeout queue/status #1543, classifier vocabulary #1513, closeout freeze/profile behavior #1532/#1533, docs convergence #1514/#1534, final release/no-release closeout #1515, or external GitHub writes.
+- Current Lane: milestone-12-wave0-active-carrier-startup-audit
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-17 WI-1541 PR metadata render/update/readback implementation slice; PR #1566 host metadata-update/readback self-consumption
+- Run Entry: 2026-06-18 WI-1542 active carrier startup audit implementation slice; PR #1568
 - Logs Entry: local command output retained in current Codex thread
-- Diagnostics Entry: WI-1541 adds `loom pr metadata-render`, `metadata-readback`, and `metadata-update` for the repo-specific PR metadata machine carrier, while leaving hosted admission and closeout gate behavior unchanged.
-- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr --help`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py status --target . --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py pr metadata-update 1566 --surface merge_ready --item WI-1541 --work-item WI-1541 --branch work/1541-pr-metadata-update-v2 --head-sha 3dc42cd2f69d2ca5a55eb406f05859e762470ead --output-file .loom/runtime/pr/WI-1541-body.md --readback-file .loom/runtime/pr/WI-1541-readback.md --base-body-file .github/PULL_REQUEST_TEMPLATE.md --json`.
-- Lane Entry: milestone-12-wave0-pr-metadata-update
+- Diagnostics Entry: WI-1542 adds read-only startup audit coverage for active carrier drift, host-complete closeout residue, compact stale terminal carrier samples, and shadow freshness drift while leaving hosted admission and closeout execution unchanged.
+- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py test/work_item_audit_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface work-item-audit`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py workspace audit --target . --json`; `git diff --check`.
+- Lane Entry: milestone-12-wave0-active-carrier-startup-audit
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1541.md
-- Dynamic Truth: .loom/progress/WI-1541.md
+- Static Truth: .loom/work-items/WI-1542.md
+- Dynamic Truth: .loom/progress/WI-1542.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

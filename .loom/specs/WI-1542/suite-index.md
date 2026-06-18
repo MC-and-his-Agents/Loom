@@ -17,5 +17,5 @@
 ## Consumption Boundary
 
 - This suite is authored for WI-1542 only.
-- It covers retained Work Item lookup ranking and regression evidence.
-- It does not authorize closeout queue UX, hosted admission, classifier vocabulary, closeout profile semantic changes, release behavior, or external host writes.
+- It covers active Work Item startup carrier audit, wrapper/runtime mapping, classifier consumption, and fixture/readback evidence.
+- It does not authorize hosted admission, closeout queue UX, one-shot post-merge closeout run, closeout profile semantic changes, release behavior, or external host writes.

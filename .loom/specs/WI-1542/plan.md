@@ -2,27 +2,32 @@
 
 ## Implementation Steps
 
-1. Split retained Work Item lookup evidence into strong canonical/exact issue ownership and weaker historical text references.
-2. Resolve retained lookup from the highest-strength candidate set only.
-3. Preserve fail-closed ambiguity when multiple candidates exist at the same highest strength.
-4. Add a focused regression for the WI-1544 / WI-1529 / WI-1540 ambiguity.
-5. Regenerate skills runtime copies from `src/skills`.
+1. Reuse existing purity and active workspace diagnostics as the startup audit input.
+2. Add a runtime `work-item-audit` payload with schema `loom-active-carrier-audit/v1`.
+3. Map host-complete carrier residue, stale carrier samples, shared workspace conflicts, and shadow freshness drift to existing classifier vocabulary and next actions.
+4. Expose the runtime payload through `tools/loom.py workspace audit`.
+5. Add focused regression coverage for blocking closeout residue, nonblocking stale terminal carriers, and shadow freshness drift.
+6. Regenerate skills runtime copies and demo bootstrap fixtures.
+7. Document the CLI matrix entry and verify PR metadata/readback before hosted checks.
 
 ## Validation
 
-- `python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py test/retained_item_lookup_test.py`
-- `python3 test/retained_item_lookup_test.py`
-- `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --issue 1544 --pr 1548 --branch work/1544-lane-orchestration-protocol --gate-profile closeout-contract`
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py test/work_item_audit_test.py`
+- `PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py`
+- `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface work-item-audit`
+- `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`
+- `make loom-demo-new-project-check`
+- `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py workspace audit --target . --json`
 - `git diff --check`
-- `python3 tools/skills_surface.py check --surface generated-tree-drift`
-- `python3 tools/skills_surface.py check --surface package-metadata`
 
 ## Dependencies
 
-- Consumes #1544 closeout evidence as the regression target.
-- Soft dependency for #1543 closeout queue/status and #1515 final closeout readback.
+- Consumes existing active workspace diagnostics and stable classifier names from the #1513 lane.
+- Provides startup audit evidence for #1515 final closeout readback.
+- Does not block #1512/#1555 implementation beyond providing a reusable pre-start diagnostic surface.
 
 ## Scope Guard
 
-- Do not edit `.loom/progress/**`, `.loom/status/current.md`, `.loom/reviews/**`, `.loom/shadow/**`, PR body, or issue body outside WI-1542 carrier admission/review.
-- Do not implement queue orchestration or closeout profile semantics in this PR.
+- Do not implement hosted freeze admission, closeout-specific gate semantics, closeout queue UX, one-shot closeout run, or release/no-release decisions in this PR.
+- Do not write GitHub issues, PR bodies, or shared milestone status from the runtime audit.
+- Keep shared truth carrier writes limited to WI-1542 fact-chain/review/status/shadow refresh required for PR #1568.
