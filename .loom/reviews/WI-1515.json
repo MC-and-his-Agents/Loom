@@ -1,39 +1,48 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1515",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "3e2f3349ed91a5e4a1fef91395ab0b2c30db17b9",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1515 release PR diff is approved for opening PR and hosted checks after fixing stale runtime evidence and adding build evidence. Scope is limited to v0.14.2 version authority bump, WI-1515 release-required evidence/carriers, valid formal-suite not_applicable decision, release closeout plan, and release readiness documentation. This review does not authorize merging the release PR, creating tags, GitHub Release, npm publication, workflow_dispatch publish=true, or closing #1515/#1505 before post-merge release evidence and closeout reconciliation.",
+  "reviewer": "Codex main thread + Huygens/Copernicus release-risk review",
+  "authored_at": "2026-06-18T22:12:26Z",
+  "reviewed_head": "a1266590d65e661fb3cbc9b6253e16b41c760eee",
+  "reviewed_validation_summary": "2026-06-19 pre-merge release validation passed: version_surface_check; check_release_surface; check_npm_package for @mc-and-his-agents/loom@0.14.2 payload_file_count=2288; npm run test:package 4 tests; npm pack --dry-run entryCount=2288; node bin/loom.mjs version --json repo_version=v0.14.2; tools/loom.py skills release-check; skills_surface.py check; tools/check_cli_contract.py all 10 surfaces in 416.11s; suite validate result not_applicable with valid formal-suite rationale; suite evidence/carrier validate; fact-chain; work-item-audit; git diff --check.",
+  "fallback_to": "merge",
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1515.md",
+    "recovery_entry": ".loom/progress/WI-1515.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
