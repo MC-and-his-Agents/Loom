@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1582.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate; make loom-check
 - Closing Condition: #1582 PR is merged or explicitly superseded; PR body, branch, head_sha, authored review, fact-chain, hosted checks, closeout freeze evidence, and issue status are read back consistently.
-- Current Checkpoint: merge
-- Current Stop: WI-1582 local validation is complete at head d5e2578b: implementation, spec/code review, fact-chain, purity/build/merge inputs, shadow parity, adopt verify, and full make loom-check are ready for commit and PR metadata.
-- Next Step: Commit WI-1582 code and carriers, push branch work/1582-closeout-hosted-admission, render/readback PR metadata, open replacement PR for issue #1582, and supersede draft PR #1581.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1582 closed out post-merge: PR #1583 merged into main at 15ff1eecc8731bd28ccfc4433791595b2f539896, issue #1582 closed, hosted checks passed, PR metadata readback/preflight passed, and closeout check passed with host_pr_checks fallback for missing retained merge-ready attempt. Post-merge evidence is closeout evidence only and does not replace the retained pre-merge review validation summary.
+- Next Step: No further WI-1582 implementation work remains. Continue milestone/12 with the next unclosed dependency lane.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-18T15:38Z WI-1582 final local validation passed in /Users/mc/dev/Loom-1582-closeout-hosted-admission: make loom-check passed (profile source, source_surface full, checked 45 source/distribution surfaces); fact-chain pass; purity-check pass; checkpoint build pass; spec review allow; code review allow; carrier refresh --write pass; shadow-parity --surface all --blocking pass; adopt verify pass; prior py_compile, generated-tree-drift, targeted terminal closeout hosted fixture, pr-metadata, demo check, aggregate, and git diff check passed.
 - Recovery Boundary: WI-1582 owns closeout hosted admission runtime/fixture repair and its own .loom carriers only; WI-1512 and WI-1578 terminal truth are read-only evidence.
-- Current Lane: milestone-12-closeout-hosted-admission-followup
+- Current Lane: milestone-12-closeout-sync
 
 ## Runtime Evidence
 
