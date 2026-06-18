@@ -197,6 +197,13 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Check closeout readiness; host closeout sync remains separate from local retire and carrier closeout-sync.",
     },
     {
+        "command": "closeout run",
+        "domain": "host-control",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan or apply a single post-merge closeout run across host reconciliation, terminal carrier metadata, recovery status, shadow refresh, and final closeout check.",
+    },
+    {
         "command": "closeout queue status",
         "domain": "scenario",
         "status": "implemented",
@@ -3143,6 +3150,388 @@ def handle_carrier(argv: list[str]) -> int:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
     return emit(payload)
+
+
+def add_closeout_host_args(flow_args: list[str], args: argparse.Namespace, *, include_comment: bool) -> None:
+    for flag, value in (
+        ("--item", args.item),
+        ("--issue", args.issue),
+        ("--pr", args.pr),
+        ("--project", args.project),
+        ("--phase", args.phase),
+        ("--fr", args.fr),
+        ("--branch", args.branch),
+        ("--owner", args.owner),
+        ("--repo", args.repo_name),
+        ("--issue-payload-file", args.issue_payload_file),
+        ("--pr-payload-file", args.pr_payload_file),
+        ("--project-payload-file", args.project_payload_file),
+    ):
+        if value is not None:
+            flow_args.extend([flag, str(value)])
+    if include_comment:
+        for flag, value in (
+            ("--comment", args.comment),
+            ("--comment-file", args.comment_file),
+        ):
+            if value is not None:
+                flow_args.extend([flag, str(value)])
+
+
+def add_closeout_check_args(flow_args: list[str], args: argparse.Namespace) -> None:
+    add_closeout_host_args(flow_args, args, include_comment=True)
+    for flag, value in (
+        ("--goal-completion", args.goal_completion),
+        ("--gate-profile", args.gate_profile),
+        ("--status-checks-file", args.status_checks_file),
+        ("--branch-protection-file", args.branch_protection_file),
+        ("--ruleset-file", args.ruleset_file),
+    ):
+        if value is not None:
+            flow_args.extend([flag, str(value)])
+    if args.skip_gate:
+        flow_args.append("--skip-gate")
+
+
+def closeout_run_step(name: str, payload: dict[str, Any], *, mutates: bool, evidence_locator: str | None = None) -> dict[str, Any]:
+    return {
+        "name": name,
+        "result": payload.get("result"),
+        "summary": payload.get("summary"),
+        "missing_inputs": payload.get("missing_inputs", []),
+        "fallback_to": payload.get("fallback_to"),
+        "mutates": mutates,
+        "evidence_locator": evidence_locator,
+        "payload": payload,
+    }
+
+
+def issue_state(payload: dict[str, Any]) -> str | None:
+    issue = payload.get("issue")
+    return str(issue.get("state")) if isinstance(issue, dict) and issue.get("state") is not None else None
+
+
+def pr_state(payload: dict[str, Any]) -> str | None:
+    pr = payload.get("pr")
+    return str(pr.get("state")) if isinstance(pr, dict) and pr.get("state") is not None else None
+
+
+def closeout_terminal_metadata(closeout_payload: dict[str, Any], args: argparse.Namespace) -> tuple[dict[str, str], list[str]]:
+    issue = closeout_payload.get("issue") if isinstance(closeout_payload.get("issue"), dict) else {}
+    pr = closeout_payload.get("pr") if isinstance(closeout_payload.get("pr"), dict) else {}
+    merge_commit = pr.get("mergeCommit") if isinstance(pr, dict) else None
+    merge_commit_sha = merge_commit.get("oid") if isinstance(merge_commit, dict) else None
+    issue_number = issue.get("number") if isinstance(issue, dict) else None
+    pr_number = pr.get("number") if isinstance(pr, dict) else None
+    issue_url = issue.get("url") if isinstance(issue, dict) else None
+    pr_url = pr.get("url") if isinstance(pr, dict) else None
+    metadata = {
+        "terminal_state": "closed_out",
+        "issue": str(issue_number or args.issue or "not_applicable"),
+        "pr": str(pr_number or args.pr or "not_applicable"),
+        "merge_commit": str(merge_commit_sha or "not_applicable"),
+        "target_branch": str(pr.get("baseRefName") or "not_applicable") if isinstance(pr, dict) else "not_applicable",
+        "closed_at": str(issue.get("closedAt") or issue.get("closed_at") or pr.get("mergedAt") or "not_applicable") if isinstance(issue, dict) and isinstance(pr, dict) else "not_applicable",
+        "evidence_locator": ";".join(str(value) for value in (issue_url, pr_url) if isinstance(value, str) and value.strip()) or "host-readback",
+    }
+    missing: list[str] = []
+    for field_name in ("issue", "pr", "merge_commit", "target_branch", "closed_at", "evidence_locator"):
+        if metadata[field_name] == "not_applicable":
+            missing.append(f"{field_name.replace('_', '-')} is required for closeout run carrier sync")
+    return metadata, missing
+
+
+def first_blocking_step(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for step in steps:
+        if step.get("result") != "pass":
+            return step
+    return None
+
+
+def closeout_run_failure_classifier(blocking_step: dict[str, Any] | None) -> str | None:
+    if blocking_step is None:
+        return None
+    missing_inputs = [str(value) for value in blocking_step.get("missing_inputs") or []]
+    if any("required check" in value or "status checks" in value for value in missing_inputs):
+        return "host_checks_unreadable_or_incomplete"
+    if any("PR is draft" in value or "pr is not merged" in value.lower() for value in missing_inputs):
+        return "pr_not_merge_ready_or_unmerged"
+    if any("issue is not closed" in value.lower() for value in missing_inputs):
+        return "issue_not_closed"
+    if any("binding" in value.lower() for value in missing_inputs):
+        return "host_binding_drift"
+    if any("carrier" in value.lower() or "shadow" in value.lower() for value in missing_inputs):
+        return "carrier_refresh_required"
+    if missing_inputs:
+        return "missing_or_stale_closeout_input"
+    return "closeout_step_blocked"
+
+
+def closeout_run_next_action(*, apply: bool, blocking_step: dict[str, Any] | None) -> str:
+    if blocking_step is None:
+        return "Closeout run completed." if apply else "Review the dry-run plan, then rerun with --apply when the planned host and repo carrier mutations are acceptable."
+    fallback_to = blocking_step.get("fallback_to")
+    if isinstance(fallback_to, str) and fallback_to:
+        return fallback_to
+    if blocking_step.get("name") == "reconciliation-sync":
+        return "Review reconciliation findings, then rerun closeout run after host drift is readable and safe to sync."
+    if blocking_step.get("name") == "final-closeout-check":
+        return "Inspect final closeout check missing_inputs; rerun closeout run only after the blocker is classified."
+    return f"Resolve blocked step `{blocking_step.get('name')}` before rerunning closeout run."
+
+
+def closeout_run_payload(
+    *,
+    args: argparse.Namespace,
+    target: Path,
+    steps: list[dict[str, Any]],
+    evidence_locators: list[str],
+    closeout_payload: dict[str, Any],
+    terminal_metadata: dict[str, str],
+    apply: bool,
+    dry_run_blocking_step: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if apply:
+        blocking_step = first_blocking_step(steps)
+        result = "pass" if blocking_step is None else "block"
+        summary = "closeout run applied host and repo carrier closeout and final check passed." if result == "pass" else "closeout run apply stopped at a blocking step."
+    else:
+        blocking_step = dry_run_blocking_step
+        result = "pass" if blocking_step is None else "block"
+        summary = "closeout run dry-run produced a post-merge closeout step plan." if result == "pass" else "closeout run dry-run could not produce a safe step plan."
+
+    next_action = closeout_run_next_action(apply=apply, blocking_step=blocking_step)
+    return output(
+        "closeout run",
+        result,
+        schema_version="loom-closeout-run/v1",
+        summary=summary,
+        dry_run=not apply,
+        apply=apply,
+        target=str(target),
+        item={"id": args.item},
+        issue={"number": args.issue, "state": issue_state(closeout_payload)},
+        pr={"number": args.pr, "state": pr_state(closeout_payload)},
+        terminal_metadata=terminal_metadata,
+        steps=steps,
+        evidence_locators=evidence_locators,
+        failure_classifier=closeout_run_failure_classifier(blocking_step),
+        next_action=next_action,
+        fallback_to=None if result == "pass" else next_action,
+    )
+
+
+def handle_closeout_run(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom closeout run")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item", required=True)
+    parser.add_argument("--issue", required=True)
+    parser.add_argument("--pr", required=True)
+    parser.add_argument("--project")
+    parser.add_argument("--phase")
+    parser.add_argument("--fr")
+    parser.add_argument("--branch", required=True)
+    parser.add_argument("--owner")
+    parser.add_argument("--repo", dest="repo_name")
+    parser.add_argument("--comment")
+    parser.add_argument("--comment-file")
+    parser.add_argument("--goal-completion")
+    parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"))
+    parser.add_argument("--issue-payload-file")
+    parser.add_argument("--pr-payload-file")
+    parser.add_argument("--project-payload-file")
+    parser.add_argument("--status-checks-file")
+    parser.add_argument("--branch-protection-file")
+    parser.add_argument("--ruleset-file")
+    parser.add_argument("--skip-gate", action="store_true")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    target = resolve_target(args.target)
+    steps: list[dict[str, Any]] = []
+    evidence_locators: list[str] = []
+
+    reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
+    add_closeout_host_args(reconciliation_args, args, include_comment=True)
+    reconciliation_args.append("--apply" if args.apply else "--dry-run")
+    reconciliation = flow_payload("closeout run", reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout run --json"])
+    steps.append(closeout_run_step("reconciliation-sync", reconciliation, mutates=args.apply, evidence_locator="reconciliation sync payload"))
+    if args.apply and reconciliation.get("result") != "pass":
+        terminal_metadata = {
+            "terminal_state": "closed_out",
+            "issue": str(args.issue),
+            "pr": str(args.pr),
+            "merge_commit": "not_applicable",
+            "target_branch": "not_applicable",
+            "closed_at": "not_applicable",
+            "evidence_locator": "host-readback",
+        }
+        return emit(
+            closeout_run_payload(
+                args=args,
+                target=target,
+                steps=steps,
+                evidence_locators=evidence_locators,
+                closeout_payload={},
+                terminal_metadata=terminal_metadata,
+                apply=args.apply,
+            )
+        )
+
+    closeout_args = ["closeout", "check", "--target", str(target)]
+    add_closeout_check_args(closeout_args, args)
+    closeout_after_reconciliation = flow_payload("closeout run", closeout_args, fallback_to=["loom closeout run --json", "manual-reconciliation"])
+    steps.append(closeout_run_step("closeout-check", closeout_after_reconciliation, mutates=False, evidence_locator="closeout check payload"))
+    if args.apply and closeout_after_reconciliation.get("result") != "pass":
+        metadata, _metadata_missing = closeout_terminal_metadata(closeout_after_reconciliation, args)
+        return emit(
+            closeout_run_payload(
+                args=args,
+                target=target,
+                steps=steps,
+                evidence_locators=evidence_locators,
+                closeout_payload=closeout_after_reconciliation,
+                terminal_metadata=metadata,
+                apply=args.apply,
+            )
+        )
+
+    metadata, metadata_missing = closeout_terminal_metadata(closeout_after_reconciliation, args)
+    carrier_args = [
+        "carrier",
+        "closeout-sync",
+        "--target",
+        str(target),
+        "--item",
+        args.item,
+        "--terminal-state",
+        metadata["terminal_state"],
+        "--issue",
+        metadata["issue"],
+        "--pr",
+        metadata["pr"],
+        "--merge-commit",
+        metadata["merge_commit"],
+        "--target-branch",
+        metadata["target_branch"],
+        "--closed-at",
+        metadata["closed_at"],
+        "--evidence-locator",
+        metadata["evidence_locator"],
+    ]
+    carrier_args.append("--apply" if args.apply else "--dry-run")
+    if metadata_missing:
+        carrier_payload = output(
+            "closeout run",
+            "block",
+            summary="closeout run could not infer terminal carrier metadata from host readback.",
+            missing_inputs=metadata_missing,
+            fallback_to=["loom closeout check --json", "manual-reconciliation"],
+            terminal_metadata=metadata,
+        )
+    else:
+        carrier_payload = flow_payload("closeout run", carrier_args, fallback_to=["loom carrier closeout-sync --json"])
+    steps.append(closeout_run_step("carrier-closeout-sync", carrier_payload, mutates=args.apply, evidence_locator=metadata["evidence_locator"]))
+    if metadata["evidence_locator"] != "host-readback":
+        evidence_locators.append(metadata["evidence_locator"])
+    if args.apply and carrier_payload.get("result") != "pass":
+        return emit(
+            closeout_run_payload(
+                args=args,
+                target=target,
+                steps=steps,
+                evidence_locators=evidence_locators,
+                closeout_payload=closeout_after_reconciliation,
+                terminal_metadata=metadata,
+                apply=args.apply,
+            )
+        )
+
+    if args.apply:
+        stop = (
+            f"{args.item} closed out by closeout run: PR #{metadata['pr']} merged at {metadata['merge_commit']}, "
+            f"issue #{metadata['issue']} closed, host reconciliation consumed, terminal carrier metadata written, "
+            "status/shadow refresh completed, and final closeout check passed."
+        )
+        recovery_args = [
+            "recovery",
+            "writeback",
+            "--target",
+            str(target),
+            "--item",
+            args.item,
+            "--current-checkpoint",
+            "closed_out",
+            "--current-stop",
+            stop,
+            "--next-step",
+            f"No further {args.item} implementation work remains.",
+            "--blockers",
+            "None recorded.",
+            "--current-lane",
+            "post-merge-closeout-run",
+        ]
+        recovery = flow_payload("closeout run", recovery_args, fallback_to=["loom recovery writeback --target <repo> --item <item>"])
+        steps.append(closeout_run_step("recovery-writeback", recovery, mutates=True, evidence_locator=".loom/progress"))
+        if recovery.get("result") != "pass":
+            return emit(
+                closeout_run_payload(
+                    args=args,
+                    target=target,
+                    steps=steps,
+                    evidence_locators=evidence_locators,
+                    closeout_payload=closeout_after_reconciliation,
+                    terminal_metadata=metadata,
+                    apply=args.apply,
+                )
+            )
+
+        refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--surface", "closeout", "--write"]
+        first_refresh = flow_payload("closeout run", refresh_args, fallback_to=["loom carrier refresh --target <repo> --item <item> --write"])
+        steps.append(closeout_run_step("carrier-refresh", first_refresh, mutates=True, evidence_locator=".loom/shadow"))
+        if first_refresh.get("result") != "pass":
+            return emit(
+                closeout_run_payload(
+                    args=args,
+                    target=target,
+                    steps=steps,
+                    evidence_locators=evidence_locators,
+                    closeout_payload=closeout_after_reconciliation,
+                    terminal_metadata=metadata,
+                    apply=args.apply,
+                )
+            )
+        second_refresh = flow_payload("closeout run", refresh_args, fallback_to=["loom carrier refresh --target <repo> --item <item> --write"])
+        steps.append(closeout_run_step("carrier-refresh-readback", second_refresh, mutates=True, evidence_locator=".loom/shadow"))
+        if second_refresh.get("result") != "pass":
+            return emit(
+                closeout_run_payload(
+                    args=args,
+                    target=target,
+                    steps=steps,
+                    evidence_locators=evidence_locators,
+                    closeout_payload=closeout_after_reconciliation,
+                    terminal_metadata=metadata,
+                    apply=args.apply,
+                )
+            )
+
+        final_closeout = flow_payload("closeout run", closeout_args, fallback_to=["loom closeout --target <repo> --json", "manual-reconciliation"])
+        steps.append(closeout_run_step("final-closeout-check", final_closeout, mutates=False, evidence_locator="closeout check payload"))
+
+    return emit(
+        closeout_run_payload(
+            args=args,
+            target=target,
+            steps=steps,
+            evidence_locators=evidence_locators,
+            closeout_payload=closeout_after_reconciliation,
+            terminal_metadata=metadata,
+            apply=args.apply,
+            dry_run_blocking_step=first_blocking_step(steps),
+        )
+    )
 
 
 def supported_hosts(target: Path) -> list[dict[str, Any]]:
@@ -6486,6 +6875,8 @@ def main(argv: list[str]) -> int:
     if command == "gate" or command.startswith("gate "):
         gate_args = command.split()[1:] + forwarded if command.startswith("gate ") else forwarded
         return handle_gate(gate_args)
+    if command == "closeout run":
+        return handle_closeout_run(forwarded)
     if command == "closeout queue status":
         return handle_closeout_queue_status(forwarded)
     if command in {"story", "spec", "plan", "build", "pre-review", "closeout", "handoff", "retire"}:
