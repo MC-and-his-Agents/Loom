@@ -3,11 +3,11 @@
   "item_id": "WI-1515",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1515 release PR diff is approved for opening PR and hosted checks after fixing stale runtime evidence and adding build evidence. Scope is limited to v0.14.2 version authority bump, WI-1515 release-required evidence/carriers, valid formal-suite not_applicable decision, release closeout plan, and release readiness documentation. This review does not authorize merging the release PR, creating tags, GitHub Release, npm publication, workflow_dispatch publish=true, or closing #1515/#1505 before post-merge release evidence and closeout reconciliation.",
+  "summary": "WI-1515 release PR diff and merge-checkpoint carrier state are approved for hosted checks and merge-gate consumption after fixing stale runtime evidence, adding build evidence, refreshing shadow evidence, and readback-validating PR #1591 metadata. Scope is limited to v0.14.2 version authority bump, WI-1515 release-required evidence/carriers, valid formal-suite not_applicable decision, release closeout plan, PR metadata, and release readiness documentation. This review does not authorize merging the release PR, creating tags, GitHub Release, npm publication, workflow_dispatch publish=true, or closing #1515/#1505 before post-merge release evidence and closeout reconciliation.",
   "reviewer": "Codex main thread + Huygens/Copernicus release-risk review",
-  "authored_at": "2026-06-18T22:12:26Z",
-  "reviewed_head": "a1266590d65e661fb3cbc9b6253e16b41c760eee",
-  "reviewed_validation_summary": "2026-06-19 pre-merge release validation passed: version_surface_check; check_release_surface; check_npm_package for @mc-and-his-agents/loom@0.14.2 payload_file_count=2288; npm run test:package 4 tests; npm pack --dry-run entryCount=2288; node bin/loom.mjs version --json repo_version=v0.14.2; tools/loom.py skills release-check; skills_surface.py check; tools/check_cli_contract.py all 10 surfaces in 416.11s; suite validate result not_applicable with valid formal-suite rationale; suite evidence/carrier validate; fact-chain; work-item-audit; git diff --check.",
+  "authored_at": "2026-06-18T22:18:40Z",
+  "reviewed_head": "ebcde81299c73e0e0f815022f205ba7136bc7190",
+  "reviewed_validation_summary": "2026-06-19 pre-merge release validation passed: version_surface_check; check_release_surface; check_npm_package for @mc-and-his-agents/loom@0.14.2 payload_file_count=2288; npm run test:package 4 tests; npm pack --dry-run entryCount=2288; node bin/loom.mjs version --json repo_version=v0.14.2; tools/loom.py skills release-check; skills_surface.py check; tools/check_cli_contract.py all 10 surfaces in 416.11s; suite validate result not_applicable with valid formal-suite rationale; suite evidence/carrier validate; fact-chain; work-item-audit; flow build; PR #1591 metadata render/readback/preflight; git diff --check.",
   "fallback_to": "merge",
   "findings": [],
   "blocking_issues": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": net/http: TLS handshake timeout",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
