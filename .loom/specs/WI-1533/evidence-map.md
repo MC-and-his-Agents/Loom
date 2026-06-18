@@ -18,8 +18,10 @@
 | --- | --- | --- | --- | --- |
 | `spec.md` | .loom/specs/WI-1533/spec.md | required | authored Work Item carrier | Recheck when closeout gate verdict fields or scope change. |
 | `plan.md` | .loom/specs/WI-1533/plan.md | required | authored Work Item carrier | Recheck when validation strategy or generated runtime copy set changes. |
+| `implementation-contract.md` | .loom/specs/WI-1533/implementation-contract.md | required | authored implementation contract | Recheck when closeout-specific gate fields, consumer boundary, or validation binding changes. |
 | suite path decision | .loom/specs/WI-1533/spec.md | minimal | suite scaffold + authored rationale | Recheck if scope expands beyond bounded runtime/fixture contract. |
 | task carrier | .loom/specs/WI-1533/task-carrier.md | required | authored task carrier | Recheck before review, PR gate, hosted checks, and closeout consumption. |
+| spec review record | .loom/reviews/WI-1533.spec.json | present | authored spec review truth | Required before implementation review consumption. |
 | review record | .loom/reviews/WI-1533.json | pending | authored review truth | Required after review consumption. |
 | host state | issue #1533 / future PR | required | GitHub readback | Recheck after PR creation, PR body updates, pushes, or issue state changes. |
 
