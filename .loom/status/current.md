@@ -14,7 +14,7 @@
 - Current Checkpoint: merge
 - Current Stop: PR #1574 is open for the docs/skills/evidence inventory convergence slice. PR metadata render/readback, WI-1514 fact-chain carriers, and authored review evidence are present; the lane is ready for local PR gate and hosted check consumption.
 - Next Step: Re-run local PR gate and hosted checks after the merge checkpoint carrier refresh is pushed and PR metadata is refreshed to the new head.
-- Blockers: None after carrier/review evidence is committed for the current head.
+- Blockers: None
 - Latest Validation Summary: 2026-06-18T06:24Z validation for WI-1514 carrier head 0f2b0c3161dfacd46ba14e4e055c6348c1d54c12: git diff --check passed before carrier commit; rg readback confirmed loom gate freeze check|write and classifier vocabulary pr_metadata_drift, shadow_stale, unsupported_command_surface, hosted_snapshot_mismatch; python3 tools/loom.py pr metadata-readback 1574 --surface merge_ready --body-file .loom/runtime/pr/pr-1514-body.md --readback-file .loom/runtime/pr/pr-1514-readback.md --compare-body-file .loom/runtime/pr/pr-1514-readback.md --head-sha 775bf187532e45708d95c18544b76749a0f4ce27 --item WI-1514 --branch work/1514-gate-freeze-docs-skills --json passed; WI-1514 fact-chain carriers are present.
 - Recovery Boundary: WI-1514/#1514 only. Do not implement #1532 closeout freeze admission, #1533 closeout-specific gate, #1534 closeout mode docs/fixtures, #1555 one-shot closeout run, or #1515 release/no-release closeout.
 - Current Lane: milestone-12-wave3-gate-freeze-docs-skills
