@@ -15,7 +15,7 @@ closeout gate 用来回答两件事：
 若 install layout、shared runtime、shared references 或 bootstrap manifest 漂移，入口必须直接 `block`。
 
 Closeout-only PRs may consume the `loom-closeout-freeze/v1` terminal profile
-defined in [gate-freeze.md](./gate-freeze.md#10-closeout-terminal-profile).
+defined in `docs/methodology/harness/gate-freeze.md#10-closeout-terminal-profile`.
 That profile freezes terminal facts for admission and closeout-specific gate
 consumption; it is not a second closeout truth source and does not replace the
 host/git/carrier readback performed by this file.
@@ -61,7 +61,7 @@ merge-ready.
 
 - closeout contract gate source、profile、subchecks 与 trigger reason
 - 同范围 `reconciliation audit` 结果
-- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence；Loom 自身 CLI release 还必须消费 [Loom CLI Release Surface](../../adoption/loom-cli-release-surface.md) 中冻结的 release validation evidence contract
+- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence；Loom 自身 CLI release 还必须消费 `docs/adoption/loom-cli-release-surface.md` 中冻结的 release validation evidence contract
 - issue 状态
 - PR 是否已 merged
 - 事项对应实现是否已达到 `absorbed`
