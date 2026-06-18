@@ -1,39 +1,57 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1512",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "08ace88cec9ab1b5e21640e2dcfe6725801c6197",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1512 PR #1572 is approved for the hosted freeze admission slice: runtime pr-gate now recomputes hosted gate freeze inputs from PR payload/body readback, blocks PR body drift and snapshot mismatch, exposes classifier evidence, and the workflow passes hosted readback artifacts. This review covers spec-reviewed head 92514944985e0366adea40cf6a107ce4cc3ee5ad and does not approve #1532/#1533 closeout profile behavior or #1555 one-shot closeout run.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-18T04:00:42Z",
+  "reviewed_head": "92514944985e0366adea40cf6a107ce4cc3ee5ad",
+  "reviewed_validation_summary": "2026-06-18T03:58Z targeted validation passed for PR #1572 implementation-contract head f74133bc928dc91326f14f5e2049ce56b2f6bb89: python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1512; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1512 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1512 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1512 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; make loom-demo-new-project-check; git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1512.md",
+    "recovery_entry": ".loom/progress/WI-1512.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2 --item WI-1512 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2 --item WI-1512 --json",
+    "suite_evidence_map": ".loom/specs/WI-1512/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1512/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
