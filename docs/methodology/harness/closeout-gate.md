@@ -15,7 +15,7 @@ closeout gate 用来回答两件事：
 若 install layout、shared runtime、shared references 或 bootstrap manifest 漂移，入口必须直接 `block`。
 
 Closeout-only PRs may consume the `loom-closeout-freeze/v1` terminal profile
-defined in [gate-freeze.md](./gate-freeze.md#10-closeout-terminal-profile).
+defined in `docs/methodology/harness/gate-freeze.md#10-closeout-terminal-profile`.
 That profile freezes terminal facts for admission and closeout-specific gate
 consumption; it is not a second closeout truth source and does not replace the
 host/git/carrier readback performed by this file.
@@ -27,13 +27,41 @@ host/git/carrier readback performed by this file.
 - `python3 skills/shared/scripts/loom_flow.py closeout sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
 - `python3 skills/shared/scripts/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]`
 
+## 2.1 Closeout Mode Protocol
+
+Closeout mode is an operator routing decision, not a new truth source. The
+canonical modes are:
+
+| mode | Use when | Default action |
+| --- | --- | --- |
+| `inline` | The implementation PR can carry its own terminal closeout metadata without a follow-up PR. | Keep closeout evidence in the implementation lane and let `closeout check` consume PR, merge commit, target branch, issue, review, and release/no-release readback. |
+| `auto_no_op` | Host and repo carriers already agree on terminal facts. | Do not write; retain evidence locator and report no-op. |
+| `light` | A single completed Work Item only needs repo carrier/shadow terminalization. | Use `carrier closeout-sync --apply` or a closeout-only PR with `surface=closeout`; no host mutation and no implementation drift. |
+| `batched` | Multiple homogeneous low-risk terminal carrier updates can be reviewed together. | Produce a repair plan and keep the batch limited to terminal carrier/shadow metadata with one risk class. |
+| `full` | Any implementation drift, release/no-release dispute, mixed-risk batch, host binding conflict, unreadable dependency graph, allowed-path violation, or stale review basis is present. | Run full closeout check and escalate to current-head review / guardian as required. |
+
+`closeout queue status` may expose operational classifications
+`auto_no_op`, `light_carrier_sync`, `batched_closeout`, `full_closeout`, and
+`blocked`. Those values are queue diagnostics; they map to the canonical modes
+above and must not replace the closeout gate mode vocabulary.
+
+Closeout-specific PR gate and freeze payloads expose
+`loom-closeout-specific-gate/v1`. Consumers must preserve these fields:
+`verdict`, `closeout_pr_allowed`, `full_review_required`,
+`escalation_required`, `escalation_reason`, `escalation_reasons`,
+`blocking_inputs`, and `next_action`. `closeout_pr_allowed=true` is only a
+closeout PR admission verdict; it is not implementation approval. If
+`full_review_required` or `escalation_required` is true, the operator must
+resolve blockers or run full review / guardian before treating the closeout as
+merge-ready.
+
 ## 3. `check` 最小检查面
 
 `closeout check` 至少读取：
 
 - closeout contract gate source、profile、subchecks 与 trigger reason
 - 同范围 `reconciliation audit` 结果
-- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence；Loom 自身 CLI release 还必须消费 [Loom CLI Release Surface](../../adoption/loom-cli-release-surface.md) 中冻结的 release validation evidence contract
+- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence；Loom 自身 CLI release 还必须消费 `docs/adoption/loom-cli-release-surface.md` 中冻结的 release validation evidence contract
 - issue 状态
 - PR 是否已 merged
 - 事项对应实现是否已达到 `absorbed`

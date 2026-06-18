@@ -14,6 +14,12 @@ closeout gate 用来回答两件事：
 在 installed-skills 或 `.loom/bin` carrier 下，`reconciliation audit|sync` 与 `closeout check|sync` 必须先消费 `runtime-state`。
 若 install layout、shared runtime、shared references 或 bootstrap manifest 漂移，入口必须直接 `block`。
 
+Closeout-only PRs may consume the `loom-closeout-freeze/v1` terminal profile
+defined in `docs/methodology/harness/gate-freeze.md#10-closeout-terminal-profile`.
+That profile freezes terminal facts for admission and closeout-specific gate
+consumption; it is not a second closeout truth source and does not replace the
+host/git/carrier readback performed by this file.
+
 ## 2. 稳定入口
 
 - `python3 skills/shared/scripts/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
@@ -21,19 +27,53 @@ closeout gate 用来回答两件事：
 - `python3 skills/shared/scripts/loom_flow.py closeout sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
 - `python3 skills/shared/scripts/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]`
 
+## 2.1 Closeout Mode Protocol
+
+Closeout mode is an operator routing decision, not a new truth source. The
+canonical modes are:
+
+| mode | Use when | Default action |
+| --- | --- | --- |
+| `inline` | The implementation PR can carry its own terminal closeout metadata without a follow-up PR. | Keep closeout evidence in the implementation lane and let `closeout check` consume PR, merge commit, target branch, issue, review, and release/no-release readback. |
+| `auto_no_op` | Host and repo carriers already agree on terminal facts. | Do not write; retain evidence locator and report no-op. |
+| `light` | A single completed Work Item only needs repo carrier/shadow terminalization. | Use `carrier closeout-sync --apply` or a closeout-only PR with `surface=closeout`; no host mutation and no implementation drift. |
+| `batched` | Multiple homogeneous low-risk terminal carrier updates can be reviewed together. | Produce a repair plan and keep the batch limited to terminal carrier/shadow metadata with one risk class. |
+| `full` | Any implementation drift, release/no-release dispute, mixed-risk batch, host binding conflict, unreadable dependency graph, allowed-path violation, or stale review basis is present. | Run full closeout check and escalate to current-head review / guardian as required. |
+
+`closeout queue status` may expose operational classifications
+`auto_no_op`, `light_carrier_sync`, `batched_closeout`, `full_closeout`, and
+`blocked`. Those values are queue diagnostics; they map to the canonical modes
+above and must not replace the closeout gate mode vocabulary.
+
+Closeout-specific PR gate and freeze payloads expose
+`loom-closeout-specific-gate/v1`. Consumers must preserve these fields:
+`verdict`, `closeout_pr_allowed`, `full_review_required`,
+`escalation_required`, `escalation_reason`, `escalation_reasons`,
+`blocking_inputs`, and `next_action`. `closeout_pr_allowed=true` is only a
+closeout PR admission verdict; it is not implementation approval. If
+`full_review_required` or `escalation_required` is true, the operator must
+resolve blockers or run full review / guardian before treating the closeout as
+merge-ready.
+
 ## 3. `check` 最小检查面
 
 `closeout check` 至少读取：
 
 - closeout contract gate source、profile、subchecks 与 trigger reason
 - 同范围 `reconciliation audit` 结果
-- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence
+- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence；Loom 自身 CLI release 还必须消费 `docs/adoption/loom-cli-release-surface.md` 中冻结的 release validation evidence contract
 - issue 状态
 - PR 是否已 merged
 - 事项对应实现是否已达到 `absorbed`
 - `host-binding inspect` 的 `binding_chain` 与 `dependency_graph`
 - merged PR 是否已进入 `origin/main`
 - project 中对应 issue 的状态
+- suite path decision 与 full suite artifact locators，或 minimal path
+  `not_applicable` rationale
+- evidence-map locator、classification、freshness、scope、PR head、merge commit
+  与 target branch backlink
+- consistency-analysis locator、blocking/advisory/stale/missing/conflict/
+  `not_applicable` 分类，以及未处理 gap 的 remediation direction
 - merge-ready 消费过的 behavior evidence / test evidence 摘要
 - 主干包含合并结果后仍可回链的 fresh verification evidence
 - 可选 `/goal completion` evidence；调用方提供时只作为一致性输入消费，不作为完成真相源
@@ -51,6 +91,13 @@ closeout 本地 gate 分为五层：
 | `strong-profile-full-gate` | strong governance 或 repo-declared profile 显式 opt-in | 执行完整本地 gate；必须声明 owner、fallback、override path 与 authority-of-truth |
 
 `--gate-profile auto` 等价普通 closeout 的 `closeout-contract`。`--skip-gate` 只允许跳过显式 heavy profile 的本地 `loom_check` 执行；它不得跳过 `closeout-contract` 的 retained evidence、backlink、PR、merge commit、target branch 或 reconciliation 检查。
+
+When `closeout-contract` consumes a retained closeout freeze snapshot, it must
+still re-read the current issue, PR, merge commit, target branch, carrier
+bindings, release/no-release evidence, allowed paths, and retained review
+disposition. Snapshot/hash mismatch, behavior or implementation drift, contract
+or gate rule changes, release judgment disputes, mixed-risk batches, or allowed
+paths violations require full review / guardian escalation.
 
 review record backlink 使用与 merge checkpoint 相同的 head-binding 语义：PR head 与 reviewed head 完全一致时通过；差异仅限允许的 recovery/status/review/shadow/runtime carrier 时通过并输出 `head_binding.status == carrier-only`；任何实现文件漂移、schema drift、validation summary drift 或 unreadable head comparison 必须 fail closed。
 
@@ -97,20 +144,59 @@ closeout 消费 behavior/test evidence 的语义如下：
 
 - 它不重新执行 BDD/TDD 判断，只校验 merge-ready 放行所消费的证据仍可回链当前 merged result
 - 普通 closeout 默认消费 `review record -> merge-ready execution_attempt -> PR head -> host required checks -> merge commit -> target branch -> reconciliation audit`
+- full path 下，closeout 还必须消费 evidence-map 与 consistency-analysis 的
+  retained locator；若 retained locator 不可读、与 PR head / merge commit /
+  target branch 不一致，或仍含 blocking consistency gap，必须返回 `block`
+- minimal path 下，closeout 可以消费 `not_applicable` rationale 作为合法缺省，
+  但 rationale 必须带 source locator、consumer boundary、recheck condition，并且
+  与 spec / plan / recovery / merged result 不冲突；否则按 missing closeout basis
+  处理
+- consistency-analysis 中的 advisory gap 可以进入 closeout 输出摘要，但不得遮蔽
+  source locator、freshness 或后续 remediation；blocking gap、stale evidence、
+  head drift、host state conflict、deferred-as-completed 必须阻断
 - host PR checks evidence 只证明当前 head 的检查状态和 freshness，不替代 Loom review record 或 reconciliation audit；当 versioned `merge-ready` execution_attempt 未被 retained runtime 写入版本控制时，可作为 legacy merge-ready freshness fallback，但必须在 subcheck 中标记 `source=host_pr_checks` 与 `fallback_reason=missing_versioned_execution_attempt`
 - review record 必须 `decision == allow`、kind 属于 implementation review，并且 `reviewed_validation_summary` 与当前 validation summary 一致；`reviewed_head` 必须覆盖 PR head，若 review 后到 PR head 的差异只包含 review / recovery / status / owned runtime evidence carriers，可作为 `carrier-only` head binding 消费
 - merge-ready evidence 优先来自同一 Work Item 的 successful `merge-ready` execution attempt，且 `head_sha` 与 PR head 一致；若 retained execution_attempt 存在但 stale、invalid 或 head mismatch，不得回退到 host checks
+- 当 validation summary 引用 `daily-execution-cli-fast` / `daily-execution-cli-full` 时，closeout 必须保留两者的消费边界：fast run 只能作为 focused troubleshooting 或本地迭代证据；full run 或等价 full aggregate 才能作为默认 daily-execution-cli retained validation basis。若 closeout 只能找到 fast locator，必须返回 `block` 或记录拥有方明确的 narrow-scope rationale、remaining risk、recheck condition 与 scheduler-owned gate disposition。
+- 默认 `no_release` closeout 仍必须消费 release/no-release 判断本身。`daily-execution-cli-full` pass 可以支持 no-release 的验证依据，但不能替代 PR metadata、review、fact-chain、hosted checks、controlled merge、target branch readback、reconciliation audit 或 release judgment。
+- Loom CLI release closeout 必须把三类 release evidence 分开保留：
+  - release-surface validation evidence：例如 `release-doc-contract`、`release-workflow-contract`、`installer-sunset-guard`、`forbidden-release-surface-patterns`、`npm-package-manifest`、`npm-pack-payload`、`installed-global-cli-smoke`，证明 release/package 机制、临时全局安装 smoke 和 payload 合同在当前 head 上仍成立。
+  - release-required closeout evidence：发布发生后绑定 PR head、merge commit、`loom-cli-release` main-push run、GitHub `v*` tag、GitHub Release、npm package registry readback、dist-tag state、installed/global CLI smoke 和 installer non-advancement。
+  - `no_release` rationale evidence：未发布时说明没有用户可见 CLI / skills / package / workflow / runtime behavior 被交付，并证明该结论不依赖 PR-event `release-judgment-only`。
+- 下游 release-required Work Item 可以消费这些 evidence label，而不是把 release/package validation 当成单一黑盒；但 closeout 必须记录当前实际命令或 hosted run 如何覆盖对应 label。命令可以是 named surface（例如 `--surface npm-package-manifest`）或 aggregate surface（例如 `--surface aggregate-release-surface` / `--surface aggregate`），但 aggregate 证据仍必须保留 label、head/merge commit、run locator 和 consumer boundary。若只能看到 aggregate command pass 而没有这些字段，结果必须返回 `block` 或要求 release evidence repair。
 - 若证据只覆盖 merge 前 `HEAD`，必须能通过 PR / merge commit / main 包含关系证明该证据仍覆盖当前主干结果
 - 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
 - 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
 - 若提供 `/goal completion` evidence，closeout 必须校验它的 Work Item 与 `head_sha` 仍绑定当前 closeout 上下文；mismatch 返回 `block`，valid 也只表示该 evidence 可消费，不表示 closeout 已完成
+
+Closeout reconciliation 对 full suite evidence 的消费顺序固定为：
+
+1. 先消费 PR / merge commit / target branch / issue / Project / dependency
+   graph 的 host basis。
+2. 再消费 review record 与 merge-ready execution attempt 中 retained 的
+   suite、evidence-map、consistency-analysis backlink。
+3. 再判断 evidence-map 是否仍覆盖 merged result。
+4. 最后消费 `reconciliation audit` 的 refreshed result。
+
+任一步无法回链时，closeout 只能返回 `block`，并指向 `merge`、
+`reconciliation-sync` 或 `manual-reconciliation`。PR merged、issue closed、
+Project Done、CI success 或 host checks green 都不能单独证明 `closed_out`。
 
 closeout truth 与 workspace retire 必须分层：
 
 - 版本化 closeout truth 必须在 merge 前通过 review / merge-ready / closeout basis 进入可审查载体
 - merge 后 `closeout check|sync` 只消费 PR、merge commit、target branch、issue、Project 与 repo-authored artifacts 的一致性
 - `workspace retire` 只做 local cleanup / runtime evidence，不写 `.loom/progress/**` 或 `.loom/status/current.md`
+- `carrier closeout-sync` 是唯一用于写入结构化 terminal closeout metadata 的版本化 carrier sync 入口；默认 dry-run，只有显式 `--apply` 才写 `.loom/progress/<item>.md`
 - post-merge retire 不得制造新的需要再开 PR 合入 main 的 carrier diff
+
+HotCP-style stale active carrier closeout 必须把三类 evidence 分开保留：
+
+- host evidence：PR mergedAt、merge commit、target branch contains merge commit、issue state/reason、Project status，以及 release/no-release judgment。
+- local-only retire evidence：`workspace retire` 的 `retire_scope = local_only` 与 `versioned_carrier_updates = []`。
+- carrier sync evidence：`carrier closeout-sync --dry-run` 与 `--apply` 的 `host_mutations = false`、写入的 terminal metadata、以及随后 `fact-chain` 读回 `idle` / `no_active_item`。
+
+这一路径可以消费 #1236 HotCP regression fixture 的行为证明；它不能把 workspace retire、host issue close、CI success 或 PR merge 单独当作 repo carrier closeout 完成。
 
 这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
 因此，`closeout check` 至少要能区分：
@@ -128,17 +214,23 @@ closeout truth 与 workspace retire 必须分层：
 - 先消费同范围的 `reconciliation audit` 结果，再生成可执行 sync 计划
 - 在条件满足时关闭 issue
 - 在 project 中把对应 item 状态设为 `Done`
+- 可选写入 closeout comment，但该写入必须作为 `add_closeout_comment` plan action 独立出现
 
 约束：
 
 - 若 `reconciliation audit` 出现任一 `block` finding，`sync` 必须直接返回 `block`，且不做任何写入
 - `sync` 只允许对 `fix-needed` finding 做机械修复；`warn` 仅保留提示，不触发写入
 - `--dry-run` 只输出基于 audit 的计划，不修改 GitHub 控制面
+- `--dry-run` 是默认行为；只有显式 `--apply` 才允许执行写入
 - `--comment-file` 与 `--comment` 二选一，只为当前 issue closeout comment 提供正文来源
+- 输出必须保留 `audit`、`sync_plan`、`applied_actions`、`skipped_actions`、`manual_actions`、`refreshed_audit` 与 `remaining_findings`
+- sync 后的 closeout 判断只能消费 `refreshed_audit`；不得只相信写入命令成功
 
 `closeout sync` 仍保持 closeout 控制面对齐入口，但不得绕过已显式暴露的 reconciliation 结果。
 
 `closeout sync` 也只允许返回 `pass` 或 `block`。若同步前置不满足，或同步后仍无法把控制面对齐，必须继续显式指向 `reconciliation-sync`、`manual-reconciliation` 或 `merge`，而不是产出新的 host action 结果词表。
+
+`carrier closeout-sync` 不得调用 GitHub、关闭 issue、修改 Project、合并 PR 或删除 worktree。它只消费调用者显式提供的 terminal closeout metadata，并产出 reviewable repo diff。
 
 若 parent issue 通过 child issue 的 `closed_out` / `absorbed` 结果完成自身 closeout 判断，`sync` 只负责把这一已成立结论写回控制面，不替代 parent 对剩余缺口的判断。
 

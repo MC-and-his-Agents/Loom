@@ -39,6 +39,12 @@ release-boundary 输入，再让 `flow pre-review` 消费冻结后的 readback �
 freeze 读回或 freeze 自身返回 blocking/fallback 时，回到 freeze repair path，
 不要跳过冻结入口直接拼 review 前检查链。
 
+若输入是 closeout-only carrier PR，pre-review 先读取 closeout mode protocol：
+`inline`、`auto_no_op`、`light`、`batched` 可以继续 closeout admission 路径；
+`full`、`blocked`、`full_review_required` 或 `escalation_required` 必须进入
+full semantic review / guardian 或 blocker repair。该判断只选择审查路径，不写
+closeout truth，也不把 queue/status runtime mode 当成新的事实源。
+
 ## 3. 固定编排
 
 `flow pre-review` 固定只编排以下读取链路：
