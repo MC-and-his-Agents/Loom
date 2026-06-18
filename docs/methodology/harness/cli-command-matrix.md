@@ -37,7 +37,7 @@ Regression bucket / named surface / fast-vs-full validation semantics for long-r
 #893 implements the host-control command family:
 
 ```text
-loom workspace create|locate|check|retire
+loom workspace create|locate|check|audit|retire
 loom issue inspect|bind|reconcile
 loom project status|reconcile
 loom pr inspect|metadata-preflight|gate
@@ -125,12 +125,13 @@ For #1229, the contract now reserves an explicit idle repository state for these
 - `loom status`
   - may render repository execution state `idle` without inventing an active Work Item
 
-`workspace retire` remains local-only. Versioned terminal carrier updates use the explicit `carrier closeout-sync` command so local cleanup, host closeout sync, and repo carrier closeout sync do not share an ambiguous command name.
+`workspace audit` is a read-only startup hygiene check over active carrier drift, host-complete carrier residue, and shadow freshness; it does not mutate host state or repo carriers. `workspace retire` remains local-only. Versioned terminal carrier updates use the explicit `carrier closeout-sync` command so local cleanup, host closeout sync, and repo carrier closeout sync do not share an ambiguous command name.
 
 Idle closeout recovery is intentionally split into explicit layers:
 
 | Layer | Command family | Writes host state | Writes versioned carriers | Primary use |
 | --- | --- | --- | --- | --- |
+| Startup carrier audit | `loom workspace audit` | no | no | Detect active Work Item residue before starting or resuming a Work Item, and point to the next explicit repair command. |
 | Closeout residue queue read | `loom closeout queue status` | no | no | Classify retained post-merge closeout residue and suggest the next read-only or explicit sync command. |
 | Local worksite retirement | `loom workspace retire` | no | no | Produce local-only cleanup/retire evidence while leaving `.loom/progress/**`, `.loom/status/current.md`, and `.loom/bootstrap/init-result.json` unchanged. |
 | Host closeout sync | host-owned merge/readback plus `reconciliation audit|sync` / `closeout check|sync` | yes, only through explicit host sync paths | no | Align GitHub issue, PR, Project, target branch, and merge commit truth. |

@@ -610,6 +610,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
+    work_item_audit = subparsers.add_parser("work-item-audit", help="Audit active Work Item carrier drift before starting work")
+    work_item_audit.add_argument("--target", required=True, help="Target repository root")
+    work_item_audit.add_argument("--item", help="Expected current item id")
+    work_item_audit.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
     fact_chain = subparsers.add_parser("fact-chain", help="Read and validate the Loom fact chain")
     fact_chain.add_argument("--target", required=True, help="Target repository root")
     fact_chain.add_argument("--item", help="Expected current item id")
@@ -13109,6 +13118,170 @@ def handle_purity(args: argparse.Namespace) -> int:
         "runtime_state": runtime_state,
     }
     return emit(payload)
+
+
+def work_item_audit_finding_from_diagnostic(diagnostic: dict[str, Any]) -> dict[str, Any]:
+    classification = str(diagnostic.get("classification") or "unknown")
+    freshness = str(diagnostic.get("freshness") or "unknown")
+    audit_blocking = bool(diagnostic.get("blocking")) or classification == "carrier_closeout_required"
+    kind_by_classification = {
+        "stale_carrier": "unrelated_terminal_stale_carrier",
+        "carrier_closeout_required": "host_complete_carrier_not_terminalized",
+        "shared_workspace_conflict": "multiple_active_work_items",
+    }
+    classifier_by_classification = {
+        "stale_carrier": "stale_carrier",
+        "carrier_closeout_required": "carrier_refresh_needed",
+        "shared_workspace_conflict": "carrier_truth_conflict",
+    }
+    next_action_by_classification = {
+        "stale_carrier": "leave unrelated terminal carriers out of the current Work Item, or retire them through their own flow if they still appear active.",
+        "carrier_closeout_required": "run the reported carrier closeout-sync command, then rerun work-item audit before starting the next Work Item.",
+        "shared_workspace_conflict": "move one active Work Item to its own branch/worktree or close its recovery path before continuing.",
+    }
+    finding = {
+        "kind": kind_by_classification.get(classification, "active_carrier_drift"),
+        "item_id": diagnostic.get("item_id"),
+        "classification": classification,
+        "classifier": classifier_by_classification.get(classification, "carrier_truth_conflict" if audit_blocking else "not_applicable"),
+        "freshness": freshness,
+        "blocking": audit_blocking,
+        "purity_blocking": bool(diagnostic.get("blocking")),
+        "work_item_locator": diagnostic.get("work_item_locator"),
+        "binding_locator": diagnostic.get("binding_locator"),
+        "checkpoint": diagnostic.get("checkpoint"),
+        "next_action": next_action_by_classification.get(
+            classification,
+            str(diagnostic.get("recommended_remediation") or "inspect the retained Work Item carrier before continuing."),
+        ),
+    }
+    if diagnostic.get("next_command"):
+        finding["next_command"] = diagnostic.get("next_command")
+    if diagnostic.get("host_truth"):
+        finding["host_truth"] = diagnostic.get("host_truth")
+    return finding
+
+
+def work_item_audit_payload(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return runtime_state_block_payload(
+            command="work-item-audit",
+            runtime_state=runtime_state,
+            summary="work-item audit is blocked because the Loom runtime state is inconsistent.",
+        )
+
+    context, errors = load_context(target_root, output_relative, expected_item)
+    if errors:
+        return {
+            "command": "work-item-audit",
+            "schema_version": "loom-active-carrier-audit/v1",
+            "result": "block",
+            "summary": "work-item audit could not read a valid Loom fact chain.",
+            "missing_inputs": [f"fact-chain: {message}" for message in errors],
+            "fallback_to": "admission",
+            "runtime_state": runtime_state,
+            "findings": [],
+            "current_item": None,
+            "shadow_freshness": {"status": "not_checked"},
+        }
+
+    assert context is not None
+    purity = purity_report_from_context(context)
+    diagnostics = list(purity.get("active_workspace_diagnostics", []))
+    diagnostic_findings = [work_item_audit_finding_from_diagnostic(entry) for entry in diagnostics if isinstance(entry, dict)]
+    diagnostic_counts: dict[str, int] = {}
+    for finding in diagnostic_findings:
+        classification = str(finding.get("classification") or "unknown")
+        diagnostic_counts[classification] = diagnostic_counts.get(classification, 0) + 1
+
+    current_checkpoint = str(context.get("current_checkpoint") or "")
+    current_item = {
+        "kind": "current_item_legitimate_active_carrier"
+        if current_checkpoint not in TERMINAL_CHECKPOINTS
+        else "current_item_terminal_carrier",
+        "item_id": context["item_id"],
+        "workspace_entry": context["workspace_entry"],
+        "checkpoint": current_checkpoint,
+        "blocking": False,
+        "classifier": "not_applicable",
+        "next_action": "continue with the selected Work Item after resolving any blocking audit findings.",
+    }
+
+    shadow_actions = refresh_shadow_evidence_actions(target_root)
+    shadow_blocking = [
+        action
+        for action in shadow_actions
+        if action.get("kind") == "shadow-evidence" and action.get("status") in {"block", "refresh-needed"}
+    ]
+    shadow_freshness = {
+        "schema_version": "loom-work-item-audit-shadow-freshness/v1",
+        "result": "block" if shadow_blocking else "pass",
+        "actions": shadow_actions,
+        "blocking_paths": [action.get("path") for action in shadow_blocking if action.get("path")],
+        "next_action": "refresh shadow evidence source hashes with the supported carrier refresh/write path, then rerun work-item audit."
+        if shadow_blocking
+        else "no shadow freshness action required.",
+    }
+
+    blocking_findings = [finding for finding in diagnostic_findings if finding.get("blocking")]
+    if shadow_blocking:
+        blocking_findings.append(
+            {
+                "kind": "current_item_shadow_source_hash_drift",
+                "item_id": context["item_id"],
+                "classification": "shadow_source_hash_drift",
+                "classifier": "shadow_stale",
+                "freshness": "refresh_needed",
+                "blocking": True,
+                "paths": [action.get("path") for action in shadow_blocking if action.get("path")],
+                "next_action": "refresh shadow evidence source hashes with the supported carrier refresh/write path, then rerun work-item audit.",
+            }
+        )
+
+    result = "block" if blocking_findings else "pass"
+    nonblocking_samples = [finding for finding in diagnostic_findings if not finding.get("blocking")][:20]
+    fallback_to = None
+    if blocking_findings:
+        classifiers = {str(finding.get("classifier") or "") for finding in blocking_findings}
+        fallback_to = "carrier_closeout_sync" if "carrier_refresh_needed" in classifiers else "carrier_refresh"
+    return {
+        "command": "work-item-audit",
+        "schema_version": "loom-active-carrier-audit/v1",
+        "result": result,
+        "summary": (
+            "work-item audit found active carrier drift that must be resolved before starting work."
+            if result == "block"
+            else "work-item audit found no blocking active carrier drift before starting work."
+        ),
+        "missing_inputs": [
+            f"{finding.get('kind')}: {finding.get('item_id') or ','.join(str(path) for path in finding.get('paths', []))}"
+            for finding in blocking_findings
+        ],
+        "fallback_to": fallback_to,
+        "runtime_state": runtime_state,
+        "current_item": current_item,
+        "findings": blocking_findings,
+        "nonblocking_samples": nonblocking_samples,
+        "diagnostic_summary": {
+            "total": len(diagnostic_findings),
+            "blocking": len(blocking_findings),
+            "by_classification": diagnostic_counts,
+            "nonblocking_samples_limited_to": 20,
+        },
+        "shadow_freshness": shadow_freshness,
+        "purity_summary": {
+            "state": purity.get("state"),
+            "hard_failure_count": len(purity.get("hard_failures", [])),
+            "report_only_count": len(purity.get("report_only", [])),
+        },
+        "next_actions": [finding.get("next_action") for finding in blocking_findings if finding.get("next_action")],
+    }
+
+
+def handle_work_item_audit(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(work_item_audit_payload(target_root, args.output, args.item))
 
 
 def handle_fact_chain(args: argparse.Namespace) -> int:
@@ -25668,6 +25841,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_checkpoint(args)
     if args.command == "workspace":
         return handle_workspace(args)
+    if args.command == "work-item-audit":
+        return handle_work_item_audit(args)
     return handle_purity(args)
 
 

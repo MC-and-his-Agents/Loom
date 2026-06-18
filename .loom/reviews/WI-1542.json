@@ -3,57 +3,43 @@
   "item_id": "WI-1542",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1542 terminal closeout sync is approved at head d932b689f87e9539d022f8f2634da9ff7b125fe5: PR #1551 terminalizes the repo-local WI-1542 carrier after PR #1550 merged, adds the minimal terminal closeout gate compatibility fix for hosted-only retained review/spec heads, refreshes the required demo bootstrap fixture plus root shadow evidence, and fixes the aggregate release-judgment fixture to keep PR head metadata synchronized after fixture commits.",
-  "reviewer": "codex",
-  "authored_at": "2026-06-17T15:46:09Z",
-  "reviewed_head": "d932b689f87e9539d022f8f2634da9ff7b125fe5",
-  "reviewed_validation_summary": "2026-06-17T15:46Z WI-1542 terminal closeout sync, hosted old-review-head compatibility, demo bootstrap fixture, shadow parity refresh, and aggregate release-judgment regression validation passed at head d932b689f87e9539d022f8f2634da9ff7b125fe5: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`.",
+  "summary": "Implementation review allow: head f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a adds read-only workspace audit/startup carrier drift detection, maps host-complete closeout residue to carrier_refresh_needed and shadow freshness drift to shadow_stale, keeps unrelated stale terminal carriers nonblocking and compact, syncs generated/demo runtime copies, and passes focused tests, CLI contract, generated-tree drift, demo fixture check, fact-chain, state-check, suite validate, workspace audit readback, and git diff check.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-18T08:47:00+08:00",
+  "reviewed_head": "f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a",
+  "reviewed_validation_summary": "2026-06-18T08:45+08:00 targeted checks passed at review target head f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface work-item-audit; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1542; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1542 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py workspace audit --target . --json; git diff --check.",
   "fallback_to": null,
-  "findings": [
-    {
-      "id": "compat-follow-up-1",
-      "summary": "#1543 can build closeout queue/status UX on top of the retained lookup ranking after #1551 lands.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-2",
-      "summary": "#1515 should consume the #1544/#1542 closeout readback after WI-1542 carrier sync lands.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    }
-  ],
+  "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "#1543 can build closeout queue/status UX on top of the retained lookup ranking after #1551 lands.",
-    "#1515 should consume the #1544/#1542 closeout readback after WI-1542 carrier sync lands."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1542.md",
     "recovery_entry": ".loom/progress/WI-1542.md",
     "status_surface": ".loom/status/current.md",
-    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1551",
-    "pr_body_readback": ".loom/runtime/pr/wi1542-carrier-closeout-sync-readback.md",
-    "build_checkpoint": "terminal_closeout_carrier_sync_and_hosted_old_review_head_compatibility",
-    "local_pr_gate": "pass",
-    "terminal_closeout_consumption": "pass",
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1568",
+    "build_checkpoint": "pass",
+    "workspace_audit_readback": "/tmp/wi1542-workspace-audit-after-commit.json",
+    "local_validation": [
+      "PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py test/work_item_audit_test.py",
+      "PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface work-item-audit",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift",
+      "make loom-demo-new-project-check",
+      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .",
+      "PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1542",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1542 --json",
+      "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py workspace audit --target . --json",
+      "git diff --check"
+    ],
     "head_binding": {
-            "reviewed_head": "d932b689f87e9539d022f8f2634da9ff7b125fe5",
-            "current_head": "d932b689f87e9539d022f8f2634da9ff7b125fe5",
+      "reviewed_head": "f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a",
+      "current_head": "f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a",
       "status": "fresh",
       "stale": false
     }
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored closeout carrier review approved the current PR head for terminal carrier sync consumption."
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
