@@ -3855,8 +3855,8 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     )
     if render_payload.get("result") != "pass":
         raise AssertionError(f"render payload failed: {render_payload.get('missing_inputs')}")
-    if render_payload.get("effective_carrier_surface") != "merge_ready":
-        raise AssertionError("closeout render should keep the declared merge_ready carrier surface")
+    if render_payload.get("effective_carrier_surface") != "closeout":
+        raise AssertionError("closeout render should emit closeout carrier surface")
     rendered = target / ".loom" / "runtime" / "pr" / "rendered.md"
     if not rendered.exists():
         raise AssertionError("render did not write the repo-relative body artifact")
@@ -3963,6 +3963,25 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     )
     if review_surface_payload.get("result") != "pass":
         raise AssertionError("review surface did not consume the declared merge_ready governance metadata carrier")
+    docs_governance_lite_closeout = target / "docs-governance-lite-closeout.md"
+    docs_governance_lite_closeout.write_text(
+        governance_metadata_body(
+            surface="closeout",
+            fields_override={
+                "governance_intensity": "light",
+                "change_class": "docs_governance",
+                "suite_path": "not_applicable",
+                "suite_not_applicable": {
+                    "rationale": "docs-governance clarification does not need formal suite artifacts",
+                    "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                    "recheck_condition": "scope expands beyond docs-governance methodology or current carrier evidence",
+                    "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                    "review_requirement": "current_head_review_required",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
     _, closeout_surface_payload = run_flow_json(
         [
             "pr-metadata",
@@ -3972,11 +3991,11 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
             "--surface",
             "closeout",
             "--body-file",
-            "docs-governance-lite.md",
+            "docs-governance-lite-closeout.md",
         ]
     )
     if closeout_surface_payload.get("result") != "pass":
-        raise AssertionError("closeout surface did not consume the declared merge_ready governance metadata carrier")
+        raise AssertionError("closeout surface did not consume the declared closeout governance metadata carrier")
 
     readback_drift = target / "docs-governance-lite-readback-drift.md"
     readback_drift.write_text(
@@ -6743,8 +6762,8 @@ def run_aggregate_cli_contract() -> None:
         ],
         expect=0,
     )
-    if render_payload.get("result") != "pass" or render_payload.get("effective_carrier_surface") != "merge_ready":
-        raise AssertionError("pr metadata-render must support closeout surface and preserve merge_ready carrier surface")
+    if render_payload.get("result") != "pass" or render_payload.get("effective_carrier_surface") != "closeout":
+        raise AssertionError("pr metadata-render must support closeout surface and emit closeout carrier surface")
 
     _, readback_payload = run_json(
         [
