@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1514
-- Goal: Update gate freeze documentation, skill protocols, and regression inventory so milestone/12 consumers use the stabilized freeze/readback surfaces.
-- Scope: Docs/skills/evidence inventory only for #1514. Update the pre-review, review, and merge-ready skills plus CLI command matrix and regression surface inventory to consume #1512 hosted admission, #1513 classifier vocabulary, #1541 PR metadata render/readback, and #1554 wrapper/runtime contract. Do not implement #1532 closeout freeze admission, #1533 closeout-specific gate, #1534 closeout mode docs, #1555 one-shot closeout run, or #1515 release/no-release closeout.
-- Execution Path: issue #1514 -> branch work/1514-gate-freeze-docs-skills -> docs/skills/evidence inventory update -> PR #1574 -> merge-ready
+- Item ID: WI-1532
+- Goal: Implement the local closeout freeze admission entry so operators can validate terminal closeout facts before opening closeout-only PRs.
+- Scope: Issue #1532 only: extend the gate freeze runtime with `--profile closeout`, consume terminal subject, host git, dependency graph, retained review, carrier/shadow freshness, PR body readback, release/no-release evidence, and closeout-only allowed paths; expose machine-readable blockers, next actions, and targeted fixtures. Do not implement #1533 closeout-specific gate, #1534 docs convergence, #1555 one-shot closeout run, #1515 release/no-release final closeout, or host writes.
+- Execution Path: issue #1532 -> branch work/1532-closeout-freeze-admission -> closeout freeze admission runtime -> generated runtime parity -> targeted fixture validation -> PR
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1514.md
-- Review Entry: .loom/reviews/WI-1514.json
-- Validation Entry: git diff --check; python3 tools/skills_surface.py check; python3 tools/loom.py suite evidence validate --target . --item WI-1514 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1514 --json; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py gate freeze check --target . --item WI-1514 --pr 1574 --surface merge_ready --json; python3 tools/loom.py pr metadata-readback 1574 --surface merge_ready --body-file .loom/runtime/pr/pr-1514-body.md --readback-file .loom/runtime/pr/pr-1514-readback.md --compare-body-file .loom/runtime/pr/pr-1514-readback.md --head-sha 82da8c020c25ba21335d777690d0b0bdb2f8122e --item WI-1514 --branch work/1514-gate-freeze-docs-skills --json; python3 tools/loom.py pr gate 1574 --head-sha 82da8c020c25ba21335d777690d0b0bdb2f8122e --work-item WI-1514 --surface merge_ready --branch work/1514-gate-freeze-docs-skills --json
-- Closing Condition: PR #1574 passes PR metadata readback, local PR gate, hosted checks, merges to main, and issue #1514 can be consumed by #1534/#1515 as the gate freeze docs/skills convergence slice.
-- Current Checkpoint: closed_out
-- Current Stop: PR #1574 merged into main at 2026-06-18T07:15:11Z with merge commit 4d2cdaf9bf427c96a01148f0025a1fc9aa576ac2; issue #1514 closed at 2026-06-18T07:23:41Z; terminal closeout metadata and task carrier now consume the gate freeze docs/skills convergence completion facts.
-- Next Step: Downstream consumers may proceed through #1534/#1515 according to the milestone/12 dependency graph; #1514 itself has no remaining implementation work.
-- Blockers: None recorded for WI-1514 closeout.
-- Latest Validation Summary: 2026-06-18T06:56Z validation for WI-1514 head 82da8c020c25ba21335d777690d0b0bdb2f8122e: git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/loom.py suite evidence validate --target . --item WI-1514 --json passed; python3 tools/loom.py suite carrier validate --target . --item WI-1514 --json passed; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking passed; python3 tools/loom.py gate freeze check --target . --item WI-1514 --pr 1574 --surface merge_ready --json passed; python3 tools/loom.py pr metadata-readback 1574 --surface merge_ready --body-file .loom/runtime/pr/pr-1514-body.md --readback-file .loom/runtime/pr/pr-1514-readback.md --compare-body-file .loom/runtime/pr/pr-1514-readback.md --head-sha 82da8c020c25ba21335d777690d0b0bdb2f8122e --item WI-1514 --branch work/1514-gate-freeze-docs-skills --json passed; python3 tools/loom.py pr gate 1574 --head-sha 82da8c020c25ba21335d777690d0b0bdb2f8122e --work-item WI-1514 --surface merge_ready --branch work/1514-gate-freeze-docs-skills --json passed. python3 tools/loom.py suite validate --target . --item WI-1514 --json returned result not_applicable with no missing inputs or blocking gaps, matching the WI-1514 docs-only suite decision. Hosted release-judgment/root-self-governance failures were classified as pre-sync fact-chain carrier drift, not code semantics or environment failure.
-- Recovery Boundary: WI-1514 closeout sync is limited to terminal carrier/status truth for PR #1574 and issue #1514. It does not implement #1532 closeout freeze admission, #1533 closeout-specific gate, #1534 closeout mode docs/fixtures, #1555 one-shot closeout run, or #1515 release/no-release closeout.
-- Current Lane: milestone-12-wave3-gate-freeze-docs-skills-closeout
+- Recovery Entry: .loom/progress/WI-1532.md
+- Review Entry: .loom/reviews/WI-1532.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py; PYTHONDONTWRITEBYTECODE=1 python3 -c 'import tempfile; from pathlib import Path; import tools.check_cli_contract as c; tmp = tempfile.TemporaryDirectory(); c.assert_closeout_freeze_profile_fixture(Path(tmp.name)); tmp.cleanup()'; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1532 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1532 --json; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1532 --write; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; git diff --check
+- Closing Condition: PR for #1532 is merged, issue #1532 is closed/completed, and downstream #1533/#1534/#1515 can consume the local closeout freeze admission surface as stable.
+- Current Checkpoint: merge
+- Current Stop: PR #1576 demo bootstrap fixture sync is committed and pushed at head c60a2a1b74fc71357b9f23df4aa569c335e1e527; hosted demo-bootstrap/repo-local-cli fixture drift root cause has been fixed locally.
+- Next Step: Refresh current-head review artifacts, update/readback PR metadata for head c60a2a1b74fc71357b9f23df4aa569c335e1e527, rerun local PR gate, then read hosted checks before merge-ready.
+- Blockers: None
+- Latest Validation Summary: 2026-06-18T10:37Z validation passed for WI-1532 branch work/1532-closeout-freeze-admission head c60a2a1b74fc71357b9f23df4aa569c335e1e527: python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile examples/new-project/.loom/bin/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py passed; git diff --check passed. Prior validation on head d00f823ab06796e2a3a931e80c2f40a6e8cb1838 also passed targeted adversarial-adoption fixture, all copied loom_check.py py_compile, installed-runtime source surface, and review-run source surface.
+- Recovery Boundary: WI-1532/#1532 only. Do not implement #1533 closeout-specific gate, #1534 docs/skills convergence, #1555 one-shot closeout run, #1515 release/no-release final closeout, or host writes.
+- Current Lane: milestone-12-wave2-closeout-freeze-local-admission
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-18 WI-1514 gate freeze docs/skills convergence closeout; PR #1574
+- Run Entry: 2026-06-18 WI-1532 closeout freeze local admission implementation
 - Logs Entry: local command output retained in current Codex milestone/12 thread
-- Diagnostics Entry: Post-merge closeout repaired PR #1574 issue binding and removed stale native blocked-by edges from already closed #1513, #1541, and #1554 before closing #1514. #1512 remains consumed as the authored dependency from the issue body.
-- Verification Entry: `python3 tools/loom.py closeout --target . --item WI-1514 --issue 1514 --pr 1574 --branch main --json`; `python3 tools/loom.py carrier closeout-sync --target . --item WI-1514 --terminal-state closed_out --issue 1514 --pr 1574 --merge-commit 4d2cdaf9bf427c96a01148f0025a1fc9aa576ac2 --target-branch main --closed-at 2026-06-18T07:23:41Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/issues/1514#issuecomment-4739132756 --apply --json`
-- Lane Entry: milestone-12-wave3-gate-freeze-docs-skills-closeout
+- Diagnostics Entry: Hilbert read-only review found closeout freeze blocker gaps; Erdos worker repaired carrier/shadow blocking inputs, release evidence readback, and stable consumed contract fields. Main thread rebased implementation onto origin/main and is registering WI-1532 suite carriers.
+- Verification Entry: git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py`; source/runtime `/usr/bin/cmp` parity; targeted `assert_closeout_freeze_profile_fixture`; `python3 tools/loom.py gate freeze check --target . --profile closeout --json
+- Lane Entry: milestone-12-wave2-closeout-freeze-local-admission
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1514.md
-- Dynamic Truth: .loom/progress/WI-1514.md
+- Static Truth: .loom/work-items/WI-1532.md
+- Dynamic Truth: .loom/progress/WI-1532.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

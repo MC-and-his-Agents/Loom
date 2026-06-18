@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1532",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current head c60a2a1b74fc71357b9f23df4aa569c335e1e527 extends the prior closeout fetch read-only fixture sync by refreshing the stable examples/new-project bootstrap fixture generated from loom_check.py. The implementation change remains scoped to fixture/runtime parity evidence for #1532 and does not alter closeout profile behavior, hosted admission, closeout-specific gate semantics, or host writes. Validation passed: demo bootstrap fixture drift check, py_compile for demo/source/shared loom_check.py, and git diff --check; prior head d00f823ab06796e2a3a931e80c2f40a6e8cb1838 passed targeted adversarial-adoption, installed-runtime, and review-run surfaces.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-06-18T10:37:53Z",
+  "reviewed_head": "c60a2a1b74fc71357b9f23df4aa569c335e1e527",
+  "reviewed_validation_summary": "2026-06-18T10:37Z validation passed for WI-1532 branch work/1532-closeout-freeze-admission head c60a2a1b74fc71357b9f23df4aa569c335e1e527: python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile examples/new-project/.loom/bin/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py passed; git diff --check passed. Prior validation on head d00f823ab06796e2a3a931e80c2f40a6e8cb1838 also passed targeted adversarial-adoption fixture, all copied loom_check.py py_compile, installed-runtime source surface, and review-run source surface.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1532.md",
+    "recovery_entry": ".loom/progress/WI-1532.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1532-closeout-freeze-admission/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1532-closeout-freeze-admission --item WI-1532 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1532-closeout-freeze-admission/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1532-closeout-freeze-admission --item WI-1532 --json",
+    "suite_evidence_map": ".loom/specs/WI-1532/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1532/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

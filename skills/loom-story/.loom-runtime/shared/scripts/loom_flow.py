@@ -145,6 +145,7 @@ PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
 PR_METADATA_RENDERER_ID = "renderer:loom-pr-metadata-render/v1"
 GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
+CLOSEOUT_FREEZE_SCHEMA = "loom-closeout-freeze/v1"
 HOSTED_FREEZE_ADMISSION_SCHEMA = "loom-hosted-freeze-admission/v1"
 FAILURE_CLASSIFIER_SCHEMA = "loom-failure-classifier/v1"
 FAILURE_CLASSIFIER_CATEGORIES = (
@@ -183,6 +184,15 @@ FAILURE_CLASSIFIER_KIND_MAP = {
     "freeze_artifact_unreadable": "freeze_artifact_unreadable",
     "hosted_snapshot_mismatch": "hosted_snapshot_mismatch",
     "release_evidence_phase_error": "release_evidence_phase_error",
+    "closeout_terminal_subject_drift": "pr_metadata_drift",
+    "closeout_host_git_mismatch": "host_api_unreadable",
+    "closeout_dependency_graph_drift": "host_api_unreadable",
+    "closeout_carrier_drift": "carrier_refresh_needed",
+    "closeout_shadow_stale": "shadow_stale",
+    "closeout_release_evidence_gap": "release_evidence_phase_error",
+    "closeout_retained_review_unconsumable": "review_stale",
+    "closeout_allowed_paths_violation": "code_semantics",
+    "closeout_batch_mixed_risk": "code_semantics",
     "host_api_unreadable": "host_api_unreadable",
     "permission": "permission",
     "ci_environment": "ci_environment",
@@ -804,6 +814,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     gate_freeze.add_argument("--head-sha", help="Expected PR head SHA")
     gate_freeze.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     gate_freeze.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    gate_freeze.add_argument("--issue", type=int, help="GitHub issue number for closeout profile terminal fact readback")
+    gate_freeze.add_argument("--issue-payload-file", help="Optional repo-relative issue payload JSON fixture for closeout profile")
+    gate_freeze.add_argument("--dependency-payload-file", help="Optional repo-relative native dependency payload JSON fixture for closeout profile")
     gate_freeze.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
     gate_freeze.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
     gate_freeze.add_argument(
@@ -812,6 +825,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default="merge_ready",
         help="Gate surface whose PR metadata contract is consumed by the snapshot",
     )
+    gate_freeze.add_argument(
+        "--profile",
+        choices=("hosted", "closeout"),
+        default="hosted",
+        help="Freeze profile to emit; `closeout` emits loom-closeout-freeze/v1 terminal admission.",
+    )
+    gate_freeze.add_argument(
+        "--closeout-mode",
+        choices=("inline", "auto_no_op", "light", "batched", "full"),
+        default="light",
+        help="Closeout terminal profile mode used with --profile closeout.",
+    )
+    gate_freeze.add_argument("--target-branch", default="main", help="Target branch used for closeout merge commit containment readback")
     gate_freeze.add_argument("--write-path", help="Repo-relative snapshot output path; defaults to .loom/runtime/gate-freeze/<item>.json")
 
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
@@ -17592,7 +17618,705 @@ def failure_classifier_payload(findings: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def closeout_freeze_load_issue(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    issue_payload_file: str | None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    fixture, fixture_errors = load_optional_json_fixture(target_root, issue_payload_file, label="issue payload fixture")
+    if fixture_errors:
+        return None, fixture_errors
+    if fixture is not None:
+        return normalize_issue_fixture_payload(fixture)
+    if issue_number is None:
+        return None, ["closeout issue number is required for closeout freeze"]
+    if not owner or not repo_name:
+        return None, ["owner/repo is required for closeout issue readback"]
+    return github_issue_payload(target_root, owner, repo_name, issue_number)
+
+
+def closeout_freeze_load_pr(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    pr_payload_file: str | None,
+) -> tuple[dict[str, Any] | None, int | None, list[str]]:
+    fixture, fixture_errors = load_optional_json_fixture(target_root, pr_payload_file, label="implementation PR payload fixture")
+    if fixture_errors:
+        return None, pr_number, fixture_errors
+    if fixture is not None:
+        payload, errors = normalize_pr_fixture_payload(fixture)
+        inferred_pr = pr_number
+        if inferred_pr is None and isinstance(payload, dict) and isinstance(payload.get("number"), int):
+            inferred_pr = int(payload["number"])
+        return payload, inferred_pr, errors
+    if pr_number is None:
+        return None, None, ["implementation PR number is required for closeout freeze"]
+    if not owner or not repo_name:
+        return None, pr_number, ["owner/repo is required for implementation PR readback"]
+    payload, errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+    return payload, pr_number, errors
+
+
+def closeout_freeze_target_contains_merge(
+    target_root: Path,
+    merge_commit_sha: str | None,
+    target_branch: str,
+    *,
+    owner: str | None,
+    repo_name: str | None,
+) -> tuple[bool | None, list[str]]:
+    if not isinstance(merge_commit_sha, str) or not merge_commit_sha:
+        return None, ["implementation PR merge commit is missing"]
+    if contains_merged_commit(target_root, merge_commit_sha, target_branch, owner=owner, repo_name=repo_name):
+        return True, []
+    return False, [f"target branch `{target_branch}` does not contain merge commit `{merge_commit_sha}`"]
+
+
+def closeout_freeze_terminal_subject_binding(
+    context: dict[str, Any],
+    *,
+    issue_number: int | None,
+    issue_payload: dict[str, Any] | None,
+    issue_errors: list[str],
+    pr_payload: dict[str, Any] | None,
+    pr_number: int | None,
+    pr_errors: list[str],
+    merge_commit: str | None,
+    target_branch: str,
+) -> dict[str, Any]:
+    item_id = str(context["item_id"])
+    missing_inputs: list[str] = []
+    pr_body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    issue_text_parts: list[str] = []
+    if isinstance(issue_payload, dict):
+        for key in ("title", "body"):
+            value = issue_payload.get(key)
+            if isinstance(value, str):
+                issue_text_parts.append(value)
+    issue_text = "\n".join(issue_text_parts)
+
+    if issue_errors:
+        missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+    elif not isinstance(issue_payload, dict):
+        missing_inputs.append("closeout issue payload is missing")
+    else:
+        payload_issue = issue_payload.get("number")
+        if issue_number is None:
+            missing_inputs.append("closeout issue number is missing")
+        elif payload_issue != issue_number:
+            missing_inputs.append(f"closeout issue payload number `{payload_issue}` does not match --issue `{issue_number}`")
+        if issue_payload.get("state") != "CLOSED":
+            missing_inputs.append("closeout issue is not closed")
+
+    if pr_errors:
+        missing_inputs.extend(f"implementation PR: {message}" for message in pr_errors)
+    elif not isinstance(pr_payload, dict):
+        missing_inputs.append("implementation PR payload is missing")
+    else:
+        payload_pr = pr_payload.get("number")
+        if pr_number is not None and payload_pr != pr_number:
+            missing_inputs.append(f"implementation PR payload number `{payload_pr}` does not match requested PR `{pr_number}`")
+        if pr_payload.get("state") != "MERGED":
+            missing_inputs.append("implementation PR is not merged")
+        if not merge_commit:
+            missing_inputs.append("implementation PR merge commit is missing")
+        if pr_payload.get("baseRefName") != target_branch:
+            missing_inputs.append(f"implementation PR baseRefName `{pr_payload.get('baseRefName')}` does not match target branch `{target_branch}`")
+        if not pr_body_mentions_item(pr_body, item_id):
+            missing_inputs.append(f"implementation PR body does not mention Loom Work Item `{item_id}`")
+        body_item = pr_work_item_from_body(pr_body)
+        if body_item and body_item != item_id:
+            missing_inputs.append(f"implementation PR body Work Item `{body_item}` does not match `{item_id}`")
+        body_branch = pr_body_binding_value(pr_body, label="Branch", metadata_field="branch")
+        payload_branch = pr_payload.get("headRefName")
+        if body_branch and isinstance(payload_branch, str) and payload_branch and body_branch != payload_branch:
+            missing_inputs.append("implementation PR body Branch does not match PR headRefName")
+        body_head = pr_body_binding_value(pr_body, label="Head SHA", metadata_field="head_sha")
+        payload_head = pr_payload.get("headRefOid")
+        if body_head and isinstance(payload_head, str) and payload_head and body_head != payload_head:
+            missing_inputs.append("implementation PR body Head SHA does not match PR headRefOid")
+
+    issue_ref = f"#{issue_number}" if issue_number is not None else None
+    pr_ref = f"#{pr_number}" if pr_number is not None else None
+    linked_by_pr_body = bool(issue_ref and isinstance(pr_body, str) and re.search(rf"(?<![A-Z0-9-]){re.escape(issue_ref)}(?![0-9])", pr_body))
+    linked_by_issue_text = bool(
+        issue_text
+        and (
+            re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", issue_text)
+            or (pr_ref and re.search(rf"(?<![A-Z0-9-]){re.escape(pr_ref)}(?![0-9])", issue_text))
+        )
+    )
+    if issue_number is not None and not linked_by_pr_body and not linked_by_issue_text:
+        missing_inputs.append("closeout issue and implementation PR are not explicitly linked by PR body, issue body, or issue title")
+
+    return {
+        "result": "pass" if not missing_inputs else "block",
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_terminal_subject_drift",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "terminal_subject",
+        "source_locator": "issue/pr terminal readback",
+        "why_blocking": "closeout freeze must bind the closed issue, merged implementation PR, Work Item, and target branch to the same terminal subject.",
+        "fallback_to": "manual-reconciliation",
+        "next_action": "re-read and align the closeout issue, implementation PR metadata, Work Item binding, and target branch before closeout freeze.",
+    }
+
+
+def closeout_allowed_paths(context: dict[str, Any]) -> set[str]:
+    return allowed_terminal_closeout_carrier_paths(context, context["review_entry"])
+
+
+def closeout_freeze_retained_review_binding(
+    context: dict[str, Any],
+    *,
+    pr_payload: dict[str, Any] | None,
+    merge_commit: str | None,
+) -> dict[str, Any]:
+    review_record, review_path, review_errors = load_review_record(context["target_root"], context["item_id"], context["review_entry"])
+    target_head = None
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str):
+        target_head = pr_payload.get("headRefOid")
+    if not target_head:
+        target_head = merge_commit
+    missing_inputs: list[str] = []
+    if review_record is None:
+        missing_inputs.extend(review_errors or [f"missing review artifact: {review_path}"])
+        return {
+            "result": "block",
+            "source_locator": review_path,
+            "missing_inputs": dedupe_strings(missing_inputs),
+            "failure_kind": "closeout_retained_review_unconsumable",
+            "category": "gate_failure",
+            "severity": "block",
+            "subject": "retained_review",
+            "why_blocking": "closeout freeze requires retained implementation review evidence for the merged implementation PR.",
+            "fallback_to": "review",
+            "next_action": "restore retained implementation review evidence before closeout freeze.",
+        }
+
+    head_binding, head_binding_errors = review_head_binding_for_head(
+        context["target_root"],
+        reviewed_head=review_record.get("reviewed_head"),
+        target_head=target_head,
+        allowed_paths=closeout_allowed_paths(context),
+    )
+    disposition, disposition_errors = semantic_review_disposition_payload(
+        review_record=review_record,
+        review_path=review_path,
+        pr_head=target_head,
+        head_binding=head_binding,
+        current_validation_summary=context.get("latest_validation_summary"),
+    )
+    if review_record.get("decision") != "allow":
+        missing_inputs.append("retained review decision is not allow")
+    if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+        missing_inputs.append("retained review kind is not an implementation review")
+    if disposition.get("consumable") is not True:
+        missing_inputs.extend(disposition_errors or ["semantic_review_disposition is not consumable"])
+    missing_inputs.extend(head_binding_errors)
+    return {
+        "result": "pass" if not missing_inputs else "block",
+        "source_locator": review_path,
+        "reviewed_head": review_record.get("reviewed_head"),
+        "target_head": target_head,
+        "decision": review_record.get("decision"),
+        "kind": review_record.get("kind"),
+        "semantic_review_disposition": disposition,
+        "head_binding": head_binding,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_retained_review_unconsumable",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "retained_review",
+        "why_blocking": "closeout freeze requires retained implementation review evidence consumable by the merged implementation PR head.",
+        "fallback_to": "review",
+        "next_action": "rerun or repair retained implementation review evidence before closeout freeze.",
+    }
+
+
+def closeout_freeze_release_evidence_locator_from_body(body: str | None) -> str | None:
+    if not isinstance(body, str):
+        return None
+    for line in body.splitlines():
+        match = re.match(
+            r"\s*(?:[-*]\s*)?"
+            r"(?:release/no-release evidence(?: locator)?|no-release evidence(?: locator)?|"
+            r"release evidence(?: locator)?|post-merge release evidence(?: locator)?|post-merge evidence(?: locator)?)"
+            r"\s*:\s*(.+?)\s*$",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            continue
+        locator = match.group(1).strip().strip("`")
+        if locator and locator.lower() not in {"none", "n/a", "not_applicable", "not applicable", "pending"}:
+            return locator
+    return None
+
+
+def closeout_freeze_evidence_locator_status(target_root: Path, locator: str | None) -> dict[str, Any]:
+    if not locator:
+        return {"status": "missing", "locator": None, "missing_inputs": ["release/no-release evidence locator is missing"]}
+    if re.match(r"^[a-z][a-z0-9+.-]*://", locator, flags=re.IGNORECASE):
+        return {"status": "present", "locator": locator, "source": "external-readback-locator", "missing_inputs": []}
+    path, errors = resolve_repo_relative_path(target_root, locator, label="release/no-release evidence locator")
+    if errors:
+        return {"status": "invalid", "locator": locator, "missing_inputs": errors}
+    if path is None or not path.exists():
+        return {"status": "missing", "locator": locator, "missing_inputs": [f"release/no-release evidence locator `{locator}` is missing"]}
+    return {"status": "present", "locator": locator, "source": "repo-readback-locator", "missing_inputs": []}
+
+
+def closeout_freeze_release_binding(
+    target_root: Path,
+    context: dict[str, Any],
+    pr_payload: dict[str, Any] | None,
+    governance_surface: dict[str, Any],
+) -> dict[str, Any]:
+    body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    fields = pr_body_governance_metadata_fields(body)
+    release_judgment = fields.get("release_judgment")
+    repo_interface = governance_surface.get("repo_interface") if isinstance(governance_surface, dict) else None
+    release_targets = repo_interface.get("release_targets") if isinstance(repo_interface, dict) else None
+    target_release = (
+        release_targets.get("target_release")
+        if isinstance(release_targets, dict) and isinstance(release_targets.get("target_release"), dict)
+        else empty_target_release_status()
+    )
+    evidence_locator = closeout_freeze_release_evidence_locator_from_body(body)
+    evidence_readback = closeout_freeze_evidence_locator_status(target_root, evidence_locator)
+    missing_inputs: list[str] = []
+    source_locator = evidence_readback.get("locator")
+
+    if release_judgment not in GOVERNANCE_RELEASE_JUDGMENT_VALUES:
+        missing_inputs.append("release judgment metadata is missing")
+    elif release_judgment == "deferred_release_judgment_blocking":
+        missing_inputs.append("release judgment is deferred and blocking")
+    elif release_judgment == "release_required":
+        if target_release.get("result") != "pass":
+            release_missing = target_release.get("missing_inputs")
+            if isinstance(release_missing, list) and release_missing:
+                missing_inputs.extend(f"target_release: {message}" for message in release_missing)
+            else:
+                missing_inputs.append("release-required closeout requires target release readback evidence")
+        provenance = target_release.get("provenance") if isinstance(target_release.get("provenance"), dict) else {}
+        source_locator = provenance.get("status_locator") or provenance.get("source_locator") or source_locator
+    elif release_judgment == "no_release":
+        if evidence_readback.get("status") != "present":
+            missing_inputs.extend(str(message) for message in evidence_readback.get("missing_inputs", []))
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": "loom-closeout-release-boundary/v1",
+        "result": result,
+        "release_judgment": release_judgment if release_judgment in GOVERNANCE_RELEASE_JUDGMENT_VALUES else None,
+        "source": "implementation_pr_body plus release/no-release evidence readback",
+        "source_locator": source_locator,
+        "release_judgment_source": "implementation_pr_body.governance_intensity_carrier.fields.release_judgment",
+        "evidence_readback": evidence_readback,
+        "target_release": target_release,
+        "context_validation_entry": context.get("validation_entry"),
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_release_evidence_gap",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "release_boundary",
+        "fallback_to": "release-evidence",
+        "why_blocking": "closeout freeze must consume release/no-release evidence readback instead of trusting PR metadata alone.",
+        "next_action": "record or read back release/no-release evidence, then rerun closeout freeze.",
+    }
+
+
+def closeout_freeze_dependency_binding(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    issue_payload: dict[str, Any] | None,
+    dependency_payload_file: str | None,
+) -> dict[str, Any]:
+    fixture, fixture_errors = load_optional_json_fixture(target_root, dependency_payload_file, label="native dependency payload fixture")
+    if fixture_errors:
+        graph = dependency_graph_payload(issue_number=issue_number, issue_payload=issue_payload, native_dependency_payload=None)
+        return {
+            "result": "block",
+            "source_locator": dependency_payload_file,
+            "dependency_graph": graph,
+            "missing_inputs": fixture_errors,
+            "failure_kind": "closeout_dependency_graph_drift",
+            "category": "gate_failure",
+            "severity": "block",
+            "subject": "dependency_graph",
+            "why_blocking": "closeout freeze must read dependency graph state before admitting terminal closeout facts.",
+            "fallback_to": "manual-reconciliation",
+            "next_action": "restore readable dependency graph readback, then rerun closeout freeze.",
+        }
+
+    source_locator = dependency_payload_file
+    if isinstance(fixture, dict):
+        native_dependencies = fixture
+    elif owner and repo_name and issue_number is not None:
+        native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        source_locator = f"github:issue/{issue_number}/dependencies"
+    else:
+        native_dependencies = {"availability": "unreadable", "checks": [], "native_edges": []}
+        source_locator = "github dependency readback"
+
+    graph = dependency_graph_payload(
+        issue_number=issue_number,
+        issue_payload=issue_payload,
+        native_dependency_payload=native_dependencies,
+    )
+    blocking_kinds = {
+        "missing_native_edge",
+        "stale_native_edge",
+        "open_blocker_executable_conflict",
+        "native_dependency_unreadable",
+    }
+    blocking_findings = [
+        finding
+        for finding in graph.get("findings", [])
+        if isinstance(finding, dict) and finding.get("kind") in blocking_kinds
+    ]
+    missing_inputs = [str(finding.get("subject") or finding.get("kind")) for finding in blocking_findings]
+    if graph.get("availability") in {"unsupported", "permission_denied", "unreadable"} and not any(
+        isinstance(finding, dict) and finding.get("kind") == "native_dependency_unreadable"
+        for finding in blocking_findings
+    ):
+        missing_inputs.append(f"dependency graph availability is {graph.get('availability')}")
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "source_locator": source_locator,
+        "dependency_graph": graph,
+        "findings": blocking_findings,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_dependency_graph_drift",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "dependency_graph",
+        "why_blocking": "closeout freeze cannot admit terminal facts while dependency edges are open, stale, unreadable, or out of sync.",
+        "fallback_to": "manual-reconciliation",
+        "next_action": "reconcile native dependency edges or resolve open blockers, then rerun closeout freeze.",
+    }
+
+
+def closeout_freeze_allowed_paths_binding(
+    context: dict[str, Any],
+    *,
+    base_sha: str | None,
+    head_sha: str | None,
+) -> dict[str, Any]:
+    allowed_paths = closeout_allowed_paths(context)
+    missing_inputs: list[str] = []
+    changed_paths: list[str] = []
+    if not isinstance(base_sha, str) or not base_sha:
+        missing_inputs.append("closeout allowed-path diff base is missing")
+    if not isinstance(head_sha, str) or not head_sha:
+        missing_inputs.append("closeout allowed-path current head is missing")
+    if not missing_inputs:
+        changed_paths, diff_errors = git_changed_paths(context["target_root"], base_sha, head_sha)
+        missing_inputs.extend(f"allowed paths diff: {message}" for message in diff_errors)
+
+    violations = [path for path in changed_paths if path not in allowed_paths]
+    for path in violations:
+        missing_inputs.append(f"non-closeout path changed after implementation merge: {path}")
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "source_locator": "git diff --name-only <merge-commit>..HEAD",
+        "allowed_paths": sorted(allowed_paths),
+        "changed_paths": changed_paths,
+        "violations": violations,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_allowed_paths_violation",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "allowed_paths",
+        "why_blocking": "closeout freeze can only admit terminal carrier/readback changes; implementation drift requires full review.",
+        "fallback_to": "full_review",
+        "next_action": "remove non-closeout changes or convert this closeout to the full review path.",
+    }
+
+
+def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
+    target_root = Path(args.target).expanduser().resolve()
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = args.owner or detected_owner
+    repo_name = args.repo_name or detected_repo
+    hosted_args = argparse.Namespace(
+        target=str(target_root),
+        output=args.output,
+        item=args.item,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        pr=args.pr,
+        head_sha=args.head_sha,
+        branch=args.branch,
+        pr_payload_file=args.pr_payload_file,
+        issue=None,
+        issue_payload_file=None,
+        dependency_payload_file=None,
+        body_file=args.body_file,
+        compare_body_file=args.compare_body_file,
+        surface=args.surface,
+        profile="hosted",
+        closeout_mode=args.closeout_mode,
+        target_branch=args.target_branch,
+        write_path=None,
+    )
+    base_freeze = gate_freeze_payload(hosted_args, operation="check")
+    runtime_state = base_freeze.get("runtime_state") if isinstance(base_freeze.get("runtime_state"), dict) else runtime_state_payload(target_root)
+    context, context_errors = load_context(target_root, args.output, args.item)
+    if context_errors:
+        missing_inputs = [str(message) for message in context_errors]
+        return {
+            "command": "gate-freeze",
+            "operation": operation,
+            "schema_version": CLOSEOUT_FREEZE_SCHEMA,
+            "profile": "closeout",
+            "mode": args.closeout_mode,
+            "result": "block",
+            "summary": "closeout freeze requires an active or retained Loom Work Item fact chain.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "loom status --target <repo> --json",
+            "mutates": operation == "write",
+            "runtime_state": runtime_state,
+            "target": str(target_root),
+            "readiness": {
+                "result": "block",
+                "blocking_inputs": [
+                    {
+                        "id": "closeout-fact-chain-not-ready",
+                        "input": "fact_chain",
+                        "failure_kind": "closeout_terminal_subject_drift",
+                        "source_locator": args.output,
+                        "messages": missing_inputs,
+                        "next_action": "restore or read back the retained Work Item fact chain before closeout freeze.",
+                    }
+                ],
+                "closeout_pr_allowed": False,
+                "full_review_required": True,
+            },
+            "failure_classifier": failure_classifier_payload(
+                [
+                    {
+                        "input": "fact_chain",
+                        "failure_kind": "closeout_terminal_subject_drift",
+                        "source_locator": args.output,
+                        "messages": missing_inputs,
+                    }
+                ]
+            ),
+        }
+
+    head_sha = args.head_sha or git_head_sha(target_root)
+    branch_name = args.branch or git_branch(target_root)
+    issue_payload, issue_errors = closeout_freeze_load_issue(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        issue_number=args.issue,
+        issue_payload_file=args.issue_payload_file,
+    )
+    pr_payload, effective_pr, pr_errors = closeout_freeze_load_pr(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=args.pr,
+        pr_payload_file=args.pr_payload_file,
+    )
+
+    merge_commit = None
+    if isinstance(pr_payload, dict):
+        merge_entry = pr_payload.get("mergeCommit")
+        if isinstance(merge_entry, dict) and isinstance(merge_entry.get("oid"), str):
+            merge_commit = merge_entry["oid"]
+    target_contains_merge, target_errors = closeout_freeze_target_contains_merge(
+        target_root,
+        merge_commit,
+        args.target_branch,
+        owner=owner,
+        repo_name=repo_name,
+    )
+    dependency_binding = closeout_freeze_dependency_binding(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        issue_number=args.issue,
+        issue_payload=issue_payload,
+        dependency_payload_file=args.dependency_payload_file,
+    )
+    allowed_paths = closeout_freeze_allowed_paths_binding(context, base_sha=merge_commit, head_sha=head_sha)
+
+    governance_surface = build_governance_surface(target_root)
+    input_bindings = base_freeze.get("input_bindings") if isinstance(base_freeze.get("input_bindings"), dict) else {}
+    hosted_retained_review = input_bindings.get("review_binding") if isinstance(input_bindings.get("review_binding"), dict) else {}
+    retained_review = closeout_freeze_retained_review_binding(context, pr_payload=pr_payload, merge_commit=merge_commit)
+    hosted_release_boundary = input_bindings.get("release_requiredness") if isinstance(input_bindings.get("release_requiredness"), dict) else {}
+    release_boundary = closeout_freeze_release_binding(target_root, context, pr_payload, governance_surface)
+    carrier_refresh = input_bindings.get("carrier_refresh") if isinstance(input_bindings.get("carrier_refresh"), dict) else {}
+    shadow_freshness = input_bindings.get("shadow_freshness") if isinstance(input_bindings.get("shadow_freshness"), dict) else {}
+    readback = input_bindings.get("pr_body_pin") if isinstance(input_bindings.get("pr_body_pin"), dict) else {}
+
+    terminal_subject_binding = closeout_freeze_terminal_subject_binding(
+        context,
+        issue_number=args.issue,
+        issue_payload=issue_payload,
+        issue_errors=issue_errors,
+        pr_payload=pr_payload,
+        pr_number=effective_pr,
+        pr_errors=pr_errors,
+        merge_commit=merge_commit,
+        target_branch=args.target_branch,
+    )
+    closeout_bindings: dict[str, Any] = {
+        "terminal_subject": terminal_subject_binding,
+        "host_git": {
+            "result": "pass" if target_contains_merge is True else "block",
+            "missing_inputs": target_errors,
+            "failure_kind": "closeout_host_git_mismatch",
+            "source_locator": f"git merge-base --is-ancestor {merge_commit or '<merge-commit>'} {args.target_branch}",
+            "next_action": "re-read the merged PR, merge commit, and target branch before closeout freeze.",
+        },
+        "dependency_graph": dependency_binding,
+        "carrier_refresh": carrier_refresh,
+        "shadow_freshness": shadow_freshness,
+        "readback": readback,
+        "retained_review": retained_review,
+        "release_boundary": release_boundary,
+        "allowed_paths": allowed_paths,
+    }
+
+    blocking_inputs = gate_freeze_blocking_inputs(closeout_bindings)
+    result = "pass" if not blocking_inputs else "block"
+    closeout_pr_allowed = result == "pass" and args.closeout_mode in {"inline", "auto_no_op", "light", "batched"}
+    terminal_subject = {
+        "work_item": context["item_id"],
+        "closeout_issue": args.issue,
+        "implementation_pr": effective_pr,
+        "closeout_pr": None,
+        "merge_commit": merge_commit,
+        "target_branch": args.target_branch,
+        "workspace": str(target_root),
+        "branch": branch_name,
+        "head_sha": head_sha,
+        "generated_at": current_iso_timestamp(),
+        "source_commands": {
+            "issue_readback": "gh api repos/:owner/:repo/issues/<issue>",
+            "implementation_pr_readback": "gh api repos/:owner/:repo/pulls/<pr>",
+            "target_branch_contains": "git merge-base --is-ancestor <merge-commit> <target-branch>",
+            "carrier_snapshot": "loom gate freeze check --profile hosted --target <repo> --json",
+        },
+    }
+    terminal_facts = {
+        "issue_state": issue_payload.get("state") if isinstance(issue_payload, dict) else None,
+        "closed_at": issue_payload.get("closedAt") if isinstance(issue_payload, dict) else None,
+        "pr_merged": isinstance(pr_payload, dict) and pr_payload.get("state") == "MERGED",
+        "target_contains_merge_commit": target_contains_merge,
+        "dependency_graph": dependency_binding.get("result"),
+        "fact_chain_idle": "pending_until_carrier_sync",
+    }
+    readiness = {
+        "result": result,
+        "blocking_inputs": blocking_inputs,
+        "refresh_suggestions": gate_freeze_refresh_suggestions(closeout_bindings) if blocking_inputs else [],
+        "closeout_pr_allowed": closeout_pr_allowed,
+        "full_review_required": result == "block" or args.closeout_mode == "full",
+        "next_action": "closeout_pr_allowed" if closeout_pr_allowed else "resolve_closeout_freeze_blockers",
+    }
+    payload: dict[str, Any] = {
+        "command": "gate-freeze",
+        "operation": operation,
+        "schema_version": CLOSEOUT_FREEZE_SCHEMA,
+        "profile": "closeout",
+        "mode": args.closeout_mode,
+        "result": result,
+        "summary": (
+            "closeout freeze terminal facts are admissible."
+            if result == "pass"
+            else "closeout freeze found terminal fact or closeout-only path drift."
+        ),
+        "missing_inputs": [
+            message
+            for blocking in blocking_inputs
+            for message in blocking.get("messages", [])
+            if isinstance(blocking, dict)
+        ],
+        "fallback_to": None if result == "pass" else "closeout_freeze_refresh",
+        "mutates": operation == "write",
+        "runtime_state": runtime_state,
+        "target": str(target_root),
+        "terminal_subject": terminal_subject,
+        "terminal_facts": terminal_facts,
+        "carrier_bindings": {
+            "progress_terminal_metadata": f".loom/progress/{context['item_id']}.md",
+            "status_surface": ".loom/status/current.md",
+            "retained_review": retained_review.get("source_locator"),
+            "dependency_graph": dependency_binding,
+            "carrier_refresh": carrier_refresh,
+            "shadow_freshness": shadow_freshness,
+            "readback": readback,
+            "release_boundary": release_boundary,
+            "hosted_retained_review": hosted_retained_review,
+            "hosted_release_boundary": hosted_release_boundary,
+        },
+        "retained_review": retained_review,
+        "release_boundary": release_boundary,
+        "allowed_paths": allowed_paths,
+        "readiness": readiness,
+        "consumed_contract_fields": [
+            "carrier_refresh_result",
+            "shadow_freshness",
+            "hosted_snapshot_binding",
+            "failure_classifier_mapping",
+            "readback_drift",
+            "release_evidence_readback",
+        ],
+        "pending_contract_fields": [
+            "closeout_specific_gate_profile",
+            "release_no_release_final_closeout",
+        ],
+        "base_freeze_snapshot": {
+            "schema_version": base_freeze.get("schema_version"),
+            "snapshot_id": base_freeze.get("snapshot_id"),
+            "input_bindings": {
+                "carrier_refresh": carrier_refresh,
+                "shadow_freshness": shadow_freshness,
+                "readback": readback,
+                "failure_classifier": base_freeze.get("failure_classifier"),
+            },
+        },
+        "failure_classifier": failure_classifier_payload(blocking_inputs),
+    }
+    fingerprint_payload = {
+        "schema_version": CLOSEOUT_FREEZE_SCHEMA,
+        "profile": payload["profile"],
+        "mode": payload["mode"],
+        "terminal_subject": terminal_subject,
+        "terminal_facts": terminal_facts,
+        "carrier_bindings": payload["carrier_bindings"],
+        "allowed_paths": allowed_paths,
+        "readiness": readiness,
+    }
+    payload["snapshot_id"] = "sha256:" + hashlib.sha256(
+        json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return payload
+
+
 def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
+    if getattr(args, "profile", "hosted") == "closeout":
+        return closeout_freeze_payload(args, operation=operation)
+
     target_root = Path(args.target).expanduser().resolve()
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
@@ -17963,8 +18687,11 @@ def handle_gate_freeze(args: argparse.Namespace) -> int:
             if isinstance(payload.get("snapshot_subject"), dict)
             else None
         )
+        if item_id is None and isinstance(payload.get("terminal_subject"), dict):
+            item_id = payload.get("terminal_subject", {}).get("work_item")
         item_slug = str(item_id or args.item or "unknown")
-        relative = args.write_path or f".loom/runtime/gate-freeze/{item_slug}.json"
+        default_name = f"{item_slug}-closeout.json" if getattr(args, "profile", "hosted") == "closeout" else f"{item_slug}.json"
+        relative = args.write_path or f".loom/runtime/gate-freeze/{default_name}"
         path, errors = resolve_repo_relative_path(target_root, relative, label="gate freeze write path")
         allowed_root = (target_root / ".loom" / "runtime" / "gate-freeze").resolve()
         if path is not None:
@@ -20878,11 +21605,25 @@ def contains_merged_commit(
     owner: str | None = None,
     repo_name: str | None = None,
 ) -> bool:
-    remote_ref = f"refs/remotes/origin/{target_branch}"
-    fetched_ref = f"refs/heads/{target_branch}:{remote_ref}"
-    fetched = run_git(root, ["fetch", "origin", fetched_ref])
-    if fetched is not None and fetched.returncode == 0:
-        contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, remote_ref])
+    target_branch = target_branch.strip()
+    if not target_branch:
+        return False
+    run_git(
+        root,
+        [
+            "fetch",
+            "--no-write-fetch-head",
+            "origin",
+            f"refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
+        ],
+    )
+    candidate_refs = (
+        target_branch,
+        f"origin/{target_branch}",
+        f"refs/remotes/origin/{target_branch}",
+    )
+    for ref in candidate_refs:
+        contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, ref])
         if contains is not None and contains.returncode == 0:
             return True
     if owner is None or repo_name is None:

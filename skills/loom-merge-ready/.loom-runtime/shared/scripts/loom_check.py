@@ -16658,7 +16658,12 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             loom_flow_module.run_git = fake_run_git
             if not loom_flow_module.contains_merged_commit(base, "abc123", "release/main"):
                 failures.append(Failure("adversarial-adoption", "target-branch merge containment fixture unexpectedly failed"))
-            expected_fetch = ["fetch", "origin", "refs/heads/release/main:refs/remotes/origin/release/main"]
+            expected_fetch = [
+                "fetch",
+                "--no-write-fetch-head",
+                "origin",
+                "refs/heads/release/main:refs/remotes/origin/release/main",
+            ]
             if not merge_calls or merge_calls[0] != expected_fetch:
                 failures.append(Failure("adversarial-adoption", "merge commit containment must fetch the explicit target branch"))
         finally:
