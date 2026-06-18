@@ -1,0 +1,28 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1514",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head review allow: WI-1514 is a bounded docs/skills/evidence inventory slice. The diff is limited to gate freeze skill protocol wording, CLI command matrix troubleshooting, and regression surface inventory; it does not change runtime code, closeout profile behavior, hosted admission semantics, or one-shot closeout run behavior.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-18T06:20:00Z",
+  "reviewed_head": "775bf187532e45708d95c18544b76749a0f4ce27",
+  "reviewed_validation_summary": "2026-06-18T06:20Z validation for PR #1574 head 775bf187532e45708d95c18544b76749a0f4ce27: git diff --check passed; rg readback confirmed loom gate freeze check|write and classifier vocabulary pr_metadata_drift, shadow_stale, unsupported_command_surface, hosted_snapshot_mismatch; python3 tools/loom.py pr metadata-readback 1574 --surface merge_ready --body-file .loom/runtime/pr/pr-1514-body.md --readback-file .loom/runtime/pr/pr-1514-readback.md --compare-body-file .loom/runtime/pr/pr-1514-readback.md --head-sha 775bf187532e45708d95c18544b76749a0f4ce27 --item WI-1514 --branch work/1514-gate-freeze-docs-skills --json passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1534 must consume final closeout-mode docs/fixtures after #1532/#1533/#1555 stabilize."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1514.md",
+    "recovery_entry": ".loom/progress/WI-1514.md",
+    "status_surface": ".loom/status/current.md",
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1574",
+    "pr_metadata_readback": ".loom/runtime/pr/pr-1514-readback.md"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored review approved the current head for merge checkpoint consumption."
+  }
+}
