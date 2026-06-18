@@ -146,6 +146,7 @@ PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parse
 PR_METADATA_RENDERER_ID = "renderer:loom-pr-metadata-render/v1"
 GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
 CLOSEOUT_FREEZE_SCHEMA = "loom-closeout-freeze/v1"
+CLOSEOUT_SPECIFIC_GATE_SCHEMA = "loom-closeout-specific-gate/v1"
 HOSTED_FREEZE_ADMISSION_SCHEMA = "loom-hosted-freeze-admission/v1"
 FAILURE_CLASSIFIER_SCHEMA = "loom-failure-classifier/v1"
 FAILURE_CLASSIFIER_CATEGORIES = (
@@ -17668,6 +17669,49 @@ def failure_classifier_payload(findings: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def closeout_specific_gate_payload(
+    *,
+    mode: str,
+    closeout_pr_allowed: bool,
+    full_review_required: bool,
+    blocking_inputs: list[dict[str, Any]],
+    next_action: str | None = None,
+    source: str = "closeout-freeze",
+) -> dict[str, Any]:
+    escalation_reasons: list[str] = []
+    for blocking in blocking_inputs:
+        if not isinstance(blocking, dict):
+            continue
+        reason = blocking.get("failure_kind") or blocking.get("kind") or blocking.get("input")
+        if isinstance(reason, str) and reason.strip():
+            escalation_reasons.append(reason.strip())
+    if mode == "full":
+        escalation_reasons.append("closeout_mode_full")
+    escalation_reasons = dedupe_strings(escalation_reasons)
+    result = "pass" if closeout_pr_allowed and not full_review_required else "block"
+    if result == "pass":
+        gate_next_action = next_action or "closeout_pr_allowed"
+        verdict = "closeout_pr_allowed"
+    else:
+        gate_next_action = next_action or "run_full_review_or_resolve_closeout_gate_blockers"
+        verdict = "full_review_required" if full_review_required else "resolve_closeout_gate_blockers"
+    return {
+        "schema_version": CLOSEOUT_SPECIFIC_GATE_SCHEMA,
+        "source": source,
+        "surface": "closeout",
+        "mode": mode,
+        "result": result,
+        "verdict": verdict,
+        "closeout_pr_allowed": closeout_pr_allowed,
+        "full_review_required": full_review_required,
+        "escalation_required": result != "pass",
+        "escalation_reason": escalation_reasons[0] if escalation_reasons else None,
+        "escalation_reasons": escalation_reasons,
+        "blocking_inputs": blocking_inputs,
+        "next_action": gate_next_action,
+    }
+
+
 def closeout_freeze_load_issue(
     *,
     target_root: Path,
@@ -18128,6 +18172,23 @@ def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict
     context, context_errors = load_context(target_root, args.output, args.item)
     if context_errors:
         missing_inputs = [str(message) for message in context_errors]
+        blocking_inputs = [
+            {
+                "id": "closeout-fact-chain-not-ready",
+                "input": "fact_chain",
+                "failure_kind": "closeout_terminal_subject_drift",
+                "source_locator": args.output,
+                "messages": missing_inputs,
+                "next_action": "restore or read back the retained Work Item fact chain before closeout freeze.",
+            }
+        ]
+        closeout_specific_gate = closeout_specific_gate_payload(
+            mode=args.closeout_mode,
+            closeout_pr_allowed=False,
+            full_review_required=True,
+            blocking_inputs=blocking_inputs,
+            next_action="resolve_closeout_freeze_blockers",
+        )
         return {
             "command": "gate-freeze",
             "operation": operation,
@@ -18143,19 +18204,23 @@ def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict
             "target": str(target_root),
             "readiness": {
                 "result": "block",
-                "blocking_inputs": [
-                    {
-                        "id": "closeout-fact-chain-not-ready",
-                        "input": "fact_chain",
-                        "failure_kind": "closeout_terminal_subject_drift",
-                        "source_locator": args.output,
-                        "messages": missing_inputs,
-                        "next_action": "restore or read back the retained Work Item fact chain before closeout freeze.",
-                    }
-                ],
+                "blocking_inputs": blocking_inputs,
                 "closeout_pr_allowed": False,
                 "full_review_required": True,
             },
+            "closeout_specific_gate": closeout_specific_gate,
+            "consumed_contract_fields": [
+                "carrier_refresh_result",
+                "shadow_freshness",
+                "hosted_freeze_admission",
+                "failure_classifier_mapping",
+                "readback_drift",
+                "release_evidence_readback",
+                "closeout_specific_gate_profile",
+            ],
+            "pending_contract_fields": [
+                "release_no_release_final_closeout",
+            ],
             "failure_classifier": failure_classifier_payload(
                 [
                     {
@@ -18283,6 +18348,13 @@ def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict
         "full_review_required": result == "block" or args.closeout_mode == "full",
         "next_action": "closeout_pr_allowed" if closeout_pr_allowed else "resolve_closeout_freeze_blockers",
     }
+    closeout_specific_gate = closeout_specific_gate_payload(
+        mode=args.closeout_mode,
+        closeout_pr_allowed=closeout_pr_allowed,
+        full_review_required=bool(readiness["full_review_required"]),
+        blocking_inputs=blocking_inputs,
+        next_action=str(readiness["next_action"]),
+    )
     payload: dict[str, Any] = {
         "command": "gate-freeze",
         "operation": operation,
@@ -18323,6 +18395,7 @@ def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict
         "release_boundary": release_boundary,
         "allowed_paths": allowed_paths,
         "readiness": readiness,
+        "closeout_specific_gate": closeout_specific_gate,
         "consumed_contract_fields": [
             "carrier_refresh_result",
             "shadow_freshness",
@@ -18330,9 +18403,9 @@ def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict
             "failure_classifier_mapping",
             "readback_drift",
             "release_evidence_readback",
+            "closeout_specific_gate_profile",
         ],
         "pending_contract_fields": [
-            "closeout_specific_gate_profile",
             "release_no_release_final_closeout",
         ],
         "base_freeze_snapshot": {
@@ -18356,6 +18429,7 @@ def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict
         "carrier_bindings": payload["carrier_bindings"],
         "allowed_paths": allowed_paths,
         "readiness": readiness,
+        "closeout_specific_gate": closeout_specific_gate,
     }
     payload["snapshot_id"] = "sha256:" + hashlib.sha256(
         json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -19935,6 +20009,39 @@ def pr_gate_payload(
             "mapped_failures": [],
             "provenance": [],
         }
+    closeout_specific_gate: dict[str, Any] | None = None
+    if metadata_surface == "closeout" or terminal_closeout_consumption.get("result") == "pass":
+        closeout_gate_messages = [
+            str(message)
+            for message in [
+                *terminal_closeout_consumption.get("missing_inputs", []),
+                *missing_inputs,
+            ]
+            if str(message).strip()
+        ]
+        closeout_gate_blocking_inputs = [
+            {
+                "input": "terminal_closeout_consumption",
+                "failure_kind": "closeout_retained_review_unconsumable",
+                "messages": closeout_gate_messages,
+                "result": "block",
+                "severity": "block",
+                "source_locator": context.get("review_entry") if context else None,
+                "next_action": "remove non-closeout changes or run full review / guardian before merging this PR.",
+            }
+        ] if closeout_gate_messages else []
+        closeout_specific_gate = closeout_specific_gate_payload(
+            mode="light",
+            closeout_pr_allowed=result == "pass" and terminal_closeout_consumption.get("result") == "pass",
+            full_review_required=bool(closeout_gate_blocking_inputs),
+            blocking_inputs=closeout_gate_blocking_inputs,
+            next_action=(
+                "closeout_pr_allowed"
+                if result == "pass" and terminal_closeout_consumption.get("result") == "pass"
+                else "run_full_review_or_resolve_closeout_gate_blockers"
+            ),
+            source="pr-gate",
+        )
     return {
         "command": "pr-gate",
         "operation": "check",
@@ -19975,6 +20082,7 @@ def pr_gate_payload(
         "docs_governance_lite_gate": docs_governance_lite_gate,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
         "terminal_closeout_consumption": terminal_closeout_consumption,
+        **({"closeout_specific_gate": closeout_specific_gate} if closeout_specific_gate is not None else {}),
         "hosted_freeze_admission": hosted_admission,
         "governance_lint": governance_lint,
         "host_enforcement": {

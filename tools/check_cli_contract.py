@@ -3237,6 +3237,15 @@ def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
         raise AssertionError("closeout freeze must consume no-release evidence readback instead of PR metadata alone")
     if pass_payload.get("readiness", {}).get("closeout_pr_allowed") is not True:
         raise AssertionError("closeout freeze positive fixture must allow closeout PR creation")
+    closeout_specific_gate = pass_payload.get("closeout_specific_gate", {})
+    if (
+        closeout_specific_gate.get("schema_version") != "loom-closeout-specific-gate/v1"
+        or closeout_specific_gate.get("result") != "pass"
+        or closeout_specific_gate.get("verdict") != "closeout_pr_allowed"
+        or closeout_specific_gate.get("escalation_required") is not False
+        or closeout_specific_gate.get("next_action") != "closeout_pr_allowed"
+    ):
+        raise AssertionError(f"closeout freeze must expose passing closeout-specific gate verdict: {closeout_specific_gate}")
 
     _, missing_release_evidence = run_flow_json(
         [
@@ -3263,6 +3272,15 @@ def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
     )
     if missing_release_evidence.get("readiness", {}).get("closeout_pr_allowed") is not False:
         raise AssertionError("closeout freeze must fail closed when release/no-release evidence is missing")
+    release_gap_gate = missing_release_evidence.get("closeout_specific_gate", {})
+    if (
+        release_gap_gate.get("schema_version") != "loom-closeout-specific-gate/v1"
+        or release_gap_gate.get("result") != "block"
+        or release_gap_gate.get("verdict") != "full_review_required"
+        or release_gap_gate.get("escalation_reason") != "closeout_release_evidence_gap"
+        or release_gap_gate.get("next_action") != "resolve_closeout_freeze_blockers"
+    ):
+        raise AssertionError(f"closeout freeze must expose release-gap closeout-specific escalation: {release_gap_gate}")
     if not any(
         blocking.get("input") == "release_boundary"
         and blocking.get("failure_kind") == "closeout_release_evidence_gap"
@@ -4647,6 +4665,15 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
             "terminal closeout pr-gate fixture did not pass: "
             f"{closeout_payload.get('missing_inputs')}; steps={step_names}"
         )
+    pr_closeout_gate = closeout_payload.get("closeout_specific_gate", {})
+    if (
+        pr_closeout_gate.get("schema_version") != "loom-closeout-specific-gate/v1"
+        or pr_closeout_gate.get("source") != "pr-gate"
+        or pr_closeout_gate.get("result") != "pass"
+        or pr_closeout_gate.get("verdict") != "closeout_pr_allowed"
+        or pr_closeout_gate.get("next_action") != "closeout_pr_allowed"
+    ):
+        raise AssertionError(f"terminal closeout pr-gate must expose passing closeout-specific gate verdict: {pr_closeout_gate}")
     pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
     hosted_body_file = f".loom/fixtures/{item}/closeout-hosted-pr-body.md"
     (target / hosted_body_file).write_text(pr_payload["body"], encoding="utf-8")
@@ -4747,6 +4774,8 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="merge_ready")
     if merge_ready_payload.get("result") == "pass" or merge_ready_payload.get("terminal_closeout_consumption", {}).get("result") != "block":
         raise AssertionError("terminal closeout retained review bypassed a non-closeout PR metadata surface")
+    if "closeout_specific_gate" in merge_ready_payload:
+        raise AssertionError("non-closeout merge_ready pr-gate must not expose closeout-specific gate verdict")
 
 
 def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
