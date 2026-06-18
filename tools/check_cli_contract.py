@@ -2686,7 +2686,15 @@ def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str 
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str], *, surface: str | None = None) -> dict[str, Any]:
+def semantic_pr_gate_fixture_payload(
+    target: Path,
+    fixture: dict[str, str],
+    *,
+    surface: str | None = None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
+    gate_freeze_snapshot_file: str | None = None,
+) -> dict[str, Any]:
     command = [
         "pr-gate",
         "check",
@@ -2699,6 +2707,12 @@ def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str], *, s
     ]
     if surface:
         command.extend(["--surface", surface])
+    if body_file:
+        command.extend(["--body-file", body_file])
+    if compare_body_file:
+        command.extend(["--compare-body-file", compare_body_file])
+    if gate_freeze_snapshot_file:
+        command.extend(["--gate-freeze-snapshot-file", gate_freeze_snapshot_file])
     _, payload = run_flow_json(command)
     return payload
 
@@ -2717,6 +2731,137 @@ def gate_freeze_fixture_payload(target: Path, fixture: dict[str, str]) -> dict[s
         ]
     )
     return payload
+
+
+def write_hosted_freeze_admission_inputs(target: Path) -> None:
+    write_governance_metadata_contract_fixture(target)
+    install_bootstrapped_runtime(target)
+    source = target / ".loom" / "companion" / "README.md"
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    shadow_dir = target / ".loom" / "shadow"
+    shadow_dir.mkdir(parents=True, exist_ok=True)
+    shadow_surfaces: dict[str, dict[str, str]] = {}
+    for surface in ("admission", "review", "merge_ready", "closeout"):
+        slug = surface.replace("_", "-")
+        loom_locator = f".loom/shadow/{slug}-loom.json"
+        repo_locator = f".loom/shadow/{slug}-repo.json"
+        payload = {
+            "surface": surface,
+            "result": "match",
+            "source_files": [".loom/companion/README.md"],
+            "source_sha256": {".loom/companion/README.md": source_hash},
+        }
+        (target / loom_locator).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        (target / repo_locator).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        shadow_surfaces[surface] = {
+            "summary": f"Fixture {surface} shadow parity is current.",
+            "loom_locator": loom_locator,
+            "repo_locator": repo_locator,
+        }
+    (target / ".loom" / "companion" / "interop.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-interop/v1",
+                "host_adapters": [],
+                "repo_native_carriers": [],
+                "shadow_surfaces": shadow_surfaces,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "hosted-freeze-admission"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    write_hosted_freeze_admission_inputs(target)
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture hosted freeze admission inputs"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
+    append_governance_intensity_metadata_body(target, fixture)
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    fixture_dir = target / ".loom" / "fixtures" / fixture["item"]
+    body_file = f".loom/fixtures/{fixture['item']}/hosted-pr-body.md"
+    readback_drift_file = f".loom/fixtures/{fixture['item']}/hosted-pr-body-drift.md"
+    snapshot_file = f".loom/fixtures/{fixture['item']}/hosted-freeze-snapshot.json"
+    body_path = target / body_file
+    readback_drift_path = target / readback_drift_file
+    snapshot_path = target / snapshot_file
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    body_path.write_text(pr_payload["body"], encoding="utf-8")
+    readback_drift_path.write_text(pr_payload["body"] + "\nOperator drift after readback.\n", encoding="utf-8")
+
+    pass_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+    )
+    admission = pass_payload.get("hosted_freeze_admission")
+    if not isinstance(admission, dict) or admission.get("schema_version") != "loom-hosted-freeze-admission/v1":
+        raise AssertionError("pr-gate did not expose hosted freeze admission schema")
+    if admission.get("result") != "pass" or pass_payload.get("result") != "pass":
+        raise AssertionError(f"hosted freeze admission positive fixture did not pass: {admission}")
+    if admission.get("artifact_comparison", {}).get("result") != "not_applicable":
+        raise AssertionError("hosted freeze admission without snapshot must mark artifact comparison not_applicable")
+    if admission.get("readback", {}).get("result") != "pass":
+        raise AssertionError("hosted freeze admission did not consume matching PR body readback")
+    if not isinstance(admission.get("carrier_refresh"), dict) or not isinstance(admission.get("shadow_freshness"), dict):
+        raise AssertionError("hosted freeze admission must expose carrier refresh and shadow freshness classifications")
+    if not any(step.get("name") == "hosted-freeze-admission" for step in pass_payload.get("steps", []) if isinstance(step, dict)):
+        raise AssertionError("pr-gate steps must include hosted-freeze-admission before merge checkpoint consumption")
+
+    body_drift_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=readback_drift_file,
+    )
+    body_drift_admission = body_drift_payload.get("hosted_freeze_admission")
+    if body_drift_payload.get("result") != "block" or body_drift_admission.get("result") != "block":
+        raise AssertionError("hosted freeze admission must block PR body readback drift")
+    if body_drift_admission.get("readback", {}).get("result") != "block":
+        raise AssertionError("hosted freeze admission did not classify PR body readback drift")
+    if not any(
+        finding.get("classifier") == "pr_metadata_drift"
+        for finding in body_drift_admission.get("failure_classifier", {}).get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("hosted freeze admission PR body drift must carry classifier next action")
+
+    snapshot = dict(admission.get("recomputed_freeze") or {})
+    snapshot["snapshot_id"] = "0" * 64
+    snapshot_path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
+    snapshot_mismatch_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+        gate_freeze_snapshot_file=snapshot_file,
+    )
+    snapshot_admission = snapshot_mismatch_payload.get("hosted_freeze_admission")
+    if snapshot_mismatch_payload.get("result") != "block" or snapshot_admission.get("result") != "block":
+        raise AssertionError("hosted freeze admission must block snapshot mismatch")
+    if snapshot_admission.get("artifact_comparison", {}).get("result") != "block":
+        raise AssertionError("hosted freeze admission did not expose blocking artifact comparison")
+    if not any(
+        finding.get("classifier") == "hosted_snapshot_mismatch"
+        and "regenerate the freeze snapshot" in str(finding.get("next_action"))
+        for finding in snapshot_admission.get("failure_classifier", {}).get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("hosted snapshot mismatch must carry classifier next action")
 
 
 def record_current_fixture_review(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
@@ -3680,14 +3825,30 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     update_fixture_pr_head(target, fixture)
     append_pr_metadata_surface(target, fixture, surface="closeout")
     closeout_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
+    checkpoint_step = next(
+        (
+            step
+            for step in closeout_payload.get("steps", [])
+            if isinstance(step, dict) and step.get("name") == "checkpoint-merge"
+        ),
+        {},
+    )
     if (
         closeout_payload.get("result") != "pass"
         or closeout_payload.get("review_approval", {}).get("status") != "terminal_closeout_retained"
         or closeout_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
         or closeout_payload.get("pr_metadata_preflight", {}).get("surface") != "closeout"
-        or closeout_payload.get("steps", [{}])[1].get("terminal_closed_checkpoint") is not True
+        or checkpoint_step.get("terminal_closed_checkpoint") is not True
     ):
-        raise AssertionError(f"terminal closeout pr-gate fixture did not pass: {closeout_payload.get('missing_inputs')}")
+        step_names = [
+            step.get("name")
+            for step in closeout_payload.get("steps", [])
+            if isinstance(step, dict)
+        ]
+        raise AssertionError(
+            "terminal closeout pr-gate fixture did not pass: "
+            f"{closeout_payload.get('missing_inputs')}; steps={step_names}"
+        )
 
     spec_review_path = target / ".loom" / "reviews" / f"{item}.spec.json"
     spec_review = json.loads(spec_review_path.read_text(encoding="utf-8"))
@@ -3740,6 +3901,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
     assert_gate_freeze_review_binding_fixture(tmp)
+    assert_hosted_freeze_admission_pr_gate_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
 

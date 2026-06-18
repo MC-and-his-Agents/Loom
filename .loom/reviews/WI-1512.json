@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1512",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1512 PR #1572 remains approved for current head ebd09040: hosted freeze admission code remains within #1512 scope, EV-004 points at a tracked source for clean hosted checkout, and the release aggregate failure was repaired by locating the checkpoint-merge step by name instead of relying on step order after hosted-freeze-admission was inserted. Targeted aggregate CLI contract, suite evidence validation, git diff --check, and refreshed spec review passed. This review does not approve #1532/#1533 closeout profile semantics, #1555 one-shot closeout run, or #1515 release closeout.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-18T04:48:16Z",
+  "reviewed_head": "ebd09040686cb172ec85c0ad1b41c7dfd03c0fbe",
+  "reviewed_validation_summary": "2026-06-18T04:45Z current-head validation for PR #1572 head c2edf420c9a32adbe14fd572a11ded745389d2e2: `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate --fixture-group check-cli-contract` passed in 365.59s after the terminal closeout fixture now locates `checkpoint-merge` by step name; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1512 --json` passed with EV-004 `source_exists=true` and freshness head `c2edf420c9a32adbe14fd572a11ded745389d2e2`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1512.md",
+    "recovery_entry": ".loom/progress/WI-1512.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2 --item WI-1512 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1512-hosted-freeze-admission-v2 --item WI-1512 --json",
+    "suite_evidence_map": ".loom/specs/WI-1512/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1512/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

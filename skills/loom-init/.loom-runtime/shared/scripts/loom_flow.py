@@ -145,6 +145,7 @@ PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
 PR_METADATA_RENDERER_ID = "renderer:loom-pr-metadata-render/v1"
 GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
+HOSTED_FREEZE_ADMISSION_SCHEMA = "loom-hosted-freeze-admission/v1"
 FAILURE_CLASSIFIER_SCHEMA = "loom-failure-classifier/v1"
 FAILURE_CLASSIFIER_CATEGORIES = (
     "code_semantics",
@@ -745,6 +746,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    pr_gate.add_argument("--body-file", help="Optional repo-relative hosted PR body readback artifact")
+    pr_gate.add_argument("--compare-body-file", help="Optional repo-relative PR body artifact to compare with --body-file")
+    pr_gate.add_argument("--gate-freeze-snapshot-file", help="Optional repo-relative loom-gate-freeze/v1 snapshot to compare with hosted recomputation")
     pr_gate.add_argument(
         "--surface",
         choices=("pre_review", "review", "merge_ready", "closeout"),
@@ -17747,6 +17751,209 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
     return payload
 
 
+def hosted_freeze_snapshot_comparison(
+    target_root: Path,
+    snapshot_file: str | None,
+    recomputed_freeze: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not snapshot_file:
+        return {
+            "result": "not_applicable",
+            "summary": "No hosted freeze snapshot artifact was provided; comparison is not applicable.",
+            "snapshot_locator": None,
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    path, errors = resolve_repo_relative_path(target_root, snapshot_file, label="hosted freeze snapshot")
+    if errors or path is None:
+        return {
+            "result": "block",
+            "summary": "Hosted freeze snapshot artifact is unreadable.",
+            "snapshot_locator": snapshot_file,
+            "missing_inputs": errors,
+            "failure_kind": "freeze_artifact_unreadable",
+            "fallback_to": "refresh_gate_inputs",
+        }
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return {
+            "result": "block",
+            "summary": "Hosted freeze snapshot artifact could not be read.",
+            "snapshot_locator": snapshot_file,
+            "missing_inputs": [f"failed to read hosted freeze snapshot: {exc.strerror or exc}"],
+            "failure_kind": "freeze_artifact_unreadable",
+            "fallback_to": "refresh_gate_inputs",
+        }
+    except json.JSONDecodeError as exc:
+        return {
+            "result": "block",
+            "summary": "Hosted freeze snapshot artifact is not valid JSON.",
+            "snapshot_locator": snapshot_file,
+            "missing_inputs": [f"hosted freeze snapshot JSON is invalid: {exc.msg}"],
+            "failure_kind": "freeze_artifact_unreadable",
+            "fallback_to": "refresh_gate_inputs",
+        }
+
+    missing_inputs: list[str] = []
+    if not isinstance(snapshot, dict):
+        missing_inputs.append("hosted freeze snapshot must be a JSON object")
+    elif snapshot.get("schema_version") != GATE_FREEZE_SCHEMA:
+        missing_inputs.append(f"hosted freeze snapshot schema_version must be `{GATE_FREEZE_SCHEMA}`")
+
+    recomputed_snapshot_id = recomputed_freeze.get("snapshot_id") if isinstance(recomputed_freeze, dict) else None
+    retained_snapshot_id = snapshot.get("snapshot_id") if isinstance(snapshot, dict) else None
+    if recomputed_snapshot_id and retained_snapshot_id and recomputed_snapshot_id != retained_snapshot_id:
+        missing_inputs.append("hosted freeze snapshot_id does not match recomputed freeze")
+
+    if isinstance(snapshot, dict) and isinstance(recomputed_freeze, dict):
+        retained_subject = snapshot.get("snapshot_subject")
+        recomputed_subject = recomputed_freeze.get("snapshot_subject")
+        if isinstance(retained_subject, dict) and isinstance(recomputed_subject, dict):
+            for key in ("item_id", "branch", "head_sha", "pr", "surface"):
+                if retained_subject.get(key) != recomputed_subject.get(key):
+                    missing_inputs.append(f"hosted freeze snapshot_subject.{key} does not match recomputed freeze")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "summary": (
+            "Hosted freeze snapshot artifact matches the recomputed freeze."
+            if result == "pass"
+            else "Hosted freeze snapshot artifact does not match the recomputed freeze."
+        ),
+        "snapshot_locator": snapshot_file,
+        "snapshot_id": retained_snapshot_id,
+        "recomputed_snapshot_id": recomputed_snapshot_id,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "hosted_snapshot_mismatch" if result == "block" else None,
+        "fallback_to": None if result == "pass" else "refresh_gate_inputs",
+    }
+
+
+def hosted_freeze_admission_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+    body_file: str | None,
+    compare_body_file: str | None,
+    snapshot_file: str | None,
+    surface: str | None,
+) -> dict[str, Any]:
+    hosted_inputs_present = any([body_file, compare_body_file, snapshot_file])
+    if not hosted_inputs_present:
+        return {
+            "schema_version": HOSTED_FREEZE_ADMISSION_SCHEMA,
+            "result": "not_applicable",
+            "summary": "Hosted freeze admission was not requested because no hosted PR body readback or freeze snapshot input was provided.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "recomputed_freeze": None,
+            "carrier_refresh": None,
+            "shadow_freshness": None,
+            "readback": None,
+            "artifact_comparison": {
+                "result": "not_applicable",
+                "summary": "No hosted freeze snapshot artifact was provided; comparison is not applicable.",
+                "snapshot_locator": None,
+                "missing_inputs": [],
+                "fallback_to": None,
+            },
+            "failure_classifier": failure_classifier_payload([]),
+        }
+
+    freeze_surface = surface if surface in {"pre_review", "review", "merge_ready"} else "merge_ready"
+    freeze_args = argparse.Namespace(
+        target=str(target_root),
+        output=output_relative,
+        item=expected_item,
+        owner=owner,
+        repo_name=repo_name,
+        pr=pr_number,
+        head_sha=head_sha,
+        branch=branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=body_file,
+        compare_body_file=compare_body_file,
+        surface=freeze_surface,
+        write_path=None,
+    )
+    recomputed = gate_freeze_payload(freeze_args, operation="check")
+    artifact_comparison = hosted_freeze_snapshot_comparison(target_root, snapshot_file, recomputed)
+    input_bindings = recomputed.get("input_bindings") if isinstance(recomputed.get("input_bindings"), dict) else {}
+    blocking_inputs = list(recomputed.get("readiness", {}).get("blocking_inputs", [])) if isinstance(recomputed.get("readiness"), dict) else []
+
+    comparison_missing = [
+        str(message)
+        for message in artifact_comparison.get("missing_inputs", [])
+        if str(message).strip()
+    ]
+    if artifact_comparison.get("result") == "block":
+        blocking_inputs.append(
+            {
+                "id": "hosted-freeze-snapshot-mismatch",
+                "input": "hosted_admission",
+                "failure_kind": artifact_comparison.get("failure_kind") or "hosted_snapshot_mismatch",
+                "category": "gate_failure",
+                "kind": artifact_comparison.get("failure_kind") or "hosted_snapshot_mismatch",
+                "severity": "block",
+                "subject": "hosted_freeze_snapshot",
+                "result": "block",
+                "source_locator": snapshot_file,
+                "messages": comparison_missing,
+                "next_action": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
+                "fallback_to": artifact_comparison.get("fallback_to"),
+            }
+        )
+
+    missing_inputs = dedupe_strings(
+        [
+            str(message)
+            for blocking in blocking_inputs
+            if isinstance(blocking, dict)
+            for message in blocking.get("messages", [])
+            if str(message).strip()
+        ]
+    )
+    result = "pass" if recomputed.get("result") == "pass" and artifact_comparison.get("result") in {"pass", "not_applicable"} else "block"
+    return {
+        "schema_version": HOSTED_FREEZE_ADMISSION_SCHEMA,
+        "result": result,
+        "summary": (
+            "Hosted freeze admission recomputed current gate inputs and found them admissible."
+            if result == "pass"
+            else "Hosted freeze admission recomputed current gate inputs and found blocking drift."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "refresh_gate_inputs",
+        "recomputed_freeze": recomputed,
+        "carrier_refresh": input_bindings.get("carrier_refresh"),
+        "shadow_freshness": input_bindings.get("shadow_freshness"),
+        "readback": input_bindings.get("pr_body_pin"),
+        "readback_classification": failure_classifier_payload(
+            [
+                {
+                    "input": "pr_body_pin",
+                    "failure_kind": "head_or_pr_drift",
+                    "messages": input_bindings.get("pr_body_pin", {}).get("missing_inputs", []),
+                }
+            ]
+            if isinstance(input_bindings.get("pr_body_pin"), dict) and input_bindings.get("pr_body_pin", {}).get("result") == "block"
+            else []
+        ),
+        "artifact_comparison": artifact_comparison,
+        "blocking_inputs": blocking_inputs,
+        "failure_classifier": failure_classifier_payload(blocking_inputs),
+    }
+
+
 def handle_gate_freeze(args: argparse.Namespace) -> int:
     payload = gate_freeze_payload(args, operation=args.operation)
     if args.operation == "write":
@@ -18147,6 +18354,10 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("host_enforcement_unverified")
         if "pr metadata" in lowered:
             categories.add("pr_metadata_preflight_failed")
+        if "hosted-freeze-admission" in lowered:
+            categories.add("hosted_freeze_admission_blocked")
+        if "hosted freeze snapshot" in lowered or "snapshot_id does not match" in lowered:
+            categories.add("hosted_snapshot_mismatch")
     if gate_result == "fallback":
         categories.add("prior_gate_fallback")
     return sorted(categories)
@@ -18520,6 +18731,9 @@ def pr_gate_payload(
     head_sha: str | None,
     branch_name: str | None,
     pr_payload_file: str | None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
+    gate_freeze_snapshot_file: str | None = None,
     surface: str | None = None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
@@ -18604,6 +18818,41 @@ def pr_gate_payload(
     current_head = git_head_sha(target_root)
     if pr_head and current_head and pr_head != current_head:
         missing_inputs.append("checkout head does not match PR head")
+    effective_branch_name = branch_name
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefName"), str) and pr_payload.get("headRefName"):
+        effective_branch_name = pr_payload["headRefName"]
+
+    metadata_surface = surface or body_surface or "merge_ready"
+    hosted_admission = hosted_freeze_admission_payload(
+        target_root=target_root,
+        output_relative=output_relative,
+        expected_item=effective_item,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=pr_head,
+        branch_name=effective_branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=body_file,
+        compare_body_file=compare_body_file,
+        snapshot_file=gate_freeze_snapshot_file,
+        surface=metadata_surface,
+    )
+    if hosted_admission.get("result") == "block":
+        missing_inputs.extend(
+            f"hosted-freeze-admission: {message}"
+            for message in hosted_admission.get("missing_inputs", [])
+        )
+    steps.append(
+        {
+            "name": "hosted-freeze-admission",
+            "result": hosted_admission["result"],
+            "summary": hosted_admission["summary"],
+            "missing_inputs": hosted_admission["missing_inputs"],
+            "fallback_to": hosted_admission["fallback_to"],
+            "hosted_freeze_admission": hosted_admission,
+        }
+    )
 
     merge_checkpoint: dict[str, Any] = {
         "result": "block",
@@ -18758,7 +19007,6 @@ def pr_gate_payload(
     else:
         raw_evidence_present = False
 
-    metadata_surface = surface or body_surface or "merge_ready"
     governance_surface = build_governance_surface(target_root)
     pr_metadata_preflight = pr_metadata_preflight_payload(
         target_root=target_root,
@@ -18950,6 +19198,7 @@ def pr_gate_payload(
         "docs_governance_lite_gate": docs_governance_lite_gate,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
         "terminal_closeout_consumption": terminal_closeout_consumption,
+        "hosted_freeze_admission": hosted_admission,
         "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
@@ -18976,6 +19225,9 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
             head_sha=args.head_sha,
             branch_name=args.branch,
             pr_payload_file=args.pr_payload_file,
+            body_file=args.body_file,
+            compare_body_file=args.compare_body_file,
+            gate_freeze_snapshot_file=args.gate_freeze_snapshot_file,
             surface=args.surface,
         )
     )
