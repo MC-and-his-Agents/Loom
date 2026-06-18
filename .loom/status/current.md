@@ -15,7 +15,7 @@
 - Current Stop: Host readback consumed: PR #1579 merged into main at 6dd205e70b2dd49517b5fb0c1454a4736568030d, and issue #1578 is closed.
 - Next Step: No further action for this carrier; retained as terminal evidence for milestone/12 convergence.
 - Blockers: None
-- Latest Validation Summary: 2026-06-18T12:42Z validation passed for WI-1578 head 9ed1fc07: make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; direct closeout metadata render/readback/preflight fixture; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/check_cli_contract.py; make loom-check; PR #1579 metadata readback surface merge_ready head_sha 9ed1fc07; code/spec review records refreshed to 9ed1fc07.
+- Latest Validation Summary: 2026-06-18T20:06Z validation passed for PR #1588 carrier-only closeout sync head 26cc6b1f: work-item-audit pass; shadow-parity --surface all --blocking pass; git diff --check pass; PR metadata readback/preflight pass for closeout surface; GitHub readback consumed merged PRs #1560/#1576/#1587/#1568/#1571/#1579 and closed issues #1494/#1532/#1533/#1542/#1554/#1578.
 - Recovery Boundary: WI-1578/#1578 only. Do not modify #1577 closeout-only carrier files, hosted workflow semantics, controlled merge behavior, release/no-release closeout, or one-shot post-merge closeout run.
 - Current Lane: milestone-12-pr-metadata-closeout-surface-fix
 
