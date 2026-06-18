@@ -479,6 +479,19 @@ def assert_closeout_wrapper_argument_contract() -> None:
         for flag, expected in (("--item", "WI-1554"), ("--issue", "1554")):
             if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
                 raise AssertionError(f"gate closeout wrapper did not preserve {flag}")
+
+        status = module.handle_pr(["gate", "1569", "--surface", "closeout", "--work-item", "WI-1542"])
+        if status != 0:
+            raise AssertionError("pr gate closeout surface wrapper regression did not complete")
+        if captured.get("command") != "pr gate":
+            raise AssertionError("pr gate wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:2] != ["pr-gate", "check"]:
+            raise AssertionError("pr gate wrapper did not delegate to pr-gate check")
+        expected_pairs = {"--pr": "1569", "--surface": "closeout", "--item": "WI-1542"}
+        for flag, expected in expected_pairs.items():
+            if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"pr gate wrapper did not preserve {flag}")
     finally:
         module.emit_flow = original_emit_flow
         module.flow_payload = original_flow_payload
@@ -2654,19 +2667,20 @@ def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str 
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
-    _, payload = run_flow_json(
-        [
-            "pr-gate",
-            "check",
-            "--target",
-            str(target),
-            "--item",
-            fixture["item"],
-            "--pr-payload-file",
-            fixture["pr_file"],
-        ]
-    )
+def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str], *, surface: str | None = None) -> dict[str, Any]:
+    command = [
+        "pr-gate",
+        "check",
+        "--target",
+        str(target),
+        "--item",
+        fixture["item"],
+        "--pr-payload-file",
+        fixture["pr_file"],
+    ]
+    if surface:
+        command.extend(["--surface", surface])
+    _, payload = run_flow_json(command)
     return payload
 
 
@@ -3646,11 +3660,12 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     commit_fixture_file(target, f".loom/specs/{item}/task-carrier.md", "fixture terminal closeout task carrier")
     update_fixture_pr_head(target, fixture)
     append_pr_metadata_surface(target, fixture, surface="closeout")
-    closeout_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    closeout_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
     if (
         closeout_payload.get("result") != "pass"
         or closeout_payload.get("review_approval", {}).get("status") != "terminal_closeout_retained"
         or closeout_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
+        or closeout_payload.get("pr_metadata_preflight", {}).get("surface") != "closeout"
         or closeout_payload.get("steps", [{}])[1].get("terminal_closed_checkpoint") is not True
     ):
         raise AssertionError(f"terminal closeout pr-gate fixture did not pass: {closeout_payload.get('missing_inputs')}")
@@ -3662,7 +3677,7 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     commit_fixture_file(target, f".loom/reviews/{item}.spec.json", "fixture unreachable spec review head")
     update_fixture_pr_head(target, fixture)
     append_pr_metadata_surface(target, fixture, surface="closeout")
-    unreachable_spec_head_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    unreachable_spec_head_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
     if (
         unreachable_spec_head_payload.get("result") != "pass"
         or unreachable_spec_head_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
@@ -3673,7 +3688,7 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
         )
 
     append_pr_metadata_surface(target, fixture, surface="merge_ready")
-    merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="merge_ready")
     if merge_ready_payload.get("result") == "pass" or merge_ready_payload.get("terminal_closeout_consumption", {}).get("result") != "block":
         raise AssertionError("terminal closeout retained review bypassed a non-closeout PR metadata surface")
 
