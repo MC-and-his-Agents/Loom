@@ -21,11 +21,11 @@
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-19 WI-1534 closeout mode docs/skills/fixtures implementation review
+- Run Entry: 2026-06-19 WI-1515 v0.14.2 release-required closeout preparation
 - Logs Entry: local command output retained in current Codex milestone/12 thread
-- Diagnostics Entry: #1534 starts after #1588 carrier sync merged; first execution pass must consume #1533 closeout-specific gate, #1555 closeout run, #1543 queue/status, and #1541 PR metadata surfaces.
-- Verification Entry: targeted local validation passed for implementation/docs head `f06410d27d72b0e3e141dc0255d392a0936580ad`; review and spec review artifacts recorded; hosted node-installer markdown-links failure repaired locally.
-- Lane Entry: milestone-12-closeout-mode-docs
+- Diagnostics Entry: #1515 is release_required because #1554/#1555 shipped CLI/runtime behavior after v0.14.1; v0.14.2 release PR merge remains publish-capable and requires explicit user approval before merge.
+- Verification Entry: pre-merge release validation passed for head `f8c998f956e17257013aaa954ed90156433d1c37`: version/release/npm/package/skills/CLI contract/suite/fact-chain/audit checks passed; post-merge release evidence remains pending.
+- Lane Entry: milestone-12-release-closeout
 
 ## Sources
 
