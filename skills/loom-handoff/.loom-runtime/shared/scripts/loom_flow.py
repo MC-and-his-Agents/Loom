@@ -15919,9 +15919,7 @@ def pr_metadata_effective_contract_surface(field: dict[str, Any], requested_surf
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     preflight = machine_carrier.get("preflight") if isinstance(machine_carrier.get("preflight"), dict) else {}
     required_before = preflight.get("required_before")
-    if requested_surface == "closeout" and carrier_surface == "merge_ready":
-        return "merge_ready"
-    if requested_surface in {"review", "pre_review", "closeout"} and carrier_surface == "merge_ready":
+    if requested_surface in {"review", "pre_review"} and carrier_surface == "merge_ready":
         if isinstance(required_before, list) and requested_surface in required_before:
             return "merge_ready"
     return requested_surface

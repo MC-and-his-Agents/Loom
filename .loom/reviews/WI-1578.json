@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1578",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1578 remains approved at head a450a6fa: the closeout metadata surface fix and aggregate fixture alignment are validated, PR #1579 metadata readback points to the latest pushed implementation head, shadow parity passes, and full make loom-check passed. This carrier-only head preserves the #1578 scope boundary.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-18T12:46:37Z",
+  "reviewed_head": "a450a6faa8d56b44a65bca3651d097300befdc1a",
+  "reviewed_validation_summary": "2026-06-18T12:42Z validation passed for WI-1578 head 9ed1fc07: make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; direct closeout metadata render/readback/preflight fixture; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/check_cli_contract.py; make loom-check; PR #1579 metadata readback surface merge_ready head_sha 9ed1fc07; code/spec review records refreshed to 9ed1fc07.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1578.md",
+    "recovery_entry": ".loom/progress/WI-1578.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-pr-metadata-closeout-surface/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-pr-metadata-closeout-surface --item WI-1578 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-pr-metadata-closeout-surface/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-pr-metadata-closeout-surface --item WI-1578 --json",
+    "suite_evidence_map": ".loom/specs/WI-1578/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1578/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
