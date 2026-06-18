@@ -226,6 +226,19 @@ either command as an executable repair command. If a freeze snapshot needs to su
 unimplemented command, it must emit `unsupported_command_surface` and provide an
 existing supported alternative path.
 
+Troubleshooting and evidence notes for #1507/#1512/#1513/#1541/#1554:
+
+- `unsupported_command_surface` is the stable classifier when a freeze
+  `next_action` or `refresh_suggestion` points at a command not present in the
+  current matrix.
+- Preferred repair commands stay within the implemented surface, for example
+  `loom gate freeze check`, `loom gate freeze write`, repo-local carrier refresh
+  paths, and `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback>`.
+- Freeze/hosted-admission docs must not recommend unsupported wrapper/runtime
+  drift such as imaginary `loom` aliases; when no implemented command exists,
+  the document should say the path is deferred to a later Work Item rather than
+  invent a command.
+
 ## Planned Suite Commands
 
 #1052 planned the full spec suite CLI command surface. #1109-#1111 implement the first read-only command and add it to the mechanical help matrix and CLI contract checks:

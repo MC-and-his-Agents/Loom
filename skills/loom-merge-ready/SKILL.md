@@ -27,6 +27,12 @@ description: 负责 merge 前统一放行。Use when Codex needs to confirm whet
 - minimal path 下，只有带 rationale、consumer boundary 和 recheck condition 的
   `not_applicable` 可以跳过 full path 附加工件；missing、deferred 或 source/generated
   sync 待办不能被当作 merge-ready
+- 有 PR 绑定时，merge-ready 应消费已冻结且已 readback 的 PR metadata、current
+  head、carrier refresh、shadow freshness、review record 与 release-boundary 输入；
+  这些输入由 `loom gate freeze check|write` 提供统一快照与 classifier。merge-ready
+  不手工重拼一条旁路检查链；若 freeze 返回 `pr_metadata_drift`、`shadow_stale`、
+  `review_stale`、`hosted_snapshot_mismatch` 或 `unsupported_command_surface`，
+  必须先回到 freeze repair path。
 
 输入信号与输出合同见：
 

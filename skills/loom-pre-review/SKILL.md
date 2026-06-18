@@ -33,6 +33,12 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 JSON 或返回 blocking/fallback 时 fail closed；skill 不重写 evidence-map 或
 task-carrier 规则。
 
+当事项已经绑定 PR 或进入 build checkpoint 时，进入 formal review 前应先用
+`loom gate freeze check|write` 冻结当前 PR metadata、head、carrier、shadow 与
+release-boundary 输入，再让 `flow pre-review` 消费冻结后的 readback 结果。缺少
+freeze 读回或 freeze 自身返回 blocking/fallback 时，回到 freeze repair path，
+不要跳过冻结入口直接拼 review 前检查链。
+
 ## 3. 固定编排
 
 `flow pre-review` 固定只编排以下读取链路：
