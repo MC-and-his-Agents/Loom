@@ -5,9 +5,9 @@
   "kind": "code_review",
   "summary": "Current-head review allow: WI-1532 implements the local closeout freeze admission profile, refreshes the generated demo bootstrap fixture, and registers the Work Item carrier/suite evidence needed before PR merge-ready. The reviewed scope is limited to #1532 runtime/profile behavior, generated runtime parity, targeted closeout-freeze fixture coverage, demo bootstrap fixture sync, and Loom carrier registration; it does not implement #1533 closeout-specific gate consumption, #1534 docs convergence, #1555 one-shot closeout run, #1515 release/no-release closeout, or host writes.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-18T08:15:38Z",
-  "reviewed_head": "6c9a2a3d37132440d2f58a59d99db818c116ddb4",
-  "reviewed_validation_summary": "2026-06-18T07:55Z-07:58Z targeted validation passed for WI-1532 branch work/1532-closeout-freeze-admission: git diff --check passed; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py passed; source/shared/generated runtime /usr/bin/cmp parity passed; direct assert_closeout_freeze_profile_fixture passed; python3 tools/loom.py suite evidence validate --target . --item WI-1532 --json passed; python3 tools/loom.py suite carrier validate --target . --item WI-1532 --json passed; python3 .loom/bin/loom_init.py verify --target . passed; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1532 --write passed; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking passed.",
+  "authored_at": "2026-06-18T08:19:56Z",
+  "reviewed_head": "2ae3c6940783852458ad3d2c5b6a81dc228a776b",
+  "reviewed_validation_summary": "2026-06-18T07:55Z-08:16Z validation passed for WI-1532 branch work/1532-closeout-freeze-admission: make py-compile passed; make loom-demo-new-project-check passed after fixture sync; git diff --check passed; suite evidence/carrier validate passed; fact-chain verify passed; shadow parity passed; merge checkpoint passed before PR creation; PR #1576 metadata readback and local PR gate passed for head 4003b796 before fixture sync.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
