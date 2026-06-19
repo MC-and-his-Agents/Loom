@@ -12,11 +12,11 @@
 - Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface pr-metadata; skills_surface check; demo bootstrap fixture check; PR metadata render/readback/preflight; hosted loom-check
 - Closing Condition: Issue #1595 and PR #1603 are terminal only after PR body metadata, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
 - Current Checkpoint: build checkpoint
-- Current Stop: PR metadata implementation and minimal suite evidence are in place.
-- Next Step: Record spec and implementation reviews, refresh carrier shadows, then run PR gate for PR #1603.
+- Current Stop: PR metadata implementation, minimal suite, evidence map, and task carrier are in place.
+- Next Step: Record current-head spec and implementation reviews, refresh carrier shadows, then run PR gate for PR #1603.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19 WI-1595 validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; PR #1603 metadata readback/preflight passed at head 526bb465c150bda5aa8282cdbf9c117b526c5a32; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync.
-- Recovery Boundary: Work item carrier for #1595 / PR #1603 only.
+- Latest Validation Summary: 2026-06-19 WI-1595 validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; PR #1603 metadata readback/preflight passed at head 526bb465c150bda5aa8282cdbf9c117b526c5a32; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync.
+- Recovery Boundary: Work item carrier, minimal suite, evidence map, and task carrier for #1595 / PR #1603 only.
 - Current Lane: PR metadata lane
 
 ## Runtime Evidence
