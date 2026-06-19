@@ -12,10 +12,10 @@
 - Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface release-readback; release surface checks; PR metadata readback/preflight; hosted loom-check
 - Closing Condition: Issue #1601 and PR #1606 are terminal only after release resume behavior, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Release readback/resume implementation and suite carriers are ready for review.
-- Next Step: Commit carriers, record spec and implementation reviews, update PR body, and rerun merge-ready checks.
+- Current Stop: Release readback/resume implementation, mainline carrier consumption, and current-head validations are ready for merge-ready.
+- Next Step: Record current-head spec and implementation reviews, update PR body, and rerun merge-ready checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19: suite validate passed; suite evidence validate passed; suite carrier validate passed; workspace audit passed after carrier refresh; release-readback CLI contract passed; release-doc-contract check passed; git diff --check passed.
+- Latest Validation Summary: 2026-06-19: merged origin/main through PR #1605 into WI-1601 at head 1dcd2dd7b6ba3f0096c2bdf0f1abefa1ddc11cb5; consumed WI-1599 terminal carrier metadata; carrier refresh runtime hashes were current and then blocked only on stale review as expected; workspace audit passed with no blocking findings; release-readback CLI contract passed; release-doc-contract check passed; git diff --check passed; v0.15.0 release readback/resume passed as non-mutating evidence and classified unpublished.
 - Recovery Boundary: Scope remains issue #1601 release readback/resume classification only; no v0.15.0 publishing, GitHub Actions replacement, closeout role, dependency parser, host auth, or PR metadata changes.
 - Current Lane: release resume lane
 
