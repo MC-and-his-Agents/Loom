@@ -456,7 +456,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "adb4b9fc7f8341ffc069085546c39767c1d4eec73bac2b2c6b78b0699cbb7823"
+      "sha256": "6f46db34ed38c3123e8abe53eb1f7e9ea1db5e0b9d233027db57e0c48308af69"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -702,17 +702,25 @@
     "github_control_plane": {
       "repository": "MC-and-his-Agents/Loom",
       "default_branch": "main",
-      "branch_protection": "unknown",
-      "required_checks": "unknown",
-      "pr_reviews": "unknown",
+      "branch_protection": "enabled",
+      "required_checks": [
+        "py-compile",
+        "demo-bootstrap",
+        "repo-local-cli",
+        "loom-check",
+        "loom-pr-merge-gate",
+        "node-installer-pr",
+        "root-self-governance"
+      ],
+      "pr_reviews": "not_required",
       "rulesets": {
-        "status": "unknown",
-        "enforced": "unknown",
-        "count": "unknown"
+        "status": "verified",
+        "enforced": false,
+        "count": 0
       },
       "ci_check_presence": {
         "schema_version": "loom-ci-check-presence/v1",
-        "workflow_exists": false,
+        "workflow_exists": true,
         "workflow_locator": ".github/workflows/loom-check.yml",
         "stable_check_names": [
           "py-compile",
@@ -720,21 +728,23 @@
           "repo-local-cli",
           "loom-check"
         ],
-        "check_ran": "unknown",
-        "required_checks_configured": "unknown",
-        "host_enforcement_status": "unverified",
+        "check_ran": true,
+        "required_checks_configured": true,
+        "host_enforcement_status": "verified",
         "recommended_action": "install the workflow and configure its stable check names as host-required checks"
       },
       "host_enforcement": {
-        "branch_protection_or_ruleset": "unknown",
-        "required_checks": "unknown",
-        "verification_status": "unverified"
+        "branch_protection_or_ruleset": true,
+        "required_checks": true,
+        "workflow_exists": true,
+        "check_ran": true,
+        "verification_status": "verified"
       },
       "api_snapshot": {
         "schema_version": "loom-host-api-snapshot/v1",
         "read_mode": "cached_non_merge",
-        "verification_status": "unverified",
-        "fallback_status": "host_unavailable",
+        "verification_status": "verified",
+        "fallback_status": null,
         "cache_scope": "process",
         "requests": [
           {
@@ -746,20 +756,32 @@
             "method": "GET",
             "path": "repos/MC-and-his-Agents/Loom/branches/main",
             "purpose": "branch protection"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/actions/workflows",
+            "purpose": "workflow presence"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/commits/main/check-runs",
+            "purpose": "recent check runs"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/rulesets",
+            "purpose": "branch ruleset enforcement"
           }
         ],
-        "errors": [
-          "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF"
-        ],
+        "errors": [],
         "budget": {
           "schema_version": "loom-execution-budget/v1",
-          "status": "unavailable",
+          "status": "not_applicable",
           "enforcement": "advisory",
-          "summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+          "summary": "execution budget is not collected for this invocation.",
           "dimensions": [],
           "provenance": {
-            "source": "github_control_plane",
-            "error_count": 1
+            "source": "github_host"
           },
           "adapter_evidence_locator": ""
         }
@@ -1310,17 +1332,10 @@
         "current": "light",
         "judgment": {
           "schema_version": "loom-github-profile-maturity-judgment/v1",
-          "judgment": "blocked",
+          "judgment": "light",
           "current": "light",
-          "blocked": true,
-          "blockers": [
-            {
-              "id": "github_host_signals_unreadable",
-              "reason": "GitHub host signals could not be read reliably",
-              "source_locator": "github_control_plane.api_snapshot.errors",
-              "fallback_to": "github-profile-binding"
-            }
-          ],
+          "blocked": false,
+          "blockers": [],
           "evidence": [
             {
               "id": "work_item",
@@ -1360,13 +1375,13 @@
             },
             {
               "id": "github_api_snapshot",
-              "status": "unverified",
+              "status": "verified",
               "locator": "github_control_plane.api_snapshot",
               "authority": "github"
             },
             {
               "id": "host_enforcement",
-              "status": "unverified",
+              "status": "verified",
               "locator": "github_control_plane.host_enforcement",
               "authority": "github"
             },
@@ -1401,7 +1416,7 @@
               "authority": "loom + host"
             }
           ],
-          "summary": "GitHub profile maturity is blocked by unreadable or conflicting required signals."
+          "summary": "GitHub profile maturity judgment is `light`."
         },
         "achieved": [
           "light"
@@ -1746,9 +1761,7 @@
       }
     },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
-    "missing_inputs": [
-      "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF"
-    ]
+    "missing_inputs": []
   },
   "lifecycle_expectations": {
     "schema_version": "loom-workspace-lifecycle/v1",
