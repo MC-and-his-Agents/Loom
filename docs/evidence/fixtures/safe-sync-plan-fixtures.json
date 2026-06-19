@@ -170,10 +170,10 @@
                 "source_issue": 794,
                 "blocking_issue": 793,
                 "direction": "blocked_by",
-                "source_of_truth": "issue_body_dependency_section",
+                "source_of_truth": "issue_body_machine_block",
                 "provenance": {
-                  "source_owner": "github_issue_body",
-                  "source_locator": "issue #794"
+                  "source_owner": "github_issue_machine_block",
+                  "source_locator": "issue #794 loom:issue-dependencies block 1"
                 }
               }
             },

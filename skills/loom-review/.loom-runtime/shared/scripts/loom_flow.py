@@ -254,6 +254,15 @@ GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS = (
     "scope_proof",
     "review_requirement",
 )
+PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES = {
+    "parser_version": list(PR_METADATA_SUPPORTED_PARSER_VERSIONS),
+    "fields.governance_intensity": sorted(GOVERNANCE_INTENSITY_VALUES),
+    "fields.change_class": sorted(GOVERNANCE_CHANGE_CLASS_VALUES),
+    "fields.suite_path": sorted(GOVERNANCE_SUITE_PATH_VALUES),
+    "fields.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
+    "fields.release_judgment": sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES),
+    "fields.suite_not_applicable.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
+}
 GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "fixture", "release", "external_action", "mixed"}
 GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS = "docs_governance"
 GOVERNANCE_LITE_ALLOWED_SUITE_PATH = "not_applicable"
@@ -807,6 +816,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--suite-na-recheck-condition")
     pr_metadata.add_argument("--suite-na-scope-proof")
     pr_metadata.add_argument("--suite-na-review-requirement")
+    pr_metadata.add_argument("--dry-run", action="store_true", default=True, help="Preview metadata update/rendered preflight without writing the host PR body; this is the default")
+    pr_metadata.add_argument("--apply", dest="dry_run", action="store_false", help="Write the rendered body to the host PR, then read it back and rerun metadata preflight")
 
     gate_freeze = subparsers.add_parser("gate-freeze", help="Generate or validate hosted gate input freeze snapshots")
     gate_freeze.add_argument("operation", choices=("check", "write"))
@@ -6526,18 +6537,95 @@ def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, is
     }
 
 
+ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER = "loom:issue-dependencies"
+ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA = "loom-issue-dependencies/v1"
+
+
+def issue_dependency_html_comment_blocks(body: str) -> list[str]:
+    pattern = re.compile(
+        rf"<!--\s*{re.escape(ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER)}\s*(.*?)\s*-->",
+        flags=re.DOTALL,
+    )
+    return [match.group(1).strip() for match in pattern.finditer(body)]
+
+
+def normalize_issue_reference(value: Any) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str):
+        match = re.fullmatch(r"\s*#?(\d+)\s*", value)
+        if match:
+            return int(match.group(1))
+    if isinstance(value, dict):
+        number = value.get("number")
+        if isinstance(number, int) and number > 0:
+            return number
+    return None
+
+
+def normalize_issue_reference_list(value: Any) -> list[int]:
+    values = value if isinstance(value, list) else [value]
+    normalized: list[int] = []
+    for entry in values:
+        issue_number = normalize_issue_reference(entry)
+        if issue_number is not None:
+            normalized.append(issue_number)
+    return normalized
+
+
+def issue_dependency_machine_block_payloads(issue_body: str) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    for raw in issue_dependency_html_comment_blocks(issue_body):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        schema_version = payload.get("schema_version")
+        if schema_version not in (None, ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA):
+            continue
+        payloads.append(payload)
+    return payloads
+
+
 def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -> list[dict[str, Any]]:
     if not isinstance(issue_body, str) or issue_number is None:
         return []
     edges: list[dict[str, Any]] = []
     seen: set[tuple[int, int, str]] = set()
-    patterns = (
-        ("blocked_by", r"(?im)(?:blocked\s+by|blocked_by|depends\s+on|dependency|依赖|前置)[^\n#]*(?:#)(\d+)"),
-        ("blocking", r"(?im)(?:blocks|blocking|阻塞)[^\n#]*(?:#)(\d+)"),
-    )
-    for relation, pattern in patterns:
-        for match in re.finditer(pattern, issue_body):
-            other = int(match.group(1))
+    for block_index, payload in enumerate(issue_dependency_machine_block_payloads(issue_body), start=1):
+        dependency_payload = payload.get("dependencies") if isinstance(payload.get("dependencies"), dict) else payload
+        relation_values: list[tuple[str, int]] = []
+        for relation, field_names in (
+            ("blocked_by", ("blocked_by", "blockedBy", "depends_on", "dependsOn")),
+            ("blocking", ("blocks", "blocking")),
+        ):
+            for field_name in field_names:
+                if field_name not in dependency_payload:
+                    continue
+                for other in normalize_issue_reference_list(dependency_payload.get(field_name)):
+                    relation_values.append((relation, other))
+                break
+        raw_edges = dependency_payload.get("edges")
+        if isinstance(raw_edges, list):
+            for raw_edge in raw_edges:
+                if not isinstance(raw_edge, dict):
+                    continue
+                direction = raw_edge.get("direction")
+                if direction == "blocked_by":
+                    other = normalize_issue_reference(
+                        raw_edge.get("blocking_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                elif direction == "blocking":
+                    other = normalize_issue_reference(
+                        raw_edge.get("source_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                else:
+                    continue
+                if other is not None:
+                    relation_values.append((direction, other))
+        for relation, other in relation_values:
             source = issue_number if relation == "blocked_by" else other
             blocker = other if relation == "blocked_by" else issue_number
             key = (source, blocker, relation)
@@ -6550,13 +6638,15 @@ def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -
                     "blocking_issue": blocker,
                     "direction": relation,
                     "blocker_state": "unknown",
-                    "source_of_truth": "issue_body_dependency_section",
+                    "source_of_truth": "issue_body_machine_block",
                     "host_mirror_status": "requires_native_compare",
                     "native": "unknown",
                     "provenance": {
                         "source_layer": "authored_truth",
-                        "source_owner": "github_issue_body",
-                        "source_locator": f"issue #{issue_number}",
+                        "source_owner": "github_issue_machine_block",
+                        "source_locator": (
+                            f"issue #{issue_number} {ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER} block {block_index}"
+                        ),
                         "freshness": "fresh",
                     },
                 }
@@ -16117,6 +16207,65 @@ def pr_metadata_body_artifact_payload(
     }
 
 
+def pr_metadata_allowed_values(missing_fields: list[str] | None) -> dict[str, list[str]]:
+    allowed_values: dict[str, list[str]] = {}
+    for field in missing_fields or []:
+        values = PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES.get(field)
+        if values:
+            allowed_values[field] = values
+    return allowed_values
+
+
+def pr_metadata_diagnostic_classifier(
+    *,
+    reason: str,
+    missing_fields: list[str] | None,
+    parse_error: str | None,
+) -> str:
+    fields = set(missing_fields or [])
+    if parse_error:
+        return "parse_error"
+    if {"metadata_contract_id", "surface"} & fields:
+        return "surface_drift"
+    if "fields.head_sha" in fields or "head" in reason.lower():
+        return "head_sha_drift"
+    if "fields.branch" in fields or "branch" in reason.lower():
+        return "branch_drift"
+    if any(field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES for field in fields):
+        return "enum_violation"
+    if "metadata_block" in fields or "pr.body" in fields:
+        return "missing_machine_block"
+    return "contract_violation"
+
+
+def pr_metadata_diagnostic_next_action(
+    *,
+    classifier: str,
+    fallback_to: str,
+    expected_surface: str | None,
+    missing_fields: list[str] | None,
+) -> str:
+    fields = set(missing_fields or [])
+    if classifier == "surface_drift":
+        surface = expected_surface or "the requested surface"
+        return f"rerender the PR metadata machine block for surface `{surface}` and replace the stale carrier before rerunning preflight."
+    if classifier == "head_sha_drift":
+        return "refresh `Head SHA` in both the PR body bindings and machine block from the current PR head, or rerun with `--head-sha <40-hex>`, then rerun preflight."
+    if classifier == "branch_drift":
+        return "refresh `Branch` in both the PR body bindings and machine block from the current `work/...` branch, or rerun with `--branch <work/...>`, then rerun preflight."
+    if classifier == "enum_violation":
+        invalid_fields = sorted(field for field in fields if field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES)
+        field_list = ", ".join(invalid_fields) if invalid_fields else "the governance enum fields"
+        return f"rewrite {field_list} to one of the allowed values, then rerun preflight."
+    if classifier == "parse_error":
+        return "rerender or rewrite the PR metadata HTML comment JSON block so it decodes cleanly, then rerun preflight."
+    if classifier == "missing_machine_block":
+        return "render or restore the declared PR metadata machine block before rerunning preflight."
+    if fallback_to == "update_pr_body":
+        return "regenerate or update the PR body machine carrier, then rerun preflight."
+    return "repair the declared PR metadata carrier inputs, then rerun preflight."
+
+
 def pr_metadata_diagnostic(
     *,
     contract_id: str,
@@ -16130,19 +16279,35 @@ def pr_metadata_diagnostic(
     block_locator: dict[str, Any] | None = None,
     parse_error: str | None = None,
     missing_fields: list[str] | None = None,
+    expected_surface: str | None = None,
 ) -> dict[str, Any]:
+    normalized_missing_fields = missing_fields or []
+    classifier = pr_metadata_diagnostic_classifier(
+        reason=reason,
+        missing_fields=normalized_missing_fields,
+        parse_error=parse_error,
+    )
     return {
+        "classifier": classifier,
         "metadata_contract_id": contract_id,
         "block_locator": block_locator,
         "source_locator": source_locator,
         "source_range_or_hash": source_range_or_hash,
         "parse_error": parse_error,
-        "missing_fields": missing_fields or [],
+        "missing_fields": normalized_missing_fields,
         "expected_schema": expected_schema or PR_METADATA_MACHINE_SCHEMA,
+        "expected_surface": expected_surface,
         "expected_parser_version": expected_parser_version or PR_METADATA_PARSER_VERSION,
+        "allowed_values": pr_metadata_allowed_values(normalized_missing_fields),
         "expected_format": pr_metadata_expected_format(marker),
         "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
         "fallback_to": fallback_to,
+        "next_action": pr_metadata_diagnostic_next_action(
+            classifier=classifier,
+            fallback_to=fallback_to,
+            expected_surface=expected_surface,
+            missing_fields=normalized_missing_fields,
+        ),
         "reason": reason,
     }
 
@@ -16266,6 +16431,7 @@ def validate_pr_metadata_envelope(
                 expected_schema=expected_schema,
                 block_locator=block_locator,
                 parse_error="decoded JSON is not an object",
+                expected_surface=surface,
             )
         )
         return None, diagnostics
@@ -16313,6 +16479,7 @@ def validate_pr_metadata_envelope(
                 expected_schema=expected_schema,
                 block_locator=block_locator,
                 missing_fields=missing_fields,
+                expected_surface=surface,
             )
         )
         return None, diagnostics
@@ -16382,6 +16549,7 @@ def pr_metadata_contract_preflight(
             source_range_or_hash=source_range_or_hash,
             expected_schema=expected_schema,
             missing_fields=["pr.body"],
+            expected_surface=effective_surface,
         )
         result = "block" if migration_mode == "required" else "pass"
         return {
@@ -16408,6 +16576,7 @@ def pr_metadata_contract_preflight(
             source_range_or_hash=source_range_or_hash,
             expected_schema=expected_schema,
             missing_fields=["metadata_block"],
+            expected_surface=effective_surface,
         )
         result = "block" if migration_mode == "required" else "pass"
         return {
@@ -16430,17 +16599,18 @@ def pr_metadata_contract_preflight(
             envelope = json.loads(block["raw"])
         except json.JSONDecodeError as exc:
             diagnostics.append(
-                pr_metadata_diagnostic(
-                    contract_id=contract_id,
-                    marker=marker,
-                    reason="metadata machine block JSON is malformed",
-                    source_locator=authority_locator,
-                    source_range_or_hash=source_range_or_hash,
-                    expected_schema=expected_schema,
-                    block_locator=block["locator"],
-                    parse_error=exc.msg,
+                    pr_metadata_diagnostic(
+                        contract_id=contract_id,
+                        marker=marker,
+                        reason="metadata machine block JSON is malformed",
+                        source_locator=authority_locator,
+                        source_range_or_hash=source_range_or_hash,
+                        expected_schema=expected_schema,
+                        block_locator=block["locator"],
+                        parse_error=exc.msg,
+                        expected_surface=effective_surface,
+                    )
                 )
-            )
             continue
         normalized = None
         envelope_diagnostics: list[dict[str, Any]] = []
@@ -16495,6 +16665,7 @@ def pr_metadata_contract_preflight(
                             expected_schema=expected_schema,
                             block_locator=block["locator"],
                             missing_fields=dedupe_strings(binding_missing),
+                            expected_surface=matched_surface,
                         )
                     )
                     return {
@@ -16538,6 +16709,7 @@ def pr_metadata_contract_preflight(
         source_range_or_hash=source_range_or_hash,
         expected_schema=expected_schema,
         missing_fields=["metadata_contract_id", "surface"],
+        expected_surface=effective_surface,
     )
     result = "block" if migration_mode == "required" else "pass"
     return {
@@ -16893,7 +17065,7 @@ def pr_metadata_render_payload(
         "preflight": preflight,
         "next_actions": [
             f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(relative_output)} --json",
-            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --json",
+            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --apply --json",
         ],
     }
 
@@ -17039,6 +17211,7 @@ def pr_metadata_update_payload(
     pr_number: int | None,
     head_sha: str | None,
     branch_name: str | None,
+    pr_payload_file: str | None,
     output_file: str,
     readback_file: str,
     base_body_file: str,
@@ -17054,6 +17227,7 @@ def pr_metadata_update_payload(
     suite_na_recheck_condition: str | None,
     suite_na_scope_proof: str | None,
     suite_na_review_requirement: str | None,
+    dry_run: bool,
 ) -> dict[str, Any]:
     render_payload = pr_metadata_render_payload(
         target_root=target_root,
@@ -17088,6 +17262,43 @@ def pr_metadata_update_payload(
             "render": render_payload,
         }
 
+    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
+    if not isinstance(rendered_relative, str) or not rendered_relative:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update could not locate the rendered body artifact after local preflight.",
+            "missing_inputs": ["render output path is unavailable"],
+            "fallback_to": "manual_pr_metadata_inputs",
+            "render": render_payload,
+            "dry_run": dry_run,
+            "host_mutations": False,
+        }
+    if dry_run:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "pass",
+            "summary": "PR metadata update dry-run rendered the body artifact and passed local preflight without mutating the host PR.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "dry_run": True,
+            "host_mutations": False,
+            "apply_required": True,
+            "pr": pr_number,
+            "render": render_payload,
+            "readback": None,
+            "next_actions": [
+                f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(rendered_relative)} --json",
+                f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(rendered_relative)} --apply --json",
+            ],
+        }
+
     detected_owner, detected_repo = detect_github_repo(target_root)
     pr_payload, effective_pr, payload_errors, inferences = load_pr_payload_for_gate(
         target_root=target_root,
@@ -17096,18 +17307,14 @@ def pr_metadata_update_payload(
         pr_number=pr_number,
         head_sha=head_sha,
         branch_name=branch_name,
-        pr_payload_file=None,
+        pr_payload_file=pr_payload_file,
     )
     missing_inputs = [str(message) for message in payload_errors]
     if effective_pr is None:
         missing_inputs.append("unable to determine target PR for metadata update")
-    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
     rendered_path = None
-    if isinstance(rendered_relative, str):
-        rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
-        missing_inputs.extend(rendered_errors)
-    else:
-        missing_inputs.append("render output path is unavailable")
+    rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
+    missing_inputs.extend(rendered_errors)
     if missing_inputs:
         return {
             "command": "pr-metadata",
@@ -17120,6 +17327,8 @@ def pr_metadata_update_payload(
             "fallback_to": "manual_pr_metadata_inputs",
             "render": render_payload,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": False,
         }
 
     assert rendered_path is not None
@@ -17137,6 +17346,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
 
     host_body, view_errors = gh_pr_view_body(target_root, effective_pr)
@@ -17153,6 +17364,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
     readback_path, readback_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
     if readback_errors:
@@ -17168,6 +17381,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
     assert readback_path is not None
     write_runtime_text_artifact(readback_path, host_body)
@@ -17201,6 +17416,8 @@ def pr_metadata_update_payload(
         ),
         "missing_inputs": readback_payload.get("missing_inputs", []),
         "fallback_to": readback_payload.get("fallback_to"),
+        "dry_run": False,
+        "host_mutations": True,
         "pr": effective_pr,
         "render": render_payload,
         "readback": readback_payload,
@@ -20222,6 +20439,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 pr_number=args.pr,
                 head_sha=args.head_sha,
                 branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
                 output_file=args.output_file,
                 readback_file=args.readback_file,
                 base_body_file=args.base_body_file,
@@ -20237,6 +20455,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 suite_na_recheck_condition=args.suite_na_recheck_condition,
                 suite_na_scope_proof=args.suite_na_scope_proof,
                 suite_na_review_requirement=args.suite_na_review_requirement,
+                dry_run=args.dry_run,
             )
         )
     if args.operation == "readback":
@@ -22649,7 +22868,7 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any], *, include_closeout_
             edge_proof = edge.get("provenance") if isinstance(edge.get("provenance"), dict) else {}
             proof_owner = edge_proof.get("source_owner")
             proof_locator = edge_proof.get("source_locator")
-            proof_is_mechanical = proof_owner in {"github_issue_body", "repo_authored_dependency"}
+            proof_is_mechanical = proof_owner in {"github_issue_machine_block", "repo_authored_dependency"}
             if kind == "stale_native_edge":
                 proof_is_mechanical = edge.get("source_of_truth") == "github_native_edge" and edge.get("blocker_state") == "closed"
                 proof_locator = proof_locator or f"issue #{blocking_issue}"
