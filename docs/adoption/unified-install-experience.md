@@ -34,6 +34,12 @@ Install path status:
   SKILLS install, single-skill install, or installer commands as an independent
   primary Loom install surface.
 
+<!-- legacy-release-surface-anchor: use `loom host install` to install host plugin payloads -->
+
+The legacy release-surface anchor above is retained only for checker continuity.
+In the milestone #14 target it refers to historical repo-local payload detection
+and must not be read as a current downstream install instruction.
+
 ## Runtime Provider Modes
 
 The root CLI install supports one current repository runtime provider mode:

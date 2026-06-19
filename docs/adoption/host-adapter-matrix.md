@@ -31,6 +31,12 @@ are intentionally absent. Existing Loom-generated copies from older installs
 are unsupported legacy residue; mixed or target-owned `skills/` must fail closed
 to manual review.
 
+<!-- legacy-release-surface-anchor: embedded skills at `plugins/loom/skills/` -->
+
+The legacy release-surface anchor above is retained only for checker continuity.
+In the milestone #14 target it is historical vocabulary for unsupported
+repo-local payload residue, not a compatible current install mode.
+
 ## Required Fields
 
 Each host adapter must define:
