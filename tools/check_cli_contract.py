@@ -25,6 +25,7 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
+RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "release-readback-fixtures.json"
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
     ".loom/work-items/WI-truth.md",
@@ -99,6 +100,8 @@ REQUIRED_COMMANDS = {
     "gate freeze check",
     "gate freeze write",
     "gate closeout",
+    "release readback",
+    "release resume",
     "closeout run",
     "host list",
     "host doctor",
@@ -6812,6 +6815,52 @@ def run_work_item_audit_surface() -> None:
     print("work item audit surface checks passed")
 
 
+def run_release_readback_surface() -> None:
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    for command in ("release readback", "release resume"):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
+            raise AssertionError(f"{command} must be declared as an implemented delivery command")
+
+    expected = {
+        "unpublished-release-required": ("release", "readback", "unpublished"),
+        "v0.14.2-manual-resume-published": ("release", "resume", "published"),
+        "partial-release-missing-github-release": ("release", "readback", "partial_published"),
+        "no-release-docs-only": ("release", "resume", "no_release"),
+    }
+    for fixture, (domain, operation, classification) in expected.items():
+        args = [
+            domain,
+            operation,
+            "--target",
+            str(REPO_ROOT),
+            "--fixture-file",
+            str(RELEASE_READBACK_FIXTURES),
+            "--fixture",
+            fixture,
+            "--json",
+        ]
+        if classification == "no_release":
+            args.extend(["--release-judgment", "no_release"])
+        _, payload = run_json(args, expect=0)
+        if payload.get("schema") != "loom-release-readback/v1" or payload.get("mutates") is not False:
+            raise AssertionError(f"{fixture} release readback did not emit the non-mutating schema contract")
+        observed = payload.get("classification", {}).get("classification")
+        if observed != classification:
+            raise AssertionError(f"{fixture} classified as {observed}, expected {classification}")
+        target = payload.get("release_target", {})
+        if not all(target.get(field) for field in ("version", "tag", "npm_version", "npm_package")):
+            raise AssertionError(f"{fixture} did not expose target version/tag/npm package readback context")
+        readbacks = payload.get("readbacks", {})
+        for surface in ("tag", "github_release", "npm_package", "workflow_run"):
+            if surface not in readbacks:
+                raise AssertionError(f"{fixture} missing {surface} readback")
+        if operation == "resume" and not isinstance(payload.get("resume_contract"), dict):
+            raise AssertionError(f"{fixture} release resume did not expose the non-mutating resume contract")
+
+    print("release readback surface checks passed")
+
+
 def run_pr_metadata_surface() -> None:
     assert_pr_metadata_wrapper_argument_contract()
     with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-") as raw_tmp:
@@ -6876,6 +6925,9 @@ def run_aggregate_cli_contract() -> None:
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #890/#891")
+    for command in ("release readback", "release resume"):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
+            raise AssertionError(f"{command} must be implemented for #1601")
     for command in ("gate freeze check", "gate freeze write"):
         if matrix[command]["domain"] != "gate" or matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be declared as an implemented gate command for #1508")
@@ -8991,6 +9043,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="work-item-audit",
             fixture_group="work-item-audit",
             run=run_work_item_audit_surface,
+        ),
+        SurfaceCheck(
+            name="release-readback",
+            fixture_group="release-readback",
+            run=run_release_readback_surface,
         ),
         SurfaceCheck(
             name="pr-metadata",

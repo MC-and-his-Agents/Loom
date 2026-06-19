@@ -64,6 +64,30 @@ For pull requests, the workflow records judgment and runs npm package dry-run ch
 
 When publishing is allowed or explicitly requested, the workflow must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit, when `package.json` does not match `VERSION`, or when the `NPM_TOKEN` secret is missing for an npm publish. It must never overwrite an existing tag, npm version, or release. Installer npm state is never publish evidence for this judgment.
 
+## Release Resume Readback
+
+`loom release readback` is the local read-only entry for a release intent. It
+reads the target `VERSION`, matching GitHub `v*` tag, GitHub Release, npm
+`@mc-and-his-agents/loom` package version, and the `loom-cli-release` workflow
+run. It classifies the release state as:
+
+- `unpublished`: no tag, GitHub Release, or npm package version exists for a release-required intent.
+- `published`: tag, GitHub Release, npm package version, and workflow run read back consistently.
+- `partial_published`: at least one release artifact exists but the release evidence set is incomplete or mismatched.
+- `no_release`: the release judgment explicitly declares that no publish is required.
+
+`loom release resume` consumes the same readback classifier and only returns
+the next recovery action. It must not trigger `workflow_dispatch`, create tags,
+publish npm, create GitHub Releases, update PR metadata, or write closeout
+carriers. Host API or registry read failures are classified as readback
+blockers; auth and host-access diagnosis remains owned by #1597.
+
+The v0.14.2 manual recovery sample is retained in
+`docs/evidence/fixtures/release-readback-fixtures.json`: the first main-push
+release run failed, and a later `workflow_dispatch` run restored tag,
+GitHub Release, npm package, and workflow run readback for the same release
+line.
+
 ## Release Validation Evidence Contract
 
 This section records the release/package validation evidence contract that release-required work may consume after the #1383 evidence freeze and the #1393/#1394/#1395 checker surface split.
