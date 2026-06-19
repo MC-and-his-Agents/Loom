@@ -3,11 +3,11 @@
   "item_id": "WI-1318",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "WI-1318 docs-governance change approved: scope is limited to the AGENTS classify-before-execute principle, minimal docs validation evidence, and WI-1318 not_applicable suite carrier; no runtime, gate, release, dependency parser, or closeout behavior changes.",
+  "summary": "WI-1318 docs-governance change approved at current validation summary: scope is limited to the AGENTS classify-before-execute principle, minimal docs validation evidence, and WI-1318 not_applicable suite carrier; no runtime, gate, release, dependency parser, or closeout behavior changes.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-19T03:55:01Z",
-  "reviewed_head": "c0cf5fc00f27f7665887dd428c3cdc49d2b0b608",
-  "reviewed_validation_summary": "2026-06-19 WI-1318 validation: workspace audit passed; git diff --check passed; suite validate result not_applicable with valid rationale; hosted loom-check, node-installer-pr, demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed for PR #1602 head c0cf5fc00f27f7665887dd428c3cdc49d2b0b608.",
+  "authored_at": "2026-06-19T03:56:45Z",
+  "reviewed_head": "df23d356bc6a3089b9cac65dd6f044167475da7f",
+  "reviewed_validation_summary": "2026-06-19 WI-1318 validation: workspace audit pending shadow refresh; git diff --check passed; suite validate result not_applicable with valid rationale; review record allowed current head c0cf5fc00f27f7665887dd428c3cdc49d2b0b608; hosted loom-check, node-installer-pr, demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed for PR #1602.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
