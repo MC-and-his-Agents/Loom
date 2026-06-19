@@ -3,11 +3,11 @@
   "item_id": "WI-1621-1622-1623-1628-1638",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "合同文档变更将 #1621/#1622/#1623/#1628/#1638 收敛到纯全局 CLI + Codex 用户级 plugin + metadata-only repository adoption；suite path 已正式声明 not_applicable；Work Item workspace_entry 已修正为仓库相对 . 以便 hosted gate 在 CI checkout 中消费；WI-1452 stale carrier 已按已有 merge closeout 事实终态化；遗留 release/doc-sync 锚点仅为 checker continuity，未恢复旧安装路径；未发现阻断问题。",
+  "summary": "合同文档变更将 #1621/#1622/#1623/#1628/#1638 收敛到纯全局 CLI + Codex 用户级 plugin + metadata-only repository adoption；suite path 已正式声明 not_applicable；分支已同步 latest main，#1292/#1645 closeout blocker 已消除；遗留 release/doc-sync 锚点仅为 checker continuity，未恢复旧安装路径；未发现阻断问题。",
   "reviewer": "Codex same-thread review",
-  "authored_at": "2026-06-19T10:32:57Z",
-  "reviewed_head": "a0ac9ace4f2674ede8029bed43b6e30115b8c196",
-  "reviewed_validation_summary": "2026-06-19T10:30Z on branch `work/1621-1628-global-install-contracts`: `Workspace Entry` is repo-relative `.`; `git diff --check` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 tools/host_adapter_check.py` passed after preserving legacy vocabulary anchors; `python3 tools/check_release_surface.py` passed; `npm --prefix packages/loom-installer run check:docs` passed; `python3 tools/check_cli_contract.py --surface adoption-host-metadata` passed; `python3 tools/loom.py suite inspect --target . --item WI-1621-1622-1623-1628-1638 --json` reported `suite_path=not_applicable`; `python3 tools/loom_flow.py review record ...` recorded allow with no findings.",
+  "authored_at": "2026-06-19T11:03:44Z",
+  "reviewed_head": "721bb508e27502b5715348fce465bcc8dca39cd1",
+  "reviewed_validation_summary": "2026-06-19T11:02Z after merging `origin/main` at `8d35968597daa56746a51e4ebc78e8907c241ae0`: `git diff --check` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 tools/host_adapter_check.py` passed; `python3 tools/check_release_surface.py` passed; `npm --prefix packages/loom-installer run check:docs` passed; `python3 tools/check_cli_contract.py --surface adoption-host-metadata` passed; `python3 tools/loom.py suite inspect --target . --item WI-1621-1622-1623-1628-1638 --json` passed with `suite_path=not_applicable`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
