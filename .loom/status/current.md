@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1601
-- Goal: Add release readback and resume classification.
-- Scope: Issue #1601 only: add release intent/readback/resume classification for tag, GitHub Release, npm, and workflow state including partial publish cases; do not replace GitHub Actions publishing and do not perform v0.15.0 release closeout.
-- Execution Path: issue #1601 -> branch work/1601-release-resume -> PR #1606 -> merge-ready
+- Item ID: WI-1318
+- Goal: Add a concise AGENTS governance principle requiring classification before execution.
+- Scope: Issue #1318 only: update AGENTS.md with the short classify-before-execute principle and add minimal docs review evidence; do not change Loom schemas, runtime behavior, release, fact-chain, review, or closeout semantics.
+- Execution Path: issue #1318 -> branch work/1318-agents-classify-first -> docs governance PR #1602 -> merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1601.md
-- Review Entry: .loom/reviews/WI-1601.json
-- Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface release-readback; release surface checks; PR metadata readback/preflight; hosted loom-check
-- Closing Condition: Issue #1601 and PR #1606 are terminal only after release resume behavior, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
+- Recovery Entry: .loom/progress/WI-1318.md
+- Review Entry: .loom/reviews/WI-1318.json
+- Validation Entry: workspace audit; py_compile_clean not_applicable docs-only; git diff --check; hosted loom-check
+- Closing Condition: Issue #1318 and PR #1602 are terminal only after PR body metadata, fact-chain, review record, hosted checks, target branch, and closeout evidence are consistent.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Release readback/resume implementation, mainline carrier consumption, and current-head validations are ready for merge-ready.
-- Next Step: Record current-head spec and implementation reviews, update PR body, and rerun merge-ready checks.
+- Current Stop: WI-1318 AGENTS principle, mainline carrier consumption, and WI-1601 terminal carrier sync are ready for merge-ready.
+- Next Step: Record current-head review, update PR body, and rerun hosted merge gate.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19: merged origin/main through PR #1605 into WI-1601 at head 1dcd2dd7b6ba3f0096c2bdf0f1abefa1ddc11cb5; consumed WI-1599 terminal carrier metadata; carrier refresh runtime hashes were current and then blocked only on stale review as expected; workspace audit passed with no blocking findings; release-readback CLI contract passed; release-doc-contract check passed; git diff --check passed; v0.15.0 release readback/resume passed as non-mutating evidence and classified unpublished.
-- Recovery Boundary: Scope remains issue #1601 release readback/resume classification only; no v0.15.0 publishing, GitHub Actions replacement, closeout role, dependency parser, host auth, or PR metadata changes.
-- Current Lane: release resume lane
+- Latest Validation Summary: 2026-06-19: merged origin/main through PR #1606 into WI-1318 at head b9524a54aef550cd06906edc0f0fd87c0e0cf3ab; consumed WI-1601 terminal carrier metadata; carrier refresh passed; workspace audit passed with no blocking findings; suite evidence validate passed; suite carrier validate passed; git diff --check passed.
+- Recovery Boundary: Scope remains issue #1318 docs-only AGENTS classify-before-execute principle; no runtime, gate, release, dependency parser, host auth, PR metadata, or closeout behavior changes.
+- Current Lane: AGENTS governance lane
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1601.md
-- Dynamic Truth: .loom/progress/WI-1601.md
+- Static Truth: .loom/work-items/WI-1318.md
+- Dynamic Truth: .loom/progress/WI-1318.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
