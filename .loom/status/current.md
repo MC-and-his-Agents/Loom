@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1515.json
 - Validation Entry: work-item-audit; milestone issue/PR readback; release/no-release evidence readback; closeout check; fact-chain; shadow parity; hosted PR checks
 - Closing Condition: Milestone/12 #1515 and parent #1505 are closed only after no-release/release judgment, GitHub issue/PR states, target branch, repo .loom carriers, shadow evidence, and closeout evidence are consistent. Ownership remains with the main thread for PR body, issue body, `.loom/status/current.md`, progress, review, shadow, and closeout carrier writes.
-- Current Checkpoint: merge
-- Current Stop: Opened PR #1591 with preflighted PR metadata and promoted WI-1515 to merge checkpoint for hosted merge-gate consumption. Local release, suite, fact-chain, build, review, shadow, PR body render/readback, and metadata preflight checks passed.
-- Next Step: Wait for hosted checks on PR #1591. Do not merge the release PR or trigger publish-capable release actions until the user explicitly approves publishing v0.14.2.
-- Blockers: None
+- Current Checkpoint: closed_out
+- Current Stop: WI-1515 closed out by closeout run: PR #1592 merged at d16dd96f4ca9e086d1805c93db571edf0d96621e, issue #1515 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1515 implementation work remains.
+- Blockers: None recorded.
 - Latest Validation Summary: 2026-06-19 pre-merge release validation passed: version_surface_check; check_release_surface; check_npm_package for @mc-and-his-agents/loom@0.14.2 payload_file_count=2288; npm run test:package 4 tests; npm pack --dry-run entryCount=2288; node bin/loom.mjs version --json repo_version=v0.14.2; tools/loom.py skills release-check; skills_surface.py check; tools/check_cli_contract.py all 10 surfaces in 416.11s; suite validate result not_applicable with valid formal-suite rationale; suite evidence/carrier validate; fact-chain; work-item-audit; flow build; PR #1591 metadata render/readback/preflight; git diff --check.
 - Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-1515.md`.
-- Current Lane: milestone-12-release-closeout
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
