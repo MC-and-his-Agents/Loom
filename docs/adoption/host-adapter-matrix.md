@@ -87,6 +87,7 @@ Adapters must fail closed and report failure instead of partial success when:
 - host discovery cannot observe the installed skill
 - version metadata cannot be read
 - a conflicting user override shadows Loom without explicit operator intent
+- GitHub host API readback cannot consume `gh api` or an explicit process token. When local `gh` auth is present but `GH_TOKEN` / `GITHUB_TOKEN` is not present, Loom runtime must not silently fall back to anonymous public REST; it reports `host_api_unreadable` or `permission` and the single-command bridge next action `CODEX_EXPORT_GH_TOKEN=1 <same loom command>`.
 
 ## Lifecycle Hook Mapping
 

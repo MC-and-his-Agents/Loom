@@ -1357,6 +1357,58 @@ def assert_reconciliation_suite_taxonomy_contract() -> None:
         raise AssertionError("reconciliation did not classify missing suite gate drift")
 
 
+def assert_issue_dependency_machine_block_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    historical_issue_body = (
+        "## Historical Notes\n\n"
+        "- depends on #1514 and blocked by #1513 were prior planning notes only.\n"
+        "- 前置：#1542、#1544 已在历史收口中消费，不代表当前 active blocker。\n"
+        "- 依赖 #1529 的说明只是归档文字，不应生成 active edge。\n"
+    )
+    historical_edges = loom_flow.parse_authored_dependency_edges(historical_issue_body, 1515)
+    if historical_edges:
+        raise AssertionError(f"historical issue prose must not produce authored dependency edges: {historical_edges}")
+    historical_graph = loom_flow.dependency_graph_payload(
+        issue_number=1515,
+        issue_payload={"number": 1515, "state": "closed", "body": historical_issue_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    if historical_graph.get("authored_edges") or historical_graph.get("findings"):
+        raise AssertionError("historical issue prose must not create active dependency drift or findings")
+
+    machine_block_body = (
+        "## Dependency Carrier\n\n"
+        '<!-- loom:issue-dependencies {"schema_version":"loom-issue-dependencies/v1","blocked_by":["#793"],"blocks":[795]} -->\n'
+    )
+    machine_edges = loom_flow.parse_authored_dependency_edges(machine_block_body, 794)
+    edge_keys = {
+        (edge.get("source_issue"), edge.get("blocking_issue"), edge.get("direction"))
+        for edge in machine_edges
+        if isinstance(edge, dict)
+    }
+    if edge_keys != {(794, 793, "blocked_by"), (795, 794, "blocking")}:
+        raise AssertionError(f"structured issue dependency machine block parsed unexpected edges: {machine_edges}")
+    if not all(
+        isinstance(edge, dict)
+        and edge.get("source_of_truth") == "issue_body_machine_block"
+        and edge.get("provenance", {}).get("source_owner") == "github_issue_machine_block"
+        for edge in machine_edges
+    ):
+        raise AssertionError("structured issue dependency machine block must retain machine-block provenance")
+    machine_graph = loom_flow.dependency_graph_payload(
+        issue_number=794,
+        issue_payload={"number": 794, "state": "open", "body": machine_block_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    missing_native_findings = [
+        finding
+        for finding in machine_graph.get("findings", [])
+        if isinstance(finding, dict) and finding.get("kind") == "missing_native_edge"
+    ]
+    if len(missing_native_findings) != 2:
+        raise AssertionError("structured issue dependency machine block must remain consumable as authored proof")
+
+
 def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
     loom_flow = load_loom_flow_module()
     target = tmp / "docs-contract-suite-not-applicable"
@@ -4158,6 +4210,24 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
                 raise AssertionError(f"pr metadata-update wrapper did not pass {flag}")
             if flow_args[flow_args.index(flag) + 1] != expected:
                 raise AssertionError(f"pr metadata-update wrapper changed {flag} value")
+        if "--dry-run" not in flow_args or "--apply" in flow_args:
+            raise AssertionError("pr metadata-update wrapper must default to dry-run delegation")
+
+        status = module.handle_pr(
+            [
+                "metadata-update",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--apply",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("pr metadata-update wrapper apply regression did not complete")
+        flow_args = captured.get("flow_args")
+        if "--apply" not in flow_args or "--dry-run" in flow_args:
+            raise AssertionError("pr metadata-update wrapper did not forward explicit --apply")
     finally:
         module.emit_flow = original_emit_flow
 
@@ -4227,6 +4297,33 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     if not isinstance(governance_fields, dict) or governance_fields.get("head_sha") != head_sha:
         raise AssertionError("readback did not expose parsed governance fields")
 
+    _, update_dry_run_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "update",
+            "--target",
+            str(target),
+            "--surface",
+            "closeout",
+            "--item",
+            "WI-1541",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1541-render",
+            "--output-file",
+            ".loom/runtime/pr/update-rendered.md",
+        ]
+    )
+    if (
+        update_dry_run_payload.get("result") != "pass"
+        or update_dry_run_payload.get("dry_run") is not True
+        or update_dry_run_payload.get("host_mutations") is not False
+        or update_dry_run_payload.get("apply_required") is not True
+        or update_dry_run_payload.get("readback") is not None
+    ):
+        raise AssertionError("pr metadata-update must default to dry-run local render/preflight without host mutation")
+
 
 def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     target = tmp / "governance-intensity-metadata"
@@ -4260,6 +4357,7 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
                 "review_requirement": "current_head_review_required",
             },
         },
+        "branch-conflict.md": {"branch": "feature/not-a-work-branch"},
         "head-conflict.md": {"head_sha": "2222222222222222222222222222222222222222"},
     }
     for body_name, overrides in negative_cases.items():
@@ -4269,6 +4367,85 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
             raise AssertionError(f"governance intensity metadata negative fixture did not block: {body_name}")
         if "PR metadata machine block invalid: loom-governance-intensity" not in payload.get("missing_inputs", []):
             raise AssertionError(f"governance intensity metadata fixture did not report invalid block: {body_name}")
+
+    unknown_intensity_payload = governance_metadata_preflight_payload(target, "unknown-intensity.md", expect=1)
+    first_unknown_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in unknown_intensity_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(first_unknown_diagnostic, dict)
+        or first_unknown_diagnostic.get("classifier") != "enum_violation"
+        or "fields.governance_intensity" not in (first_unknown_diagnostic.get("allowed_values") or {})
+        or "allowed values" not in str(first_unknown_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("enum violations must expose legal values and a rewrite next_action")
+
+    head_conflict_payload = governance_metadata_preflight_payload(target, "head-conflict.md", expect=1)
+    head_conflict_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in head_conflict_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict) and "fields.head_sha" in diagnostic.get("missing_fields", [])
+        ),
+        None,
+    )
+    if (
+        not isinstance(head_conflict_diagnostic, dict)
+        or head_conflict_diagnostic.get("classifier") != "head_sha_drift"
+        or "--head-sha" not in str(head_conflict_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("head_sha drift diagnostics must expose a targeted next_action")
+
+    branch_conflict_payload = governance_metadata_preflight_payload(target, "branch-conflict.md", expect=1)
+    branch_conflict_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in branch_conflict_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict) and "fields.branch" in diagnostic.get("missing_fields", [])
+        ),
+        None,
+    )
+    if (
+        not isinstance(branch_conflict_diagnostic, dict)
+        or branch_conflict_diagnostic.get("classifier") != "branch_drift"
+        or "--branch" not in str(branch_conflict_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("branch drift diagnostics must expose a targeted next_action")
+
+    surface_mismatch = target / "surface-mismatch.md"
+    surface_mismatch.write_text(governance_metadata_body(surface="closeout"), encoding="utf-8")
+    _, surface_mismatch_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            "surface-mismatch.md",
+        ],
+        expect=1,
+    )
+    surface_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in surface_mismatch_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(surface_diagnostic, dict)
+        or surface_diagnostic.get("classifier") != "surface_drift"
+        or "`merge_ready`" not in str(surface_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("surface drift diagnostics must expose the expected surface next_action")
 
     docs_governance_lite = target / "docs-governance-lite.md"
     docs_governance_lite.write_text(
@@ -6875,6 +7052,7 @@ def run_governance_closeout_contract() -> None:
     assert_active_closeout_contract(active_item)
     assert_idle_root_self_governance_direct_contract()
     assert_reconciliation_suite_taxonomy_contract()
+    assert_issue_dependency_machine_block_contract()
     with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
@@ -7034,6 +7212,20 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError(f"failure classifier mapping missing {sorted(required_classifiers - observed_classifiers)}")
     if not all(finding.get("next_action") for finding in classifier_payload.get("findings", [])):
         raise AssertionError("failure classifier findings must include next_action")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["host_api_unreadable"]:
+        raise AssertionError("host_api_unreadable next_action must expose the single-command token bridge")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["permission"]:
+        raise AssertionError("permission next_action must expose the single-command token bridge")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: API rate limit exceeded"]) != "host_api_unreadable":
+        raise AssertionError("GitHub API rate-limit diagnostics must classify as host_api_unreadable")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: Resource not accessible by integration"]) != "permission":
+        raise AssertionError("GitHub permission diagnostics must classify as permission")
+    rate_limit_diagnostic = loom_flow.host_api_diagnostic_message(
+        "gh api repos/example/repo",
+        ["HTTP 403 Forbidden: API rate limit exceeded"],
+    )
+    if "classifier=host_api_unreadable" not in rate_limit_diagnostic or "CODEX_EXPORT_GH_TOKEN=1" not in rate_limit_diagnostic:
+        raise AssertionError("host API diagnostics must include classifier and token bridge next_action")
     subject = freeze_payload.get("snapshot_subject")
     input_bindings = freeze_payload.get("input_bindings", {})
     pr_metadata = input_bindings.get("pr_metadata") if isinstance(input_bindings, dict) else None
