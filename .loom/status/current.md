@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1515
-- Goal: Complete milestone/12 release/no-release closeout for gate input freeze, hosted admission, closeout orchestration, wrapper, SKILL integrity, and docs/fixtures convergence.
-- Scope: Issue #1515 only: read back milestone/12 child issues, PRs, merge commits, target branch, hosted checks, release/no-release evidence, closeout freeze terminal evidence, and repo/GitHub carriers; terminalize #1515 and parent #1505 after evidence is consistent. Ownership is limited to WI-1515 release/version evidence, release PR metadata, and Loom-owned closeout carriers; do not add new gate behavior implementation.
-- Execution Path: issue #1515 -> branch work/1515-release-closeout -> release/no-release evidence -> final closeout PR -> parent #1505 closeout.
+- Item ID: WI-1595
+- Goal: Strengthen PR metadata dry-run and preflight diagnostics.
+- Scope: Issue #1595 only: make PR metadata update dry-run by default, require explicit apply for host writes, and expose enum/head/branch/surface diagnostics with targeted fixtures; do not change host API auth, closeout role model, release resume, or issue dependency parser semantics.
+- Execution Path: issue #1595 -> branch work/1595-pr-metadata-preflight -> PR #1603 -> merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1515.md
-- Review Entry: .loom/reviews/WI-1515.json
-- Validation Entry: work-item-audit; milestone issue/PR readback; release/no-release evidence readback; closeout check; fact-chain; shadow parity; hosted PR checks
-- Closing Condition: Milestone/12 #1515 and parent #1505 are closed only after no-release/release judgment, GitHub issue/PR states, target branch, repo .loom carriers, shadow evidence, and closeout evidence are consistent. Ownership remains with the main thread for PR body, issue body, `.loom/status/current.md`, progress, review, shadow, and closeout carrier writes.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1515 closed out by closeout run: PR #1592 merged at d16dd96f4ca9e086d1805c93db571edf0d96621e, issue #1515 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1515 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1595.md
+- Review Entry: .loom/reviews/WI-1595.json
+- Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface pr-metadata; skills_surface check; demo bootstrap fixture check; PR metadata render/readback/preflight; hosted loom-check
+- Closing Condition: Issue #1595 and PR #1603 are terminal only after PR body metadata, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
+- Current Checkpoint: merge checkpoint
+- Current Stop: WI-1595 is ready for PR #1603 merge gate: implementation, minimal suite, evidence map, task carrier, spec review, implementation review, PR body metadata, and local carrier checks are aligned.
+- Next Step: Wait for hosted checks and hosted loom-pr-merge-gate on PR #1603, then merge when required checks are green.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19 pre-merge release validation passed: version_surface_check; check_release_surface; check_npm_package for @mc-and-his-agents/loom@0.14.2 payload_file_count=2288; npm run test:package 4 tests; npm pack --dry-run entryCount=2288; node bin/loom.mjs version --json repo_version=v0.14.2; tools/loom.py skills release-check; skills_surface.py check; tools/check_cli_contract.py all 10 surfaces in 416.11s; suite validate result not_applicable with valid formal-suite rationale; suite evidence/carrier validate; fact-chain; work-item-audit; flow build; PR #1591 metadata render/readback/preflight; git diff --check.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-1515.md`.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-06-19 WI-1595 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; spec review allow; implementation review allow with carrier-only head binding accepted; PR #1603 metadata readback/preflight passed and must be re-read after the final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at readback.
+- Recovery Boundary: Work item carrier, minimal suite, evidence map, task carrier, review records, PR metadata, and shadow carrier for #1595 / PR #1603 only.
+- Current Lane: PR metadata lane
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1515.md
-- Dynamic Truth: .loom/progress/WI-1515.md
+- Static Truth: .loom/work-items/WI-1595.md
+- Dynamic Truth: .loom/progress/WI-1595.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -4047,6 +4047,24 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
                 raise AssertionError(f"pr metadata-update wrapper did not pass {flag}")
             if flow_args[flow_args.index(flag) + 1] != expected:
                 raise AssertionError(f"pr metadata-update wrapper changed {flag} value")
+        if "--dry-run" not in flow_args or "--apply" in flow_args:
+            raise AssertionError("pr metadata-update wrapper must default to dry-run delegation")
+
+        status = module.handle_pr(
+            [
+                "metadata-update",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--apply",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("pr metadata-update wrapper apply regression did not complete")
+        flow_args = captured.get("flow_args")
+        if "--apply" not in flow_args or "--dry-run" in flow_args:
+            raise AssertionError("pr metadata-update wrapper did not forward explicit --apply")
     finally:
         module.emit_flow = original_emit_flow
 
@@ -4116,6 +4134,33 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     if not isinstance(governance_fields, dict) or governance_fields.get("head_sha") != head_sha:
         raise AssertionError("readback did not expose parsed governance fields")
 
+    _, update_dry_run_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "update",
+            "--target",
+            str(target),
+            "--surface",
+            "closeout",
+            "--item",
+            "WI-1541",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1541-render",
+            "--output-file",
+            ".loom/runtime/pr/update-rendered.md",
+        ]
+    )
+    if (
+        update_dry_run_payload.get("result") != "pass"
+        or update_dry_run_payload.get("dry_run") is not True
+        or update_dry_run_payload.get("host_mutations") is not False
+        or update_dry_run_payload.get("apply_required") is not True
+        or update_dry_run_payload.get("readback") is not None
+    ):
+        raise AssertionError("pr metadata-update must default to dry-run local render/preflight without host mutation")
+
 
 def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     target = tmp / "governance-intensity-metadata"
@@ -4149,6 +4194,7 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
                 "review_requirement": "current_head_review_required",
             },
         },
+        "branch-conflict.md": {"branch": "feature/not-a-work-branch"},
         "head-conflict.md": {"head_sha": "2222222222222222222222222222222222222222"},
     }
     for body_name, overrides in negative_cases.items():
@@ -4158,6 +4204,85 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
             raise AssertionError(f"governance intensity metadata negative fixture did not block: {body_name}")
         if "PR metadata machine block invalid: loom-governance-intensity" not in payload.get("missing_inputs", []):
             raise AssertionError(f"governance intensity metadata fixture did not report invalid block: {body_name}")
+
+    unknown_intensity_payload = governance_metadata_preflight_payload(target, "unknown-intensity.md", expect=1)
+    first_unknown_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in unknown_intensity_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(first_unknown_diagnostic, dict)
+        or first_unknown_diagnostic.get("classifier") != "enum_violation"
+        or "fields.governance_intensity" not in (first_unknown_diagnostic.get("allowed_values") or {})
+        or "allowed values" not in str(first_unknown_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("enum violations must expose legal values and a rewrite next_action")
+
+    head_conflict_payload = governance_metadata_preflight_payload(target, "head-conflict.md", expect=1)
+    head_conflict_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in head_conflict_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict) and "fields.head_sha" in diagnostic.get("missing_fields", [])
+        ),
+        None,
+    )
+    if (
+        not isinstance(head_conflict_diagnostic, dict)
+        or head_conflict_diagnostic.get("classifier") != "head_sha_drift"
+        or "--head-sha" not in str(head_conflict_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("head_sha drift diagnostics must expose a targeted next_action")
+
+    branch_conflict_payload = governance_metadata_preflight_payload(target, "branch-conflict.md", expect=1)
+    branch_conflict_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in branch_conflict_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict) and "fields.branch" in diagnostic.get("missing_fields", [])
+        ),
+        None,
+    )
+    if (
+        not isinstance(branch_conflict_diagnostic, dict)
+        or branch_conflict_diagnostic.get("classifier") != "branch_drift"
+        or "--branch" not in str(branch_conflict_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("branch drift diagnostics must expose a targeted next_action")
+
+    surface_mismatch = target / "surface-mismatch.md"
+    surface_mismatch.write_text(governance_metadata_body(surface="closeout"), encoding="utf-8")
+    _, surface_mismatch_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            "surface-mismatch.md",
+        ],
+        expect=1,
+    )
+    surface_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in surface_mismatch_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(surface_diagnostic, dict)
+        or surface_diagnostic.get("classifier") != "surface_drift"
+        or "`merge_ready`" not in str(surface_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("surface drift diagnostics must expose the expected surface next_action")
 
     docs_governance_lite = target / "docs-governance-lite.md"
     docs_governance_lite.write_text(
