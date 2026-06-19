@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1293.json
 - Validation Entry: release readback; version/release/npm/package checks; CLI contract; skills checks; PR metadata preflight; hosted checks; post-merge release evidence readback
 - Closing Condition: v0.16.0 tag, GitHub Release, npm package, global CLI smoke, #1293 issue state, target branch, and Loom carriers are terminal and mutually consistent.
-- Current Checkpoint: build
-- Current Stop: v0.16.0 release/docs/version changes and pre-PR local validation are complete; implementation commit and review/PR creation remain.
-- Next Step: Commit release branch changes, create WI-1293 review records, push `work/1293-v0.16-release`, create release PR, and wait for hosted checks before controlled merge.
+- Current Checkpoint: merge
+- Current Stop: v0.16.0 release PR #1646 is open, PR body machine carrier readback passed, native dependency edges for completed predecessors were cleared, and repo-local PR gate inputs are ready for hosted checks and controlled merge.
+- Next Step: Wait for hosted checks on PR #1646 head `241a01a80a3c52a95d449a2a4440c64b025e393f`, then run controlled merge check/run and post-merge release readback.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-19T11:06Z-2026-06-19T11:15Z local release validation passed: release readback classified `v0.16.0` as unpublished; tag/GitHub Release/npm occupancy readback found no `v0.16.0`; version/release/npm/package/skills checks passed; CLI contract `merge-wrapper`, `release-readback`, and `aggregate` passed; suite validate/evidence/carrier passed; fact-chain, shadow parity, and `git diff --check` passed. First raw `py_compile` produced `tools/__pycache__`; classified as local validation artifact, removed, and replaced with `python3 tools/py_compile_clean.py ...`, which passed without package payload pollution.
 - Recovery Boundary: WI-1293 release/docs/version closeout only; do not modify #1452 runtime behavior, #1292 fixture logic, live branch protection/rulesets, HotCP/WebEnvoy/Syvert repositories, or parent #1285 closeout before release evidence is terminal.
