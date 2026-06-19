@@ -21811,6 +21811,14 @@ def evaluate_complex_existing_authority_migration_fixture(group: str, input_payl
             missing_inputs.append("fresh Loom merge-ready / PR merge gate allow result")
         if input_payload.get("required_checks") != "pass":
             missing_inputs.append("required checks readback")
+        triggered_check_rollup = input_payload.get("triggered_check_rollup")
+        if isinstance(triggered_check_rollup, dict):
+            if triggered_check_rollup.get("unreadable") is True:
+                missing_inputs.append("triggered check rollup readback")
+            if triggered_check_rollup.get("blocking"):
+                missing_inputs.append("triggered checks failed")
+            if triggered_check_rollup.get("pending"):
+                missing_inputs.append("triggered checks pending")
         if input_payload.get("observed_pr_head") and input_payload.get("observed_pr_head") != input_payload.get("head_sha"):
             missing_inputs.append("PR head drift after Loom merge-ready allow result")
         return {
