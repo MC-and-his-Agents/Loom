@@ -29,6 +29,7 @@
 - `.loom` surfaces 版本控制策略：[loom-surfaces-version-control.md](./loom-surfaces-version-control.md)
 - 统一安装体验：[unified-install-experience.md](./unified-install-experience.md)
 - CLI-only 安装合同：[cli-only-install-contract.md](./cli-only-install-contract.md)
+- 纯全局 CLI 与 Codex 用户级 plugin 安装合同：[global-cli-user-plugin-contract.md](./global-cli-user-plugin-contract.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
 - 安装 taxonomy 与权威边界：[installation-taxonomy.md](./installation-taxonomy.md)
 - 单 skill 安装合同：[single-skill-contract.md](./single-skill-contract.md)
@@ -36,16 +37,15 @@
 - CLI-first installed-state 合同：[loom-installed-state-v2.md](./loom-installed-state-v2.md)
 - 版本权威图：[version-authority-map.md](./version-authority-map.md)
 
-Runtime provider modes:
+Runtime provider target:
 
 - `global-cli` repositories consume the installed root `loom` command as the
   runtime provider. No `.loom/bin` carrier is expected; use
   `loom installed-state validate`, `loom doctor`, `loom verify`, and
   `loom repair plan` to diagnose repository metadata and external provider
   readiness without recording workstation state as repository truth.
-- `repo-local-wrapper` repositories intentionally keep repo-local carriers such
-  as `.loom/bin`; those carriers remain valid when installed-state declares
-  them as current, retained, audit-only, obsolete, or compatibility-only.
+- `repo-local-wrapper`, repo-local plugin payload, and single-skill downstream
+  installs are legacy compatibility surfaces, not the milestone #14 target.
 
 边界约束：
 
