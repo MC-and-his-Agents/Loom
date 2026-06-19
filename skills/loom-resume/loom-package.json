@@ -3,7 +3,7 @@
   "package_type": "single-skill",
   "package_id": "loom-resume",
   "display_name": "Loom Resume",
-  "repo_version": "v0.14.2",
+  "repo_version": "v0.15.0",
   "source_repository": "https://github.com/MC-and-his-Agents/Loom",
   "source_revision": "repository-working-tree",
   "skill_package_version": "1.0.0",
