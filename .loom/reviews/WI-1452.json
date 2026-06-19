@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1452",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Review allow for WI-1452 at implementation head 07bb4651cc662c008e2855f877fa6ee7844cc931: controlled-merge keeps required checks unchanged while adding fail-closed triggered_check_rollup consumption; targeted merge-wrapper/controlled-merge fixtures cover allowed, failed, pending, and unreadable triggered checks; docs and generated/runtime/demo surfaces are synchronized. No live branch protection mutation, release action, #1292/#1293 scope, or parent #1285 closeout is included.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-19T08:45:01Z",
+  "reviewed_head": "07bb4651cc662c008e2855f877fa6ee7844cc931",
+  "reviewed_validation_summary": "2026-06-19: py_compile passed for src/skills/shared/scripts/loom_flow.py, tools/check_cli_contract.py, and examples/new-project/.loom/bin/loom_flow.py; merge-wrapper and controlled-merge CLI contract surfaces passed; generated-tree-drift passed; make loom-demo-new-project-check passed after fixture sync; git diff --check passed; PR #1614 metadata-update/readback passed for WI-1452 at head 07bb4651cc662c008e2855f877fa6ee7844cc931.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1452.md",
+    "recovery_entry": ".loom/progress/WI-1452.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1452 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1452 --json",
+    "suite_evidence_map": ".loom/specs/WI-1452/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1452/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
