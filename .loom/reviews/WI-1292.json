@@ -3,11 +3,11 @@
   "item_id": "WI-1292",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Code review allows WI-1292 implementation after triggered-check migration evaluator fix and generated runtime sync: HotCP/WebEnvoy/Syvert review gate fixtures and downstream triggered-check inventory consume #1452 behavior while keeping controlled-merge runtime semantics unchanged; controlled-merge, aggregate, generated skills, demo bootstrap, shadow parity, and contract-only loom_check surfaces passed.",
+  "summary": "Terminal closeout review allows WI-1292 carrier sync at head 053ec5abf812bed318e60d689948391ec32150cc: PR #1642 was merged by controlled merge, issue #1292 is CLOSED/COMPLETED, progress/status/shadow evidence now records closed_out terminal metadata, and the change is limited to repo-local closeout carriers.",
   "reviewer": "Codex main-control",
-  "authored_at": "2026-06-19T10:24:14Z",
-  "reviewed_head": "7d4b512e34670a06e7f92ca97fd887e04e60dfb7",
-  "reviewed_validation_summary": "2026-06-19: `python3 -m py_compile tools/check_cli_contract.py` passed; `python3 -m py_compile src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py tools/check_cli_contract.py` passed; `python3 -m json.tool docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json >/dev/null` passed; `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 416.98s; `python3 tools/loom.py suite validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1292 --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 tools/skills_surface.py check` passed; `python3 tools/check_demo_bootstrap_fixture.py` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed on 2026-06-19T10:23:08Z.",
+  "authored_at": "2026-06-19T10:52:30Z",
+  "reviewed_head": "053ec5abf812bed318e60d689948391ec32150cc",
+  "reviewed_validation_summary": "2026-06-19: PR #1642 hosted checks passed (`py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, `loom-pr-merge-gate`, `node-installer-pr`, `root-self-governance`, `release-judgment`); `python3 tools/loom.py merge check 1642 --head-sha a2e5ba3113392f4b9add997974b5ed4e1df272f4 --work-item WI-1292 --json` passed; `python3 tools/loom.py merge run 1642 --head-sha a2e5ba3113392f4b9add997974b5ed4e1df272f4 --work-item WI-1292 --merge-method merge --delete-branch --apply --json` merged PR #1642 into `main` at `9af883609de3025a19017ac34b1612b8cbce180b`; `gh issue view 1292 --json number,state,stateReason,closedAt,url` read back CLOSED/COMPLETED at `2026-06-19T10:48:27Z`; `python3 tools/loom.py carrier closeout-sync --target . --item WI-1292 --terminal-state closed_out --issue 1292 --pr 1642 --merge-commit 9af883609de3025a19017ac34b1612b8cbce180b --target-branch main --closed-at 2026-06-19T10:48:27Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/issues/1292 --apply --json` passed with `host_mutations=false`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored terminal closeout review approved the reviewed carrier head for post-merge closeout PR consumption; implementation merge-ready was consumed by PR #1642."
   }
 }
