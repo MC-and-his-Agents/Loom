@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1292.json
 - Validation Entry: python3 -m py_compile tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge; git diff --check
 - Closing Condition: PR passes local and hosted gates, controlled merge consumes review gate fixtures, #1292 is closed, and #1293 can consume the completed fixture coverage.
-- Current Checkpoint: hosted check fix
-- Current Stop: #1292 hosted `loom-check` failure was classified as a complex-existing-authority migration fixture evaluator gap; triggered-check rollup blocking/pending/unreadable cases are now consumed by the evaluator and the contract-only source surface passes locally.
-- Next Step: Commit evaluator/carrier fix, refresh review records for the new head, push PR, update PR metadata, and wait for hosted checks.
+- Current Checkpoint: generated runtime sync
+- Current Stop: #1292 hosted failures were classified and fixed: complex-existing-authority migration fixtures now consume triggered-check rollup, generated skills runtime is synced, and demo bootstrap fixture drift is cleared locally.
+- Next Step: Commit carrier evidence, refresh review records for the generated-sync head, push PR, update PR metadata, and wait for hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19: `python3 -m py_compile tools/check_cli_contract.py` passed; `python3 -m py_compile src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py` passed; `python3 -m json.tool docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json >/dev/null` passed; `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 416.98s; `python3 tools/loom.py suite validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1292 --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed on 2026-06-19T10:15:02Z.
+- Latest Validation Summary: 2026-06-19: `python3 -m py_compile tools/check_cli_contract.py` passed; `python3 -m py_compile src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py tools/check_cli_contract.py` passed; `python3 -m json.tool docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json >/dev/null` passed; `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 416.98s; `python3 tools/loom.py suite validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1292 --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 tools/skills_surface.py check` passed; `python3 tools/check_demo_bootstrap_fixture.py` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed on 2026-06-19T10:23:08Z.
 - Recovery Boundary: WI-1292 worktree branch `work/1292-review-gate-fixtures`; implementation artifacts in `tools/check_cli_contract.py` and `docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json`.
 - Current Lane: main-control integrating Lane C read-only inventory
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-19 WI-1292 milestone/9 review gate fixture closeout
 - Logs Entry: local command output retained in current Codex milestone/9 thread
 - Diagnostics Entry: #1292 consumes completed #1452 triggered-check behavior through fixture and inventory updates without changing runtime product logic.
-- Verification Entry: local targeted validation, suite/shadow checks, and source `contract-only` loom_check passed on 2026-06-19T10:15:02Z.
+- Verification Entry: local targeted validation, generated runtime checks, suite/shadow checks, and source `contract-only` loom_check passed on 2026-06-19T10:23:08Z.
 - Lane Entry: milestone-9-main-control
 
 ## Sources
