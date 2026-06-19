@@ -55,11 +55,41 @@ closeout PR admission verdict; it is not implementation approval. If
 resolve blockers or run full review / guardian before treating the closeout as
 merge-ready.
 
+## 2.2 Closeout PR Role Protocol
+
+Closeout PR role is an input/readback classifier, not a release judgment and not
+a new truth source. `closeout check`, `closeout sync`, `reconciliation
+audit|sync`, and `closeout run` may receive:
+
+| role | Meaning |
+| --- | --- |
+| `implementation_pr` | The PR that delivered the Work Item implementation or validating fixture. |
+| `release_pr` | A PR whose purpose is release validation or release-readiness correction. |
+| `carrier_sync_pr` | A PR limited to terminal repo carrier or shadow synchronization. |
+| `final_closeout_pr` | The final closeout PR that consumes already completed implementation/release facts. |
+
+Inputs use `--implementation-pr`, `--release-pr`, `--carrier-sync-pr`,
+`--final-closeout-pr`, and optional `--pr-role`. The legacy `--pr` remains
+accepted for compatibility and is classified as `implementation_pr` unless
+`--pr-role` explicitly binds it to another role. If multiple role-specific PRs
+are present and `--pr-role` is omitted, the consumed role is selected in this
+order: `final_closeout_pr`, `carrier_sync_pr`, `release_pr`,
+`implementation_pr`.
+
+`closeout check` output must include `pr_roles` and `current_pr_role`, so the
+operator can see exactly which role is being consumed. This classifier only
+chooses the host PR readback subject; release/no-release requiredness,
+target-release gaps, reconciliation findings, review freshness, and carrier
+sync eligibility continue to be decided by their existing closeout inputs.
+
 ## 3. `check` 最小检查面
 
 `closeout check` 至少读取：
 
 - closeout contract gate source、profile、subchecks 与 trigger reason
+- PR role classifier readback: `pr_roles.current.role`,
+  `pr_roles.current.number`, and source flag used for the current closeout
+  readback
 - 同范围 `reconciliation audit` 结果
 - 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence；Loom 自身 CLI release 还必须消费 `docs/adoption/loom-cli-release-surface.md` 中冻结的 release validation evidence contract
 - issue 状态
