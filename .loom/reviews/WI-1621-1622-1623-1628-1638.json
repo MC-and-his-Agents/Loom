@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1621-1622-1623-1628-1638",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "Reviewed milestone #14 contract-freeze PR after adding suite evidence map, task carrier, and refreshed shadow/status carriers. Scope remains limited to adoption/install/installed-state/host adapter/AGENTS bootstrap contracts and Work Item carriers; no CLI implementation, release, package, generated skill, or repo-local plugin payload surface was introduced. Local targeted checks, suite inspect/evidence/carrier validation, suite not_applicable validation, and shadow parity passed on the reviewed head.",
+  "reviewer": "Codex same-thread review",
+  "authored_at": "2026-06-19T11:19:05Z",
+  "reviewed_head": "299ef9970b3b25b1e0696a2382c1975fe253595c",
+  "reviewed_validation_summary": "2026-06-19T11:16Z in `/Users/mc/dev/Loom-m14-contracts` on branch `work/1621-1628-global-install-contracts`: `git diff --check` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 tools/host_adapter_check.py` passed; `python3 tools/check_release_surface.py` passed; `npm --prefix packages/loom-installer run check:docs` passed; `python3 tools/check_cli_contract.py --surface adoption-host-metadata` passed; `python3 tools/loom.py suite inspect --target . --item WI-1621-1622-1623-1628-1638 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1621-1622-1623-1628-1638 --json` returned `not_applicable` with no blocking gaps; `python3 tools/loom.py suite evidence validate --target . --item WI-1621-1622-1623-1628-1638 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1621-1622-1623-1628-1638 --json` passed; `python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1621-1622-1623-1628-1638.md",
+    "recovery_entry": ".loom/progress/WI-1621-1622-1623-1628-1638.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

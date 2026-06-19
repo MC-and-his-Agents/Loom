@@ -5,6 +5,12 @@ type, scope, authority, and skills granularity. Other adoption, installed-state,
 CLI, and host-adapter documents should reference this contract instead of
 redefining install meanings.
 
+The milestone #14 downstream target is defined by
+[global-cli-user-plugin-contract.md](./global-cli-user-plugin-contract.md):
+global `loom` CLI, Codex user-level Loom plugin, and metadata-only repository
+adoption. Repo-local runtime, repo-local plugin payload, and single-skill
+distribution are legacy surfaces for detection and migration only.
+
 ## Authority Boundaries
 
 Loom separates repository truth from workstation truth:
@@ -14,7 +20,7 @@ Loom separates repository truth from workstation truth:
 | Repository adoption truth | Versioned target repository | `.loom/installed-state.json` and equivalent compatibility paths | Codex Desktop registration, user plugin cache, personal marketplace entries |
 | Repo-owned governance residue | Versioned target repository | `.loom/companion`, repo interop metadata, evidence carriers, repo-native gates and closeout evidence | Loom plugin payload ownership or workstation discovery |
 | Global CLI runtime provider | User/workstation executable plus its shipped runtime | The `loom` command semantics, packaged runtime/provider version, and external provider provenance | Repository adoption truth, repo-owned governance residue, or workstation registration truth |
-| Embedded repository payload | Versioned target repository, explicit opt-in | `plugins/loom/.codex-plugin/plugin.json` and `plugins/loom/skills/` | User-level Codex plugin registration |
+| Embedded repository payload | Versioned target repository, legacy residue | `plugins/loom/.codex-plugin/plugin.json` and `plugins/loom/skills/` | User-level Codex plugin registration |
 | Workstation registration truth | User workstation | Codex personal marketplace entry, user plugin cache, Codex config enablement | Repository adoption truth or repo-owned governance evidence |
 | Compatibility export | Explicit export target | `.agents/skills` or another host compatibility surface selected by the operator | Default Loom downstream adoption |
 | Host repository namespace | Target repository | Root `skills/` when the target repository owns skills | Loom-generated downstream skills by default |
@@ -40,11 +46,11 @@ diagnosing them:
 | Repo companion / interop / evidence | Repository | Repo-owned governance residue | Preserved across plugin and provider changes. |
 | Global CLI runtime provider | User/workstation | Global CLI runtime provider | The default CLI-owned provider surface for `loom` command semantics and shipped runtime. |
 | Host adapter plugin manifest | Repository or user plugin source | Embedded repository payload or workstation provider | Repository copy is only required in embedded payload mode. |
-| Plugin-embedded skills bundle | Repository | Embedded repository payload | `plugins/loom/skills/` is required only when `repo_payload.mode = embedded`. |
+| Plugin-embedded skills bundle | Repository | Legacy embedded repository payload | `plugins/loom/skills/` is unsupported legacy residue for the milestone #14 target. |
 | User-level skills provider | Workstation | Workstation registration truth | Used by metadata-only adoption; verified separately from repo truth. |
 | Full Loom skills bundle export | Compatibility export | Compatibility/discovery surface | Explicit opt-in; never the default metadata-only surface. |
-| Single Loom skill export | Compatibility export | Compatibility/discovery surface | Installs one generated skill package and must not imply the full Loom bundle. |
-| Runtime carrier | Repository or external runtime | Runtime carrier policy | `.loom/bin` and `.loom/bootstrap` can be current, retained, obsolete, or compatibility-only depending on installed-state. |
+| Single Loom skill export | Compatibility export | Legacy compatibility surface | Not a supported downstream install shape for the milestone #14 target. |
+| Runtime carrier | Repository or external runtime | Runtime carrier policy | `.loom/bin` and `.loom/bootstrap` are unsupported legacy residue unless a migration issue explicitly classifies them. |
 
 ## Repository Adoption Modes
 
@@ -57,8 +63,12 @@ residue, and relies on a user/workstation skills provider.
 Required semantics:
 
 - `repo_payload.mode = "metadata-only"`.
+- `runtime_provider = "global-cli"` or an equivalent provider declaration points
+  to the global root `loom` CLI.
 - `skills_provider.scope = "user"` or an equivalent layer declaration points to
   the user-level Codex Loom plugin.
+- Absence of `.loom/bin` is intentional.
+- Absence of `plugins/loom/.codex-plugin/plugin.json` is intentional.
 - Absence of `plugins/loom/skills/` is intentional.
 - Absence of `.agents/skills` and root `skills/` is intentional.
 - Missing workstation provider registration is diagnosed as external
@@ -70,23 +80,24 @@ They may diagnose missing global CLI or workstation provider state, but those
 diagnostics must remain outside repository truth unless installed-state
 explicitly models the dependency.
 
-### Embedded Repository Payload
+### Legacy Embedded Repository Payload
 
-Embedded payload mode remains supported for repositories that need a
-self-contained repository plugin payload.
+Embedded payload mode is legacy residue for downstream repositories. It is a
+detectable migration state, not a supported current install shape.
 
 Required semantics:
 
-- `repo_payload.mode = "embedded"` or equivalent legacy plugin-mode layers.
-- `plugins/loom/.codex-plugin/plugin.json` and `plugins/loom/skills/` are
+- `repo_payload.mode = "embedded"` or equivalent legacy plugin-mode layers are
+  migration inputs only.
+- `plugins/loom/.codex-plugin/plugin.json` and `plugins/loom/skills/` are legacy
   repository payload artifacts.
-- `loom host verify --host codex --mode plugin` validates the repository
-  payload strictly.
+- `loom host verify --host codex --mode plugin` is legacy verification and must
+  not be presented as the current adoption path.
 - Workstation registration remains separate and does not become repository
   truth.
 
-Embedded mode is explicit opt-in for downstream repositories. It is not the
-universal default for Codex adoption.
+Current Codex adoption installs the plugin at user scope from the global Loom
+package and writes no repo-local plugin payload.
 
 ### Global CLI Provider Dependency
 
@@ -112,10 +123,10 @@ Loom must keep these skills surfaces distinct:
 | Surface | Granularity | Default? | Contract |
 | --- | --- | --- | --- |
 | User-level Codex Loom plugin | Full provider | Yes for metadata-only repositories | Provides Loom scenario skills from workstation state. |
-| `plugins/loom/skills/` | Full embedded bundle | Only for embedded payload mode | Repository carries generated Loom skills with plugin payload. |
-| `.agents/skills` | Compatibility export | No | Explicit export for hosts that discover this layout. |
+| `plugins/loom/skills/` | Legacy embedded bundle | No | Unsupported legacy residue in downstream repositories. |
+| `.agents/skills` | Compatibility export | No | Legacy compatibility residue unless a future host issue explicitly owns it. |
 | Root `skills/` | Target-owned namespace | No | Protected as repo-owned unless explicit Loom ownership is proven. |
-| Single generated skill package | One skill | No | Follows `single-skill-contract.md` and does not imply full bundle availability. |
+| Single generated skill package | One skill | No | Legacy distribution shape; the plugin payload is the only current skills publishing shape. |
 
 Repair and upgrade plans must not delete or overwrite root `skills/`,
 `.agents/skills`, or other repo-owned skills without explicit ownership proof
@@ -123,9 +134,9 @@ and an operator-approved mutating action.
 
 ## Runtime Carriers
 
-Legacy `.loom/bin` and `.loom/bootstrap` carriers are runtime carriers, not
-skills providers and not plugin payload. Installed-state and doctor output must
-classify them explicitly:
+Legacy `.loom/bin` and `.loom/bootstrap` carriers are unsupported residue in
+downstream repositories, not skills providers and not plugin payload.
+Installed-state and doctor output must classify them explicitly:
 
 - `current`: the repository intentionally uses vendored runtime carriers.
 - `retained-for-consumer-gate`: repo-native gates still depend on the carrier.
@@ -136,24 +147,22 @@ classify them explicitly:
   handshake can diagnose, compare, repair, or retire it without treating it as
   the active provider.
 
-Metadata-only adoption may retain runtime carriers for audit or consumer gates.
-That retention must not make the repository look like an embedded skills
-payload install.
+Metadata-only adoption must not create runtime carriers. Retained carriers are
+migration residue only and must not make the repository look like an embedded
+skills payload install.
 
 ## Runtime Provider Modes
 
-Loom exposes two user-facing runtime provider modes:
+Loom exposes one current user-facing runtime provider mode:
 
 | Mode | Repository expectation | Provider authority | Validation entry |
 | --- | --- | --- | --- |
 | `global-cli` | `.loom/installed-state.json` records a dependency on the installed root `loom` command. No `.loom/bin` carrier is expected. | Global CLI runtime provider; workstation/user-level state remains outside repository truth. | `loom installed-state validate`, `loom doctor`, `loom verify`, `loom repair plan` |
-| `repo-local-wrapper` | `.loom/bin` or equivalent repo-local wrapper carriers are intentionally present and classified by installed-state. | Repository runtime carrier for wrapper/provenance, or compatibility delegation to the declared provider. | Same commands, plus wrapper residue/provenance classification in diagnostics |
+| `repo-local-wrapper` | Legacy residue only for the milestone #14 target. | Migration/provenance classification, not active provider authority. | Diagnostics only |
 
-For `global-cli` repositories, a detected `.loom/bin` directory is legacy or
-retained residue until installed-state explicitly says otherwise. It must not be
-used as proof that the repository owns the active runtime provider. For
-`repo-local-wrapper` repositories, `.loom/bin` remains a valid repository
-carrier when the metadata declares its current or retained role.
+For `global-cli` repositories, a detected `.loom/bin` directory is unsupported
+legacy residue. It must not be used as proof that the repository owns the active
+runtime provider.
 
 Copyable validation commands for a `global-cli` repository:
 
