@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1597",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current head accepted: WI-1597 host API auth/readback classifier behavior remains scoped after merging main #1595/#1600 metadata/runtime updates and serially consuming WI-1600 terminal carrier metadata; workspace audit, host metadata/pr metadata contract checks, skills surface, demo bootstrap, suite evidence, and suite carrier validations passed.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-19T05:40:47Z",
+  "reviewed_head": "f58f111aa375cf1a4231408879f5cac75062b9fe",
+  "reviewed_validation_summary": "2026-06-19 WI-1597 merge-ready validation: workspace audit passed; py_compile_clean passed; host adapter/auth classifier checks passed; check_cli_contract passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; PR #1607 metadata readback/preflight must be re-read after final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile had passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at last readback.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1597.md",
+    "recovery_entry": ".loom/progress/WI-1597.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1597-host-api-auth/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1597-host-api-auth --item WI-1597 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1597-host-api-auth/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1597-host-api-auth --item WI-1597 --json",
+    "suite_evidence_map": ".loom/specs/WI-1597/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1597/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

@@ -7101,6 +7101,20 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError(f"failure classifier mapping missing {sorted(required_classifiers - observed_classifiers)}")
     if not all(finding.get("next_action") for finding in classifier_payload.get("findings", [])):
         raise AssertionError("failure classifier findings must include next_action")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["host_api_unreadable"]:
+        raise AssertionError("host_api_unreadable next_action must expose the single-command token bridge")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["permission"]:
+        raise AssertionError("permission next_action must expose the single-command token bridge")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: API rate limit exceeded"]) != "host_api_unreadable":
+        raise AssertionError("GitHub API rate-limit diagnostics must classify as host_api_unreadable")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: Resource not accessible by integration"]) != "permission":
+        raise AssertionError("GitHub permission diagnostics must classify as permission")
+    rate_limit_diagnostic = loom_flow.host_api_diagnostic_message(
+        "gh api repos/example/repo",
+        ["HTTP 403 Forbidden: API rate limit exceeded"],
+    )
+    if "classifier=host_api_unreadable" not in rate_limit_diagnostic or "CODEX_EXPORT_GH_TOKEN=1" not in rate_limit_diagnostic:
+        raise AssertionError("host API diagnostics must include classifier and token bridge next_action")
     subject = freeze_payload.get("snapshot_subject")
     input_bindings = freeze_payload.get("input_bindings", {})
     pr_metadata = input_bindings.get("pr_metadata") if isinstance(input_bindings, dict) else None

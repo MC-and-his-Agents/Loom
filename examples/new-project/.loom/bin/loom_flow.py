@@ -218,9 +218,9 @@ FAILURE_CLASSIFIER_NEXT_ACTIONS = {
     "carrier_refresh_needed": "refresh Loom carriers, then rerun gate freeze.",
     "shadow_stale": "refresh or restore shadow evidence, then rerun shadow parity and gate freeze.",
     "review_stale": "rerun authored Loom review for the current head, then rerun gate freeze.",
-    "host_api_unreadable": "bridge an explicit GH_TOKEN/GITHUB_TOKEN for this command or retry after host API access recovers.",
+    "host_api_unreadable": "rerun the same command as `CODEX_EXPORT_GH_TOKEN=1 <same loom command>` so the wrapper can bridge the local gh keyring token into GH_TOKEN for this process only; do not export GH_TOKEN/GITHUB_TOKEN globally.",
     "ci_environment": "fix the CI/runtime environment and rerun the check.",
-    "permission": "fix host permissions or bridge an explicit token for this command.",
+    "permission": "fix host permissions or rerun the same command as `CODEX_EXPORT_GH_TOKEN=1 <same loom command>` so the wrapper can bridge the local gh keyring token into GH_TOKEN for this process only.",
     "external_service_flake": "wait for the external service to recover, then rerun once.",
     "suite_evidence_contract_invalid": "fix suite evidence contract fields, then rerun suite evidence validation.",
     "task_carrier_contract_invalid": "fix Work Item/task carrier fields, then rerun suite carrier validation.",
@@ -230,6 +230,8 @@ FAILURE_CLASSIFIER_NEXT_ACTIONS = {
     "hosted_snapshot_mismatch": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
     "release_evidence_phase_error": "record release/no-release evidence in the correct phase, then rerun gate freeze.",
 }
+HOST_API_TOKEN_BRIDGE_COMMAND = "CODEX_EXPORT_GH_TOKEN=1 <same loom command>"
+HOST_API_TOKEN_BRIDGE_NEXT_ACTION = FAILURE_CLASSIFIER_NEXT_ACTIONS["host_api_unreadable"]
 GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID = "loom-governance-intensity"
 GOVERNANCE_INTENSITY_VALUES = {"light", "standard", "reinforced"}
 GOVERNANCE_CHANGE_CLASS_VALUES = {
@@ -4637,6 +4639,48 @@ def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = N
     )
 
 
+def host_api_env_token_present() -> bool:
+    return bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+
+
+def host_api_gh_logged_in(root: Path) -> bool:
+    try:
+        result = run_process(["gh", "auth", "status"], root, timeout_seconds=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def host_api_failure_classifier(messages: list[str]) -> str:
+    text = " ".join(str(message) for message in messages).lower()
+    if any(token in text for token in ("rate limit", "api rate limit exceeded", "secondary rate limit")):
+        return "host_api_unreadable"
+    if any(token in text for token in ("resource not accessible", "permission", "forbidden", "403")):
+        return "permission"
+    return "host_api_unreadable"
+
+
+def host_api_diagnostic_message(subject: str, messages: list[str]) -> str:
+    classifier = host_api_failure_classifier(messages)
+    detail = "; ".join(str(message).strip() for message in messages if str(message).strip()) or "host API read failed"
+    next_action = FAILURE_CLASSIFIER_NEXT_ACTIONS[classifier]
+    return f"{subject} failed (classifier={classifier}; next_action={next_action}): {detail}"
+
+
+def host_api_anonymous_fallback_blocked(root: Path, path: str, gh_errors: list[str]) -> list[str]:
+    if host_api_env_token_present() or not host_api_gh_logged_in(root):
+        return []
+    return [
+        host_api_diagnostic_message(
+            f"gh api {path}",
+            [
+                *gh_errors,
+                "refusing anonymous public REST fallback because local gh auth is available but GH_TOKEN/GITHUB_TOKEN is not present in this process",
+            ],
+        )
+    ]
+
+
 def suite_validation_command_payload(
     context: dict[str, Any],
     *,
@@ -5028,7 +5072,8 @@ def closeout_required_status_subcheck(
         label="branch rules/ruleset fixture",
     )
     if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
-        ruleset_payload, ruleset_errors = github_public_rest_list(
+        ruleset_payload, ruleset_errors = gh_rest_list(
+            target_root,
             f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
         )
     missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
@@ -6050,11 +6095,13 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
     try:
         result = run_process(["gh", *args], root, timeout_seconds=20)
     except FileNotFoundError:
-        return None, ["gh command is unavailable in PATH"]
+        return None, [host_api_diagnostic_message(f"gh {' '.join(args)}", ["gh command is unavailable in PATH"])]
     except subprocess.TimeoutExpired:
-        return None, [f"gh {' '.join(args)} timed out after 20s"]
+        return None, [host_api_diagnostic_message(f"gh {' '.join(args)}", [f"gh {' '.join(args)} timed out after 20s"])]
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
+        if args and args[0] in {"api", "pr", "project"}:
+            detail = host_api_diagnostic_message(f"gh {' '.join(args)}", [detail])
         return None, [detail]
     try:
         payload = json.loads(result.stdout)
@@ -6069,6 +6116,9 @@ def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str
     payload, errors = gh_json(root, ["api", path])
     if payload is not None or not errors:
         return payload, errors
+    blocked_errors = host_api_anonymous_fallback_blocked(root, path, errors)
+    if blocked_errors:
+        return None, blocked_errors
     fallback_payload, fallback_errors = github_public_rest_json(path)
     if fallback_payload is not None:
         return fallback_payload, []
@@ -6079,7 +6129,21 @@ def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]
     raw_payload, errors = gh_json(root, ["api", path])
     if raw_payload is not None:
         return [], [f"gh api {path} returned an object where a list was expected"]
-    result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    try:
+        result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    except FileNotFoundError:
+        result = None
+        detail = "gh command is unavailable in PATH"
+    except subprocess.TimeoutExpired:
+        result = None
+        detail = f"gh api {path} timed out after 20s"
+    else:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
+    if result is None:
+        fallback_payload, fallback_errors = github_public_rest_list(path)
+        if fallback_payload:
+            return fallback_payload, []
+        return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
     if result.returncode == 0:
         try:
             payload = json.loads(result.stdout)
@@ -6088,11 +6152,13 @@ def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]
         if not isinstance(payload, list):
             return [], [f"gh api {path} did not return a list"]
         return [entry for entry in payload if isinstance(entry, dict)], []
+    blocked_errors = host_api_anonymous_fallback_blocked(root, path, [detail])
+    if blocked_errors:
+        return [], blocked_errors
     fallback_payload, fallback_errors = github_public_rest_list(path)
     if fallback_payload:
         return fallback_payload, []
-    detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
-    return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+    return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
 
 
 def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -6110,11 +6176,11 @@ def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]
             text = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace").strip()
-        return None, [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"HTTP {exc.code} {exc.reason}: {detail or url}"])]
     except URLError as exc:
-        return None, [f"REST request failed: {exc.reason}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc.reason}"])]
     except OSError as exc:
-        return None, [f"REST request failed: {exc}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc}"])]
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -6139,11 +6205,11 @@ def github_public_rest_list(path: str) -> tuple[list[dict[str, Any]], list[str]]
             text = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace").strip()
-        return [], [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"HTTP {exc.code} {exc.reason}: {detail or url}"])]
     except URLError as exc:
-        return [], [f"REST request failed: {exc.reason}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc.reason}"])]
     except OSError as exc:
-        return [], [f"REST request failed: {exc}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc}"])]
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -15326,10 +15392,13 @@ def github_commit_pulls(root: Path, owner: str, repo_name: str, head_sha: str) -
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh api commit pulls failed"
+        blocked_errors = host_api_anonymous_fallback_blocked(root, path, [detail])
+        if blocked_errors:
+            return [], blocked_errors
         pulls, fallback_errors = github_public_rest_list(path)
         if pulls:
             return pulls, []
-        return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+        return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -20928,7 +20997,8 @@ def controlled_merge_payload(
         label="branch rules/ruleset fixture",
     )
     if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
-        ruleset_payload, ruleset_errors = github_public_rest_list(
+        ruleset_payload, ruleset_errors = gh_rest_list(
+            target_root,
             f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
         )
     if ruleset_errors:
