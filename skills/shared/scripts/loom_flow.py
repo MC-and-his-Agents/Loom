@@ -129,6 +129,12 @@ CLOSEOUT_GATE_PROFILES = (
     "distribution-regression",
     "strong-profile-full-gate",
 )
+CLOSEOUT_PR_ROLES = (
+    "implementation_pr",
+    "release_pr",
+    "carrier_sync_pr",
+    "final_closeout_pr",
+)
 CLOSEOUT_LIGHT_PROFILE = "closeout-contract"
 CLOSEOUT_HEAVY_PROFILES = {
     "source-self-fixture",
@@ -218,9 +224,9 @@ FAILURE_CLASSIFIER_NEXT_ACTIONS = {
     "carrier_refresh_needed": "refresh Loom carriers, then rerun gate freeze.",
     "shadow_stale": "refresh or restore shadow evidence, then rerun shadow parity and gate freeze.",
     "review_stale": "rerun authored Loom review for the current head, then rerun gate freeze.",
-    "host_api_unreadable": "bridge an explicit GH_TOKEN/GITHUB_TOKEN for this command or retry after host API access recovers.",
+    "host_api_unreadable": "rerun the same command as `CODEX_EXPORT_GH_TOKEN=1 <same loom command>` so the wrapper can bridge the local gh keyring token into GH_TOKEN for this process only; do not export GH_TOKEN/GITHUB_TOKEN globally.",
     "ci_environment": "fix the CI/runtime environment and rerun the check.",
-    "permission": "fix host permissions or bridge an explicit token for this command.",
+    "permission": "fix host permissions or rerun the same command as `CODEX_EXPORT_GH_TOKEN=1 <same loom command>` so the wrapper can bridge the local gh keyring token into GH_TOKEN for this process only.",
     "external_service_flake": "wait for the external service to recover, then rerun once.",
     "suite_evidence_contract_invalid": "fix suite evidence contract fields, then rerun suite evidence validation.",
     "task_carrier_contract_invalid": "fix Work Item/task carrier fields, then rerun suite carrier validation.",
@@ -230,6 +236,8 @@ FAILURE_CLASSIFIER_NEXT_ACTIONS = {
     "hosted_snapshot_mismatch": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
     "release_evidence_phase_error": "record release/no-release evidence in the correct phase, then rerun gate freeze.",
 }
+HOST_API_TOKEN_BRIDGE_COMMAND = "CODEX_EXPORT_GH_TOKEN=1 <same loom command>"
+HOST_API_TOKEN_BRIDGE_NEXT_ACTION = FAILURE_CLASSIFIER_NEXT_ACTIONS["host_api_unreadable"]
 GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID = "loom-governance-intensity"
 GOVERNANCE_INTENSITY_VALUES = {"light", "standard", "reinforced"}
 GOVERNANCE_CHANGE_CLASS_VALUES = {
@@ -252,6 +260,15 @@ GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS = (
     "scope_proof",
     "review_requirement",
 )
+PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES = {
+    "parser_version": list(PR_METADATA_SUPPORTED_PARSER_VERSIONS),
+    "fields.governance_intensity": sorted(GOVERNANCE_INTENSITY_VALUES),
+    "fields.change_class": sorted(GOVERNANCE_CHANGE_CLASS_VALUES),
+    "fields.suite_path": sorted(GOVERNANCE_SUITE_PATH_VALUES),
+    "fields.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
+    "fields.release_judgment": sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES),
+    "fields.suite_not_applicable.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
+}
 GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "fixture", "release", "external_action", "mixed"}
 GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS = "docs_governance"
 GOVERNANCE_LITE_ALLOWED_SUITE_PATH = "not_applicable"
@@ -805,6 +822,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--suite-na-recheck-condition")
     pr_metadata.add_argument("--suite-na-scope-proof")
     pr_metadata.add_argument("--suite-na-review-requirement")
+    pr_metadata.add_argument("--dry-run", action="store_true", default=True, help="Preview metadata update/rendered preflight without writing the host PR body; this is the default")
+    pr_metadata.add_argument("--apply", dest="dry_run", action="store_false", help="Write the rendered body to the host PR, then read it back and rerun metadata preflight")
 
     gate_freeze = subparsers.add_parser("gate-freeze", help="Generate or validate hosted gate input freeze snapshots")
     gate_freeze.add_argument("operation", choices=("check", "write"))
@@ -999,6 +1018,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--item", help="Expected retained Loom Work Item id for closeout disambiguation")
     closeout.add_argument("--issue", type=int, help="GitHub issue number to validate or sync")
     closeout.add_argument("--pr", type=int, help="GitHub pull request number to validate or sync")
+    closeout.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, help="Explicit closeout PR role consumed by this check")
+    closeout.add_argument("--implementation-pr", type=int, help="Implementation PR number for the closeout subject")
+    closeout.add_argument("--release-pr", type=int, help="Release PR number for the closeout subject")
+    closeout.add_argument("--carrier-sync-pr", type=int, help="Carrier sync PR number for the closeout subject")
+    closeout.add_argument("--final-closeout-pr", type=int, help="Final closeout PR number for the closeout subject")
     closeout.add_argument("--project", type=int, help="GitHub project number to validate or sync")
     closeout.add_argument("--phase", type=int, help="GitHub Phase issue number")
     closeout.add_argument("--fr", type=int, help="GitHub FR issue number")
@@ -1039,6 +1063,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--item", help="Expected retained Loom Work Item id for reconciliation disambiguation")
     reconciliation.add_argument("--issue", type=int, help="GitHub issue number to audit")
     reconciliation.add_argument("--pr", type=int, help="GitHub pull request number to audit")
+    reconciliation.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, help="Explicit closeout PR role consumed by this reconciliation read")
+    reconciliation.add_argument("--implementation-pr", type=int, help="Implementation PR number for the closeout subject")
+    reconciliation.add_argument("--release-pr", type=int, help="Release PR number for the closeout subject")
+    reconciliation.add_argument("--carrier-sync-pr", type=int, help="Carrier sync PR number for the closeout subject")
+    reconciliation.add_argument("--final-closeout-pr", type=int, help="Final closeout PR number for the closeout subject")
     reconciliation.add_argument("--project", type=int, help="GitHub project number to audit")
     reconciliation.add_argument("--phase", type=int, help="GitHub Phase issue number")
     reconciliation.add_argument("--fr", type=int, help="GitHub FR issue number")
@@ -4626,6 +4655,48 @@ def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = N
     )
 
 
+def host_api_env_token_present() -> bool:
+    return bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+
+
+def host_api_gh_logged_in(root: Path) -> bool:
+    try:
+        result = run_process(["gh", "auth", "status"], root, timeout_seconds=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def host_api_failure_classifier(messages: list[str]) -> str:
+    text = " ".join(str(message) for message in messages).lower()
+    if any(token in text for token in ("rate limit", "api rate limit exceeded", "secondary rate limit")):
+        return "host_api_unreadable"
+    if any(token in text for token in ("resource not accessible", "permission", "forbidden", "403")):
+        return "permission"
+    return "host_api_unreadable"
+
+
+def host_api_diagnostic_message(subject: str, messages: list[str]) -> str:
+    classifier = host_api_failure_classifier(messages)
+    detail = "; ".join(str(message).strip() for message in messages if str(message).strip()) or "host API read failed"
+    next_action = FAILURE_CLASSIFIER_NEXT_ACTIONS[classifier]
+    return f"{subject} failed (classifier={classifier}; next_action={next_action}): {detail}"
+
+
+def host_api_anonymous_fallback_blocked(root: Path, path: str, gh_errors: list[str]) -> list[str]:
+    if host_api_env_token_present() or not host_api_gh_logged_in(root):
+        return []
+    return [
+        host_api_diagnostic_message(
+            f"gh api {path}",
+            [
+                *gh_errors,
+                "refusing anonymous public REST fallback because local gh auth is available but GH_TOKEN/GITHUB_TOKEN is not present in this process",
+            ],
+        )
+    ]
+
+
 def suite_validation_command_payload(
     context: dict[str, Any],
     *,
@@ -4876,6 +4947,67 @@ def effective_closeout_gate_profile(profile: str | None) -> str:
     return CLOSEOUT_LIGHT_PROFILE if profile in {None, "auto"} else profile
 
 
+def closeout_pr_role_numbers_from_args(args: argparse.Namespace) -> dict[str, int]:
+    roles: dict[str, int] = {}
+    for role in CLOSEOUT_PR_ROLES:
+        value = getattr(args, role, None)
+        if value is not None:
+            roles[role] = int(value)
+    return roles
+
+
+def closeout_pr_roles_payload(
+    *,
+    legacy_pr_number: int | None,
+    role_numbers: dict[str, int],
+    requested_role: str | None,
+) -> dict[str, Any]:
+    current_role: str | None = None
+    current_number: int | None = None
+    source: str | None = None
+
+    if requested_role is not None:
+        current_role = requested_role
+        current_number = role_numbers.get(requested_role, legacy_pr_number)
+        source = f"--{requested_role.replace('_', '-')}" if requested_role in role_numbers else "--pr plus --pr-role"
+    else:
+        for role in ("final_closeout_pr", "carrier_sync_pr", "release_pr", "implementation_pr"):
+            if role in role_numbers:
+                current_role = role
+                current_number = role_numbers[role]
+                source = f"--{role.replace('_', '-')}"
+                break
+        if current_role is None and legacy_pr_number is not None:
+            current_role = "implementation_pr"
+            current_number = legacy_pr_number
+            source = "--pr"
+
+    summary = (
+        f"closeout check is consuming `{current_role}` PR #{current_number}."
+        if current_role is not None and current_number is not None
+        else "closeout check has no PR role input; host PR readback is not role-bound."
+    )
+    return {
+        "schema_version": "loom-closeout-pr-roles/v1",
+        "supported_roles": list(CLOSEOUT_PR_ROLES),
+        "roles": {role: role_numbers[role] for role in CLOSEOUT_PR_ROLES if role in role_numbers},
+        "legacy_pr": legacy_pr_number,
+        "requested_role": requested_role,
+        "current": {
+            "role": current_role,
+            "number": current_number,
+            "source": source,
+        },
+        "summary": summary,
+    }
+
+
+def closeout_current_pr_number(pr_roles: dict[str, Any]) -> int | None:
+    current = pr_roles.get("current") if isinstance(pr_roles, dict) else None
+    number = current.get("number") if isinstance(current, dict) else None
+    return int(number) if isinstance(number, int) else None
+
+
 def closeout_subcheck(
     *,
     check_id: str,
@@ -5017,7 +5149,8 @@ def closeout_required_status_subcheck(
         label="branch rules/ruleset fixture",
     )
     if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
-        ruleset_payload, ruleset_errors = github_public_rest_list(
+        ruleset_payload, ruleset_errors = gh_rest_list(
+            target_root,
             f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
         )
     missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
@@ -6039,11 +6172,13 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
     try:
         result = run_process(["gh", *args], root, timeout_seconds=20)
     except FileNotFoundError:
-        return None, ["gh command is unavailable in PATH"]
+        return None, [host_api_diagnostic_message(f"gh {' '.join(args)}", ["gh command is unavailable in PATH"])]
     except subprocess.TimeoutExpired:
-        return None, [f"gh {' '.join(args)} timed out after 20s"]
+        return None, [host_api_diagnostic_message(f"gh {' '.join(args)}", [f"gh {' '.join(args)} timed out after 20s"])]
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
+        if args and args[0] in {"api", "pr", "project"}:
+            detail = host_api_diagnostic_message(f"gh {' '.join(args)}", [detail])
         return None, [detail]
     try:
         payload = json.loads(result.stdout)
@@ -6058,6 +6193,9 @@ def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str
     payload, errors = gh_json(root, ["api", path])
     if payload is not None or not errors:
         return payload, errors
+    blocked_errors = host_api_anonymous_fallback_blocked(root, path, errors)
+    if blocked_errors:
+        return None, blocked_errors
     fallback_payload, fallback_errors = github_public_rest_json(path)
     if fallback_payload is not None:
         return fallback_payload, []
@@ -6068,7 +6206,21 @@ def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]
     raw_payload, errors = gh_json(root, ["api", path])
     if raw_payload is not None:
         return [], [f"gh api {path} returned an object where a list was expected"]
-    result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    try:
+        result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    except FileNotFoundError:
+        result = None
+        detail = "gh command is unavailable in PATH"
+    except subprocess.TimeoutExpired:
+        result = None
+        detail = f"gh api {path} timed out after 20s"
+    else:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
+    if result is None:
+        fallback_payload, fallback_errors = github_public_rest_list(path)
+        if fallback_payload:
+            return fallback_payload, []
+        return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
     if result.returncode == 0:
         try:
             payload = json.loads(result.stdout)
@@ -6077,11 +6229,13 @@ def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]
         if not isinstance(payload, list):
             return [], [f"gh api {path} did not return a list"]
         return [entry for entry in payload if isinstance(entry, dict)], []
+    blocked_errors = host_api_anonymous_fallback_blocked(root, path, [detail])
+    if blocked_errors:
+        return [], blocked_errors
     fallback_payload, fallback_errors = github_public_rest_list(path)
     if fallback_payload:
         return fallback_payload, []
-    detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
-    return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+    return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
 
 
 def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -6099,11 +6253,11 @@ def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]
             text = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace").strip()
-        return None, [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"HTTP {exc.code} {exc.reason}: {detail or url}"])]
     except URLError as exc:
-        return None, [f"REST request failed: {exc.reason}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc.reason}"])]
     except OSError as exc:
-        return None, [f"REST request failed: {exc}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc}"])]
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -6128,11 +6282,11 @@ def github_public_rest_list(path: str) -> tuple[list[dict[str, Any]], list[str]]
             text = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace").strip()
-        return [], [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"HTTP {exc.code} {exc.reason}: {detail or url}"])]
     except URLError as exc:
-        return [], [f"REST request failed: {exc.reason}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc.reason}"])]
     except OSError as exc:
-        return [], [f"REST request failed: {exc}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc}"])]
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -6460,18 +6614,95 @@ def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, is
     }
 
 
+ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER = "loom:issue-dependencies"
+ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA = "loom-issue-dependencies/v1"
+
+
+def issue_dependency_html_comment_blocks(body: str) -> list[str]:
+    pattern = re.compile(
+        rf"<!--\s*{re.escape(ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER)}\s*(.*?)\s*-->",
+        flags=re.DOTALL,
+    )
+    return [match.group(1).strip() for match in pattern.finditer(body)]
+
+
+def normalize_issue_reference(value: Any) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str):
+        match = re.fullmatch(r"\s*#?(\d+)\s*", value)
+        if match:
+            return int(match.group(1))
+    if isinstance(value, dict):
+        number = value.get("number")
+        if isinstance(number, int) and number > 0:
+            return number
+    return None
+
+
+def normalize_issue_reference_list(value: Any) -> list[int]:
+    values = value if isinstance(value, list) else [value]
+    normalized: list[int] = []
+    for entry in values:
+        issue_number = normalize_issue_reference(entry)
+        if issue_number is not None:
+            normalized.append(issue_number)
+    return normalized
+
+
+def issue_dependency_machine_block_payloads(issue_body: str) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    for raw in issue_dependency_html_comment_blocks(issue_body):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        schema_version = payload.get("schema_version")
+        if schema_version not in (None, ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA):
+            continue
+        payloads.append(payload)
+    return payloads
+
+
 def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -> list[dict[str, Any]]:
     if not isinstance(issue_body, str) or issue_number is None:
         return []
     edges: list[dict[str, Any]] = []
     seen: set[tuple[int, int, str]] = set()
-    patterns = (
-        ("blocked_by", r"(?im)(?:blocked\s+by|blocked_by|depends\s+on|dependency|依赖|前置)[^\n#]*(?:#)(\d+)"),
-        ("blocking", r"(?im)(?:blocks|blocking|阻塞)[^\n#]*(?:#)(\d+)"),
-    )
-    for relation, pattern in patterns:
-        for match in re.finditer(pattern, issue_body):
-            other = int(match.group(1))
+    for block_index, payload in enumerate(issue_dependency_machine_block_payloads(issue_body), start=1):
+        dependency_payload = payload.get("dependencies") if isinstance(payload.get("dependencies"), dict) else payload
+        relation_values: list[tuple[str, int]] = []
+        for relation, field_names in (
+            ("blocked_by", ("blocked_by", "blockedBy", "depends_on", "dependsOn")),
+            ("blocking", ("blocks", "blocking")),
+        ):
+            for field_name in field_names:
+                if field_name not in dependency_payload:
+                    continue
+                for other in normalize_issue_reference_list(dependency_payload.get(field_name)):
+                    relation_values.append((relation, other))
+                break
+        raw_edges = dependency_payload.get("edges")
+        if isinstance(raw_edges, list):
+            for raw_edge in raw_edges:
+                if not isinstance(raw_edge, dict):
+                    continue
+                direction = raw_edge.get("direction")
+                if direction == "blocked_by":
+                    other = normalize_issue_reference(
+                        raw_edge.get("blocking_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                elif direction == "blocking":
+                    other = normalize_issue_reference(
+                        raw_edge.get("source_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                else:
+                    continue
+                if other is not None:
+                    relation_values.append((direction, other))
+        for relation, other in relation_values:
             source = issue_number if relation == "blocked_by" else other
             blocker = other if relation == "blocked_by" else issue_number
             key = (source, blocker, relation)
@@ -6484,13 +6715,15 @@ def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -
                     "blocking_issue": blocker,
                     "direction": relation,
                     "blocker_state": "unknown",
-                    "source_of_truth": "issue_body_dependency_section",
+                    "source_of_truth": "issue_body_machine_block",
                     "host_mirror_status": "requires_native_compare",
                     "native": "unknown",
                     "provenance": {
                         "source_layer": "authored_truth",
-                        "source_owner": "github_issue_body",
-                        "source_locator": f"issue #{issue_number}",
+                        "source_owner": "github_issue_machine_block",
+                        "source_locator": (
+                            f"issue #{issue_number} {ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER} block {block_index}"
+                        ),
                         "freshness": "fresh",
                     },
                 }
@@ -15236,10 +15469,13 @@ def github_commit_pulls(root: Path, owner: str, repo_name: str, head_sha: str) -
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh api commit pulls failed"
+        blocked_errors = host_api_anonymous_fallback_blocked(root, path, [detail])
+        if blocked_errors:
+            return [], blocked_errors
         pulls, fallback_errors = github_public_rest_list(path)
         if pulls:
             return pulls, []
-        return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+        return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -16048,6 +16284,65 @@ def pr_metadata_body_artifact_payload(
     }
 
 
+def pr_metadata_allowed_values(missing_fields: list[str] | None) -> dict[str, list[str]]:
+    allowed_values: dict[str, list[str]] = {}
+    for field in missing_fields or []:
+        values = PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES.get(field)
+        if values:
+            allowed_values[field] = values
+    return allowed_values
+
+
+def pr_metadata_diagnostic_classifier(
+    *,
+    reason: str,
+    missing_fields: list[str] | None,
+    parse_error: str | None,
+) -> str:
+    fields = set(missing_fields or [])
+    if parse_error:
+        return "parse_error"
+    if {"metadata_contract_id", "surface"} & fields:
+        return "surface_drift"
+    if "fields.head_sha" in fields or "head" in reason.lower():
+        return "head_sha_drift"
+    if "fields.branch" in fields or "branch" in reason.lower():
+        return "branch_drift"
+    if any(field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES for field in fields):
+        return "enum_violation"
+    if "metadata_block" in fields or "pr.body" in fields:
+        return "missing_machine_block"
+    return "contract_violation"
+
+
+def pr_metadata_diagnostic_next_action(
+    *,
+    classifier: str,
+    fallback_to: str,
+    expected_surface: str | None,
+    missing_fields: list[str] | None,
+) -> str:
+    fields = set(missing_fields or [])
+    if classifier == "surface_drift":
+        surface = expected_surface or "the requested surface"
+        return f"rerender the PR metadata machine block for surface `{surface}` and replace the stale carrier before rerunning preflight."
+    if classifier == "head_sha_drift":
+        return "refresh `Head SHA` in both the PR body bindings and machine block from the current PR head, or rerun with `--head-sha <40-hex>`, then rerun preflight."
+    if classifier == "branch_drift":
+        return "refresh `Branch` in both the PR body bindings and machine block from the current `work/...` branch, or rerun with `--branch <work/...>`, then rerun preflight."
+    if classifier == "enum_violation":
+        invalid_fields = sorted(field for field in fields if field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES)
+        field_list = ", ".join(invalid_fields) if invalid_fields else "the governance enum fields"
+        return f"rewrite {field_list} to one of the allowed values, then rerun preflight."
+    if classifier == "parse_error":
+        return "rerender or rewrite the PR metadata HTML comment JSON block so it decodes cleanly, then rerun preflight."
+    if classifier == "missing_machine_block":
+        return "render or restore the declared PR metadata machine block before rerunning preflight."
+    if fallback_to == "update_pr_body":
+        return "regenerate or update the PR body machine carrier, then rerun preflight."
+    return "repair the declared PR metadata carrier inputs, then rerun preflight."
+
+
 def pr_metadata_diagnostic(
     *,
     contract_id: str,
@@ -16061,19 +16356,35 @@ def pr_metadata_diagnostic(
     block_locator: dict[str, Any] | None = None,
     parse_error: str | None = None,
     missing_fields: list[str] | None = None,
+    expected_surface: str | None = None,
 ) -> dict[str, Any]:
+    normalized_missing_fields = missing_fields or []
+    classifier = pr_metadata_diagnostic_classifier(
+        reason=reason,
+        missing_fields=normalized_missing_fields,
+        parse_error=parse_error,
+    )
     return {
+        "classifier": classifier,
         "metadata_contract_id": contract_id,
         "block_locator": block_locator,
         "source_locator": source_locator,
         "source_range_or_hash": source_range_or_hash,
         "parse_error": parse_error,
-        "missing_fields": missing_fields or [],
+        "missing_fields": normalized_missing_fields,
         "expected_schema": expected_schema or PR_METADATA_MACHINE_SCHEMA,
+        "expected_surface": expected_surface,
         "expected_parser_version": expected_parser_version or PR_METADATA_PARSER_VERSION,
+        "allowed_values": pr_metadata_allowed_values(normalized_missing_fields),
         "expected_format": pr_metadata_expected_format(marker),
         "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
         "fallback_to": fallback_to,
+        "next_action": pr_metadata_diagnostic_next_action(
+            classifier=classifier,
+            fallback_to=fallback_to,
+            expected_surface=expected_surface,
+            missing_fields=normalized_missing_fields,
+        ),
         "reason": reason,
     }
 
@@ -16197,6 +16508,7 @@ def validate_pr_metadata_envelope(
                 expected_schema=expected_schema,
                 block_locator=block_locator,
                 parse_error="decoded JSON is not an object",
+                expected_surface=surface,
             )
         )
         return None, diagnostics
@@ -16244,6 +16556,7 @@ def validate_pr_metadata_envelope(
                 expected_schema=expected_schema,
                 block_locator=block_locator,
                 missing_fields=missing_fields,
+                expected_surface=surface,
             )
         )
         return None, diagnostics
@@ -16313,6 +16626,7 @@ def pr_metadata_contract_preflight(
             source_range_or_hash=source_range_or_hash,
             expected_schema=expected_schema,
             missing_fields=["pr.body"],
+            expected_surface=effective_surface,
         )
         result = "block" if migration_mode == "required" else "pass"
         return {
@@ -16339,6 +16653,7 @@ def pr_metadata_contract_preflight(
             source_range_or_hash=source_range_or_hash,
             expected_schema=expected_schema,
             missing_fields=["metadata_block"],
+            expected_surface=effective_surface,
         )
         result = "block" if migration_mode == "required" else "pass"
         return {
@@ -16361,17 +16676,18 @@ def pr_metadata_contract_preflight(
             envelope = json.loads(block["raw"])
         except json.JSONDecodeError as exc:
             diagnostics.append(
-                pr_metadata_diagnostic(
-                    contract_id=contract_id,
-                    marker=marker,
-                    reason="metadata machine block JSON is malformed",
-                    source_locator=authority_locator,
-                    source_range_or_hash=source_range_or_hash,
-                    expected_schema=expected_schema,
-                    block_locator=block["locator"],
-                    parse_error=exc.msg,
+                    pr_metadata_diagnostic(
+                        contract_id=contract_id,
+                        marker=marker,
+                        reason="metadata machine block JSON is malformed",
+                        source_locator=authority_locator,
+                        source_range_or_hash=source_range_or_hash,
+                        expected_schema=expected_schema,
+                        block_locator=block["locator"],
+                        parse_error=exc.msg,
+                        expected_surface=effective_surface,
+                    )
                 )
-            )
             continue
         normalized = None
         envelope_diagnostics: list[dict[str, Any]] = []
@@ -16426,6 +16742,7 @@ def pr_metadata_contract_preflight(
                             expected_schema=expected_schema,
                             block_locator=block["locator"],
                             missing_fields=dedupe_strings(binding_missing),
+                            expected_surface=matched_surface,
                         )
                     )
                     return {
@@ -16469,6 +16786,7 @@ def pr_metadata_contract_preflight(
         source_range_or_hash=source_range_or_hash,
         expected_schema=expected_schema,
         missing_fields=["metadata_contract_id", "surface"],
+        expected_surface=effective_surface,
     )
     result = "block" if migration_mode == "required" else "pass"
     return {
@@ -16824,7 +17142,7 @@ def pr_metadata_render_payload(
         "preflight": preflight,
         "next_actions": [
             f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(relative_output)} --json",
-            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --json",
+            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --apply --json",
         ],
     }
 
@@ -16970,6 +17288,7 @@ def pr_metadata_update_payload(
     pr_number: int | None,
     head_sha: str | None,
     branch_name: str | None,
+    pr_payload_file: str | None,
     output_file: str,
     readback_file: str,
     base_body_file: str,
@@ -16985,6 +17304,7 @@ def pr_metadata_update_payload(
     suite_na_recheck_condition: str | None,
     suite_na_scope_proof: str | None,
     suite_na_review_requirement: str | None,
+    dry_run: bool,
 ) -> dict[str, Any]:
     render_payload = pr_metadata_render_payload(
         target_root=target_root,
@@ -17019,6 +17339,43 @@ def pr_metadata_update_payload(
             "render": render_payload,
         }
 
+    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
+    if not isinstance(rendered_relative, str) or not rendered_relative:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update could not locate the rendered body artifact after local preflight.",
+            "missing_inputs": ["render output path is unavailable"],
+            "fallback_to": "manual_pr_metadata_inputs",
+            "render": render_payload,
+            "dry_run": dry_run,
+            "host_mutations": False,
+        }
+    if dry_run:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "pass",
+            "summary": "PR metadata update dry-run rendered the body artifact and passed local preflight without mutating the host PR.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "dry_run": True,
+            "host_mutations": False,
+            "apply_required": True,
+            "pr": pr_number,
+            "render": render_payload,
+            "readback": None,
+            "next_actions": [
+                f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(rendered_relative)} --json",
+                f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(rendered_relative)} --apply --json",
+            ],
+        }
+
     detected_owner, detected_repo = detect_github_repo(target_root)
     pr_payload, effective_pr, payload_errors, inferences = load_pr_payload_for_gate(
         target_root=target_root,
@@ -17027,18 +17384,14 @@ def pr_metadata_update_payload(
         pr_number=pr_number,
         head_sha=head_sha,
         branch_name=branch_name,
-        pr_payload_file=None,
+        pr_payload_file=pr_payload_file,
     )
     missing_inputs = [str(message) for message in payload_errors]
     if effective_pr is None:
         missing_inputs.append("unable to determine target PR for metadata update")
-    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
     rendered_path = None
-    if isinstance(rendered_relative, str):
-        rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
-        missing_inputs.extend(rendered_errors)
-    else:
-        missing_inputs.append("render output path is unavailable")
+    rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
+    missing_inputs.extend(rendered_errors)
     if missing_inputs:
         return {
             "command": "pr-metadata",
@@ -17051,6 +17404,8 @@ def pr_metadata_update_payload(
             "fallback_to": "manual_pr_metadata_inputs",
             "render": render_payload,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": False,
         }
 
     assert rendered_path is not None
@@ -17068,6 +17423,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
 
     host_body, view_errors = gh_pr_view_body(target_root, effective_pr)
@@ -17084,6 +17441,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
     readback_path, readback_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
     if readback_errors:
@@ -17099,6 +17458,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
     assert readback_path is not None
     write_runtime_text_artifact(readback_path, host_body)
@@ -17132,6 +17493,8 @@ def pr_metadata_update_payload(
         ),
         "missing_inputs": readback_payload.get("missing_inputs", []),
         "fallback_to": readback_payload.get("fallback_to"),
+        "dry_run": False,
+        "host_mutations": True,
         "pr": effective_pr,
         "render": render_payload,
         "readback": readback_payload,
@@ -20153,6 +20516,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 pr_number=args.pr,
                 head_sha=args.head_sha,
                 branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
                 output_file=args.output_file,
                 readback_file=args.readback_file,
                 base_body_file=args.base_body_file,
@@ -20168,6 +20532,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 suite_na_recheck_condition=args.suite_na_recheck_condition,
                 suite_na_scope_proof=args.suite_na_scope_proof,
                 suite_na_review_requirement=args.suite_na_review_requirement,
+                dry_run=args.dry_run,
             )
         )
     if args.operation == "readback":
@@ -20709,7 +21074,8 @@ def controlled_merge_payload(
         label="branch rules/ruleset fixture",
     )
     if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
-        ruleset_payload, ruleset_errors = github_public_rest_list(
+        ruleset_payload, ruleset_errors = gh_rest_list(
+            target_root,
             f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
         )
     if ruleset_errors:
@@ -22579,7 +22945,7 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any], *, include_closeout_
             edge_proof = edge.get("provenance") if isinstance(edge.get("provenance"), dict) else {}
             proof_owner = edge_proof.get("source_owner")
             proof_locator = edge_proof.get("source_locator")
-            proof_is_mechanical = proof_owner in {"github_issue_body", "repo_authored_dependency"}
+            proof_is_mechanical = proof_owner in {"github_issue_machine_block", "repo_authored_dependency"}
             if kind == "stale_native_edge":
                 proof_is_mechanical = edge.get("source_of_truth") == "github_native_edge" and edge.get("blocker_state") == "closed"
                 proof_locator = proof_locator or f"issue #{blocking_issue}"
@@ -23584,8 +23950,16 @@ def closeout_payload(
     status_checks_file: str | None = None,
     branch_protection_file: str | None = None,
     ruleset_file: str | None = None,
+    pr_role: str | None = None,
+    pr_role_numbers: dict[str, int] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
+    pr_roles = closeout_pr_roles_payload(
+        legacy_pr_number=pr_number,
+        role_numbers=pr_role_numbers or {},
+        requested_role=pr_role,
+    )
+    effective_pr_number = closeout_current_pr_number(pr_roles)
     effective_profile = effective_closeout_gate_profile(gate_profile)
     expected_closeout_lookup = closeout_expected_item_lookup(target_root, issue_number, expected_item)
     missing_inputs.extend(retained_item_lookup_missing_inputs(expected_closeout_lookup))
@@ -23696,14 +24070,14 @@ def closeout_payload(
     reconciliation_payload: dict[str, Any] | None = None
     closeout_fallback: str | None = None
     closeout_summary_override: str | None = None
-    if issue_number is not None or pr_number is not None or project_number is not None:
+    if issue_number is not None or effective_pr_number is not None or project_number is not None:
         reconciliation_payload, reconciliation_errors = reconciliation_audit_payload(
             target_root=target_root,
             expected_item=expected_closeout_item,
             phase_number=phase_number,
             fr_number=fr_number,
             issue_number=issue_number,
-            pr_number=pr_number,
+            pr_number=effective_pr_number,
             project_number=project_number,
             branch_name=branch_name,
             owner=owner,
@@ -23772,7 +24146,7 @@ def closeout_payload(
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
     merge_commit_in_target: bool | None = None
-    if pr_number is not None:
+    if effective_pr_number is not None:
         fixture_pr_payload, fixture_pr_errors = load_optional_json_fixture(
             target_root,
             pr_payload_file,
@@ -23785,7 +24159,7 @@ def closeout_payload(
             pr_payload = fixture_pr_payload
             pr_errors = []
         else:
-            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, effective_pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:
@@ -23805,14 +24179,14 @@ def closeout_payload(
                 else:
                     missing_inputs.append("pr baseRefName is missing")
 
-    if pr_number is not None:
+    if effective_pr_number is not None:
         backlink_subchecks = closeout_backlink_subchecks(
             target_root=target_root,
             context=fact_chain_context,
             profile=CLOSEOUT_LIGHT_PROFILE,
             owner=owner,
             repo_name=repo_name,
-            pr_number=pr_number,
+            pr_number=effective_pr_number,
             pr_payload=pr_payload,
             merge_commit_sha=merge_commit_sha,
             merge_commit_in_target=merge_commit_in_target,
@@ -23879,7 +24253,7 @@ def closeout_payload(
                         "project_v2_issue_item_lookup",
                         issue_item_errors,
                     )
-            pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
+            pr_item = find_project_item(items, effective_pr_number, "pr") if effective_pr_number is not None else None
             if issue_number is not None and issue_item is None:
                 missing_inputs.append("issue is missing from project")
             project_payload = {
@@ -24020,6 +24394,8 @@ def closeout_payload(
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "repo": {"owner": owner, "name": repo_name},
+            "pr_roles": pr_roles,
+            "current_pr_role": pr_roles["current"],
             "gate": gate,
             **({"suite_gate_validation": suite_gate_validation} if suite_gate_validation is not None else {}),
             "issue": issue_payload,
@@ -24096,6 +24472,8 @@ def handle_closeout(args: argparse.Namespace) -> int:
         status_checks_file=args.status_checks_file,
         branch_protection_file=args.branch_protection_file,
         ruleset_file=args.ruleset_file,
+        pr_role=args.pr_role,
+        pr_role_numbers=closeout_pr_role_numbers_from_args(args),
     )
     if errors:
         return emit(
@@ -24214,6 +24592,8 @@ def handle_closeout(args: argparse.Namespace) -> int:
         status_checks_file=args.status_checks_file,
         branch_protection_file=args.branch_protection_file,
         ruleset_file=args.ruleset_file,
+        pr_role=args.pr_role,
+        pr_role_numbers=closeout_pr_role_numbers_from_args(args),
     )
     if errors:
         sync_missing.extend(errors)
@@ -24287,13 +24667,19 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             }
         )
 
+    pr_roles = closeout_pr_roles_payload(
+        legacy_pr_number=args.pr,
+        role_numbers=closeout_pr_role_numbers_from_args(args),
+        requested_role=args.pr_role,
+    )
+    effective_pr_number = closeout_current_pr_number(pr_roles)
     payload, errors = reconciliation_audit_payload(
         target_root=target_root,
         expected_item=args.item,
         phase_number=args.phase,
         fr_number=args.fr,
         issue_number=args.issue,
-        pr_number=args.pr,
+        pr_number=effective_pr_number,
         project_number=args.project,
         branch_name=args.branch,
         owner=owner,
@@ -24315,6 +24701,8 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             }
         )
     payload["runtime_state"] = runtime_state
+    payload["pr_roles"] = pr_roles
+    payload["current_pr_role"] = pr_roles["current"]
     if args.operation == "audit":
         return emit(payload)
 

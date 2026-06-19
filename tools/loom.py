@@ -65,6 +65,12 @@ PROFILE_SCHEMA = "loom-governance-profile-control/v1"
 GATE_SCHEMA = "loom-gate-control/v1"
 DELIVERY_SCHEMA = "loom-delivery-control/v1"
 RELEASE_READBACK_SCHEMA = "loom-release-readback/v1"
+CLOSEOUT_PR_ROLES = (
+    "implementation_pr",
+    "release_pr",
+    "carrier_sync_pr",
+    "final_closeout_pr",
+)
 
 RUNTIME_PROVIDER_GLOBAL_CLI = "global-cli"
 RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER = "repo-local-wrapper"
@@ -991,6 +997,38 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
         "generated_at": now_iso(),
         **fields,
     }
+
+
+def add_closeout_pr_role_args(flow_args: list[str], args: argparse.Namespace) -> None:
+    for flag, value in (
+        ("--pr-role", getattr(args, "pr_role", None)),
+        ("--implementation-pr", getattr(args, "implementation_pr", None)),
+        ("--release-pr", getattr(args, "release_pr", None)),
+        ("--carrier-sync-pr", getattr(args, "carrier_sync_pr", None)),
+        ("--final-closeout-pr", getattr(args, "final_closeout_pr", None)),
+    ):
+        if value is not None:
+            flow_args.extend([flag, str(value)])
+
+
+def closeout_pr_role_numbers_from_args(args: argparse.Namespace) -> dict[str, int]:
+    roles: dict[str, int] = {}
+    for role in CLOSEOUT_PR_ROLES:
+        value = getattr(args, role, None)
+        if value is not None:
+            roles[role] = int(value)
+    return roles
+
+
+def closeout_current_pr_input(args: argparse.Namespace) -> int | None:
+    requested_role = getattr(args, "pr_role", None)
+    role_numbers = closeout_pr_role_numbers_from_args(args)
+    if requested_role is not None:
+        return role_numbers.get(requested_role, getattr(args, "pr", None))
+    for role in ("final_closeout_pr", "carrier_sync_pr", "release_pr", "implementation_pr"):
+        if role in role_numbers:
+            return role_numbers[role]
+    return getattr(args, "pr", None)
 
 
 def run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
@@ -3436,6 +3474,8 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("--suite-na-recheck-condition")
     parser.add_argument("--suite-na-scope-proof")
     parser.add_argument("--suite-na-review-requirement")
+    parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument("--apply", dest="dry_run", action="store_false")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     command = f"pr {args.action}"
@@ -3541,6 +3581,7 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--suite-na-scope-proof", args.suite_na_scope_proof])
         if args.suite_na_review_requirement:
             flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
+        flow_args.append("--apply" if not args.dry_run else "--dry-run")
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-render --surface merge_ready --json", "loom pr metadata-readback --surface merge_ready --pr <number> --json"])
     if args.action == "metadata-preflight":
         flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", args.surface]
@@ -3704,6 +3745,7 @@ def add_closeout_host_args(flow_args: list[str], args: argparse.Namespace, *, in
     ):
         if value is not None:
             flow_args.extend([flag, str(value)])
+    add_closeout_pr_role_args(flow_args, args)
     if include_comment:
         for flag, value in (
             ("--comment", args.comment),
@@ -3836,6 +3878,8 @@ def closeout_run_payload(
         summary = "closeout run dry-run produced a post-merge closeout step plan." if result == "pass" else "closeout run dry-run could not produce a safe step plan."
 
     next_action = closeout_run_next_action(apply=apply, blocking_step=blocking_step)
+    pr_roles = closeout_payload.get("pr_roles") if isinstance(closeout_payload.get("pr_roles"), dict) else None
+    current_pr_role = pr_roles.get("current") if isinstance(pr_roles, dict) and isinstance(pr_roles.get("current"), dict) else None
     return output(
         "closeout run",
         result,
@@ -3846,7 +3890,9 @@ def closeout_run_payload(
         target=str(target),
         item={"id": args.item},
         issue={"number": args.issue, "state": issue_state(closeout_payload)},
-        pr={"number": args.pr, "state": pr_state(closeout_payload)},
+        pr={"number": (current_pr_role or {}).get("number", args.pr), "state": pr_state(closeout_payload)},
+        pr_roles=pr_roles,
+        current_pr_role=current_pr_role,
         terminal_metadata=terminal_metadata,
         steps=steps,
         evidence_locators=evidence_locators,
@@ -3861,7 +3907,12 @@ def handle_closeout_run(argv: list[str]) -> int:
     parser.add_argument("--target", default=".")
     parser.add_argument("--item", required=True)
     parser.add_argument("--issue", required=True)
-    parser.add_argument("--pr", required=True)
+    parser.add_argument("--pr")
+    parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
+    parser.add_argument("--implementation-pr", type=int)
+    parser.add_argument("--release-pr", type=int)
+    parser.add_argument("--carrier-sync-pr", type=int)
+    parser.add_argument("--final-closeout-pr", type=int)
     parser.add_argument("--project")
     parser.add_argument("--phase")
     parser.add_argument("--fr")
@@ -3882,6 +3933,8 @@ def handle_closeout_run(argv: list[str]) -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    if closeout_current_pr_input(args) is None:
+        parser.error("--pr or one closeout PR role flag is required")
 
     target = resolve_target(args.target)
     steps: list[dict[str, Any]] = []
@@ -3896,7 +3949,7 @@ def handle_closeout_run(argv: list[str]) -> int:
         terminal_metadata = {
             "terminal_state": "closed_out",
             "issue": str(args.issue),
-            "pr": str(args.pr),
+            "pr": str(closeout_current_pr_input(args) or "not_applicable"),
             "merge_commit": "not_applicable",
             "target_branch": "not_applicable",
             "closed_at": "not_applicable",
@@ -4442,6 +4495,11 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     parser.add_argument("--repo", dest="repo_name")
     parser.add_argument("--issue", type=int)
     parser.add_argument("--pr", type=int)
+    parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
+    parser.add_argument("--implementation-pr", type=int)
+    parser.add_argument("--release-pr", type=int)
+    parser.add_argument("--carrier-sync-pr", type=int)
+    parser.add_argument("--final-closeout-pr", type=int)
     parser.add_argument("--pr-payload-file")
     parser.add_argument("--project", type=int)
     parser.add_argument("--phase", type=int)
@@ -4539,6 +4597,11 @@ def handle_scenario(command: str, argv: list[str]) -> int:
             ("--item", args.item),
             ("--issue", args.issue),
             ("--pr", args.pr),
+            ("--pr-role", args.pr_role),
+            ("--implementation-pr", args.implementation_pr),
+            ("--release-pr", args.release_pr),
+            ("--carrier-sync-pr", args.carrier_sync_pr),
+            ("--final-closeout-pr", args.final_closeout_pr),
             ("--project", args.project),
             ("--phase", args.phase),
             ("--fr", args.fr),

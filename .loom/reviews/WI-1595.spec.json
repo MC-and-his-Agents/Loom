@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1595",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1595 minimal suite approved at merge checkpoint head: spec, plan, evidence map, task carrier, validation mapping, and ownership constraints cover the PR metadata dry-run/preflight slice without expanding into host auth, closeout roles, release resume, or dependency parsing.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-19T04:11:39Z",
+  "reviewed_head": "b66ac0bbc9897c68d0e788e10edc41e5bd1a850c",
+  "reviewed_validation_summary": "2026-06-19 WI-1595 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; spec review allow; implementation review allow with carrier-only head binding accepted; PR #1603 metadata readback/preflight passed and must be re-read after the final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at readback.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1595.md",
+    "recovery_entry": ".loom/progress/WI-1595.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom-worktrees/1595-pr-metadata-preflight/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1595/spec.md",
+    "suite_plan": ".loom/specs/WI-1595/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1595/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1595/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
