@@ -27,7 +27,7 @@ Stable native read states and capability judgments:
 The native dependency reader prefers GitHub GraphQL `blockedBy` / `blocking` and falls back only when the host capability is unreadable. It compares:
 
 - repo-authored dependency statements
-- issue body dependency statements
+- issue body dependency machine blocks
 - GitHub native `blockedBy` / `blocking` edges
 - Project status when a Project read is requested
 

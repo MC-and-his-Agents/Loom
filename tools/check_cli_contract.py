@@ -1246,6 +1246,58 @@ def assert_reconciliation_suite_taxonomy_contract() -> None:
         raise AssertionError("reconciliation did not classify missing suite gate drift")
 
 
+def assert_issue_dependency_machine_block_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    historical_issue_body = (
+        "## Historical Notes\n\n"
+        "- depends on #1514 and blocked by #1513 were prior planning notes only.\n"
+        "- 前置：#1542、#1544 已在历史收口中消费，不代表当前 active blocker。\n"
+        "- 依赖 #1529 的说明只是归档文字，不应生成 active edge。\n"
+    )
+    historical_edges = loom_flow.parse_authored_dependency_edges(historical_issue_body, 1515)
+    if historical_edges:
+        raise AssertionError(f"historical issue prose must not produce authored dependency edges: {historical_edges}")
+    historical_graph = loom_flow.dependency_graph_payload(
+        issue_number=1515,
+        issue_payload={"number": 1515, "state": "closed", "body": historical_issue_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    if historical_graph.get("authored_edges") or historical_graph.get("findings"):
+        raise AssertionError("historical issue prose must not create active dependency drift or findings")
+
+    machine_block_body = (
+        "## Dependency Carrier\n\n"
+        '<!-- loom:issue-dependencies {"schema_version":"loom-issue-dependencies/v1","blocked_by":["#793"],"blocks":[795]} -->\n'
+    )
+    machine_edges = loom_flow.parse_authored_dependency_edges(machine_block_body, 794)
+    edge_keys = {
+        (edge.get("source_issue"), edge.get("blocking_issue"), edge.get("direction"))
+        for edge in machine_edges
+        if isinstance(edge, dict)
+    }
+    if edge_keys != {(794, 793, "blocked_by"), (795, 794, "blocking")}:
+        raise AssertionError(f"structured issue dependency machine block parsed unexpected edges: {machine_edges}")
+    if not all(
+        isinstance(edge, dict)
+        and edge.get("source_of_truth") == "issue_body_machine_block"
+        and edge.get("provenance", {}).get("source_owner") == "github_issue_machine_block"
+        for edge in machine_edges
+    ):
+        raise AssertionError("structured issue dependency machine block must retain machine-block provenance")
+    machine_graph = loom_flow.dependency_graph_payload(
+        issue_number=794,
+        issue_payload={"number": 794, "state": "open", "body": machine_block_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    missing_native_findings = [
+        finding
+        for finding in machine_graph.get("findings", [])
+        if isinstance(finding, dict) and finding.get("kind") == "missing_native_edge"
+    ]
+    if len(missing_native_findings) != 2:
+        raise AssertionError("structured issue dependency machine block must remain consumable as authored proof")
+
+
 def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
     loom_flow = load_loom_flow_module()
     target = tmp / "docs-contract-suite-not-applicable"
@@ -6764,6 +6816,7 @@ def run_governance_closeout_contract() -> None:
     assert_active_closeout_contract(active_item)
     assert_idle_root_self_governance_direct_contract()
     assert_reconciliation_suite_taxonomy_contract()
+    assert_issue_dependency_machine_block_contract()
     with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)

@@ -6460,18 +6460,95 @@ def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, is
     }
 
 
+ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER = "loom:issue-dependencies"
+ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA = "loom-issue-dependencies/v1"
+
+
+def issue_dependency_html_comment_blocks(body: str) -> list[str]:
+    pattern = re.compile(
+        rf"<!--\s*{re.escape(ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER)}\s*(.*?)\s*-->",
+        flags=re.DOTALL,
+    )
+    return [match.group(1).strip() for match in pattern.finditer(body)]
+
+
+def normalize_issue_reference(value: Any) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str):
+        match = re.fullmatch(r"\s*#?(\d+)\s*", value)
+        if match:
+            return int(match.group(1))
+    if isinstance(value, dict):
+        number = value.get("number")
+        if isinstance(number, int) and number > 0:
+            return number
+    return None
+
+
+def normalize_issue_reference_list(value: Any) -> list[int]:
+    values = value if isinstance(value, list) else [value]
+    normalized: list[int] = []
+    for entry in values:
+        issue_number = normalize_issue_reference(entry)
+        if issue_number is not None:
+            normalized.append(issue_number)
+    return normalized
+
+
+def issue_dependency_machine_block_payloads(issue_body: str) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    for raw in issue_dependency_html_comment_blocks(issue_body):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        schema_version = payload.get("schema_version")
+        if schema_version not in (None, ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA):
+            continue
+        payloads.append(payload)
+    return payloads
+
+
 def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -> list[dict[str, Any]]:
     if not isinstance(issue_body, str) or issue_number is None:
         return []
     edges: list[dict[str, Any]] = []
     seen: set[tuple[int, int, str]] = set()
-    patterns = (
-        ("blocked_by", r"(?im)(?:blocked\s+by|blocked_by|depends\s+on|dependency|依赖|前置)[^\n#]*(?:#)(\d+)"),
-        ("blocking", r"(?im)(?:blocks|blocking|阻塞)[^\n#]*(?:#)(\d+)"),
-    )
-    for relation, pattern in patterns:
-        for match in re.finditer(pattern, issue_body):
-            other = int(match.group(1))
+    for block_index, payload in enumerate(issue_dependency_machine_block_payloads(issue_body), start=1):
+        dependency_payload = payload.get("dependencies") if isinstance(payload.get("dependencies"), dict) else payload
+        relation_values: list[tuple[str, int]] = []
+        for relation, field_names in (
+            ("blocked_by", ("blocked_by", "blockedBy", "depends_on", "dependsOn")),
+            ("blocking", ("blocks", "blocking")),
+        ):
+            for field_name in field_names:
+                if field_name not in dependency_payload:
+                    continue
+                for other in normalize_issue_reference_list(dependency_payload.get(field_name)):
+                    relation_values.append((relation, other))
+                break
+        raw_edges = dependency_payload.get("edges")
+        if isinstance(raw_edges, list):
+            for raw_edge in raw_edges:
+                if not isinstance(raw_edge, dict):
+                    continue
+                direction = raw_edge.get("direction")
+                if direction == "blocked_by":
+                    other = normalize_issue_reference(
+                        raw_edge.get("blocking_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                elif direction == "blocking":
+                    other = normalize_issue_reference(
+                        raw_edge.get("source_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                else:
+                    continue
+                if other is not None:
+                    relation_values.append((direction, other))
+        for relation, other in relation_values:
             source = issue_number if relation == "blocked_by" else other
             blocker = other if relation == "blocked_by" else issue_number
             key = (source, blocker, relation)
@@ -6484,13 +6561,15 @@ def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -
                     "blocking_issue": blocker,
                     "direction": relation,
                     "blocker_state": "unknown",
-                    "source_of_truth": "issue_body_dependency_section",
+                    "source_of_truth": "issue_body_machine_block",
                     "host_mirror_status": "requires_native_compare",
                     "native": "unknown",
                     "provenance": {
                         "source_layer": "authored_truth",
-                        "source_owner": "github_issue_body",
-                        "source_locator": f"issue #{issue_number}",
+                        "source_owner": "github_issue_machine_block",
+                        "source_locator": (
+                            f"issue #{issue_number} {ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER} block {block_index}"
+                        ),
                         "freshness": "fresh",
                     },
                 }
@@ -22579,7 +22658,7 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any], *, include_closeout_
             edge_proof = edge.get("provenance") if isinstance(edge.get("provenance"), dict) else {}
             proof_owner = edge_proof.get("source_owner")
             proof_locator = edge_proof.get("source_locator")
-            proof_is_mechanical = proof_owner in {"github_issue_body", "repo_authored_dependency"}
+            proof_is_mechanical = proof_owner in {"github_issue_machine_block", "repo_authored_dependency"}
             if kind == "stale_native_edge":
                 proof_is_mechanical = edge.get("source_of_truth") == "github_native_edge" and edge.get("blocker_state") == "closed"
                 proof_locator = proof_locator or f"issue #{blocking_issue}"
