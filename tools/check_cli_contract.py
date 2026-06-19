@@ -397,6 +397,76 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
         module.emit_flow = original_emit_flow
 
 
+def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
+    target = tmp / "controlled-merge-triggered-check-rollup"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if pass_payload.get("result") != "pass":
+        raise AssertionError("controlled-merge triggered check fixture could not produce a pr-gate pass")
+
+    fixture_dir = target / ".loom" / "fixtures" / fixture["item"]
+    checks_file = fixture_dir / "checks.json"
+    branch_protection_file = fixture_dir / "branch-protection.json"
+    ruleset_file = fixture_dir / "ruleset.json"
+    checks_file.write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "non-required-failed", "conclusion": "FAILURE", "status": "COMPLETED"},
+                {"name": "non-required-pending", "status": "IN_PROGRESS"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    branch_protection_file.write_text(
+        json.dumps({"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    ruleset_file.write_text(json.dumps([], indent=2) + "\n", encoding="utf-8")
+
+    _, payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            fixture["head_sha"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--status-checks-file",
+            f".loom/fixtures/{fixture['item']}/checks.json",
+            "--branch-protection-file",
+            f".loom/fixtures/{fixture['item']}/branch-protection.json",
+            "--ruleset-file",
+            f".loom/fixtures/{fixture['item']}/ruleset.json",
+        ]
+    )
+    required_checks = payload.get("required_checks", {})
+    missing_inputs = payload.get("missing_inputs", [])
+    if (
+        payload.get("result") != "block"
+        or required_checks.get("result") != "pass"
+        or required_checks.get("missing") != []
+        or required_checks.get("pending") != []
+        or required_checks.get("failing") != []
+        or payload.get("triggered_check_rollup", {}).get("result") != "block"
+        or payload.get("triggered_check_rollup", {}).get("blocking") != ["non-required-failed"]
+        or payload.get("triggered_check_rollup", {}).get("pending") != ["non-required-pending"]
+        or payload.get("controlled_merge_consumption", {}).get("result") != "block"
+        or "triggered check `non-required-failed` failed" not in missing_inputs
+        or "triggered check `non-required-pending` is pending" not in missing_inputs
+    ):
+        raise AssertionError("controlled-merge did not fail closed on failed/pending triggered non-required checks")
+
+
 def assert_closeout_wrapper_argument_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -5084,6 +5154,88 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("non-closeout merge_ready pr-gate must not expose closeout-specific gate verdict")
 
 
+def prepare_controlled_merge_fixture(
+    tmp: Path,
+    *,
+    fixture_name: str,
+    branch_protection_contexts: list[str],
+    ruleset_required_contexts: list[str] | None = None,
+) -> tuple[Path, dict[str, Any], dict[str, Any], Path]:
+    merge_target = tmp / fixture_name
+    merge_target.mkdir()
+    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target)
+    merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
+    if merge_pass_payload.get("result") != "pass":
+        raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
+    fixture_dir = merge_target / ".loom" / "fixtures" / "WI-1287"
+    check_names = sorted({"loom-pr-merge-gate", *branch_protection_contexts, *(ruleset_required_contexts or [])})
+    (fixture_dir / "checks.json").write_text(
+        json.dumps(
+            [{"name": name, "conclusion": "SUCCESS", "status": "COMPLETED"} for name in check_names],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (fixture_dir / "branch-protection.json").write_text(
+        json.dumps({"required_status_checks": {"contexts": branch_protection_contexts}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    ruleset_payload: list[dict[str, Any]] = []
+    if ruleset_required_contexts:
+        ruleset_payload = [
+            {
+                "type": "required_status_checks",
+                "parameters": {
+                    "required_status_checks": [{"context": context} for context in ruleset_required_contexts],
+                },
+            }
+        ]
+    (fixture_dir / "ruleset.json").write_text(json.dumps(ruleset_payload, indent=2) + "\n", encoding="utf-8")
+    return merge_target, merge_fixture, merge_pass_payload, fixture_dir
+
+
+def assert_controlled_merge_ruleset_trigger_fixture(tmp: Path) -> None:
+    merge_target, merge_fixture, _, _ = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="controlled-merge-ruleset-trigger",
+        branch_protection_contexts=[],
+        ruleset_required_contexts=["loom-pr-merge-gate"],
+    )
+    _, payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+        expect=0,
+    )
+    host_enforcement = payload.get("host_enforcement")
+    if payload.get("result") != "pass":
+        raise AssertionError("controlled-merge did not accept active ruleset required context for the triggered check surface")
+    if not isinstance(host_enforcement, dict) or "loom-pr-merge-gate" not in host_enforcement.get("ruleset_required_contexts", []):
+        raise AssertionError("controlled-merge did not expose active ruleset required contexts")
+    if "loom-pr-merge-gate" in host_enforcement.get("branch_protection_required_contexts", []):
+        raise AssertionError("controlled-merge ruleset-trigger fixture incorrectly attributed host enforcement to branch protection")
+    if payload.get("pr_gate", {}).get("result") != "pass" or payload.get("controlled_merge_consumption", {}).get("result") != "pass":
+        raise AssertionError("controlled-merge ruleset-trigger fixture did not preserve pre-merge gate consumption")
+
+
 def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     target = tmp / "semantic-review-pr-gate"
     target.mkdir()
@@ -5116,31 +5268,14 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     assert_closeout_freeze_profile_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
+    assert_controlled_merge_ruleset_trigger_fixture(tmp)
 
     pr_path = target / fixture["pr_file"]
-    merge_target = tmp / "semantic-review-controlled-merge"
-    merge_target.mkdir()
-    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target)
-    merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
-    if merge_pass_payload.get("result") != "pass":
-        raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
-    fixture_dir = merge_target / ".loom" / "fixtures" / "WI-1287"
-    checks_file = fixture_dir / "checks.json"
-    branch_protection_file = fixture_dir / "branch-protection.json"
-    ruleset_file = fixture_dir / "ruleset.json"
-    checks_file.write_text(
-        json.dumps(
-            [{"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"}],
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+    merge_target, merge_fixture, merge_pass_payload, fixture_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="semantic-review-controlled-merge",
+        branch_protection_contexts=["loom-pr-merge-gate"],
     )
-    branch_protection_file.write_text(
-        json.dumps({"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}}, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    ruleset_file.write_text(json.dumps([], indent=2) + "\n", encoding="utf-8")
     _, merge_check_payload = run_flow_json(
         [
             "controlled-merge",
@@ -5170,6 +5305,98 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         or merge_check_payload.get("controlled_merge_consumption", {}).get("result") != "pass"
     ):
         raise AssertionError("controlled-merge did not consume inline pr-gate pass before host merge")
+    if merge_check_payload.get("triggered_check_rollup", {}).get("result") != "pass":
+        raise AssertionError("controlled-merge positive fixture did not allow successful triggered checks")
+
+    failed_triggered_file = fixture_dir / "checks-triggered-failed.json"
+    failed_triggered_file.write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {
+                    "name": "optional-ci",
+                    "workflowName": "optional",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                    "detailsUrl": "https://example.invalid/checks/optional-ci",
+                },
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, failed_triggered_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-triggered-failed.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        failed_triggered_payload.get("result") != "block"
+        or failed_triggered_payload.get("required_checks", {}).get("result") != "pass"
+        or failed_triggered_payload.get("triggered_check_rollup", {}).get("result") != "block"
+        or "triggered checks readback"
+        not in failed_triggered_payload.get("controlled_merge_consumption", {}).get("missing_inputs", [])
+    ):
+        raise AssertionError("controlled-merge did not block non-required failed triggered check")
+
+    pending_triggered_file = fixture_dir / "checks-triggered-pending.json"
+    pending_triggered_file.write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "optional-pending", "workflowName": "optional", "status": "IN_PROGRESS"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, pending_triggered_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-triggered-pending.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        pending_triggered_payload.get("result") != "block"
+        or pending_triggered_payload.get("required_checks", {}).get("result") != "pass"
+        or "optional-pending" not in pending_triggered_payload.get("triggered_check_rollup", {}).get("pending", [])
+    ):
+        raise AssertionError("controlled-merge did not block pending triggered check")
     retained_gate_file = fixture_dir / "pr-gate-pass.json"
     retained_gate_file.write_text(json.dumps(merge_pass_payload, indent=2) + "\n", encoding="utf-8")
     (merge_target / "retained-gate-drift.txt").write_text("drift after retained pr-gate\n", encoding="utf-8")
@@ -7093,6 +7320,8 @@ def run_adoption_host_metadata_surface() -> None:
 
 def run_merge_wrapper_surface() -> None:
     assert_merge_wrapper_pr_argument_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-merge-wrapper-") as raw_tmp:
+        assert_controlled_merge_triggered_check_rollup_contract(Path(raw_tmp))
     print("merge wrapper surface checks passed")
 
 
@@ -7173,6 +7402,14 @@ def run_pr_metadata_surface() -> None:
         assert_governance_intensity_metadata_preflight_fixture(tmp)
 
     print("pr metadata surface checks passed")
+
+
+def run_controlled_merge_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-controlled-merge-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_controlled_merge_ruleset_trigger_fixture(tmp)
+
+    print("controlled merge surface checks passed")
 
 
 def run_aggregate_cli_contract() -> None:
@@ -9383,6 +9620,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="pr-metadata",
             fixture_group="pr-metadata",
             run=run_pr_metadata_surface,
+        ),
+        SurfaceCheck(
+            name="controlled-merge",
+            fixture_group="controlled-merge",
+            run=run_controlled_merge_surface,
         ),
         SurfaceCheck(
             name="aggregate",
