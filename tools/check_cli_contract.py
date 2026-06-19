@@ -4194,10 +4194,12 @@ def assert_cross_repo_review_gate_fixtures(tmp: Path) -> None:
         },
     )
     syvert_advisory = semantic_pr_gate_fixture_payload(syvert_target, syvert_fixture)
+    syvert_disposition = syvert_advisory.get("review_approval", {}).get("semantic_review_disposition", {})
     if (
         syvert_advisory.get("result") != "block"
-        or syvert_advisory.get("authority_boundary", {}).get("guardian_satisfies_approval") is not False
+        or syvert_disposition.get("consumable") is not False
         or "ci_only_bypass" not in syvert_advisory.get("failure_taxonomy", [])
+        or not any("host-review signal cannot satisfy" in item for item in syvert_advisory.get("missing_inputs", []))
     ):
         raise AssertionError("Syvert-style guardian/integration advisory signals replaced Loom semantic review")
 
