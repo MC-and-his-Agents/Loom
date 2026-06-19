@@ -309,6 +309,9 @@ def assert_repo_local_closeout_runtime_argument_contract() -> None:
     help_text = completed.stdout + completed.stderr
     if "--item" not in help_text:
         raise AssertionError("repo-local closeout runtime must accept --item for wrapper/runtime contract parity")
+    for flag in ("--implementation-pr", "--release-pr", "--carrier-sync-pr", "--final-closeout-pr", "--pr-role"):
+        if flag not in help_text:
+            raise AssertionError(f"repo-local closeout runtime must accept {flag} for PR role contract parity")
 
 
 def assert_merge_wrapper_pr_argument_contract() -> None:
@@ -394,6 +397,46 @@ def assert_closeout_wrapper_argument_contract() -> None:
         captured["fallback_to"] = fallback_to
         return 0
 
+    def arg_value(flow_args: list[str], flag: str) -> str | None:
+        if flag not in flow_args:
+            return None
+        index = flow_args.index(flag)
+        return flow_args[index + 1] if index + 1 < len(flow_args) else None
+
+    def int_arg_value(flow_args: list[str], flag: str) -> int | None:
+        value = arg_value(flow_args, flag)
+        return int(value) if value is not None else None
+
+    def closeout_pr_roles_from_flow_args(flow_args: list[str]) -> dict[str, Any]:
+        roles = {
+            role: number
+            for role, number in (
+                ("implementation_pr", int_arg_value(flow_args, "--implementation-pr")),
+                ("release_pr", int_arg_value(flow_args, "--release-pr")),
+                ("carrier_sync_pr", int_arg_value(flow_args, "--carrier-sync-pr")),
+                ("final_closeout_pr", int_arg_value(flow_args, "--final-closeout-pr")),
+            )
+            if number is not None
+        }
+        requested_role = arg_value(flow_args, "--pr-role")
+        legacy_pr = int_arg_value(flow_args, "--pr")
+        if requested_role is not None:
+            current_role = requested_role
+            current_number = roles.get(requested_role, legacy_pr)
+            source = f"--{requested_role.replace('_', '-')}" if requested_role in roles else "--pr plus --pr-role"
+        else:
+            current_role = "implementation_pr" if legacy_pr is not None else None
+            current_number = legacy_pr
+            source = "--pr" if legacy_pr is not None else None
+        return {
+            "schema_version": "loom-closeout-pr-roles/v1",
+            "supported_roles": ["implementation_pr", "release_pr", "carrier_sync_pr", "final_closeout_pr"],
+            "roles": roles,
+            "legacy_pr": legacy_pr,
+            "requested_role": requested_role,
+            "current": {"role": current_role, "number": current_number, "source": source},
+        }
+
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         captured.clear()
         captured["command"] = command
@@ -402,20 +445,25 @@ def assert_closeout_wrapper_argument_contract() -> None:
         flow_payload_calls.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
         payload: dict[str, Any] = {"command": command, "result": "pass"}
         if flow_args[:2] == ["closeout", "check"]:
+            pr_roles = closeout_pr_roles_from_flow_args(flow_args)
+            current_pr = pr_roles["current"]["number"] or int_arg_value(flow_args, "--pr")
+            issue_number = int_arg_value(flow_args, "--issue") or 1555
             payload.update(
                 {
+                    "pr_roles": pr_roles,
+                    "current_pr_role": pr_roles["current"],
                     "issue": {
-                        "number": 1555,
+                        "number": issue_number,
                         "state": "CLOSED",
                         "closedAt": "2026-06-18T10:00:00Z",
-                        "url": "https://github.com/MC-and-his-Agents/Loom/issues/1555",
+                        "url": f"https://github.com/MC-and-his-Agents/Loom/issues/{issue_number}",
                     },
                     "pr": {
-                        "number": 1563,
+                        "number": current_pr,
                         "state": "MERGED",
                         "baseRefName": "main",
                         "mergedAt": "2026-06-18T09:55:00Z",
-                        "url": "https://github.com/MC-and-his-Agents/Loom/pull/1563",
+                        "url": f"https://github.com/MC-and-his-Agents/Loom/pull/{current_pr}",
                         "mergeCommit": {"oid": "fixture-merge-sha"},
                     },
                 }
@@ -444,6 +492,16 @@ def assert_closeout_wrapper_argument_contract() -> None:
                 "1554",
                 "--pr",
                 "1562",
+                "--pr-role",
+                "final_closeout_pr",
+                "--implementation-pr",
+                "1592",
+                "--release-pr",
+                "1592",
+                "--carrier-sync-pr",
+                "1593",
+                "--final-closeout-pr",
+                "1593",
                 "--project",
                 "4",
                 "--phase",
@@ -488,6 +546,11 @@ def assert_closeout_wrapper_argument_contract() -> None:
             "--item": "WI-1554",
             "--issue": "1554",
             "--pr": "1562",
+            "--pr-role": "final_closeout_pr",
+            "--implementation-pr": "1592",
+            "--release-pr": "1592",
+            "--carrier-sync-pr": "1593",
+            "--final-closeout-pr": "1593",
             "--project": "4",
             "--phase": "1504",
             "--fr": "1505",
@@ -624,6 +687,54 @@ def assert_closeout_wrapper_argument_contract() -> None:
             raise AssertionError("closeout run dry-run did not delegate carrier closeout-sync as dry-run")
         if not emitted_payloads or emitted_payloads[-1].get("schema_version") != "loom-closeout-run/v1":
             raise AssertionError("closeout run must emit loom-closeout-run/v1")
+
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1515",
+                "--issue",
+                "1515",
+                "--implementation-pr",
+                "1592",
+                "--release-pr",
+                "1592",
+                "--final-closeout-pr",
+                "1593",
+                "--pr-role",
+                "final_closeout_pr",
+                "--branch",
+                "work/1515-post-release-closeout",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run PR role fixture regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [["reconciliation", "sync"], ["closeout", "check"], ["carrier", "closeout-sync"]]:
+            raise AssertionError(f"closeout run PR role fixture delegated unexpected runtime sequence: {call_heads}")
+        reconciliation_args = flow_payload_calls[0]["flow_args"]
+        closeout_args = flow_payload_calls[1]["flow_args"]
+        carrier_args = flow_payload_calls[2]["flow_args"]
+        for args_name, flow_args in (("reconciliation", reconciliation_args), ("closeout-check", closeout_args)):
+            for flag, expected in {
+                "--implementation-pr": "1592",
+                "--release-pr": "1592",
+                "--final-closeout-pr": "1593",
+                "--pr-role": "final_closeout_pr",
+            }.items():
+                if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                    raise AssertionError(f"closeout run {args_name} step did not preserve {flag} for PR role fixture")
+            if "--pr" in flow_args:
+                raise AssertionError(f"closeout run {args_name} step leaked legacy --pr for role-only fixture")
+        if carrier_args[carrier_args.index("--pr") + 1] != "1593":
+            raise AssertionError("closeout run PR role fixture did not consume final_closeout_pr for carrier metadata")
+        role_payload = emitted_payloads[-1].get("current_pr_role") if emitted_payloads else {}
+        if role_payload != {"role": "final_closeout_pr", "number": 1593, "source": "--final-closeout-pr"}:
+            raise AssertionError(f"closeout run PR role fixture emitted unexpected current role: {role_payload}")
 
         flow_payload_calls.clear()
         emitted_payloads.clear()

@@ -129,6 +129,12 @@ CLOSEOUT_GATE_PROFILES = (
     "distribution-regression",
     "strong-profile-full-gate",
 )
+CLOSEOUT_PR_ROLES = (
+    "implementation_pr",
+    "release_pr",
+    "carrier_sync_pr",
+    "final_closeout_pr",
+)
 CLOSEOUT_LIGHT_PROFILE = "closeout-contract"
 CLOSEOUT_HEAVY_PROFILES = {
     "source-self-fixture",
@@ -855,6 +861,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--item", help="Expected retained Loom Work Item id for closeout disambiguation")
     closeout.add_argument("--issue", type=int, help="GitHub issue number to validate or sync")
     closeout.add_argument("--pr", type=int, help="GitHub pull request number to validate or sync")
+    closeout.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, help="Explicit closeout PR role consumed by this check")
+    closeout.add_argument("--implementation-pr", type=int, help="Implementation PR number for the closeout subject")
+    closeout.add_argument("--release-pr", type=int, help="Release PR number for the closeout subject")
+    closeout.add_argument("--carrier-sync-pr", type=int, help="Carrier sync PR number for the closeout subject")
+    closeout.add_argument("--final-closeout-pr", type=int, help="Final closeout PR number for the closeout subject")
     closeout.add_argument("--project", type=int, help="GitHub project number to validate or sync")
     closeout.add_argument("--phase", type=int, help="GitHub Phase issue number")
     closeout.add_argument("--fr", type=int, help="GitHub FR issue number")
@@ -882,6 +893,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--target", required=True, help="Target repository root")
     reconciliation.add_argument("--issue", type=int, help="GitHub issue number to audit")
     reconciliation.add_argument("--pr", type=int, help="GitHub pull request number to audit")
+    reconciliation.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, help="Explicit closeout PR role consumed by this reconciliation read")
+    reconciliation.add_argument("--implementation-pr", type=int, help="Implementation PR number for the closeout subject")
+    reconciliation.add_argument("--release-pr", type=int, help="Release PR number for the closeout subject")
+    reconciliation.add_argument("--carrier-sync-pr", type=int, help="Carrier sync PR number for the closeout subject")
+    reconciliation.add_argument("--final-closeout-pr", type=int, help="Final closeout PR number for the closeout subject")
     reconciliation.add_argument("--project", type=int, help="GitHub project number to audit")
     reconciliation.add_argument("--phase", type=int, help="GitHub Phase issue number")
     reconciliation.add_argument("--fr", type=int, help="GitHub FR issue number")
@@ -4717,6 +4733,67 @@ def closeout_gate_command(target_root: Path) -> tuple[list[str], str]:
 
 def effective_closeout_gate_profile(profile: str | None) -> str:
     return CLOSEOUT_LIGHT_PROFILE if profile in {None, "auto"} else profile
+
+
+def closeout_pr_role_numbers_from_args(args: argparse.Namespace) -> dict[str, int]:
+    roles: dict[str, int] = {}
+    for role in CLOSEOUT_PR_ROLES:
+        value = getattr(args, role, None)
+        if value is not None:
+            roles[role] = int(value)
+    return roles
+
+
+def closeout_pr_roles_payload(
+    *,
+    legacy_pr_number: int | None,
+    role_numbers: dict[str, int],
+    requested_role: str | None,
+) -> dict[str, Any]:
+    current_role: str | None = None
+    current_number: int | None = None
+    source: str | None = None
+
+    if requested_role is not None:
+        current_role = requested_role
+        current_number = role_numbers.get(requested_role, legacy_pr_number)
+        source = f"--{requested_role.replace('_', '-')}" if requested_role in role_numbers else "--pr plus --pr-role"
+    else:
+        for role in ("final_closeout_pr", "carrier_sync_pr", "release_pr", "implementation_pr"):
+            if role in role_numbers:
+                current_role = role
+                current_number = role_numbers[role]
+                source = f"--{role.replace('_', '-')}"
+                break
+        if current_role is None and legacy_pr_number is not None:
+            current_role = "implementation_pr"
+            current_number = legacy_pr_number
+            source = "--pr"
+
+    summary = (
+        f"closeout check is consuming `{current_role}` PR #{current_number}."
+        if current_role is not None and current_number is not None
+        else "closeout check has no PR role input; host PR readback is not role-bound."
+    )
+    return {
+        "schema_version": "loom-closeout-pr-roles/v1",
+        "supported_roles": list(CLOSEOUT_PR_ROLES),
+        "roles": {role: role_numbers[role] for role in CLOSEOUT_PR_ROLES if role in role_numbers},
+        "legacy_pr": legacy_pr_number,
+        "requested_role": requested_role,
+        "current": {
+            "role": current_role,
+            "number": current_number,
+            "source": source,
+        },
+        "summary": summary,
+    }
+
+
+def closeout_current_pr_number(pr_roles: dict[str, Any]) -> int | None:
+    current = pr_roles.get("current") if isinstance(pr_roles, dict) else None
+    number = current.get("number") if isinstance(current, dict) else None
+    return int(number) if isinstance(number, int) else None
 
 
 def closeout_subcheck(
@@ -20985,8 +21062,16 @@ def closeout_payload(
     status_checks_file: str | None = None,
     branch_protection_file: str | None = None,
     ruleset_file: str | None = None,
+    pr_role: str | None = None,
+    pr_role_numbers: dict[str, int] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
+    pr_roles = closeout_pr_roles_payload(
+        legacy_pr_number=pr_number,
+        role_numbers=pr_role_numbers or {},
+        requested_role=pr_role,
+    )
+    effective_pr_number = closeout_current_pr_number(pr_roles)
     effective_profile = effective_closeout_gate_profile(gate_profile)
     expected_closeout_lookup = closeout_expected_item_lookup(target_root, issue_number, expected_item)
     missing_inputs.extend(retained_item_lookup_missing_inputs(expected_closeout_lookup))
@@ -21097,13 +21182,13 @@ def closeout_payload(
     reconciliation_payload: dict[str, Any] | None = None
     closeout_fallback: str | None = None
     closeout_summary_override: str | None = None
-    if issue_number is not None or pr_number is not None or project_number is not None:
+    if issue_number is not None or effective_pr_number is not None or project_number is not None:
         reconciliation_payload, reconciliation_errors = reconciliation_audit_payload(
             target_root=target_root,
             phase_number=phase_number,
             fr_number=fr_number,
             issue_number=issue_number,
-            pr_number=pr_number,
+            pr_number=effective_pr_number,
             project_number=project_number,
             branch_name=branch_name,
             owner=owner,
@@ -21172,7 +21257,7 @@ def closeout_payload(
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
     merge_commit_in_target: bool | None = None
-    if pr_number is not None:
+    if effective_pr_number is not None:
         fixture_pr_payload, fixture_pr_errors = load_optional_json_fixture(
             target_root,
             pr_payload_file,
@@ -21185,7 +21270,7 @@ def closeout_payload(
             pr_payload = fixture_pr_payload
             pr_errors = []
         else:
-            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, effective_pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:
@@ -21205,14 +21290,14 @@ def closeout_payload(
                 else:
                     missing_inputs.append("pr baseRefName is missing")
 
-    if pr_number is not None:
+    if effective_pr_number is not None:
         backlink_subchecks = closeout_backlink_subchecks(
             target_root=target_root,
             context=fact_chain_context,
             profile=CLOSEOUT_LIGHT_PROFILE,
             owner=owner,
             repo_name=repo_name,
-            pr_number=pr_number,
+            pr_number=effective_pr_number,
             pr_payload=pr_payload,
             merge_commit_sha=merge_commit_sha,
             merge_commit_in_target=merge_commit_in_target,
@@ -21279,7 +21364,7 @@ def closeout_payload(
                         "project_v2_issue_item_lookup",
                         issue_item_errors,
                     )
-            pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
+            pr_item = find_project_item(items, effective_pr_number, "pr") if effective_pr_number is not None else None
             if issue_number is not None and issue_item is None:
                 missing_inputs.append("issue is missing from project")
             project_payload = {
@@ -21420,6 +21505,8 @@ def closeout_payload(
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "repo": {"owner": owner, "name": repo_name},
+            "pr_roles": pr_roles,
+            "current_pr_role": pr_roles["current"],
             "gate": gate,
             **({"suite_gate_validation": suite_gate_validation} if suite_gate_validation is not None else {}),
             "issue": issue_payload,
@@ -21496,6 +21583,8 @@ def handle_closeout(args: argparse.Namespace) -> int:
         status_checks_file=args.status_checks_file,
         branch_protection_file=args.branch_protection_file,
         ruleset_file=args.ruleset_file,
+        pr_role=args.pr_role,
+        pr_role_numbers=closeout_pr_role_numbers_from_args(args),
     )
     if errors:
         return emit(
@@ -21614,6 +21703,8 @@ def handle_closeout(args: argparse.Namespace) -> int:
         status_checks_file=args.status_checks_file,
         branch_protection_file=args.branch_protection_file,
         ruleset_file=args.ruleset_file,
+        pr_role=args.pr_role,
+        pr_role_numbers=closeout_pr_role_numbers_from_args(args),
     )
     if errors:
         sync_missing.extend(errors)
@@ -21687,12 +21778,18 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             }
         )
 
+    pr_roles = closeout_pr_roles_payload(
+        legacy_pr_number=args.pr,
+        role_numbers=closeout_pr_role_numbers_from_args(args),
+        requested_role=args.pr_role,
+    )
+    effective_pr_number = closeout_current_pr_number(pr_roles)
     payload, errors = reconciliation_audit_payload(
         target_root=target_root,
         phase_number=args.phase,
         fr_number=args.fr,
         issue_number=args.issue,
-        pr_number=args.pr,
+        pr_number=effective_pr_number,
         project_number=args.project,
         branch_name=args.branch,
         owner=owner,
@@ -21714,6 +21811,8 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             }
         )
     payload["runtime_state"] = runtime_state
+    payload["pr_roles"] = pr_roles
+    payload["current_pr_role"] = pr_roles["current"]
     if args.operation == "audit":
         return emit(payload)
 
