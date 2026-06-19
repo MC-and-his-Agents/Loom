@@ -12,10 +12,10 @@
 - Validation Entry: release readback; version/release/npm/package checks; CLI contract; skills checks; PR metadata preflight; hosted checks; post-merge release evidence readback
 - Closing Condition: v0.16.0 tag, GitHub Release, npm package, global CLI smoke, #1293 issue state, target branch, and Loom carriers are terminal and mutually consistent.
 - Current Checkpoint: merge
-- Current Stop: v0.16.0 release PR #1646 is open, PR body machine carrier readback passed, native dependency edges for completed predecessors were cleared, and repo-local PR gate inputs are ready for hosted checks and controlled merge.
-- Next Step: Wait for hosted checks on PR #1646 head `241a01a80a3c52a95d449a2a4440c64b025e393f`, then run controlled merge check/run and post-merge release readback.
+- Current Stop: v0.16.0 release PR #1646 is open, PR body machine carrier readback passed, native dependency edges for completed predecessors were cleared, and hosted `release-judgment` failure was classified as PR diff shallow-fetch merge-base loss with a workflow readback fix in progress.
+- Next Step: Update review/PR metadata for the workflow fix head, wait for hosted checks on PR #1646, then run controlled merge check/run and post-merge release readback.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19T11:06Z-2026-06-19T11:15Z local release validation passed: release readback classified `v0.16.0` as unpublished; tag/GitHub Release/npm occupancy readback found no `v0.16.0`; version/release/npm/package/skills checks passed; CLI contract `merge-wrapper`, `release-readback`, and `aggregate` passed; suite validate/evidence/carrier passed; fact-chain, shadow parity, and `git diff --check` passed. First raw `py_compile` produced `tools/__pycache__`; classified as local validation artifact, removed, and replaced with `python3 tools/py_compile_clean.py ...`, which passed without package payload pollution.
+- Latest Validation Summary: 2026-06-19T11:06Z-2026-06-19T11:15Z local release validation passed: release readback classified `v0.16.0` as unpublished; tag/GitHub Release/npm occupancy readback found no `v0.16.0`; version/release/npm/package/skills checks passed; CLI contract `merge-wrapper`, `release-readback`, and `aggregate` passed; suite validate/evidence/carrier passed; fact-chain, shadow parity, and `git diff --check` passed. First raw `py_compile` produced `tools/__pycache__`; classified as local validation artifact, removed, and replaced with `python3 tools/py_compile_clean.py ...`, which passed without package payload pollution. 2026-06-19T11:33Z hosted `release-judgment` run `27823076402` failed from PR diff shallow-fetch merge-base loss (`fatal: origin/main...HEAD: no merge base`); `.github/workflows/loom-cli-release.yml` now fetches the base branch without `--depth=1`, and local `git fetch origin main && git merge-base origin/main HEAD && git diff --name-only origin/main...HEAD` passes.
 - Recovery Boundary: WI-1293 release/docs/version closeout only; do not modify #1452 runtime behavior, #1292 fixture logic, live branch protection/rulesets, HotCP/WebEnvoy/Syvert repositories, or parent #1285 closeout before release evidence is terminal.
 - Current Lane: milestone-9-release-control
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-19 WI-1293 milestone/9 v0.16.0 release closeout
 - Logs Entry: local command output retained in current Codex milestone/9 thread
 - Diagnostics Entry: #1293 consumes completed #1452 triggered-check behavior and #1292 cross-repo fixture coverage before v0.16.0 release.
-- Verification Entry: release readback, version/release/npm/package/skills checks, CLI contract surfaces, suite validation, fact-chain, shadow parity, and diff hygiene passed pre-PR on 2026-06-19.
+- Verification Entry: release readback, version/release/npm/package/skills checks, CLI contract surfaces, suite validation, fact-chain, shadow parity, diff hygiene, and PR diff merge-base readback passed locally on 2026-06-19.
 - Lane Entry: milestone-9-main-control
 
 ## Sources
