@@ -60,6 +60,15 @@ If the repository still carries `.loom/bin`, `.loom/bootstrap`, `plugins/loom/`,
 `.agents/skills`, or Loom-owned root `skills/`, treat those paths as unsupported
 legacy residue until `doctor` classifies them.
 
+<!-- legacy-installer-doc-sync-anchor: loom host install --host codex --mode plugin --target . --apply --json -->
+<!-- legacy-installer-doc-sync-anchor: loom host verify --host codex --mode plugin --target . --json -->
+<!-- legacy-installer-doc-sync-anchor: CLI-managed payloads -->
+
+The legacy installer doc-sync anchor above is retained only for checker
+continuity. In the milestone #14 target it is historical vocabulary for
+unsupported repo-local plugin payload residue, not a compatible current install
+command.
+
 Codex should start from `loom-init` after host discovery reloads. In
 metadata-only adoption, the user-level Codex Loom plugin is the skills provider.
 Downstream top-level `skills/` belongs to the target repository namespace unless
