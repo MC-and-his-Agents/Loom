@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1292",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1292 minimal suite: scenarios S1-S4 and acceptance A1-A5 map to automated fixture evidence, implementation contract, fresh verification input, and #1452 dependency consumption without runtime scope expansion.",
+  "reviewer": "Codex main-control",
+  "authored_at": "2026-06-19T09:44:12Z",
+  "reviewed_head": "b6848e68021e4b5f465c8d82173d8de076b73465",
+  "reviewed_validation_summary": "2026-06-19: `python3 -m py_compile tools/check_cli_contract.py` passed; `python3 -m json.tool docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json >/dev/null` passed; `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge` passed in 2.02s; `python3 tools/loom.py suite validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1292 --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1292.md",
+    "recovery_entry": ".loom/progress/WI-1292.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1292/spec.md",
+    "suite_plan": ".loom/specs/WI-1292/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1292/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1292/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
