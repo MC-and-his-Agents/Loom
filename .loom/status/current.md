@@ -12,12 +12,12 @@
 - Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface governance-closeout/closeout roles; skills_surface check; demo bootstrap fixture check; PR metadata readback/preflight; hosted loom-check
 - Closing Condition: Issue #1599 and PR #1605 are terminal only after closeout PR role behavior, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-1599 is ready for PR #1605 merge gate: closeout PR role implementation, minimal suite, evidence map, and task carrier are in place.
-- Next Step: Record current-head spec and implementation reviews, refresh shadow carriers, update PR #1605 metadata, and wait for hosted checks.
+- Current Stop: Repo-local closeout role runtime parity repaired after hosted release-judgment failure.
+- Next Step: Commit runtime carrier, refresh review evidence, update PR body, and rerun hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19 WI-1599 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface governance-closeout passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; PR #1605 metadata readback/preflight must be re-read after final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile had passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at last readback.
-- Recovery Boundary: Work item carrier, minimal suite, evidence map, task carrier, review records, PR metadata, and shadow carrier for #1599 / PR #1605 only.
-- Current Lane: Closeout PR role lane
+- Latest Validation Summary: 2026-06-19: governance-closeout CLI contract passed; loom_init verify passed; governance-profile status passed; runtime-parity validate passed; adopt verify passed; git diff --check passed.
+- Recovery Boundary: Scope remains issue #1599 closeout PR role model and repo-local runtime parity; no release publishing or dependency parser changes.
+- Current Lane: closeout PR role lane
 
 ## Runtime Evidence
 

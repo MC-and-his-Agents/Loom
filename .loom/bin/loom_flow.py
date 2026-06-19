@@ -129,6 +129,12 @@ CLOSEOUT_GATE_PROFILES = (
     "distribution-regression",
     "strong-profile-full-gate",
 )
+CLOSEOUT_PR_ROLES = (
+    "implementation_pr",
+    "release_pr",
+    "carrier_sync_pr",
+    "final_closeout_pr",
+)
 CLOSEOUT_LIGHT_PROFILE = "closeout-contract"
 CLOSEOUT_HEAVY_PROFILES = {
     "source-self-fixture",
@@ -137,10 +143,99 @@ CLOSEOUT_HEAVY_PROFILES = {
     "strong-profile-full-gate",
 }
 PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
+PR_METADATA_RENDER_SCHEMA = "loom-pr-metadata-render/v1"
+PR_METADATA_READBACK_SCHEMA = "loom-pr-metadata-readback/v1"
+PR_METADATA_UPDATE_SCHEMA = "loom-pr-metadata-update/v1"
 PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
 PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
+PR_METADATA_RENDERER_ID = "renderer:loom-pr-metadata-render/v1"
 GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
+CLOSEOUT_FREEZE_SCHEMA = "loom-closeout-freeze/v1"
+CLOSEOUT_SPECIFIC_GATE_SCHEMA = "loom-closeout-specific-gate/v1"
+HOSTED_FREEZE_ADMISSION_SCHEMA = "loom-hosted-freeze-admission/v1"
+FAILURE_CLASSIFIER_SCHEMA = "loom-failure-classifier/v1"
+FAILURE_CLASSIFIER_CATEGORIES = (
+    "code_semantics",
+    "pr_metadata_drift",
+    "carrier_refresh_needed",
+    "shadow_stale",
+    "review_stale",
+    "host_api_unreadable",
+    "ci_environment",
+    "permission",
+    "external_service_flake",
+    "suite_evidence_contract_invalid",
+    "task_carrier_contract_invalid",
+    "contract_vocabulary_invalid",
+    "unsupported_command_surface",
+    "freeze_artifact_unreadable",
+    "hosted_snapshot_mismatch",
+    "release_evidence_phase_error",
+)
+FAILURE_CLASSIFIER_KIND_MAP = {
+    "head_binding_drift": "review_stale",
+    "review_stale": "review_stale",
+    "validation_summary_drift": "review_stale",
+    "shadow_source_hash_drift": "shadow_stale",
+    "carrier_refresh_stale": "carrier_refresh_needed",
+    "head_or_pr_drift": "pr_metadata_drift",
+    "stale_evidence": "suite_evidence_contract_invalid",
+    "missing_evidence_map": "suite_evidence_contract_invalid",
+    "missing_fresh_verification_evidence": "suite_evidence_contract_invalid",
+    "missing_task_carrier_locator": "task_carrier_contract_invalid",
+    "carrier_truth_conflict": "task_carrier_contract_invalid",
+    "invalid_not_applicable_rationale": "contract_vocabulary_invalid",
+    "missing_suite_path_decision": "contract_vocabulary_invalid",
+    "unsupported_command_surface": "unsupported_command_surface",
+    "freeze_artifact_unreadable": "freeze_artifact_unreadable",
+    "hosted_snapshot_mismatch": "hosted_snapshot_mismatch",
+    "release_evidence_phase_error": "release_evidence_phase_error",
+    "closeout_terminal_subject_drift": "pr_metadata_drift",
+    "closeout_host_git_mismatch": "host_api_unreadable",
+    "closeout_dependency_graph_drift": "host_api_unreadable",
+    "closeout_carrier_drift": "carrier_refresh_needed",
+    "closeout_shadow_stale": "shadow_stale",
+    "closeout_release_evidence_gap": "release_evidence_phase_error",
+    "closeout_retained_review_unconsumable": "review_stale",
+    "closeout_allowed_paths_violation": "code_semantics",
+    "closeout_batch_mixed_risk": "code_semantics",
+    "host_api_unreadable": "host_api_unreadable",
+    "permission": "permission",
+    "ci_environment": "ci_environment",
+    "external_service_flake": "external_service_flake",
+}
+FAILURE_CLASSIFIER_INPUT_MAP = {
+    "pr_metadata": "pr_metadata_drift",
+    "pr_body_pin": "pr_metadata_drift",
+    "carrier_refresh": "carrier_refresh_needed",
+    "shadow_parity": "shadow_stale",
+    "shadow_freshness": "shadow_stale",
+    "review_binding": "review_stale",
+    "suite_evidence_validation": "suite_evidence_contract_invalid",
+    "suite_validation": "contract_vocabulary_invalid",
+    "suite_carrier_validation": "task_carrier_contract_invalid",
+    "command_surface": "unsupported_command_surface",
+    "release_requiredness": "release_evidence_phase_error",
+}
+FAILURE_CLASSIFIER_NEXT_ACTIONS = {
+    "code_semantics": "fix the code or contract violation, then rerun the failing gate.",
+    "pr_metadata_drift": "regenerate or update the PR body machine carrier, read it back, then rerun gate freeze.",
+    "carrier_refresh_needed": "refresh Loom carriers, then rerun gate freeze.",
+    "shadow_stale": "refresh or restore shadow evidence, then rerun shadow parity and gate freeze.",
+    "review_stale": "rerun authored Loom review for the current head, then rerun gate freeze.",
+    "host_api_unreadable": "bridge an explicit GH_TOKEN/GITHUB_TOKEN for this command or retry after host API access recovers.",
+    "ci_environment": "fix the CI/runtime environment and rerun the check.",
+    "permission": "fix host permissions or bridge an explicit token for this command.",
+    "external_service_flake": "wait for the external service to recover, then rerun once.",
+    "suite_evidence_contract_invalid": "fix suite evidence contract fields, then rerun suite evidence validation.",
+    "task_carrier_contract_invalid": "fix Work Item/task carrier fields, then rerun suite carrier validation.",
+    "contract_vocabulary_invalid": "use the supported contract vocabulary, then rerun validation.",
+    "unsupported_command_surface": "use an implemented Loom command surface or update the command matrix.",
+    "freeze_artifact_unreadable": "restore the freeze artifact or declared source file, then rerun gate freeze.",
+    "hosted_snapshot_mismatch": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
+    "release_evidence_phase_error": "record release/no-release evidence in the correct phase, then rerun gate freeze.",
+}
 GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID = "loom-governance-intensity"
 GOVERNANCE_INTENSITY_VALUES = {"light", "standard", "reinforced"}
 GOVERNANCE_CHANGE_CLASS_VALUES = {
@@ -533,6 +628,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
+    work_item_audit = subparsers.add_parser("work-item-audit", help="Audit active Work Item carrier drift before starting work")
+    work_item_audit.add_argument("--target", required=True, help="Target repository root")
+    work_item_audit.add_argument("--item", help="Expected current item id")
+    work_item_audit.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
     fact_chain = subparsers.add_parser("fact-chain", help="Read and validate the Loom fact chain")
     fact_chain.add_argument("--target", required=True, help="Target repository root")
     fact_chain.add_argument("--item", help="Expected current item id")
@@ -582,6 +686,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     carrier.add_argument("--dry-run", action="store_true", default=True, help="Preview refresh actions without writing files; this is the default")
     carrier.add_argument("--write", dest="dry_run", action="store_false", help="Write Loom-owned carrier metadata refreshes")
     carrier.add_argument("--apply", dest="dry_run", action="store_false", help="Apply explicit versioned carrier closeout metadata writes")
+    carrier.add_argument(
+        "--surface",
+        choices=("pre_review", "review", "merge_ready", "closeout"),
+        default="merge_ready",
+        help="Gate surface whose carrier refresh drift policy should be evaluated",
+    )
     carrier.add_argument("--terminal-state", choices=tuple(sorted(TERMINAL_CLOSEOUT_STATES)), help="Terminal closeout state to write")
     carrier.add_argument("--issue", help="Issue locator or number bound to terminal closeout")
     carrier.add_argument("--pr", help="PR locator or number bound to terminal closeout")
@@ -659,24 +769,48 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    pr_gate.add_argument("--body-file", help="Optional repo-relative hosted PR body readback artifact")
+    pr_gate.add_argument("--compare-body-file", help="Optional repo-relative PR body artifact to compare with --body-file")
+    pr_gate.add_argument("--gate-freeze-snapshot-file", help="Optional repo-relative loom-gate-freeze/v1 snapshot to compare with hosted recomputation")
+    pr_gate.add_argument(
+        "--surface",
+        choices=("pre_review", "review", "merge_ready", "closeout"),
+        default=None,
+        help="PR metadata surface consumed by this gate; defaults to the PR body machine surface or merge_ready",
+    )
 
-    pr_metadata = subparsers.add_parser("pr-metadata", help="Validate repo-specific PR metadata machine carriers")
-    pr_metadata.add_argument("operation", choices=("preflight",))
+    pr_metadata = subparsers.add_parser("pr-metadata", help="Render, update, read back, or validate repo-specific PR metadata machine carriers")
+    pr_metadata.add_argument("operation", choices=("render", "update", "readback", "preflight"))
     pr_metadata.add_argument("--target", required=True, help="Target repository root")
     pr_metadata.add_argument(
         "--surface",
-        choices=("pre_review", "review", "merge_ready"),
+        choices=("pre_review", "review", "merge_ready", "closeout"),
         required=True,
         help="Gate surface that consumes the metadata preflight",
     )
     pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--item", help="Expected Loom Work Item id for render, update, or readback binding")
     pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
     pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
     pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    pr_metadata.add_argument("--output-file", default=".loom/runtime/pr/metadata-rendered.md", help="Repo-relative rendered PR body artifact output path")
+    pr_metadata.add_argument("--readback-file", default=".loom/runtime/pr/metadata-readback.md", help="Repo-relative readback artifact output path when reading the current host PR body")
+    pr_metadata.add_argument("--base-body-file", default=".github/PULL_REQUEST_TEMPLATE.md", help="Repo-relative PR body template or existing body artifact to update during render")
     pr_metadata.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
     pr_metadata.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
+    pr_metadata.add_argument("--governance-intensity", choices=tuple(sorted(GOVERNANCE_INTENSITY_VALUES)), default="standard")
+    pr_metadata.add_argument("--change-class", choices=tuple(sorted(GOVERNANCE_CHANGE_CLASS_VALUES)), default="contract")
+    pr_metadata.add_argument("--suite-path", choices=tuple(sorted(GOVERNANCE_SUITE_PATH_VALUES)), default="minimal")
+    pr_metadata.add_argument("--review-requirement", choices=tuple(sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES)), default="current_head_review_required")
+    pr_metadata.add_argument("--release-judgment", choices=tuple(sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES)), default="no_release")
+    pr_metadata.add_argument("--upgrade-trigger", action="append", default=[], help="Repeatable governance upgrade trigger string")
+    pr_metadata.add_argument("--suite-na-rationale")
+    pr_metadata.add_argument("--suite-na-consumer-boundary")
+    pr_metadata.add_argument("--suite-na-recheck-condition")
+    pr_metadata.add_argument("--suite-na-scope-proof")
+    pr_metadata.add_argument("--suite-na-review-requirement")
 
     gate_freeze = subparsers.add_parser("gate-freeze", help="Generate or validate hosted gate input freeze snapshots")
     gate_freeze.add_argument("operation", choices=("check", "write"))
@@ -693,14 +827,30 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     gate_freeze.add_argument("--head-sha", help="Expected PR head SHA")
     gate_freeze.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     gate_freeze.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    gate_freeze.add_argument("--issue", type=int, help="GitHub issue number for closeout profile terminal fact readback")
+    gate_freeze.add_argument("--issue-payload-file", help="Optional repo-relative issue payload JSON fixture for closeout profile")
+    gate_freeze.add_argument("--dependency-payload-file", help="Optional repo-relative native dependency payload JSON fixture for closeout profile")
     gate_freeze.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
     gate_freeze.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
     gate_freeze.add_argument(
         "--surface",
-        choices=("pre_review", "review", "merge_ready"),
+        choices=("pre_review", "review", "merge_ready", "closeout"),
         default="merge_ready",
         help="Gate surface whose PR metadata contract is consumed by the snapshot",
     )
+    gate_freeze.add_argument(
+        "--profile",
+        choices=("hosted", "closeout"),
+        default="hosted",
+        help="Freeze profile to emit; `closeout` emits loom-closeout-freeze/v1 terminal admission.",
+    )
+    gate_freeze.add_argument(
+        "--closeout-mode",
+        choices=("inline", "auto_no_op", "light", "batched", "full"),
+        default="light",
+        help="Closeout terminal profile mode used with --profile closeout.",
+    )
+    gate_freeze.add_argument("--target-branch", default="main", help="Target branch used for closeout merge commit containment readback")
     gate_freeze.add_argument("--write-path", help="Repo-relative snapshot output path; defaults to .loom/runtime/gate-freeze/<item>.json")
 
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
@@ -855,6 +1005,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--item", help="Expected retained Loom Work Item id for closeout disambiguation")
     closeout.add_argument("--issue", type=int, help="GitHub issue number to validate or sync")
     closeout.add_argument("--pr", type=int, help="GitHub pull request number to validate or sync")
+    closeout.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, help="Explicit closeout PR role consumed by this check")
+    closeout.add_argument("--implementation-pr", type=int, help="Implementation PR number for the closeout subject")
+    closeout.add_argument("--release-pr", type=int, help="Release PR number for the closeout subject")
+    closeout.add_argument("--carrier-sync-pr", type=int, help="Carrier sync PR number for the closeout subject")
+    closeout.add_argument("--final-closeout-pr", type=int, help="Final closeout PR number for the closeout subject")
     closeout.add_argument("--project", type=int, help="GitHub project number to validate or sync")
     closeout.add_argument("--phase", type=int, help="GitHub Phase issue number")
     closeout.add_argument("--fr", type=int, help="GitHub FR issue number")
@@ -877,11 +1032,29 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
     closeout.add_argument("--skip-gate", action="store_true", help="Skip explicit heavyweight local gate execution during closeout")
 
+    closeout_queue = subparsers.add_parser("closeout-queue", help="Read post-merge closeout residue queue status without writing")
+    closeout_queue.add_argument("operation", choices=("status",))
+    closeout_queue.add_argument("--target", required=True, help="Target repository root")
+    closeout_queue.add_argument("--issue", type=int, action="append", default=[], help="Limit scan to one or more GitHub issue numbers")
+    closeout_queue.add_argument("--item", action="append", default=[], help="Limit scan to one or more Work Item ids")
+    closeout_queue.add_argument("--queue-file", help="Optional repo-relative JSON fixture with host completion inputs")
+    closeout_queue.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root; reported for next-command context only",
+    )
+
     reconciliation = subparsers.add_parser("reconciliation", help="Audit Loom GitHub drift before closeout reconciliation")
     reconciliation.add_argument("operation", choices=("audit", "sync"))
     reconciliation.add_argument("--target", required=True, help="Target repository root")
+    reconciliation.add_argument("--item", help="Expected retained Loom Work Item id for reconciliation disambiguation")
     reconciliation.add_argument("--issue", type=int, help="GitHub issue number to audit")
     reconciliation.add_argument("--pr", type=int, help="GitHub pull request number to audit")
+    reconciliation.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, help="Explicit closeout PR role consumed by this reconciliation read")
+    reconciliation.add_argument("--implementation-pr", type=int, help="Implementation PR number for the closeout subject")
+    reconciliation.add_argument("--release-pr", type=int, help="Release PR number for the closeout subject")
+    reconciliation.add_argument("--carrier-sync-pr", type=int, help="Carrier sync PR number for the closeout subject")
+    reconciliation.add_argument("--final-closeout-pr", type=int, help="Final closeout PR number for the closeout subject")
     reconciliation.add_argument("--project", type=int, help="GitHub project number to audit")
     reconciliation.add_argument("--phase", type=int, help="GitHub Phase issue number")
     reconciliation.add_argument("--fr", type=int, help="GitHub FR issue number")
@@ -4717,6 +4890,67 @@ def closeout_gate_command(target_root: Path) -> tuple[list[str], str]:
 
 def effective_closeout_gate_profile(profile: str | None) -> str:
     return CLOSEOUT_LIGHT_PROFILE if profile in {None, "auto"} else profile
+
+
+def closeout_pr_role_numbers_from_args(args: argparse.Namespace) -> dict[str, int]:
+    roles: dict[str, int] = {}
+    for role in CLOSEOUT_PR_ROLES:
+        value = getattr(args, role, None)
+        if value is not None:
+            roles[role] = int(value)
+    return roles
+
+
+def closeout_pr_roles_payload(
+    *,
+    legacy_pr_number: int | None,
+    role_numbers: dict[str, int],
+    requested_role: str | None,
+) -> dict[str, Any]:
+    current_role: str | None = None
+    current_number: int | None = None
+    source: str | None = None
+
+    if requested_role is not None:
+        current_role = requested_role
+        current_number = role_numbers.get(requested_role, legacy_pr_number)
+        source = f"--{requested_role.replace('_', '-')}" if requested_role in role_numbers else "--pr plus --pr-role"
+    else:
+        for role in ("final_closeout_pr", "carrier_sync_pr", "release_pr", "implementation_pr"):
+            if role in role_numbers:
+                current_role = role
+                current_number = role_numbers[role]
+                source = f"--{role.replace('_', '-')}"
+                break
+        if current_role is None and legacy_pr_number is not None:
+            current_role = "implementation_pr"
+            current_number = legacy_pr_number
+            source = "--pr"
+
+    summary = (
+        f"closeout check is consuming `{current_role}` PR #{current_number}."
+        if current_role is not None and current_number is not None
+        else "closeout check has no PR role input; host PR readback is not role-bound."
+    )
+    return {
+        "schema_version": "loom-closeout-pr-roles/v1",
+        "supported_roles": list(CLOSEOUT_PR_ROLES),
+        "roles": {role: role_numbers[role] for role in CLOSEOUT_PR_ROLES if role in role_numbers},
+        "legacy_pr": legacy_pr_number,
+        "requested_role": requested_role,
+        "current": {
+            "role": current_role,
+            "number": current_number,
+            "source": source,
+        },
+        "summary": summary,
+    }
+
+
+def closeout_current_pr_number(pr_roles: dict[str, Any]) -> int | None:
+    current = pr_roles.get("current") if isinstance(pr_roles, dict) else None
+    number = current.get("number") if isinstance(current, dict) else None
+    return int(number) if isinstance(number, int) else None
 
 
 def closeout_subcheck(
@@ -9812,6 +10046,25 @@ def text_mentions_issue_number(text: object, issue_number: int) -> bool:
     return any(re.search(pattern, text) for pattern in patterns)
 
 
+def exact_issue_locator_match(text: object, issue_number: int) -> bool:
+    if not isinstance(text, str):
+        return False
+    normalized = text.strip().strip("`").strip()
+    if not normalized:
+        return False
+    exact_values = {
+        f"#{issue_number}",
+        f"issue #{issue_number}",
+        f"github issue #{issue_number}",
+        f"github:issue/{issue_number}",
+        f"issue/{issue_number}",
+        f"issues/{issue_number}",
+        f"/issues/{issue_number}",
+        f"https://github.com/MC-and-his-Agents/Loom/issues/{issue_number}",
+    }
+    return normalized.casefold() in {value.casefold() for value in exact_values}
+
+
 def retained_item_candidate_reasons(
     *,
     target_root: Path,
@@ -9841,8 +10094,11 @@ def retained_item_candidate_reasons(
         reasons.append("work item title/body metadata references issue")
 
     artifacts = work_item.get("associated_artifacts")
-    if isinstance(artifacts, list) and any(text_mentions_issue_number(value, issue_number) for value in artifacts):
-        reasons.append("associated artifact references issue")
+    if isinstance(artifacts, list):
+        if any(exact_issue_locator_match(value, issue_number) for value in artifacts):
+            reasons.append("exact associated artifact issue locator")
+        elif any(text_mentions_issue_number(value, issue_number) for value in artifacts):
+            reasons.append("associated artifact references issue")
 
     recovery_relative = work_item.get("recovery_entry")
     if isinstance(recovery_relative, str) and recovery_relative:
@@ -12984,6 +13240,170 @@ def handle_purity(args: argparse.Namespace) -> int:
     return emit(payload)
 
 
+def work_item_audit_finding_from_diagnostic(diagnostic: dict[str, Any]) -> dict[str, Any]:
+    classification = str(diagnostic.get("classification") or "unknown")
+    freshness = str(diagnostic.get("freshness") or "unknown")
+    audit_blocking = bool(diagnostic.get("blocking")) or classification == "carrier_closeout_required"
+    kind_by_classification = {
+        "stale_carrier": "unrelated_terminal_stale_carrier",
+        "carrier_closeout_required": "host_complete_carrier_not_terminalized",
+        "shared_workspace_conflict": "multiple_active_work_items",
+    }
+    classifier_by_classification = {
+        "stale_carrier": "stale_carrier",
+        "carrier_closeout_required": "carrier_refresh_needed",
+        "shared_workspace_conflict": "carrier_truth_conflict",
+    }
+    next_action_by_classification = {
+        "stale_carrier": "leave unrelated terminal carriers out of the current Work Item, or retire them through their own flow if they still appear active.",
+        "carrier_closeout_required": "run the reported carrier closeout-sync command, then rerun work-item audit before starting the next Work Item.",
+        "shared_workspace_conflict": "move one active Work Item to its own branch/worktree or close its recovery path before continuing.",
+    }
+    finding = {
+        "kind": kind_by_classification.get(classification, "active_carrier_drift"),
+        "item_id": diagnostic.get("item_id"),
+        "classification": classification,
+        "classifier": classifier_by_classification.get(classification, "carrier_truth_conflict" if audit_blocking else "not_applicable"),
+        "freshness": freshness,
+        "blocking": audit_blocking,
+        "purity_blocking": bool(diagnostic.get("blocking")),
+        "work_item_locator": diagnostic.get("work_item_locator"),
+        "binding_locator": diagnostic.get("binding_locator"),
+        "checkpoint": diagnostic.get("checkpoint"),
+        "next_action": next_action_by_classification.get(
+            classification,
+            str(diagnostic.get("recommended_remediation") or "inspect the retained Work Item carrier before continuing."),
+        ),
+    }
+    if diagnostic.get("next_command"):
+        finding["next_command"] = diagnostic.get("next_command")
+    if diagnostic.get("host_truth"):
+        finding["host_truth"] = diagnostic.get("host_truth")
+    return finding
+
+
+def work_item_audit_payload(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return runtime_state_block_payload(
+            command="work-item-audit",
+            runtime_state=runtime_state,
+            summary="work-item audit is blocked because the Loom runtime state is inconsistent.",
+        )
+
+    context, errors = load_context(target_root, output_relative, expected_item)
+    if errors:
+        return {
+            "command": "work-item-audit",
+            "schema_version": "loom-active-carrier-audit/v1",
+            "result": "block",
+            "summary": "work-item audit could not read a valid Loom fact chain.",
+            "missing_inputs": [f"fact-chain: {message}" for message in errors],
+            "fallback_to": "admission",
+            "runtime_state": runtime_state,
+            "findings": [],
+            "current_item": None,
+            "shadow_freshness": {"status": "not_checked"},
+        }
+
+    assert context is not None
+    purity = purity_report_from_context(context)
+    diagnostics = list(purity.get("active_workspace_diagnostics", []))
+    diagnostic_findings = [work_item_audit_finding_from_diagnostic(entry) for entry in diagnostics if isinstance(entry, dict)]
+    diagnostic_counts: dict[str, int] = {}
+    for finding in diagnostic_findings:
+        classification = str(finding.get("classification") or "unknown")
+        diagnostic_counts[classification] = diagnostic_counts.get(classification, 0) + 1
+
+    current_checkpoint = str(context.get("current_checkpoint") or "")
+    current_item = {
+        "kind": "current_item_legitimate_active_carrier"
+        if current_checkpoint not in TERMINAL_CHECKPOINTS
+        else "current_item_terminal_carrier",
+        "item_id": context["item_id"],
+        "workspace_entry": context["workspace_entry"],
+        "checkpoint": current_checkpoint,
+        "blocking": False,
+        "classifier": "not_applicable",
+        "next_action": "continue with the selected Work Item after resolving any blocking audit findings.",
+    }
+
+    shadow_actions = refresh_shadow_evidence_actions(target_root)
+    shadow_blocking = [
+        action
+        for action in shadow_actions
+        if action.get("kind") == "shadow-evidence" and action.get("status") in {"block", "refresh-needed"}
+    ]
+    shadow_freshness = {
+        "schema_version": "loom-work-item-audit-shadow-freshness/v1",
+        "result": "block" if shadow_blocking else "pass",
+        "actions": shadow_actions,
+        "blocking_paths": [action.get("path") for action in shadow_blocking if action.get("path")],
+        "next_action": "refresh shadow evidence source hashes with the supported carrier refresh/write path, then rerun work-item audit."
+        if shadow_blocking
+        else "no shadow freshness action required.",
+    }
+
+    blocking_findings = [finding for finding in diagnostic_findings if finding.get("blocking")]
+    if shadow_blocking:
+        blocking_findings.append(
+            {
+                "kind": "current_item_shadow_source_hash_drift",
+                "item_id": context["item_id"],
+                "classification": "shadow_source_hash_drift",
+                "classifier": "shadow_stale",
+                "freshness": "refresh_needed",
+                "blocking": True,
+                "paths": [action.get("path") for action in shadow_blocking if action.get("path")],
+                "next_action": "refresh shadow evidence source hashes with the supported carrier refresh/write path, then rerun work-item audit.",
+            }
+        )
+
+    result = "block" if blocking_findings else "pass"
+    nonblocking_samples = [finding for finding in diagnostic_findings if not finding.get("blocking")][:20]
+    fallback_to = None
+    if blocking_findings:
+        classifiers = {str(finding.get("classifier") or "") for finding in blocking_findings}
+        fallback_to = "carrier_closeout_sync" if "carrier_refresh_needed" in classifiers else "carrier_refresh"
+    return {
+        "command": "work-item-audit",
+        "schema_version": "loom-active-carrier-audit/v1",
+        "result": result,
+        "summary": (
+            "work-item audit found active carrier drift that must be resolved before starting work."
+            if result == "block"
+            else "work-item audit found no blocking active carrier drift before starting work."
+        ),
+        "missing_inputs": [
+            f"{finding.get('kind')}: {finding.get('item_id') or ','.join(str(path) for path in finding.get('paths', []))}"
+            for finding in blocking_findings
+        ],
+        "fallback_to": fallback_to,
+        "runtime_state": runtime_state,
+        "current_item": current_item,
+        "findings": blocking_findings,
+        "nonblocking_samples": nonblocking_samples,
+        "diagnostic_summary": {
+            "total": len(diagnostic_findings),
+            "blocking": len(blocking_findings),
+            "by_classification": diagnostic_counts,
+            "nonblocking_samples_limited_to": 20,
+        },
+        "shadow_freshness": shadow_freshness,
+        "purity_summary": {
+            "state": purity.get("state"),
+            "hard_failure_count": len(purity.get("hard_failures", [])),
+            "report_only_count": len(purity.get("report_only", [])),
+        },
+        "next_actions": [finding.get("next_action") for finding in blocking_findings if finding.get("next_action")],
+    }
+
+
+def handle_work_item_audit(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(work_item_audit_payload(target_root, args.output, args.item))
+
+
 def handle_fact_chain(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     report, errors = load_fact_chain_report(target_root, args.output)
@@ -13808,7 +14228,14 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
             write_json_file(path, payload)
 
 
-def carrier_refresh_payload(target_root: Path, output_relative: str, expected_item: str | None, *, dry_run: bool) -> dict[str, Any]:
+def carrier_refresh_payload(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    *,
+    dry_run: bool,
+    surface: str = "merge_ready",
+) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     context, context_errors = load_context(target_root, output_relative, expected_item)
     idle_context = is_idle_context_errors(context_errors)
@@ -13860,7 +14287,13 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
         assert context
         review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
         spec_review_path = default_spec_review_path(context["item_id"])
-        allowed_paths = allowed_post_review_carrier_paths(context, review_path, spec_review_path)
+        normalized_checkpoint = normalize_checkpoint(str(context.get("current_checkpoint", "")))
+        terminal_closeout_surface = surface == "closeout" and normalized_checkpoint in TERMINAL_CHECKPOINTS
+        allowed_paths = (
+            allowed_terminal_closeout_carrier_paths(context, review_path, spec_review_path)
+            if terminal_closeout_surface
+            else allowed_post_review_carrier_paths(context, review_path, spec_review_path)
+        )
         if review_errors or review_record is None:
             review_status = {"status": "missing", "path": review_path, "missing_inputs": review_errors or [f"missing review artifact: {review_path}"]}
         else:
@@ -13869,7 +14302,17 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
                 reviewed_head=str(review_record.get("reviewed_head", "")),
                 allowed_paths=allowed_paths,
             )
-            review_status = {"path": review_path, "head_binding": binding, "missing_inputs": binding_errors}
+            review_status = {
+                "path": review_path,
+                "head_binding": binding,
+                "missing_inputs": binding_errors,
+                "surface": surface,
+                "allowed_paths_policy": (
+                    "terminal closeout carrier paths only; requires terminal checkpoint"
+                    if terminal_closeout_surface
+                    else "post-review carrier paths only"
+                ),
+            }
             if binding.get("status") in {"implementation-drift-only", "stale"}:
                 review_status["status"] = "block"
                 missing_inputs.append("review artifact is stale because non-carrier drift is present")
@@ -13902,6 +14345,7 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
         "missing_inputs": missing_inputs,
         "fallback_to": None if result == "pass" else "adoption",
         "dry_run": dry_run,
+        "surface": surface,
         "runtime_state": runtime_state,
         "actions": actions,
         "refresh_needed": refresh_needed,
@@ -14370,6 +14814,470 @@ def carrier_repair_payload(
     }
 
 
+def parse_terminal_closeout_metadata(path: Path) -> dict[str, str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    in_section = False
+    metadata: dict[str, str] = {}
+    for line in lines:
+        if line.strip() == "## Terminal Closeout Metadata":
+            in_section = True
+            continue
+        if in_section and line.startswith("## "):
+            break
+        if not in_section or not line.startswith("- ") or ":" not in line:
+            continue
+        key, value = line[2:].split(":", 1)
+        normalized = key.strip().lower().replace(" ", "_").replace("-", "_")
+        metadata[normalized] = value.strip()
+    return metadata
+
+
+def parse_optional_number(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        match = re.search(r"\d+", value)
+        if match:
+            return int(match.group(0))
+    return None
+
+
+def extract_single_number(pattern: re.Pattern[str], texts: list[str]) -> int | None:
+    values: set[int] = set()
+    for text in texts:
+        values.update(int(match.group("number")) for match in pattern.finditer(text))
+    return next(iter(values)) if len(values) == 1 else None
+
+
+def closeout_queue_fixture_by_item(target_root: Path, queue_file: str | None) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    if not queue_file:
+        return {}, []
+    payload, errors = load_optional_json_fixture(target_root, queue_file, label="closeout queue fixture")
+    if errors:
+        return {}, errors
+    if isinstance(payload, dict):
+        raw_items = payload.get("items")
+        if raw_items is None:
+            raw_items = payload.get("queue")
+    elif isinstance(payload, list):
+        raw_items = payload
+    else:
+        raw_items = None
+    if not isinstance(raw_items, list):
+        return {}, ["closeout queue fixture must contain an items array"]
+    by_item: dict[str, dict[str, Any]] = {}
+    fixture_errors: list[str] = []
+    for index, raw_item in enumerate(raw_items, start=1):
+        if not isinstance(raw_item, dict):
+            fixture_errors.append(f"closeout queue fixture item {index} must be an object")
+            continue
+        item_id = raw_item.get("item_id") or raw_item.get("item")
+        if not isinstance(item_id, str) or not item_id:
+            fixture_errors.append(f"closeout queue fixture item {index} is missing item_id")
+            continue
+        by_item[item_id] = raw_item
+    return by_item, fixture_errors
+
+
+def normalize_host_completion(raw: Any, metadata: dict[str, str]) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        host = dict(raw)
+        source = str(host.get("source") or "fixture")
+    else:
+        host = {}
+        source = "terminal_metadata" if metadata else "local_scan"
+    merge_commit = str(host.get("merge_commit") or host.get("mergeCommit") or metadata.get("merge_commit") or "").strip()
+    target_branch = str(host.get("target_branch") or host.get("baseRefName") or metadata.get("target_branch") or "").strip()
+    closed_at = str(host.get("closed_at") or host.get("closedAt") or host.get("mergedAt") or metadata.get("closed_at") or "").strip()
+    evidence_locator = str(host.get("evidence_locator") or metadata.get("evidence_locator") or "").strip()
+    issue_closed = host.get("issue_closed")
+    pr_merged = host.get("pr_merged")
+    if issue_closed is None and str(host.get("issue_state") or host.get("state") or "").lower() == "closed":
+        issue_closed = True
+    if pr_merged is None and str(host.get("pr_state") or "").upper() == "MERGED":
+        pr_merged = True
+    if pr_merged is None and merge_commit:
+        pr_merged = True
+    if issue_closed is None and metadata.get("issue") and metadata.get("issue") != "not_applicable":
+        issue_closed = True
+    if pr_merged is None and metadata.get("pr") and metadata.get("pr") != "not_applicable" and merge_commit:
+        pr_merged = True
+    missing: list[str] = []
+    if issue_closed is not True:
+        missing.append("issue_closed")
+    if pr_merged is not True:
+        missing.append("pr_merged")
+    for field_name, value in (
+        ("merge_commit", merge_commit),
+        ("target_branch", target_branch),
+        ("closed_at", closed_at),
+        ("evidence_locator", evidence_locator),
+    ):
+        if not value or value == "not_applicable":
+            missing.append(field_name)
+    if not raw and not metadata:
+        result = "unknown"
+        missing = ["host_completion"]
+    else:
+        result = "pass" if not missing else "block"
+    return {
+        "result": result,
+        "source": source,
+        "issue_closed": issue_closed if issue_closed is not None else "unknown",
+        "pr_merged": pr_merged if pr_merged is not None else "unknown",
+        "merge_commit": merge_commit or None,
+        "target_branch": target_branch or None,
+        "closed_at": closed_at or None,
+        "evidence_locator": evidence_locator or None,
+        "missing_inputs": missing,
+    }
+
+
+def terminal_metadata_complete(metadata: dict[str, str]) -> bool:
+    if not metadata:
+        return False
+    terminal_state = metadata.get("terminal_state")
+    if terminal_state in {None, "", "not_applicable"}:
+        return False
+    required = ("issue", "pr", "merge_commit", "target_branch", "closed_at", "evidence_locator")
+    return all(metadata.get(field) and metadata.get(field) != "not_applicable" for field in required)
+
+
+def closeout_queue_next_command(
+    *,
+    mode: str,
+    item_id: str,
+    issue_number: int | None,
+    pr_number: int | None,
+    host_completion: dict[str, Any],
+) -> str | None:
+    if mode == "light_carrier_sync":
+        if issue_number is None or pr_number is None:
+            return None
+        merge_commit = host_completion.get("merge_commit")
+        target_branch = host_completion.get("target_branch")
+        closed_at = host_completion.get("closed_at")
+        evidence_locator = host_completion.get("evidence_locator")
+        if not all(isinstance(value, str) and value for value in (merge_commit, target_branch, closed_at, evidence_locator)):
+            return None
+        return (
+            "loom carrier closeout-sync --target <repo> "
+            f"--item {item_id} --issue {issue_number} --pr {pr_number} "
+            f"--merge-commit {merge_commit} --target-branch {target_branch} "
+            f"--closed-at {closed_at} --evidence-locator {shlex.quote(evidence_locator)} --json"
+        )
+    if mode == "batched_closeout" and issue_number is not None:
+        return f"loom repair plan --target <repo> --issue {issue_number} --json"
+    if mode == "full_closeout" and issue_number is not None:
+        command = f"loom closeout --target <repo> --issue {issue_number}"
+        if pr_number is not None:
+            command += f" --pr {pr_number}"
+        return command + " --json"
+    return None
+
+
+def classify_closeout_queue_item(
+    *,
+    item_id: str,
+    work_item_relative: str,
+    recovery_relative: str | None,
+    checkpoint: str | None,
+    terminal_metadata: dict[str, str],
+    host_completion: dict[str, Any],
+    issue_number: int | None,
+    pr_number: int | None,
+) -> dict[str, Any]:
+    carrier_checkpoint = normalize_checkpoint(checkpoint or "")
+    carrier_terminal = carrier_checkpoint in TERMINAL_CHECKPOINTS or terminal_state_from_checkpoint(carrier_checkpoint) is not None
+    metadata_present = bool(terminal_metadata)
+    metadata_complete = terminal_metadata_complete(terminal_metadata)
+    missing_inputs = list(host_completion.get("missing_inputs", []))
+    host_result = host_completion.get("result")
+    if issue_number is None:
+        missing_inputs.append("issue_number")
+    if pr_number is None and host_result in {"pass", "block"}:
+        missing_inputs.append("pr_number")
+
+    if metadata_complete and carrier_terminal and host_result in {"pass", "unknown"}:
+        mode = "auto_no_op"
+        next_action = "none"
+        fallback_to = None
+        missing_inputs = []
+    elif host_result == "pass" and carrier_terminal:
+        mode = "light_carrier_sync"
+        next_action = "preview terminal carrier metadata sync"
+        fallback_to = "loom carrier closeout-sync --target <repo> --json"
+    elif host_result == "pass" and not carrier_terminal:
+        mode = "batched_closeout"
+        next_action = "plan stale active carrier closeout"
+        fallback_to = "loom repair plan --target <repo> --issue <issue> --json"
+    elif host_result == "block" and issue_number is not None and pr_number is not None:
+        mode = "full_closeout"
+        next_action = "run full closeout check with host readback"
+        fallback_to = "loom closeout --target <repo> --issue <issue> --pr <pr> --json"
+    else:
+        mode = "blocked"
+        next_action = "provide retained host completion evidence before queue classification"
+        fallback_to = "manual-reconciliation"
+        if host_result == "unknown" and "host_completion" not in missing_inputs:
+            missing_inputs.append("host_completion")
+
+    next_command = closeout_queue_next_command(
+        mode=mode,
+        item_id=item_id,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        host_completion=host_completion,
+    )
+    if mode != "auto_no_op" and next_command is None:
+        if "next_command_inputs" not in missing_inputs:
+            missing_inputs.append("next_command_inputs")
+        if mode != "blocked":
+            mode = "blocked"
+            next_action = "provide missing inputs before queue classification"
+            fallback_to = "manual-reconciliation"
+
+    return {
+        "item_id": item_id,
+        "work_item_relative": work_item_relative,
+        "issue_number": issue_number,
+        "pr_number": pr_number,
+        "host_completion": host_completion,
+        "carrier_checkpoint": carrier_checkpoint or None,
+        "terminal_metadata_present": metadata_present,
+        "merge_commit": host_completion.get("merge_commit") or terminal_metadata.get("merge_commit"),
+        "target_branch": host_completion.get("target_branch") or terminal_metadata.get("target_branch"),
+        "closed_at": host_completion.get("closed_at") or terminal_metadata.get("closed_at"),
+        "reconciliation_result": "not_run",
+        "closeout_mode": mode,
+        "evidence_locator": host_completion.get("evidence_locator") or terminal_metadata.get("evidence_locator"),
+        "next_action": next_action,
+        "next_command": next_command,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": fallback_to,
+        **({"recovery_relative": recovery_relative} if recovery_relative else {}),
+    }
+
+
+def closeout_queue_status_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    issue_filters: list[int],
+    item_filters: list[str],
+    queue_file: str | None,
+) -> dict[str, Any]:
+    if not issue_filters and not item_filters and not queue_file:
+        return {
+            "command": "closeout-queue",
+            "operation": "status",
+            "schema_version": "loom-closeout-queue-status/v1",
+            "result": "block",
+            "mode": "blocked",
+            "summary": "closeout queue status requires an explicit queue input before scanning retained Work Items.",
+            "target": str(target_root),
+            "output": output_relative,
+            "mutates": False,
+            "host_mutations": False,
+            "carrier_mutations": False,
+            "item_count": 0,
+            "mode_counts": {
+                "auto_no_op": 0,
+                "light_carrier_sync": 0,
+                "batched_closeout": 0,
+                "full_closeout": 0,
+                "blocked": 0,
+            },
+            "items": [],
+            "diagnostics": [],
+            "missing_inputs": ["queue_input"],
+            "fallback_to": "manual-reconciliation",
+            "next_action": "provide --issue, --item, or --queue-file before reading closeout queue status",
+            "next_command": "loom closeout queue status --target <repo> --issue <issue> --json",
+        }
+    fixture_by_item, fixture_errors = closeout_queue_fixture_by_item(target_root, queue_file)
+    work_items_dir = target_root / ".loom" / "work-items"
+    items: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    if not work_items_dir.exists():
+        return {
+            "command": "closeout-queue",
+            "operation": "status",
+            "schema_version": "loom-closeout-queue-status/v1",
+            "result": "pass" if not fixture_errors else "block",
+            "mode": "auto_no_op" if not fixture_errors else "blocked",
+            "summary": "closeout queue status found no retained Work Items.",
+            "target": str(target_root),
+            "mutates": False,
+            "host_mutations": False,
+            "carrier_mutations": False,
+            "items": [],
+            "missing_inputs": fixture_errors,
+            "fallback_to": "manual-reconciliation" if fixture_errors else None,
+            "next_action": "none" if not fixture_errors else "fix closeout queue fixture inputs",
+            "next_command": None,
+        }
+
+    requested_items = set(item_filters)
+    requested_issues = set(issue_filters)
+    for work_item_path in sorted(work_items_dir.glob("*.md")):
+        work_item_relative = relative_to_root(work_item_path, target_root)
+        try:
+            work_item, work_item_errors = parse_work_item(work_item_path, target_root)
+        except OSError as exc:
+            diagnostics.append({"work_item_relative": work_item_relative, "status": "unreadable", "missing_inputs": [str(exc)]})
+            continue
+        if work_item_errors:
+            diagnostics.append({"work_item_relative": work_item_relative, "status": "parse_error", "missing_inputs": work_item_errors})
+            continue
+        item_id = str(work_item.get("item_id") or work_item_path.stem)
+        if requested_items and item_id not in requested_items:
+            continue
+        recovery_relative = str(work_item.get("recovery_entry") or "")
+        recovery_path = target_root / recovery_relative if recovery_relative else None
+        recovery_entry: dict[str, Any] = {}
+        recovery_errors: list[str] = []
+        recovery_text = ""
+        if recovery_path is None or not recovery_path.exists():
+            recovery_errors.append(f"missing recovery entry: {recovery_relative or '<missing>'}")
+        else:
+            recovery_text = recovery_path.read_text(encoding="utf-8")
+            recovery_entry, recovery_errors = parse_recovery_entry(recovery_path, target_root, recovery_relative)
+        fixture = fixture_by_item.get(item_id, {})
+        terminal_metadata = parse_terminal_closeout_metadata(recovery_path) if recovery_path is not None else {}
+        texts = [work_item_path.read_text(encoding="utf-8"), recovery_text]
+        issue_number = (
+            parse_optional_number(fixture.get("issue_number"))
+            or parse_optional_number(terminal_metadata.get("issue"))
+            or extract_single_number(GITHUB_ISSUE_URL_RE, texts)
+            or extract_single_number(GITHUB_ISSUE_REF_RE, texts)
+            or (int(item_id.removeprefix("WI-")) if re.fullmatch(r"WI-\d+", item_id) else None)
+        )
+        pr_number = (
+            parse_optional_number(fixture.get("pr_number"))
+            or parse_optional_number(terminal_metadata.get("pr"))
+            or extract_single_number(GITHUB_PR_URL_RE, texts)
+            or extract_single_number(GITHUB_PR_REF_RE, texts)
+        )
+        if requested_issues and issue_number not in requested_issues:
+            continue
+        host_completion = normalize_host_completion(fixture.get("host_completion"), terminal_metadata)
+        if recovery_errors:
+            host_completion["result"] = "block"
+            host_completion["missing_inputs"] = dedupe_strings([*host_completion.get("missing_inputs", []), *recovery_errors])
+        item_payload = classify_closeout_queue_item(
+            item_id=item_id,
+            work_item_relative=work_item_relative,
+            recovery_relative=recovery_relative or None,
+            checkpoint=str(recovery_entry.get("current_checkpoint") or ""),
+            terminal_metadata=terminal_metadata,
+            host_completion=host_completion,
+            issue_number=issue_number,
+            pr_number=pr_number,
+        )
+        items.append(item_payload)
+
+    mode_rank = {
+        "blocked": 5,
+        "full_closeout": 4,
+        "batched_closeout": 3,
+        "light_carrier_sync": 2,
+        "auto_no_op": 1,
+    }
+    actionable_items = [item for item in items if item.get("closeout_mode") != "auto_no_op"]
+    blocked_items = [item for item in items if item.get("closeout_mode") == "blocked"]
+    unmatched_filters: list[str] = []
+    matched_item_ids = {str(item.get("item_id")) for item in items if item.get("item_id")}
+    matched_issue_numbers = {item.get("issue_number") for item in items if item.get("issue_number") is not None}
+    for requested_item in sorted(requested_items):
+        if requested_item not in matched_item_ids:
+            unmatched_filters.append(f"item not found: {requested_item}")
+    for requested_issue in sorted(requested_issues):
+        if requested_issue not in matched_issue_numbers:
+            unmatched_filters.append(f"issue not found: {requested_issue}")
+
+    if fixture_errors:
+        mode = "blocked"
+        next_action = "fix closeout queue fixture inputs"
+        next_command = None
+    elif unmatched_filters:
+        mode = "blocked"
+        next_action = "correct closeout queue filters before treating the queue as empty"
+        next_command = None
+    elif not items or not actionable_items:
+        mode = "auto_no_op"
+        next_action = "none"
+        next_command = None
+    elif blocked_items:
+        mode = "blocked"
+        next_action = "resolve blocked queue items before applying closeout sync"
+        next_command = None
+    elif len(actionable_items) > 1:
+        mode = "batched_closeout"
+        next_action = "process actionable queue items in listed order"
+        next_command = "review items[].next_command"
+    else:
+        only = actionable_items[0]
+        mode = str(only.get("closeout_mode"))
+        next_action = str(only.get("next_action"))
+        next_command = only.get("next_command")
+    result = "block" if mode == "blocked" else "pass"
+    missing_inputs = dedupe_strings(
+        [
+            *fixture_errors,
+            *unmatched_filters,
+            *[
+                f"{item.get('item_id')}: {message}"
+                for item in items
+                for message in item.get("missing_inputs", [])
+                if item.get("closeout_mode") == "blocked"
+            ],
+        ]
+    )
+    return {
+        "command": "closeout-queue",
+        "operation": "status",
+        "schema_version": "loom-closeout-queue-status/v1",
+        "result": result,
+        "mode": mode,
+        "summary": (
+            "closeout queue status found no post-merge residue requiring action."
+            if mode == "auto_no_op"
+            else "closeout queue status classified retained post-merge residue."
+            if result == "pass"
+            else "closeout queue status is blocked until required retained host inputs are available."
+        ),
+        "target": str(target_root),
+        "output": output_relative,
+        "mutates": False,
+        "host_mutations": False,
+        "carrier_mutations": False,
+        "item_count": len(items),
+        "mode_counts": {name: sum(1 for item in items if item.get("closeout_mode") == name) for name in sorted(mode_rank, key=mode_rank.get)},
+        "items": items,
+        "diagnostics": diagnostics,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "manual-reconciliation" if result == "block" else None,
+        "next_action": next_action,
+        "next_command": next_command,
+    }
+
+
+def handle_closeout_queue(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    payload = closeout_queue_status_payload(
+        target_root=target_root,
+        output_relative=args.output,
+        issue_filters=args.issue,
+        item_filters=args.item,
+        queue_file=args.queue_file,
+    )
+    return emit(payload)
+
+
 def handle_repair(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     return emit(
@@ -14388,7 +15296,7 @@ def handle_carrier(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     if args.operation == "closeout-sync":
         return emit(carrier_closeout_sync_payload(target_root, args.output, args.item, args))
-    return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run))
+    return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run, surface=args.surface))
 
 
 def github_commit_pulls(root: Path, owner: str, repo_name: str, head_sha: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -14837,6 +15745,49 @@ def load_optional_text_fixture(target_root: Path, fixture: str | None, *, label:
         return None, [f"invalid {label} `{fixture}`: {exc}"]
 
 
+def pr_metadata_replace_or_insert_binding_line(body: str, *, label: str, value: str, insert_after: str | None = None) -> str:
+    pattern = re.compile(rf"(?im)^([ \t]*[-*]?[ \t]*{re.escape(label)}[ \t]*:[ \t]*)(`?[^`\n]*`?)[ \t]*$")
+    if pattern.search(body):
+        return pattern.sub(lambda match: f"{match.group(1)}{value}", body, count=1)
+
+    lines = body.splitlines()
+    insert_at: int | None = None
+    if insert_after:
+        anchor_pattern = re.compile(rf"(?im)^[ \t]*[-*]?[ \t]*{re.escape(insert_after)}[ \t]*:")
+        for index, line in enumerate(lines):
+            if anchor_pattern.search(line):
+                insert_at = index + 1
+                break
+    if insert_at is None:
+        in_related = False
+        for index, line in enumerate(lines):
+            if line.startswith("## "):
+                if line.strip() == "## Related Work":
+                    in_related = True
+                    continue
+                if in_related:
+                    insert_at = index
+                    break
+            if in_related and line.strip().startswith("- "):
+                insert_at = index + 1
+        if insert_at is None and in_related:
+            insert_at = len(lines)
+    if insert_at is None:
+        lines.extend(["", "## Related Work", ""])
+        insert_at = len(lines)
+    lines.insert(insert_at, f"- {label}: {value}")
+    return "\n".join(lines) + ("\n" if body.endswith("\n") else "")
+
+
+def pr_metadata_replace_machine_block(body: str, *, marker: str, rendered_block: str) -> str:
+    pattern = re.compile(rf"<!--\s*{re.escape(marker)}\s*.*?-->", flags=re.DOTALL)
+    if pattern.search(body):
+        updated = pattern.sub(rendered_block.rstrip(), body, count=1)
+    else:
+        updated = body.rstrip() + "\n\n" + rendered_block.rstrip() + "\n"
+    return updated if updated.endswith("\n") else updated + "\n"
+
+
 def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
     if not isinstance(payload, dict):
         return None, ["PR payload fixture must be a JSON object"]
@@ -14903,9 +15854,9 @@ def pr_work_item_from_body(body: Any) -> str | None:
         return None
     work_item_id = r"(?:[A-Z]+-\d+(?:-\d+)*|INIT-\d+)"
     patterns = (
-        rf"(?im)^\s*[-*]?\s*Loom Work Item\s*:\s*`?({work_item_id})`?\s*$",
-        rf"(?im)^\s*[-*]?\s*Work Item\s*:\s*`?({work_item_id})`?\s*$",
-        rf"(?im)^\s*[-*]?\s*Loom-Work-Item\s*:\s*`?({work_item_id})`?\s*$",
+        rf"(?im)^[ \t]*[-*]?[ \t]*Loom Work Item[ \t]*:[ \t]*`?({work_item_id})`?[ \t]*$",
+        rf"(?im)^[ \t]*[-*]?[ \t]*Work Item[ \t]*:[ \t]*`?({work_item_id})`?[ \t]*$",
+        rf"(?im)^[ \t]*[-*]?[ \t]*Loom-Work-Item[ \t]*:[ \t]*`?({work_item_id})`?[ \t]*$",
     )
     for pattern in patterns:
         match = re.search(pattern, body)
@@ -14917,7 +15868,7 @@ def pr_work_item_from_body(body: Any) -> str | None:
 def pr_body_field_value(body: Any, label: str) -> str | None:
     if not isinstance(body, str):
         return None
-    pattern = rf"(?im)^\s*[-*]?\s*{re.escape(label)}\s*:\s*`?([^`\n]+?)`?\s*$"
+    pattern = rf"(?im)^[ \t]*[-*]?[ \t]*{re.escape(label)}[ \t]*:[ \t]*`?([^`\n]+?)`?[ \t]*$"
     match = re.search(pattern, body)
     if not match:
         return None
@@ -14994,7 +15945,7 @@ def pr_metadata_expected_format(marker: str) -> str:
         "{\n"
         '  "schema_version": "loom-repo-pr-metadata/v1",\n'
         '  "metadata_contract_id": "<repo-specific-id>",\n'
-        '  "surface": "review|merge_ready",\n'
+        '  "surface": "review|merge_ready|closeout",\n'
         '  "fields": {"<repo-field>": "<value>"},\n'
         '  "source": {"rendered_hash": "<sha256-or-repo-renderer-hash>"},\n'
         '  "parser_version": "loom-pr-metadata-parser/v1"\n'
@@ -15060,9 +16011,13 @@ def applicable_pr_metadata_contracts(
         machine_carrier = field.get("machine_carrier")
         if not isinstance(machine_carrier, dict):
             continue
+        carrier_surface = pr_metadata_contract_surface(field)
         preflight = machine_carrier.get("preflight")
         required_before = preflight.get("required_before") if isinstance(preflight, dict) else None
         if isinstance(required_before, list) and surface in required_before:
+            contracts.append(field)
+            continue
+        if surface == "closeout" and carrier_surface == "merge_ready":
             contracts.append(field)
     return contracts
 
@@ -15743,6 +16698,527 @@ def pr_metadata_preflight_payload(
     }
 
 
+def render_governance_intensity_metadata_body(
+    *,
+    base_body: str,
+    field: dict[str, Any],
+    requested_surface: str,
+    item_id: str,
+    branch_name: str,
+    head_sha: str,
+    governance_intensity: str,
+    change_class: str,
+    suite_path: str,
+    review_requirement: str,
+    release_judgment: str,
+    upgrade_triggers: list[str],
+    suite_not_applicable: dict[str, str] | None,
+) -> tuple[str, dict[str, Any], list[str]]:
+    contract_id = str(field.get("id") or GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID)
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    effective_surface = pr_metadata_effective_contract_surface(field, requested_surface)
+    fields = {
+        "loom_work_item": item_id,
+        "branch": branch_name,
+        "head_sha": head_sha,
+        "governance_intensity": governance_intensity,
+        "change_class": change_class,
+        "suite_path": suite_path,
+        "suite_not_applicable": suite_not_applicable if suite_path == "not_applicable" else None,
+        "review_requirement": review_requirement,
+        "fact_chain_required": True,
+        "pr_gate_required": True,
+        "release_judgment": release_judgment,
+        "closeout_required": True,
+        "upgrade_triggers": upgrade_triggers,
+    }
+    missing_inputs = validate_governance_intensity_metadata_fields(fields)
+    if missing_inputs:
+        return base_body, {}, missing_inputs
+    envelope = {
+        "schema_version": PR_METADATA_MACHINE_SCHEMA,
+        "metadata_contract_id": contract_id,
+        "surface": effective_surface,
+        "fields": fields,
+        "source": {"rendered_hash": PR_METADATA_RENDERER_ID},
+        "parser_version": PR_METADATA_PARSER_VERSION,
+    }
+    rendered_block = "<!-- " + marker + "\n" + json.dumps(envelope, indent=2, ensure_ascii=False) + "\n-->\n"
+    updated = pr_metadata_replace_or_insert_binding_line(base_body, label="Loom Work Item", value=item_id)
+    updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
+    updated = pr_metadata_replace_or_insert_binding_line(updated, label="Head SHA", value=head_sha, insert_after="Branch")
+    updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
+    return updated, envelope, []
+
+
+def pr_metadata_render_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    output_file: str,
+    base_body_file: str,
+    item_id: str | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    governance_intensity: str,
+    change_class: str,
+    suite_path: str,
+    review_requirement: str,
+    release_judgment: str,
+    upgrade_triggers: list[str],
+    suite_na_rationale: str | None,
+    suite_na_consumer_boundary: str | None,
+    suite_na_recheck_condition: str | None,
+    suite_na_scope_proof: str | None,
+    suite_na_review_requirement: str | None,
+) -> dict[str, Any]:
+    base_body, base_errors = load_optional_text_fixture(target_root, base_body_file, label="PR metadata render base body")
+    output_path, output_errors = resolve_repo_relative_path(target_root, output_file, label="PR metadata render output")
+    current_head = head_sha or git_head_sha(target_root)
+    current_branch = branch_name or git_branch(target_root)
+    effective_item = item_id
+    if not effective_item:
+        init_result = target_root / ".loom" / "bootstrap" / "init-result.json"
+        if init_result.exists():
+            try:
+                payload = load_json_file(init_result)
+                fact_chain = payload.get("fact_chain") if isinstance(payload, dict) else None
+                entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+                current_item = entry_points.get("current_item_id") if isinstance(entry_points, dict) else None
+                if isinstance(current_item, str) and current_item not in {"", "no_active_item"}:
+                    effective_item = current_item
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
+
+    missing_inputs = list(base_errors) + list(output_errors)
+    if not effective_item:
+        missing_inputs.append("pass --item <WI-...> or provide a readable current Loom Work Item carrier")
+    if not current_branch:
+        missing_inputs.append("branch is unavailable; pass --branch <work/...>")
+    if not current_head:
+        missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
+
+    suite_not_applicable: dict[str, str] | None = None
+    if suite_path == "not_applicable":
+        suite_not_applicable = {
+            "rationale": suite_na_rationale or "",
+            "consumer_boundary": suite_na_consumer_boundary or "",
+            "recheck_condition": suite_na_recheck_condition or "",
+            "scope_proof": suite_na_scope_proof or "",
+            "review_requirement": suite_na_review_requirement or review_requirement,
+        }
+
+    governance_surface = build_governance_surface(target_root)
+    fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
+    contracts = applicable_pr_metadata_contracts(fields, surface=surface)
+    missing_inputs.extend(str(message) for message in contract_errors)
+    contract = next((field for field in contracts if field.get("id") == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID), None)
+    if contract is None and not contract_errors:
+        missing_inputs.append(f"no applicable PR metadata machine carrier is declared for surface {surface}")
+    if missing_inputs:
+        return {
+            "command": "pr-metadata",
+            "operation": "render",
+            "schema_version": PR_METADATA_RENDER_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata render is missing required bindings, carrier declarations, or output locators.",
+            "missing_inputs": dedupe_strings(missing_inputs),
+            "fallback_to": "adoption" if contract is None else "manual_pr_metadata_inputs",
+            "source_locator": source_locator,
+        }
+
+    assert base_body is not None
+    assert output_path is not None
+    rendered_body, envelope, render_errors = render_governance_intensity_metadata_body(
+        base_body=base_body,
+        field=contract,
+        requested_surface=surface,
+        item_id=effective_item or "",
+        branch_name=current_branch or "",
+        head_sha=current_head or "",
+        governance_intensity=governance_intensity,
+        change_class=change_class,
+        suite_path=suite_path,
+        review_requirement=review_requirement,
+        release_judgment=release_judgment,
+        upgrade_triggers=[entry for entry in upgrade_triggers if isinstance(entry, str) and entry.strip()],
+        suite_not_applicable=suite_not_applicable,
+    )
+    if render_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "render",
+            "schema_version": PR_METADATA_RENDER_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata render inputs do not satisfy the governance metadata contract.",
+            "missing_inputs": dedupe_strings(render_errors),
+            "fallback_to": "manual_pr_metadata_inputs",
+            "source_locator": source_locator,
+        }
+
+    write_runtime_text_artifact(output_path, rendered_body)
+    relative_output = relative_to_root(output_path, target_root)
+    preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface=surface,
+        body_file=relative_output,
+        expected_item=effective_item,
+        expected_head_sha=current_head,
+        expected_branch=current_branch,
+        governance_surface=governance_surface,
+    )
+    result = "pass" if preflight.get("result") == "pass" else "block"
+    return {
+        "command": "pr-metadata",
+        "operation": "render",
+        "schema_version": PR_METADATA_RENDER_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": (
+            "PR metadata render produced a repo-relative PR body artifact and validated it with local preflight."
+            if result == "pass"
+            else "PR metadata render produced an artifact but local preflight still found blocking diagnostics."
+        ),
+        "missing_inputs": preflight.get("missing_inputs", []),
+        "fallback_to": preflight.get("fallback_to"),
+        "source_locator": source_locator,
+        "rendered_body": {
+            "body_file": relative_output,
+            "body_sha256": hashlib.sha256(rendered_body.encode("utf-8")).hexdigest(),
+            "base_body_file": base_body_file,
+            "legacy_bindings": {
+                "loom_work_item": effective_item,
+                "branch": current_branch,
+                "head_sha": current_head,
+            },
+        },
+        "metadata_contract_id": envelope.get("metadata_contract_id"),
+        "effective_carrier_surface": envelope.get("surface"),
+        "envelope": envelope,
+        "preflight": preflight,
+        "next_actions": [
+            f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(relative_output)} --json",
+            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --json",
+        ],
+    }
+
+
+def gh_pr_view_body(root: Path, pr_number: int) -> tuple[str | None, list[str]]:
+    owner, repo_name = detect_github_repo(root)
+    if not owner or not repo_name:
+        return None, ["owner/repo"]
+    payload, errors = github_pr_payload(root, owner, repo_name, pr_number)
+    if errors or payload is None:
+        return None, errors
+    body = payload.get("body")
+    if not isinstance(body, str):
+        return None, [f"gh api repos/{owner}/{repo_name}/pulls/{pr_number} is missing `body`"]
+    return body, []
+
+
+def gh_pr_edit_body_file(root: Path, pr_number: int, body_path: Path) -> list[str]:
+    try:
+        result = run_process(["gh", "pr", "edit", str(pr_number), "--body-file", str(body_path)], root, timeout_seconds=30)
+    except FileNotFoundError:
+        return ["gh command is unavailable in PATH"]
+    except subprocess.TimeoutExpired:
+        return [f"gh pr edit {pr_number} --body-file timed out after 30s"]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh pr edit failed"
+        return [detail]
+    return []
+
+
+def pr_metadata_readback_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    owner: str | None = None,
+    repo_name: str | None = None,
+    pr_number: int | None = None,
+    head_sha: str | None = None,
+    branch_name: str | None = None,
+    pr_payload_file: str | None = None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
+    readback_file: str | None = None,
+    expected_item: str | None = None,
+) -> dict[str, Any]:
+    governance_surface = build_governance_surface(target_root)
+    effective_body_file = body_file
+    effective_compare_file = compare_body_file
+    source_body: str | None = None
+    effective_pr = pr_number
+    host_errors: list[str] = []
+    inferences: list[dict[str, Any]] = []
+
+    if effective_body_file is None and effective_compare_file is None:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        pr_payload, inferred_pr, payload_errors, payload_inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner or detected_owner,
+            repo_name=repo_name or detected_repo,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=branch_name,
+            pr_payload_file=pr_payload_file,
+        )
+        effective_pr = inferred_pr
+        inferences.extend(payload_inferences)
+        if payload_errors:
+            host_errors.extend(f"pr: {message}" for message in payload_errors)
+        elif isinstance(pr_payload, dict):
+            source_body = pr_payload.get("body") if isinstance(pr_payload.get("body"), str) else None
+        if source_body is None and effective_pr is not None:
+            source_body, view_errors = gh_pr_view_body(target_root, effective_pr)
+            host_errors.extend(view_errors)
+        if source_body is not None and readback_file:
+            readback_path, path_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
+            if path_errors:
+                host_errors.extend(path_errors)
+            else:
+                assert readback_path is not None
+                write_runtime_text_artifact(readback_path, source_body)
+                effective_body_file = relative_to_root(readback_path, target_root)
+
+    preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface=surface,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=effective_body_file,
+        compare_body_file=effective_compare_file,
+        governance_surface=governance_surface,
+        expected_item=expected_item,
+        expected_head_sha=head_sha,
+        expected_branch=branch_name,
+    )
+    body = source_body
+    if effective_compare_file:
+        body, _ = load_optional_text_fixture(target_root, effective_compare_file, label="post-edit PR body file")
+    elif effective_body_file:
+        body, _ = load_optional_text_fixture(target_root, effective_body_file, label="PR body file")
+    result = "pass" if preflight.get("result") == "pass" and isinstance(body, str) and not host_errors else "block"
+    missing_inputs = [*host_errors, *[str(message) for message in preflight.get("missing_inputs", [])]]
+    return {
+        "command": "pr-metadata",
+        "operation": "readback",
+        "schema_version": PR_METADATA_READBACK_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": (
+            "PR metadata readback parsed the current body artifact and matched the declared machine carrier."
+            if result == "pass"
+            else "PR metadata readback could not prove the current body artifact matches the declared machine carrier."
+        ),
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": preflight.get("fallback_to"),
+        "pr": effective_pr,
+        "body_file": effective_compare_file or effective_body_file,
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest() if isinstance(body, str) else None,
+        "legacy_bindings": {
+            "loom_work_item": pr_body_binding_value(body, label="Loom Work Item", metadata_field="loom_work_item") if isinstance(body, str) else None,
+            "branch": pr_body_binding_value(body, label="Branch", metadata_field="branch") if isinstance(body, str) else None,
+            "head_sha": pr_body_binding_value(body, label="Head SHA", metadata_field="head_sha") if isinstance(body, str) else None,
+        },
+        "machine_surface": pr_body_machine_surface(body) if isinstance(body, str) else None,
+        "governance_fields": pr_body_governance_metadata_fields(body) if isinstance(body, str) else {},
+        "preflight": preflight,
+        "inferences": inferences,
+        "next_actions": [
+            f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(effective_compare_file or effective_body_file or '<body-file>')} --json",
+        ],
+    }
+
+
+def pr_metadata_update_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    output_file: str,
+    readback_file: str,
+    base_body_file: str,
+    item_id: str | None,
+    governance_intensity: str,
+    change_class: str,
+    suite_path: str,
+    review_requirement: str,
+    release_judgment: str,
+    upgrade_triggers: list[str],
+    suite_na_rationale: str | None,
+    suite_na_consumer_boundary: str | None,
+    suite_na_recheck_condition: str | None,
+    suite_na_scope_proof: str | None,
+    suite_na_review_requirement: str | None,
+) -> dict[str, Any]:
+    render_payload = pr_metadata_render_payload(
+        target_root=target_root,
+        surface=surface,
+        output_file=output_file,
+        base_body_file=base_body_file,
+        item_id=item_id,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        governance_intensity=governance_intensity,
+        change_class=change_class,
+        suite_path=suite_path,
+        review_requirement=review_requirement,
+        release_judgment=release_judgment,
+        upgrade_triggers=upgrade_triggers,
+        suite_na_rationale=suite_na_rationale,
+        suite_na_consumer_boundary=suite_na_consumer_boundary,
+        suite_na_recheck_condition=suite_na_recheck_condition,
+        suite_na_scope_proof=suite_na_scope_proof,
+        suite_na_review_requirement=suite_na_review_requirement,
+    )
+    if render_payload.get("result") != "pass":
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update did not start because render/preflight prerequisites are still blocking.",
+            "missing_inputs": render_payload.get("missing_inputs", []),
+            "fallback_to": render_payload.get("fallback_to"),
+            "render": render_payload,
+        }
+
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    pr_payload, effective_pr, payload_errors, inferences = load_pr_payload_for_gate(
+        target_root=target_root,
+        owner=owner or detected_owner,
+        repo_name=repo_name or detected_repo,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=None,
+    )
+    missing_inputs = [str(message) for message in payload_errors]
+    if effective_pr is None:
+        missing_inputs.append("unable to determine target PR for metadata update")
+    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
+    rendered_path = None
+    if isinstance(rendered_relative, str):
+        rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
+        missing_inputs.extend(rendered_errors)
+    else:
+        missing_inputs.append("render output path is unavailable")
+    if missing_inputs:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update is missing the rendered body artifact or a resolvable target PR.",
+            "missing_inputs": dedupe_strings(missing_inputs),
+            "fallback_to": "manual_pr_metadata_inputs",
+            "render": render_payload,
+            "inferences": inferences,
+        }
+
+    assert rendered_path is not None
+    update_errors = gh_pr_edit_body_file(target_root, effective_pr, rendered_path)
+    if update_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update could not write the rendered body to the host PR.",
+            "missing_inputs": update_errors,
+            "fallback_to": "gh_pr_edit_body_file_readback",
+            "render": render_payload,
+            "pr": effective_pr,
+            "inferences": inferences,
+        }
+
+    host_body, view_errors = gh_pr_view_body(target_root, effective_pr)
+    if view_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update wrote the host PR body but could not read it back for verification.",
+            "missing_inputs": view_errors,
+            "fallback_to": "gh_pr_edit_body_file_readback",
+            "render": render_payload,
+            "pr": effective_pr,
+            "inferences": inferences,
+        }
+    readback_path, readback_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
+    if readback_errors:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update wrote the host PR body but could not persist the readback artifact.",
+            "missing_inputs": readback_errors,
+            "fallback_to": "gh_pr_edit_body_file_readback",
+            "render": render_payload,
+            "pr": effective_pr,
+            "inferences": inferences,
+        }
+    assert readback_path is not None
+    write_runtime_text_artifact(readback_path, host_body)
+    readback_relative = relative_to_root(readback_path, target_root)
+
+    readback_payload = pr_metadata_readback_payload(
+        target_root=target_root,
+        surface=surface,
+        owner=owner or detected_owner,
+        repo_name=repo_name or detected_repo,
+        pr_number=effective_pr,
+        head_sha=head_sha or (pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else None),
+        branch_name=branch_name or (pr_payload.get("headRefName") if isinstance(pr_payload, dict) else None),
+        pr_payload_file=None,
+        body_file=rendered_relative,
+        compare_body_file=readback_relative,
+        readback_file=readback_relative,
+        expected_item=item_id,
+    )
+    result = "pass" if readback_payload.get("result") == "pass" else "block"
+    return {
+        "command": "pr-metadata",
+        "operation": "update",
+        "schema_version": PR_METADATA_UPDATE_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": (
+            "PR metadata update rendered, wrote, read back, and revalidated the host PR body."
+            if result == "pass"
+            else "PR metadata update wrote the host PR body but readback or revalidation still found blocking drift."
+        ),
+        "missing_inputs": readback_payload.get("missing_inputs", []),
+        "fallback_to": readback_payload.get("fallback_to"),
+        "pr": effective_pr,
+        "render": render_payload,
+        "readback": readback_payload,
+        "inferences": inferences,
+        "next_actions": [
+            f"loom pr metadata-readback {effective_pr} --surface {surface} --body-file {shlex.quote(rendered_relative)} --readback-file {shlex.quote(readback_file)} --json",
+        ],
+    }
+
+
 def gate_freeze_file_binding(target_root: Path, relative: str, *, label: str) -> dict[str, Any]:
     path, errors = resolve_repo_relative_path(target_root, relative, label=label)
     binding: dict[str, Any] = {
@@ -15810,7 +17286,7 @@ def gate_freeze_command_surface(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None) -> dict[str, Any]:
+def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None, surface: str = "merge_ready") -> dict[str, Any]:
     review_entry = context.get("review_entry")
     review_relative = str(review_entry) if isinstance(review_entry, str) and review_entry else None
     review_record, review_path, review_errors = load_review_record(
@@ -15844,11 +17320,18 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None)
     binding["decision"] = review_record.get("decision")
     binding["kind"] = review_record.get("kind")
     binding["reviewed_head"] = review_record.get("reviewed_head")
+    normalized_checkpoint = normalize_checkpoint(str(context.get("current_checkpoint", "")))
+    terminal_closeout_surface = surface == "closeout" and normalized_checkpoint in TERMINAL_CHECKPOINTS
+    allowed_paths = (
+        allowed_terminal_closeout_carrier_paths(context, review_path)
+        if terminal_closeout_surface
+        else allowed_post_review_carrier_paths(context, review_path)
+    )
     head_binding, head_errors = review_head_binding_for_head(
         context["target_root"],
         reviewed_head=review_record.get("reviewed_head") if isinstance(review_record.get("reviewed_head"), str) else None,
         target_head=head_sha or git_head_sha(context["target_root"]),
-        allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+        allowed_paths=allowed_paths,
     )
     binding["head_binding"] = head_binding
     binding["current_head"] = head_binding.get("current_head")
@@ -15862,6 +17345,12 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None)
         current_validation_summary=context.get("latest_validation_summary"),
     )
     binding["semantic_review_disposition"] = disposition
+    binding["surface"] = surface
+    binding["allowed_paths_policy"] = (
+        "terminal closeout carrier paths only; requires terminal checkpoint"
+        if terminal_closeout_surface
+        else "post-review carrier paths only"
+    )
     binding["missing_inputs"] = [*head_errors, *disposition_errors]
     if review_record.get("decision") != "allow":
         binding["missing_inputs"].append("review artifact decision is not allow")
@@ -16016,8 +17505,17 @@ def gate_freeze_shadow_freshness_binding(target_root: Path, governance_surface: 
     }
 
 
-def gate_freeze_carrier_refresh_binding(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
-    dry_run_payload = carrier_refresh_payload(target_root, output_relative, expected_item, dry_run=True)
+def gate_freeze_carrier_refresh_binding(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    *,
+    surface: str = "merge_ready",
+) -> dict[str, Any]:
+    dry_run_payload = carrier_refresh_payload(target_root, output_relative, expected_item, dry_run=True, surface=surface)
+    refresh_command = "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+    if surface != "merge_ready":
+        refresh_command = f"{refresh_command} --surface {surface}"
     refresh_needed = [
         action for action in dry_run_payload.get("refresh_needed", []) if isinstance(action, dict)
     ]
@@ -16046,10 +17544,10 @@ def gate_freeze_carrier_refresh_binding(target_root: Path, output_relative: str,
         "subject": "carrier_refresh",
         "why_blocking": "hosted admission cannot trust a frozen snapshot while carrier refresh dry-run reports pending updates.",
         "fallback_to": "carrier_refresh",
-        "refresh_suggestion": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        "refresh_suggestion": refresh_command
         if refresh_needed
         else None,
-        "next_action": "python3 .loom/bin/loom_flow.py carrier refresh --target <repo> --write"
+        "next_action": refresh_command
         if refresh_needed
         else dry_run_payload.get("fallback_to"),
     }
@@ -16212,7 +17710,814 @@ def gate_freeze_refresh_suggestions(input_bindings: dict[str, Any]) -> list[str]
     return dedupe_strings(suggestions)
 
 
+def failure_classifier_category(failure_kind: str, input_name: str) -> str:
+    if failure_kind in FAILURE_CLASSIFIER_KIND_MAP:
+        return FAILURE_CLASSIFIER_KIND_MAP[failure_kind]
+    if input_name in FAILURE_CLASSIFIER_INPUT_MAP:
+        return FAILURE_CLASSIFIER_INPUT_MAP[input_name]
+    return "code_semantics"
+
+
+def failure_classifier_payload(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized: list[dict[str, Any]] = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        failure_kind = str(finding.get("failure_kind") or finding.get("kind") or "code_semantics")
+        input_name = str(finding.get("input") or finding.get("subject") or "")
+        classifier = failure_classifier_category(failure_kind, input_name)
+        next_action = FAILURE_CLASSIFIER_NEXT_ACTIONS[classifier]
+        normalized.append(
+            {
+                "classifier": classifier,
+                "failure_kind": failure_kind,
+                "input": input_name,
+                "result": finding.get("result") or "block",
+                "severity": finding.get("severity") or "block",
+                "evidence_locator": finding.get("source_locator"),
+                "next_action": next_action,
+                "messages": list(finding.get("messages") or []),
+            }
+        )
+    return {
+        "schema_version": FAILURE_CLASSIFIER_SCHEMA,
+        "supported_classifiers": list(FAILURE_CLASSIFIER_CATEGORIES),
+        "findings": normalized,
+    }
+
+
+def closeout_specific_gate_payload(
+    *,
+    mode: str,
+    closeout_pr_allowed: bool,
+    full_review_required: bool,
+    blocking_inputs: list[dict[str, Any]],
+    next_action: str | None = None,
+    source: str = "closeout-freeze",
+) -> dict[str, Any]:
+    escalation_reasons: list[str] = []
+    for blocking in blocking_inputs:
+        if not isinstance(blocking, dict):
+            continue
+        reason = blocking.get("failure_kind") or blocking.get("kind") or blocking.get("input")
+        if isinstance(reason, str) and reason.strip():
+            escalation_reasons.append(reason.strip())
+    if mode == "full":
+        escalation_reasons.append("closeout_mode_full")
+    escalation_reasons = dedupe_strings(escalation_reasons)
+    result = "pass" if closeout_pr_allowed and not full_review_required else "block"
+    if result == "pass":
+        gate_next_action = next_action or "closeout_pr_allowed"
+        verdict = "closeout_pr_allowed"
+    else:
+        gate_next_action = next_action or "run_full_review_or_resolve_closeout_gate_blockers"
+        verdict = "full_review_required" if full_review_required else "resolve_closeout_gate_blockers"
+    return {
+        "schema_version": CLOSEOUT_SPECIFIC_GATE_SCHEMA,
+        "source": source,
+        "surface": "closeout",
+        "mode": mode,
+        "result": result,
+        "verdict": verdict,
+        "closeout_pr_allowed": closeout_pr_allowed,
+        "full_review_required": full_review_required,
+        "escalation_required": result != "pass",
+        "escalation_reason": escalation_reasons[0] if escalation_reasons else None,
+        "escalation_reasons": escalation_reasons,
+        "blocking_inputs": blocking_inputs,
+        "next_action": gate_next_action,
+    }
+
+
+def closeout_freeze_load_issue(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    issue_payload_file: str | None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    fixture, fixture_errors = load_optional_json_fixture(target_root, issue_payload_file, label="issue payload fixture")
+    if fixture_errors:
+        return None, fixture_errors
+    if fixture is not None:
+        return normalize_issue_fixture_payload(fixture)
+    if issue_number is None:
+        return None, ["closeout issue number is required for closeout freeze"]
+    if not owner or not repo_name:
+        return None, ["owner/repo is required for closeout issue readback"]
+    return github_issue_payload(target_root, owner, repo_name, issue_number)
+
+
+def closeout_freeze_load_pr(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    pr_payload_file: str | None,
+) -> tuple[dict[str, Any] | None, int | None, list[str]]:
+    fixture, fixture_errors = load_optional_json_fixture(target_root, pr_payload_file, label="implementation PR payload fixture")
+    if fixture_errors:
+        return None, pr_number, fixture_errors
+    if fixture is not None:
+        payload, errors = normalize_pr_fixture_payload(fixture)
+        inferred_pr = pr_number
+        if inferred_pr is None and isinstance(payload, dict) and isinstance(payload.get("number"), int):
+            inferred_pr = int(payload["number"])
+        return payload, inferred_pr, errors
+    if pr_number is None:
+        return None, None, ["implementation PR number is required for closeout freeze"]
+    if not owner or not repo_name:
+        return None, pr_number, ["owner/repo is required for implementation PR readback"]
+    payload, errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+    return payload, pr_number, errors
+
+
+def closeout_freeze_target_contains_merge(
+    target_root: Path,
+    merge_commit_sha: str | None,
+    target_branch: str,
+    *,
+    owner: str | None,
+    repo_name: str | None,
+) -> tuple[bool | None, list[str]]:
+    if not isinstance(merge_commit_sha, str) or not merge_commit_sha:
+        return None, ["implementation PR merge commit is missing"]
+    if contains_merged_commit(target_root, merge_commit_sha, target_branch, owner=owner, repo_name=repo_name):
+        return True, []
+    return False, [f"target branch `{target_branch}` does not contain merge commit `{merge_commit_sha}`"]
+
+
+def closeout_freeze_terminal_subject_binding(
+    context: dict[str, Any],
+    *,
+    issue_number: int | None,
+    issue_payload: dict[str, Any] | None,
+    issue_errors: list[str],
+    pr_payload: dict[str, Any] | None,
+    pr_number: int | None,
+    pr_errors: list[str],
+    merge_commit: str | None,
+    target_branch: str,
+) -> dict[str, Any]:
+    item_id = str(context["item_id"])
+    missing_inputs: list[str] = []
+    pr_body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    issue_text_parts: list[str] = []
+    if isinstance(issue_payload, dict):
+        for key in ("title", "body"):
+            value = issue_payload.get(key)
+            if isinstance(value, str):
+                issue_text_parts.append(value)
+    issue_text = "\n".join(issue_text_parts)
+
+    if issue_errors:
+        missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+    elif not isinstance(issue_payload, dict):
+        missing_inputs.append("closeout issue payload is missing")
+    else:
+        payload_issue = issue_payload.get("number")
+        if issue_number is None:
+            missing_inputs.append("closeout issue number is missing")
+        elif payload_issue != issue_number:
+            missing_inputs.append(f"closeout issue payload number `{payload_issue}` does not match --issue `{issue_number}`")
+        if issue_payload.get("state") != "CLOSED":
+            missing_inputs.append("closeout issue is not closed")
+
+    if pr_errors:
+        missing_inputs.extend(f"implementation PR: {message}" for message in pr_errors)
+    elif not isinstance(pr_payload, dict):
+        missing_inputs.append("implementation PR payload is missing")
+    else:
+        payload_pr = pr_payload.get("number")
+        if pr_number is not None and payload_pr != pr_number:
+            missing_inputs.append(f"implementation PR payload number `{payload_pr}` does not match requested PR `{pr_number}`")
+        if pr_payload.get("state") != "MERGED":
+            missing_inputs.append("implementation PR is not merged")
+        if not merge_commit:
+            missing_inputs.append("implementation PR merge commit is missing")
+        if pr_payload.get("baseRefName") != target_branch:
+            missing_inputs.append(f"implementation PR baseRefName `{pr_payload.get('baseRefName')}` does not match target branch `{target_branch}`")
+        if not pr_body_mentions_item(pr_body, item_id):
+            missing_inputs.append(f"implementation PR body does not mention Loom Work Item `{item_id}`")
+        body_item = pr_work_item_from_body(pr_body)
+        if body_item and body_item != item_id:
+            missing_inputs.append(f"implementation PR body Work Item `{body_item}` does not match `{item_id}`")
+        body_branch = pr_body_binding_value(pr_body, label="Branch", metadata_field="branch")
+        payload_branch = pr_payload.get("headRefName")
+        if body_branch and isinstance(payload_branch, str) and payload_branch and body_branch != payload_branch:
+            missing_inputs.append("implementation PR body Branch does not match PR headRefName")
+        body_head = pr_body_binding_value(pr_body, label="Head SHA", metadata_field="head_sha")
+        payload_head = pr_payload.get("headRefOid")
+        if body_head and isinstance(payload_head, str) and payload_head and body_head != payload_head:
+            missing_inputs.append("implementation PR body Head SHA does not match PR headRefOid")
+
+    issue_ref = f"#{issue_number}" if issue_number is not None else None
+    pr_ref = f"#{pr_number}" if pr_number is not None else None
+    linked_by_pr_body = bool(issue_ref and isinstance(pr_body, str) and re.search(rf"(?<![A-Z0-9-]){re.escape(issue_ref)}(?![0-9])", pr_body))
+    linked_by_issue_text = bool(
+        issue_text
+        and (
+            re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", issue_text)
+            or (pr_ref and re.search(rf"(?<![A-Z0-9-]){re.escape(pr_ref)}(?![0-9])", issue_text))
+        )
+    )
+    if issue_number is not None and not linked_by_pr_body and not linked_by_issue_text:
+        missing_inputs.append("closeout issue and implementation PR are not explicitly linked by PR body, issue body, or issue title")
+
+    return {
+        "result": "pass" if not missing_inputs else "block",
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_terminal_subject_drift",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "terminal_subject",
+        "source_locator": "issue/pr terminal readback",
+        "why_blocking": "closeout freeze must bind the closed issue, merged implementation PR, Work Item, and target branch to the same terminal subject.",
+        "fallback_to": "manual-reconciliation",
+        "next_action": "re-read and align the closeout issue, implementation PR metadata, Work Item binding, and target branch before closeout freeze.",
+    }
+
+
+def closeout_allowed_paths(context: dict[str, Any]) -> set[str]:
+    return allowed_terminal_closeout_carrier_paths(context, context["review_entry"])
+
+
+def closeout_freeze_retained_review_binding(
+    context: dict[str, Any],
+    *,
+    pr_payload: dict[str, Any] | None,
+    merge_commit: str | None,
+) -> dict[str, Any]:
+    review_record, review_path, review_errors = load_review_record(context["target_root"], context["item_id"], context["review_entry"])
+    target_head = None
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str):
+        target_head = pr_payload.get("headRefOid")
+    if not target_head:
+        target_head = merge_commit
+    missing_inputs: list[str] = []
+    if review_record is None:
+        missing_inputs.extend(review_errors or [f"missing review artifact: {review_path}"])
+        return {
+            "result": "block",
+            "source_locator": review_path,
+            "missing_inputs": dedupe_strings(missing_inputs),
+            "failure_kind": "closeout_retained_review_unconsumable",
+            "category": "gate_failure",
+            "severity": "block",
+            "subject": "retained_review",
+            "why_blocking": "closeout freeze requires retained implementation review evidence for the merged implementation PR.",
+            "fallback_to": "review",
+            "next_action": "restore retained implementation review evidence before closeout freeze.",
+        }
+
+    head_binding, head_binding_errors = review_head_binding_for_head(
+        context["target_root"],
+        reviewed_head=review_record.get("reviewed_head"),
+        target_head=target_head,
+        allowed_paths=closeout_allowed_paths(context),
+    )
+    disposition, disposition_errors = semantic_review_disposition_payload(
+        review_record=review_record,
+        review_path=review_path,
+        pr_head=target_head,
+        head_binding=head_binding,
+        current_validation_summary=context.get("latest_validation_summary"),
+    )
+    if review_record.get("decision") != "allow":
+        missing_inputs.append("retained review decision is not allow")
+    if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+        missing_inputs.append("retained review kind is not an implementation review")
+    if disposition.get("consumable") is not True:
+        missing_inputs.extend(disposition_errors or ["semantic_review_disposition is not consumable"])
+    missing_inputs.extend(head_binding_errors)
+    return {
+        "result": "pass" if not missing_inputs else "block",
+        "source_locator": review_path,
+        "reviewed_head": review_record.get("reviewed_head"),
+        "target_head": target_head,
+        "decision": review_record.get("decision"),
+        "kind": review_record.get("kind"),
+        "semantic_review_disposition": disposition,
+        "head_binding": head_binding,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_retained_review_unconsumable",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "retained_review",
+        "why_blocking": "closeout freeze requires retained implementation review evidence consumable by the merged implementation PR head.",
+        "fallback_to": "review",
+        "next_action": "rerun or repair retained implementation review evidence before closeout freeze.",
+    }
+
+
+def closeout_freeze_release_evidence_locator_from_body(body: str | None) -> str | None:
+    if not isinstance(body, str):
+        return None
+    for line in body.splitlines():
+        match = re.match(
+            r"\s*(?:[-*]\s*)?"
+            r"(?:release/no-release evidence(?: locator)?|no-release evidence(?: locator)?|"
+            r"release evidence(?: locator)?|post-merge release evidence(?: locator)?|post-merge evidence(?: locator)?)"
+            r"\s*:\s*(.+?)\s*$",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            continue
+        locator = match.group(1).strip().strip("`")
+        if locator and locator.lower() not in {"none", "n/a", "not_applicable", "not applicable", "pending"}:
+            return locator
+    return None
+
+
+def closeout_freeze_evidence_locator_status(target_root: Path, locator: str | None) -> dict[str, Any]:
+    if not locator:
+        return {"status": "missing", "locator": None, "missing_inputs": ["release/no-release evidence locator is missing"]}
+    if re.match(r"^[a-z][a-z0-9+.-]*://", locator, flags=re.IGNORECASE):
+        return {"status": "present", "locator": locator, "source": "external-readback-locator", "missing_inputs": []}
+    path, errors = resolve_repo_relative_path(target_root, locator, label="release/no-release evidence locator")
+    if errors:
+        return {"status": "invalid", "locator": locator, "missing_inputs": errors}
+    if path is None or not path.exists():
+        return {"status": "missing", "locator": locator, "missing_inputs": [f"release/no-release evidence locator `{locator}` is missing"]}
+    return {"status": "present", "locator": locator, "source": "repo-readback-locator", "missing_inputs": []}
+
+
+def closeout_freeze_release_binding(
+    target_root: Path,
+    context: dict[str, Any],
+    pr_payload: dict[str, Any] | None,
+    governance_surface: dict[str, Any],
+) -> dict[str, Any]:
+    body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    fields = pr_body_governance_metadata_fields(body)
+    release_judgment = fields.get("release_judgment")
+    repo_interface = governance_surface.get("repo_interface") if isinstance(governance_surface, dict) else None
+    release_targets = repo_interface.get("release_targets") if isinstance(repo_interface, dict) else None
+    target_release = (
+        release_targets.get("target_release")
+        if isinstance(release_targets, dict) and isinstance(release_targets.get("target_release"), dict)
+        else empty_target_release_status()
+    )
+    evidence_locator = closeout_freeze_release_evidence_locator_from_body(body)
+    evidence_readback = closeout_freeze_evidence_locator_status(target_root, evidence_locator)
+    missing_inputs: list[str] = []
+    source_locator = evidence_readback.get("locator")
+
+    if release_judgment not in GOVERNANCE_RELEASE_JUDGMENT_VALUES:
+        missing_inputs.append("release judgment metadata is missing")
+    elif release_judgment == "deferred_release_judgment_blocking":
+        missing_inputs.append("release judgment is deferred and blocking")
+    elif release_judgment == "release_required":
+        if target_release.get("result") != "pass":
+            release_missing = target_release.get("missing_inputs")
+            if isinstance(release_missing, list) and release_missing:
+                missing_inputs.extend(f"target_release: {message}" for message in release_missing)
+            else:
+                missing_inputs.append("release-required closeout requires target release readback evidence")
+        provenance = target_release.get("provenance") if isinstance(target_release.get("provenance"), dict) else {}
+        source_locator = provenance.get("status_locator") or provenance.get("source_locator") or source_locator
+    elif release_judgment == "no_release":
+        if evidence_readback.get("status") != "present":
+            missing_inputs.extend(str(message) for message in evidence_readback.get("missing_inputs", []))
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": "loom-closeout-release-boundary/v1",
+        "result": result,
+        "release_judgment": release_judgment if release_judgment in GOVERNANCE_RELEASE_JUDGMENT_VALUES else None,
+        "source": "implementation_pr_body plus release/no-release evidence readback",
+        "source_locator": source_locator,
+        "release_judgment_source": "implementation_pr_body.governance_intensity_carrier.fields.release_judgment",
+        "evidence_readback": evidence_readback,
+        "target_release": target_release,
+        "context_validation_entry": context.get("validation_entry"),
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_release_evidence_gap",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "release_boundary",
+        "fallback_to": "release-evidence",
+        "why_blocking": "closeout freeze must consume release/no-release evidence readback instead of trusting PR metadata alone.",
+        "next_action": "record or read back release/no-release evidence, then rerun closeout freeze.",
+    }
+
+
+def closeout_freeze_dependency_binding(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    issue_payload: dict[str, Any] | None,
+    dependency_payload_file: str | None,
+) -> dict[str, Any]:
+    fixture, fixture_errors = load_optional_json_fixture(target_root, dependency_payload_file, label="native dependency payload fixture")
+    if fixture_errors:
+        graph = dependency_graph_payload(issue_number=issue_number, issue_payload=issue_payload, native_dependency_payload=None)
+        return {
+            "result": "block",
+            "source_locator": dependency_payload_file,
+            "dependency_graph": graph,
+            "missing_inputs": fixture_errors,
+            "failure_kind": "closeout_dependency_graph_drift",
+            "category": "gate_failure",
+            "severity": "block",
+            "subject": "dependency_graph",
+            "why_blocking": "closeout freeze must read dependency graph state before admitting terminal closeout facts.",
+            "fallback_to": "manual-reconciliation",
+            "next_action": "restore readable dependency graph readback, then rerun closeout freeze.",
+        }
+
+    source_locator = dependency_payload_file
+    if isinstance(fixture, dict):
+        native_dependencies = fixture
+    elif owner and repo_name and issue_number is not None:
+        native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        source_locator = f"github:issue/{issue_number}/dependencies"
+    else:
+        native_dependencies = {"availability": "unreadable", "checks": [], "native_edges": []}
+        source_locator = "github dependency readback"
+
+    graph = dependency_graph_payload(
+        issue_number=issue_number,
+        issue_payload=issue_payload,
+        native_dependency_payload=native_dependencies,
+    )
+    blocking_kinds = {
+        "missing_native_edge",
+        "stale_native_edge",
+        "open_blocker_executable_conflict",
+        "native_dependency_unreadable",
+    }
+    blocking_findings = [
+        finding
+        for finding in graph.get("findings", [])
+        if isinstance(finding, dict) and finding.get("kind") in blocking_kinds
+    ]
+    missing_inputs = [str(finding.get("subject") or finding.get("kind")) for finding in blocking_findings]
+    if graph.get("availability") in {"unsupported", "permission_denied", "unreadable"} and not any(
+        isinstance(finding, dict) and finding.get("kind") == "native_dependency_unreadable"
+        for finding in blocking_findings
+    ):
+        missing_inputs.append(f"dependency graph availability is {graph.get('availability')}")
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "source_locator": source_locator,
+        "dependency_graph": graph,
+        "findings": blocking_findings,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_dependency_graph_drift",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "dependency_graph",
+        "why_blocking": "closeout freeze cannot admit terminal facts while dependency edges are open, stale, unreadable, or out of sync.",
+        "fallback_to": "manual-reconciliation",
+        "next_action": "reconcile native dependency edges or resolve open blockers, then rerun closeout freeze.",
+    }
+
+
+def closeout_freeze_allowed_paths_binding(
+    context: dict[str, Any],
+    *,
+    base_sha: str | None,
+    head_sha: str | None,
+) -> dict[str, Any]:
+    allowed_paths = closeout_allowed_paths(context)
+    missing_inputs: list[str] = []
+    changed_paths: list[str] = []
+    if not isinstance(base_sha, str) or not base_sha:
+        missing_inputs.append("closeout allowed-path diff base is missing")
+    if not isinstance(head_sha, str) or not head_sha:
+        missing_inputs.append("closeout allowed-path current head is missing")
+    if not missing_inputs:
+        changed_paths, diff_errors = git_changed_paths(context["target_root"], base_sha, head_sha)
+        missing_inputs.extend(f"allowed paths diff: {message}" for message in diff_errors)
+
+    violations = [path for path in changed_paths if path not in allowed_paths]
+    for path in violations:
+        missing_inputs.append(f"non-closeout path changed after implementation merge: {path}")
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "source_locator": "git diff --name-only <merge-commit>..HEAD",
+        "allowed_paths": sorted(allowed_paths),
+        "changed_paths": changed_paths,
+        "violations": violations,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "closeout_allowed_paths_violation",
+        "category": "gate_failure",
+        "severity": "block",
+        "subject": "allowed_paths",
+        "why_blocking": "closeout freeze can only admit terminal carrier/readback changes; implementation drift requires full review.",
+        "fallback_to": "full_review",
+        "next_action": "remove non-closeout changes or convert this closeout to the full review path.",
+    }
+
+
+def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
+    target_root = Path(args.target).expanduser().resolve()
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = args.owner or detected_owner
+    repo_name = args.repo_name or detected_repo
+    hosted_args = argparse.Namespace(
+        target=str(target_root),
+        output=args.output,
+        item=args.item,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        pr=args.pr,
+        head_sha=args.head_sha,
+        branch=args.branch,
+        pr_payload_file=args.pr_payload_file,
+        issue=None,
+        issue_payload_file=None,
+        dependency_payload_file=None,
+        body_file=args.body_file,
+        compare_body_file=args.compare_body_file,
+        surface=args.surface,
+        profile="hosted",
+        closeout_mode=args.closeout_mode,
+        target_branch=args.target_branch,
+        write_path=None,
+    )
+    base_freeze = gate_freeze_payload(hosted_args, operation="check")
+    runtime_state = base_freeze.get("runtime_state") if isinstance(base_freeze.get("runtime_state"), dict) else runtime_state_payload(target_root)
+    context, context_errors = load_context(target_root, args.output, args.item)
+    if context_errors:
+        missing_inputs = [str(message) for message in context_errors]
+        blocking_inputs = [
+            {
+                "id": "closeout-fact-chain-not-ready",
+                "input": "fact_chain",
+                "failure_kind": "closeout_terminal_subject_drift",
+                "source_locator": args.output,
+                "messages": missing_inputs,
+                "next_action": "restore or read back the retained Work Item fact chain before closeout freeze.",
+            }
+        ]
+        closeout_specific_gate = closeout_specific_gate_payload(
+            mode=args.closeout_mode,
+            closeout_pr_allowed=False,
+            full_review_required=True,
+            blocking_inputs=blocking_inputs,
+            next_action="resolve_closeout_freeze_blockers",
+        )
+        return {
+            "command": "gate-freeze",
+            "operation": operation,
+            "schema_version": CLOSEOUT_FREEZE_SCHEMA,
+            "profile": "closeout",
+            "mode": args.closeout_mode,
+            "result": "block",
+            "summary": "closeout freeze requires an active or retained Loom Work Item fact chain.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "loom status --target <repo> --json",
+            "mutates": operation == "write",
+            "runtime_state": runtime_state,
+            "target": str(target_root),
+            "readiness": {
+                "result": "block",
+                "blocking_inputs": blocking_inputs,
+                "closeout_pr_allowed": False,
+                "full_review_required": True,
+            },
+            "closeout_specific_gate": closeout_specific_gate,
+            "consumed_contract_fields": [
+                "carrier_refresh_result",
+                "shadow_freshness",
+                "hosted_freeze_admission",
+                "failure_classifier_mapping",
+                "readback_drift",
+                "release_evidence_readback",
+                "closeout_specific_gate_profile",
+            ],
+            "pending_contract_fields": [
+                "release_no_release_final_closeout",
+            ],
+            "failure_classifier": failure_classifier_payload(
+                [
+                    {
+                        "input": "fact_chain",
+                        "failure_kind": "closeout_terminal_subject_drift",
+                        "source_locator": args.output,
+                        "messages": missing_inputs,
+                    }
+                ]
+            ),
+        }
+
+    head_sha = args.head_sha or git_head_sha(target_root)
+    branch_name = args.branch or git_branch(target_root)
+    issue_payload, issue_errors = closeout_freeze_load_issue(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        issue_number=args.issue,
+        issue_payload_file=args.issue_payload_file,
+    )
+    pr_payload, effective_pr, pr_errors = closeout_freeze_load_pr(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=args.pr,
+        pr_payload_file=args.pr_payload_file,
+    )
+
+    merge_commit = None
+    if isinstance(pr_payload, dict):
+        merge_entry = pr_payload.get("mergeCommit")
+        if isinstance(merge_entry, dict) and isinstance(merge_entry.get("oid"), str):
+            merge_commit = merge_entry["oid"]
+    target_contains_merge, target_errors = closeout_freeze_target_contains_merge(
+        target_root,
+        merge_commit,
+        args.target_branch,
+        owner=owner,
+        repo_name=repo_name,
+    )
+    dependency_binding = closeout_freeze_dependency_binding(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        issue_number=args.issue,
+        issue_payload=issue_payload,
+        dependency_payload_file=args.dependency_payload_file,
+    )
+    allowed_paths = closeout_freeze_allowed_paths_binding(context, base_sha=merge_commit, head_sha=head_sha)
+
+    governance_surface = build_governance_surface(target_root)
+    input_bindings = base_freeze.get("input_bindings") if isinstance(base_freeze.get("input_bindings"), dict) else {}
+    hosted_retained_review = input_bindings.get("review_binding") if isinstance(input_bindings.get("review_binding"), dict) else {}
+    retained_review = closeout_freeze_retained_review_binding(context, pr_payload=pr_payload, merge_commit=merge_commit)
+    hosted_release_boundary = input_bindings.get("release_requiredness") if isinstance(input_bindings.get("release_requiredness"), dict) else {}
+    release_boundary = closeout_freeze_release_binding(target_root, context, pr_payload, governance_surface)
+    carrier_refresh = input_bindings.get("carrier_refresh") if isinstance(input_bindings.get("carrier_refresh"), dict) else {}
+    shadow_freshness = input_bindings.get("shadow_freshness") if isinstance(input_bindings.get("shadow_freshness"), dict) else {}
+    readback = input_bindings.get("pr_body_pin") if isinstance(input_bindings.get("pr_body_pin"), dict) else {}
+
+    terminal_subject_binding = closeout_freeze_terminal_subject_binding(
+        context,
+        issue_number=args.issue,
+        issue_payload=issue_payload,
+        issue_errors=issue_errors,
+        pr_payload=pr_payload,
+        pr_number=effective_pr,
+        pr_errors=pr_errors,
+        merge_commit=merge_commit,
+        target_branch=args.target_branch,
+    )
+    closeout_bindings: dict[str, Any] = {
+        "terminal_subject": terminal_subject_binding,
+        "host_git": {
+            "result": "pass" if target_contains_merge is True else "block",
+            "missing_inputs": target_errors,
+            "failure_kind": "closeout_host_git_mismatch",
+            "source_locator": f"git merge-base --is-ancestor {merge_commit or '<merge-commit>'} {args.target_branch}",
+            "next_action": "re-read the merged PR, merge commit, and target branch before closeout freeze.",
+        },
+        "dependency_graph": dependency_binding,
+        "carrier_refresh": carrier_refresh,
+        "shadow_freshness": shadow_freshness,
+        "readback": readback,
+        "retained_review": retained_review,
+        "release_boundary": release_boundary,
+        "allowed_paths": allowed_paths,
+    }
+
+    blocking_inputs = gate_freeze_blocking_inputs(closeout_bindings)
+    result = "pass" if not blocking_inputs else "block"
+    closeout_pr_allowed = result == "pass" and args.closeout_mode in {"inline", "auto_no_op", "light", "batched"}
+    terminal_subject = {
+        "work_item": context["item_id"],
+        "closeout_issue": args.issue,
+        "implementation_pr": effective_pr,
+        "closeout_pr": None,
+        "merge_commit": merge_commit,
+        "target_branch": args.target_branch,
+        "workspace": str(target_root),
+        "branch": branch_name,
+        "head_sha": head_sha,
+        "generated_at": current_iso_timestamp(),
+        "source_commands": {
+            "issue_readback": "gh api repos/:owner/:repo/issues/<issue>",
+            "implementation_pr_readback": "gh api repos/:owner/:repo/pulls/<pr>",
+            "target_branch_contains": "git merge-base --is-ancestor <merge-commit> <target-branch>",
+            "carrier_snapshot": "loom gate freeze check --profile hosted --target <repo> --json",
+        },
+    }
+    terminal_facts = {
+        "issue_state": issue_payload.get("state") if isinstance(issue_payload, dict) else None,
+        "closed_at": issue_payload.get("closedAt") if isinstance(issue_payload, dict) else None,
+        "pr_merged": isinstance(pr_payload, dict) and pr_payload.get("state") == "MERGED",
+        "target_contains_merge_commit": target_contains_merge,
+        "dependency_graph": dependency_binding.get("result"),
+        "fact_chain_idle": "pending_until_carrier_sync",
+    }
+    readiness = {
+        "result": result,
+        "blocking_inputs": blocking_inputs,
+        "refresh_suggestions": gate_freeze_refresh_suggestions(closeout_bindings) if blocking_inputs else [],
+        "closeout_pr_allowed": closeout_pr_allowed,
+        "full_review_required": result == "block" or args.closeout_mode == "full",
+        "next_action": "closeout_pr_allowed" if closeout_pr_allowed else "resolve_closeout_freeze_blockers",
+    }
+    closeout_specific_gate = closeout_specific_gate_payload(
+        mode=args.closeout_mode,
+        closeout_pr_allowed=closeout_pr_allowed,
+        full_review_required=bool(readiness["full_review_required"]),
+        blocking_inputs=blocking_inputs,
+        next_action=str(readiness["next_action"]),
+    )
+    payload: dict[str, Any] = {
+        "command": "gate-freeze",
+        "operation": operation,
+        "schema_version": CLOSEOUT_FREEZE_SCHEMA,
+        "profile": "closeout",
+        "mode": args.closeout_mode,
+        "result": result,
+        "summary": (
+            "closeout freeze terminal facts are admissible."
+            if result == "pass"
+            else "closeout freeze found terminal fact or closeout-only path drift."
+        ),
+        "missing_inputs": [
+            message
+            for blocking in blocking_inputs
+            for message in blocking.get("messages", [])
+            if isinstance(blocking, dict)
+        ],
+        "fallback_to": None if result == "pass" else "closeout_freeze_refresh",
+        "mutates": operation == "write",
+        "runtime_state": runtime_state,
+        "target": str(target_root),
+        "terminal_subject": terminal_subject,
+        "terminal_facts": terminal_facts,
+        "carrier_bindings": {
+            "progress_terminal_metadata": f".loom/progress/{context['item_id']}.md",
+            "status_surface": ".loom/status/current.md",
+            "retained_review": retained_review.get("source_locator"),
+            "dependency_graph": dependency_binding,
+            "carrier_refresh": carrier_refresh,
+            "shadow_freshness": shadow_freshness,
+            "readback": readback,
+            "release_boundary": release_boundary,
+            "hosted_retained_review": hosted_retained_review,
+            "hosted_release_boundary": hosted_release_boundary,
+        },
+        "retained_review": retained_review,
+        "release_boundary": release_boundary,
+        "allowed_paths": allowed_paths,
+        "readiness": readiness,
+        "closeout_specific_gate": closeout_specific_gate,
+        "consumed_contract_fields": [
+            "carrier_refresh_result",
+            "shadow_freshness",
+            "hosted_snapshot_binding",
+            "failure_classifier_mapping",
+            "readback_drift",
+            "release_evidence_readback",
+            "closeout_specific_gate_profile",
+        ],
+        "pending_contract_fields": [
+            "release_no_release_final_closeout",
+        ],
+        "base_freeze_snapshot": {
+            "schema_version": base_freeze.get("schema_version"),
+            "snapshot_id": base_freeze.get("snapshot_id"),
+            "input_bindings": {
+                "carrier_refresh": carrier_refresh,
+                "shadow_freshness": shadow_freshness,
+                "readback": readback,
+                "failure_classifier": base_freeze.get("failure_classifier"),
+            },
+        },
+        "failure_classifier": failure_classifier_payload(blocking_inputs),
+    }
+    fingerprint_payload = {
+        "schema_version": CLOSEOUT_FREEZE_SCHEMA,
+        "profile": payload["profile"],
+        "mode": payload["mode"],
+        "terminal_subject": terminal_subject,
+        "terminal_facts": terminal_facts,
+        "carrier_bindings": payload["carrier_bindings"],
+        "allowed_paths": allowed_paths,
+        "readiness": readiness,
+        "closeout_specific_gate": closeout_specific_gate,
+    }
+    payload["snapshot_id"] = "sha256:" + hashlib.sha256(
+        json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return payload
+
+
 def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
+    if getattr(args, "profile", "hosted") == "closeout":
+        return closeout_freeze_payload(args, operation=operation)
+
     target_root = Path(args.target).expanduser().resolve()
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
@@ -16306,9 +18611,9 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
         "status_surface": status_binding,
         "pr_metadata": pr_metadata,
         "pr_body_pin": gate_freeze_pr_body_pin_binding(pr_metadata),
-        "review_binding": gate_freeze_review_binding(context, head_sha=head_sha),
+        "review_binding": gate_freeze_review_binding(context, head_sha=head_sha, surface=args.surface),
         "shadow_parity": gate_freeze_shadow_binding(target_root, governance_surface),
-        "carrier_refresh": gate_freeze_carrier_refresh_binding(target_root, args.output, context["item_id"]),
+        "carrier_refresh": gate_freeze_carrier_refresh_binding(target_root, args.output, context["item_id"], surface=args.surface),
         "shadow_freshness": gate_freeze_shadow_freshness_binding(target_root, governance_surface),
         "suite_validation": suite_validation,
         "suite_evidence_validation": suite_evidence_validation,
@@ -16357,10 +18662,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
             "refresh_suggestions": refresh_suggestions,
             "next_action": "hosted_admission_allowed" if result == "pass" else "refresh_gate_inputs_before_hosted_admission",
         },
-        "failure_classifier": {
-            "schema_version": "loom-gate-freeze-failure-classifier/v1",
-            "findings": blocking_inputs,
-        },
+        "failure_classifier": failure_classifier_payload(blocking_inputs),
     }
     fingerprint_payload = {
         "schema_version": payload["schema_version"],
@@ -16374,6 +18676,209 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
     return payload
 
 
+def hosted_freeze_snapshot_comparison(
+    target_root: Path,
+    snapshot_file: str | None,
+    recomputed_freeze: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not snapshot_file:
+        return {
+            "result": "not_applicable",
+            "summary": "No hosted freeze snapshot artifact was provided; comparison is not applicable.",
+            "snapshot_locator": None,
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    path, errors = resolve_repo_relative_path(target_root, snapshot_file, label="hosted freeze snapshot")
+    if errors or path is None:
+        return {
+            "result": "block",
+            "summary": "Hosted freeze snapshot artifact is unreadable.",
+            "snapshot_locator": snapshot_file,
+            "missing_inputs": errors,
+            "failure_kind": "freeze_artifact_unreadable",
+            "fallback_to": "refresh_gate_inputs",
+        }
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return {
+            "result": "block",
+            "summary": "Hosted freeze snapshot artifact could not be read.",
+            "snapshot_locator": snapshot_file,
+            "missing_inputs": [f"failed to read hosted freeze snapshot: {exc.strerror or exc}"],
+            "failure_kind": "freeze_artifact_unreadable",
+            "fallback_to": "refresh_gate_inputs",
+        }
+    except json.JSONDecodeError as exc:
+        return {
+            "result": "block",
+            "summary": "Hosted freeze snapshot artifact is not valid JSON.",
+            "snapshot_locator": snapshot_file,
+            "missing_inputs": [f"hosted freeze snapshot JSON is invalid: {exc.msg}"],
+            "failure_kind": "freeze_artifact_unreadable",
+            "fallback_to": "refresh_gate_inputs",
+        }
+
+    missing_inputs: list[str] = []
+    if not isinstance(snapshot, dict):
+        missing_inputs.append("hosted freeze snapshot must be a JSON object")
+    elif snapshot.get("schema_version") != GATE_FREEZE_SCHEMA:
+        missing_inputs.append(f"hosted freeze snapshot schema_version must be `{GATE_FREEZE_SCHEMA}`")
+
+    recomputed_snapshot_id = recomputed_freeze.get("snapshot_id") if isinstance(recomputed_freeze, dict) else None
+    retained_snapshot_id = snapshot.get("snapshot_id") if isinstance(snapshot, dict) else None
+    if recomputed_snapshot_id and retained_snapshot_id and recomputed_snapshot_id != retained_snapshot_id:
+        missing_inputs.append("hosted freeze snapshot_id does not match recomputed freeze")
+
+    if isinstance(snapshot, dict) and isinstance(recomputed_freeze, dict):
+        retained_subject = snapshot.get("snapshot_subject")
+        recomputed_subject = recomputed_freeze.get("snapshot_subject")
+        if isinstance(retained_subject, dict) and isinstance(recomputed_subject, dict):
+            for key in ("item_id", "branch", "head_sha", "pr", "surface"):
+                if retained_subject.get(key) != recomputed_subject.get(key):
+                    missing_inputs.append(f"hosted freeze snapshot_subject.{key} does not match recomputed freeze")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "summary": (
+            "Hosted freeze snapshot artifact matches the recomputed freeze."
+            if result == "pass"
+            else "Hosted freeze snapshot artifact does not match the recomputed freeze."
+        ),
+        "snapshot_locator": snapshot_file,
+        "snapshot_id": retained_snapshot_id,
+        "recomputed_snapshot_id": recomputed_snapshot_id,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "failure_kind": "hosted_snapshot_mismatch" if result == "block" else None,
+        "fallback_to": None if result == "pass" else "refresh_gate_inputs",
+    }
+
+
+def hosted_freeze_admission_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+    body_file: str | None,
+    compare_body_file: str | None,
+    snapshot_file: str | None,
+    surface: str | None,
+) -> dict[str, Any]:
+    hosted_inputs_present = any([body_file, compare_body_file, snapshot_file])
+    if not hosted_inputs_present:
+        return {
+            "schema_version": HOSTED_FREEZE_ADMISSION_SCHEMA,
+            "result": "not_applicable",
+            "summary": "Hosted freeze admission was not requested because no hosted PR body readback or freeze snapshot input was provided.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "recomputed_freeze": None,
+            "carrier_refresh": None,
+            "shadow_freshness": None,
+            "readback": None,
+            "artifact_comparison": {
+                "result": "not_applicable",
+                "summary": "No hosted freeze snapshot artifact was provided; comparison is not applicable.",
+                "snapshot_locator": None,
+                "missing_inputs": [],
+                "fallback_to": None,
+            },
+            "failure_classifier": failure_classifier_payload([]),
+        }
+
+    freeze_surface = surface if surface in {"pre_review", "review", "merge_ready", "closeout"} else "merge_ready"
+    freeze_args = argparse.Namespace(
+        target=str(target_root),
+        output=output_relative,
+        item=expected_item,
+        owner=owner,
+        repo_name=repo_name,
+        pr=pr_number,
+        head_sha=head_sha,
+        branch=branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=body_file,
+        compare_body_file=compare_body_file,
+        surface=freeze_surface,
+        write_path=None,
+    )
+    recomputed = gate_freeze_payload(freeze_args, operation="check")
+    artifact_comparison = hosted_freeze_snapshot_comparison(target_root, snapshot_file, recomputed)
+    input_bindings = recomputed.get("input_bindings") if isinstance(recomputed.get("input_bindings"), dict) else {}
+    blocking_inputs = list(recomputed.get("readiness", {}).get("blocking_inputs", [])) if isinstance(recomputed.get("readiness"), dict) else []
+
+    comparison_missing = [
+        str(message)
+        for message in artifact_comparison.get("missing_inputs", [])
+        if str(message).strip()
+    ]
+    if artifact_comparison.get("result") == "block":
+        blocking_inputs.append(
+            {
+                "id": "hosted-freeze-snapshot-mismatch",
+                "input": "hosted_admission",
+                "failure_kind": artifact_comparison.get("failure_kind") or "hosted_snapshot_mismatch",
+                "category": "gate_failure",
+                "kind": artifact_comparison.get("failure_kind") or "hosted_snapshot_mismatch",
+                "severity": "block",
+                "subject": "hosted_freeze_snapshot",
+                "result": "block",
+                "source_locator": snapshot_file,
+                "messages": comparison_missing,
+                "next_action": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
+                "fallback_to": artifact_comparison.get("fallback_to"),
+            }
+        )
+
+    missing_inputs = dedupe_strings(
+        [
+            str(message)
+            for blocking in blocking_inputs
+            if isinstance(blocking, dict)
+            for message in blocking.get("messages", [])
+            if str(message).strip()
+        ]
+    )
+    result = "pass" if recomputed.get("result") == "pass" and artifact_comparison.get("result") in {"pass", "not_applicable"} else "block"
+    return {
+        "schema_version": HOSTED_FREEZE_ADMISSION_SCHEMA,
+        "result": result,
+        "summary": (
+            "Hosted freeze admission recomputed current gate inputs and found them admissible."
+            if result == "pass"
+            else "Hosted freeze admission recomputed current gate inputs and found blocking drift."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "refresh_gate_inputs",
+        "recomputed_freeze": recomputed,
+        "carrier_refresh": input_bindings.get("carrier_refresh"),
+        "shadow_freshness": input_bindings.get("shadow_freshness"),
+        "readback": input_bindings.get("pr_body_pin"),
+        "readback_classification": failure_classifier_payload(
+            [
+                {
+                    "input": "pr_body_pin",
+                    "failure_kind": "head_or_pr_drift",
+                    "messages": input_bindings.get("pr_body_pin", {}).get("missing_inputs", []),
+                }
+            ]
+            if isinstance(input_bindings.get("pr_body_pin"), dict) and input_bindings.get("pr_body_pin", {}).get("result") == "block"
+            else []
+        ),
+        "artifact_comparison": artifact_comparison,
+        "blocking_inputs": blocking_inputs,
+        "failure_classifier": failure_classifier_payload(blocking_inputs),
+    }
+
+
 def handle_gate_freeze(args: argparse.Namespace) -> int:
     payload = gate_freeze_payload(args, operation=args.operation)
     if args.operation == "write":
@@ -16383,8 +18888,11 @@ def handle_gate_freeze(args: argparse.Namespace) -> int:
             if isinstance(payload.get("snapshot_subject"), dict)
             else None
         )
+        if item_id is None and isinstance(payload.get("terminal_subject"), dict):
+            item_id = payload.get("terminal_subject", {}).get("work_item")
         item_slug = str(item_id or args.item or "unknown")
-        relative = args.write_path or f".loom/runtime/gate-freeze/{item_slug}.json"
+        default_name = f"{item_slug}-closeout.json" if getattr(args, "profile", "hosted") == "closeout" else f"{item_slug}.json"
+        relative = args.write_path or f".loom/runtime/gate-freeze/{default_name}"
         path, errors = resolve_repo_relative_path(target_root, relative, label="gate freeze write path")
         allowed_root = (target_root / ".loom" / "runtime" / "gate-freeze").resolve()
         if path is not None:
@@ -16774,6 +19282,10 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("host_enforcement_unverified")
         if "pr metadata" in lowered:
             categories.add("pr_metadata_preflight_failed")
+        if "hosted-freeze-admission" in lowered:
+            categories.add("hosted_freeze_admission_blocked")
+        if "hosted freeze snapshot" in lowered or "snapshot_id does not match" in lowered:
+            categories.add("hosted_snapshot_mismatch")
     if gate_result == "fallback":
         categories.add("prior_gate_fallback")
     return sorted(categories)
@@ -17147,6 +19659,10 @@ def pr_gate_payload(
     head_sha: str | None,
     branch_name: str | None,
     pr_payload_file: str | None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
+    gate_freeze_snapshot_file: str | None = None,
+    surface: str | None = None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
@@ -17230,6 +19746,41 @@ def pr_gate_payload(
     current_head = git_head_sha(target_root)
     if pr_head and current_head and pr_head != current_head:
         missing_inputs.append("checkout head does not match PR head")
+    effective_branch_name = branch_name
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefName"), str) and pr_payload.get("headRefName"):
+        effective_branch_name = pr_payload["headRefName"]
+
+    metadata_surface = surface or body_surface or "merge_ready"
+    hosted_admission = hosted_freeze_admission_payload(
+        target_root=target_root,
+        output_relative=output_relative,
+        expected_item=effective_item,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=pr_head,
+        branch_name=effective_branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=body_file,
+        compare_body_file=compare_body_file,
+        snapshot_file=gate_freeze_snapshot_file,
+        surface=metadata_surface,
+    )
+    if hosted_admission.get("result") == "block":
+        missing_inputs.extend(
+            f"hosted-freeze-admission: {message}"
+            for message in hosted_admission.get("missing_inputs", [])
+        )
+    steps.append(
+        {
+            "name": "hosted-freeze-admission",
+            "result": hosted_admission["result"],
+            "summary": hosted_admission["summary"],
+            "missing_inputs": hosted_admission["missing_inputs"],
+            "fallback_to": hosted_admission["fallback_to"],
+            "hosted_freeze_admission": hosted_admission,
+        }
+    )
 
     merge_checkpoint: dict[str, Any] = {
         "result": "block",
@@ -17308,7 +19859,10 @@ def pr_gate_payload(
             non_review_checkpoint_missing = [
                 message
                 for message in merge_checkpoint_missing
-                if "review artifact is stale" not in message and "reviewed_head" not in message and "head binding" not in message
+                if "review artifact is stale" not in message
+                and "reviewed_head" not in message
+                and "head binding" not in message
+                and "review HEAD comparison failed" not in message
             ]
             terminal_closeout_missing.extend(non_review_checkpoint_missing)
             terminal_closeout_consumption = {
@@ -17384,7 +19938,7 @@ def pr_gate_payload(
     governance_surface = build_governance_surface(target_root)
     pr_metadata_preflight = pr_metadata_preflight_payload(
         target_root=target_root,
-        surface="merge_ready",
+        surface=metadata_surface,
         owner=owner,
         repo_name=repo_name,
         pr_number=effective_pr,
@@ -17532,6 +20086,39 @@ def pr_gate_payload(
             "mapped_failures": [],
             "provenance": [],
         }
+    closeout_specific_gate: dict[str, Any] | None = None
+    if metadata_surface == "closeout" or terminal_closeout_consumption.get("result") == "pass":
+        closeout_gate_messages = [
+            str(message)
+            for message in [
+                *terminal_closeout_consumption.get("missing_inputs", []),
+                *missing_inputs,
+            ]
+            if str(message).strip()
+        ]
+        closeout_gate_blocking_inputs = [
+            {
+                "input": "terminal_closeout_consumption",
+                "failure_kind": "closeout_retained_review_unconsumable",
+                "messages": closeout_gate_messages,
+                "result": "block",
+                "severity": "block",
+                "source_locator": context.get("review_entry") if context else None,
+                "next_action": "remove non-closeout changes or run full review / guardian before merging this PR.",
+            }
+        ] if closeout_gate_messages else []
+        closeout_specific_gate = closeout_specific_gate_payload(
+            mode="light",
+            closeout_pr_allowed=result == "pass" and terminal_closeout_consumption.get("result") == "pass",
+            full_review_required=bool(closeout_gate_blocking_inputs),
+            blocking_inputs=closeout_gate_blocking_inputs,
+            next_action=(
+                "closeout_pr_allowed"
+                if result == "pass" and terminal_closeout_consumption.get("result") == "pass"
+                else "run_full_review_or_resolve_closeout_gate_blockers"
+            ),
+            source="pr-gate",
+        )
     return {
         "command": "pr-gate",
         "operation": "check",
@@ -17572,6 +20159,8 @@ def pr_gate_payload(
         "docs_governance_lite_gate": docs_governance_lite_gate,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
         "terminal_closeout_consumption": terminal_closeout_consumption,
+        **({"closeout_specific_gate": closeout_specific_gate} if closeout_specific_gate is not None else {}),
+        "hosted_freeze_admission": hosted_admission,
         "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
@@ -17598,12 +20187,83 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
             head_sha=args.head_sha,
             branch_name=args.branch,
             pr_payload_file=args.pr_payload_file,
+            body_file=args.body_file,
+            compare_body_file=args.compare_body_file,
+            gate_freeze_snapshot_file=args.gate_freeze_snapshot_file,
+            surface=args.surface,
         )
     )
 
 
 def handle_pr_metadata(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    if args.operation == "render":
+        return emit(
+            pr_metadata_render_payload(
+                target_root=target_root,
+                surface=args.surface,
+                output_file=args.output_file,
+                base_body_file=args.base_body_file,
+                item_id=args.item,
+                head_sha=args.head_sha,
+                branch_name=args.branch,
+                governance_intensity=args.governance_intensity,
+                change_class=args.change_class,
+                suite_path=args.suite_path,
+                review_requirement=args.review_requirement,
+                release_judgment=args.release_judgment,
+                upgrade_triggers=args.upgrade_trigger,
+                suite_na_rationale=args.suite_na_rationale,
+                suite_na_consumer_boundary=args.suite_na_consumer_boundary,
+                suite_na_recheck_condition=args.suite_na_recheck_condition,
+                suite_na_scope_proof=args.suite_na_scope_proof,
+                suite_na_review_requirement=args.suite_na_review_requirement,
+            )
+        )
+    if args.operation == "update":
+        return emit(
+            pr_metadata_update_payload(
+                target_root=target_root,
+                surface=args.surface,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                pr_number=args.pr,
+                head_sha=args.head_sha,
+                branch_name=args.branch,
+                output_file=args.output_file,
+                readback_file=args.readback_file,
+                base_body_file=args.base_body_file,
+                item_id=args.item,
+                governance_intensity=args.governance_intensity,
+                change_class=args.change_class,
+                suite_path=args.suite_path,
+                review_requirement=args.review_requirement,
+                release_judgment=args.release_judgment,
+                upgrade_triggers=args.upgrade_trigger,
+                suite_na_rationale=args.suite_na_rationale,
+                suite_na_consumer_boundary=args.suite_na_consumer_boundary,
+                suite_na_recheck_condition=args.suite_na_recheck_condition,
+                suite_na_scope_proof=args.suite_na_scope_proof,
+                suite_na_review_requirement=args.suite_na_review_requirement,
+            )
+        )
+    if args.operation == "readback":
+        return emit(
+            pr_metadata_readback_payload(
+                target_root=target_root,
+                surface=args.surface,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                pr_number=args.pr,
+                head_sha=args.head_sha,
+                branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
+                body_file=args.body_file,
+                compare_body_file=args.compare_body_file,
+                readback_file=args.readback_file,
+                expected_item=args.item,
+            )
+        )
     return emit(
         pr_metadata_preflight_payload(
             target_root=target_root,
@@ -17616,6 +20276,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
             pr_payload_file=args.pr_payload_file,
             body_file=args.body_file,
             compare_body_file=args.compare_body_file,
+            expected_item=args.item,
             expected_head_sha=args.head_sha,
             expected_branch=args.branch,
         )
@@ -19179,11 +21840,25 @@ def contains_merged_commit(
     owner: str | None = None,
     repo_name: str | None = None,
 ) -> bool:
-    remote_ref = f"refs/remotes/origin/{target_branch}"
-    fetched_ref = f"refs/heads/{target_branch}:{remote_ref}"
-    fetched = run_git(root, ["fetch", "origin", fetched_ref])
-    if fetched is not None and fetched.returncode == 0:
-        contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, remote_ref])
+    target_branch = target_branch.strip()
+    if not target_branch:
+        return False
+    run_git(
+        root,
+        [
+            "fetch",
+            "--no-write-fetch-head",
+            "origin",
+            f"refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
+        ],
+    )
+    candidate_refs = (
+        target_branch,
+        f"origin/{target_branch}",
+        f"refs/remotes/origin/{target_branch}",
+    )
+    for ref in candidate_refs:
+        contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, ref])
         if contains is not None and contains.returncode == 0:
             return True
     if owner is None or repo_name is None:
@@ -19368,6 +22043,7 @@ def suite_gate_reconciliation_findings(
 def reconciliation_audit_payload(
     *,
     target_root: Path,
+    expected_item: str | None,
     phase_number: int | None,
     fr_number: int | None,
     issue_number: int | None,
@@ -19387,7 +22063,7 @@ def reconciliation_audit_payload(
         missing_inputs.append("issue/pr/project")
 
     suite_gate_validation: dict[str, Any] | None = None
-    expected_reconciliation_lookup = closeout_expected_item_lookup(target_root, issue_number)
+    expected_reconciliation_lookup = closeout_expected_item_lookup(target_root, issue_number, expected_item)
     missing_inputs.extend(retained_item_lookup_missing_inputs(expected_reconciliation_lookup))
     expected_reconciliation_item = retained_item_lookup_id(expected_reconciliation_lookup)
     expected_reconciliation_work_item = retained_item_lookup_work_item_relative(expected_reconciliation_lookup)
@@ -20985,8 +23661,16 @@ def closeout_payload(
     status_checks_file: str | None = None,
     branch_protection_file: str | None = None,
     ruleset_file: str | None = None,
+    pr_role: str | None = None,
+    pr_role_numbers: dict[str, int] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
+    pr_roles = closeout_pr_roles_payload(
+        legacy_pr_number=pr_number,
+        role_numbers=pr_role_numbers or {},
+        requested_role=pr_role,
+    )
+    effective_pr_number = closeout_current_pr_number(pr_roles)
     effective_profile = effective_closeout_gate_profile(gate_profile)
     expected_closeout_lookup = closeout_expected_item_lookup(target_root, issue_number, expected_item)
     missing_inputs.extend(retained_item_lookup_missing_inputs(expected_closeout_lookup))
@@ -21097,13 +23781,14 @@ def closeout_payload(
     reconciliation_payload: dict[str, Any] | None = None
     closeout_fallback: str | None = None
     closeout_summary_override: str | None = None
-    if issue_number is not None or pr_number is not None or project_number is not None:
+    if issue_number is not None or effective_pr_number is not None or project_number is not None:
         reconciliation_payload, reconciliation_errors = reconciliation_audit_payload(
             target_root=target_root,
+            expected_item=expected_closeout_item,
             phase_number=phase_number,
             fr_number=fr_number,
             issue_number=issue_number,
-            pr_number=pr_number,
+            pr_number=effective_pr_number,
             project_number=project_number,
             branch_name=branch_name,
             owner=owner,
@@ -21172,7 +23857,7 @@ def closeout_payload(
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
     merge_commit_in_target: bool | None = None
-    if pr_number is not None:
+    if effective_pr_number is not None:
         fixture_pr_payload, fixture_pr_errors = load_optional_json_fixture(
             target_root,
             pr_payload_file,
@@ -21185,7 +23870,7 @@ def closeout_payload(
             pr_payload = fixture_pr_payload
             pr_errors = []
         else:
-            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, effective_pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:
@@ -21205,14 +23890,14 @@ def closeout_payload(
                 else:
                     missing_inputs.append("pr baseRefName is missing")
 
-    if pr_number is not None:
+    if effective_pr_number is not None:
         backlink_subchecks = closeout_backlink_subchecks(
             target_root=target_root,
             context=fact_chain_context,
             profile=CLOSEOUT_LIGHT_PROFILE,
             owner=owner,
             repo_name=repo_name,
-            pr_number=pr_number,
+            pr_number=effective_pr_number,
             pr_payload=pr_payload,
             merge_commit_sha=merge_commit_sha,
             merge_commit_in_target=merge_commit_in_target,
@@ -21279,7 +23964,7 @@ def closeout_payload(
                         "project_v2_issue_item_lookup",
                         issue_item_errors,
                     )
-            pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
+            pr_item = find_project_item(items, effective_pr_number, "pr") if effective_pr_number is not None else None
             if issue_number is not None and issue_item is None:
                 missing_inputs.append("issue is missing from project")
             project_payload = {
@@ -21420,6 +24105,8 @@ def closeout_payload(
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "repo": {"owner": owner, "name": repo_name},
+            "pr_roles": pr_roles,
+            "current_pr_role": pr_roles["current"],
             "gate": gate,
             **({"suite_gate_validation": suite_gate_validation} if suite_gate_validation is not None else {}),
             "issue": issue_payload,
@@ -21496,6 +24183,8 @@ def handle_closeout(args: argparse.Namespace) -> int:
         status_checks_file=args.status_checks_file,
         branch_protection_file=args.branch_protection_file,
         ruleset_file=args.ruleset_file,
+        pr_role=args.pr_role,
+        pr_role_numbers=closeout_pr_role_numbers_from_args(args),
     )
     if errors:
         return emit(
@@ -21614,6 +24303,8 @@ def handle_closeout(args: argparse.Namespace) -> int:
         status_checks_file=args.status_checks_file,
         branch_protection_file=args.branch_protection_file,
         ruleset_file=args.ruleset_file,
+        pr_role=args.pr_role,
+        pr_role_numbers=closeout_pr_role_numbers_from_args(args),
     )
     if errors:
         sync_missing.extend(errors)
@@ -21687,12 +24378,19 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             }
         )
 
+    pr_roles = closeout_pr_roles_payload(
+        legacy_pr_number=args.pr,
+        role_numbers=closeout_pr_role_numbers_from_args(args),
+        requested_role=args.pr_role,
+    )
+    effective_pr_number = closeout_current_pr_number(pr_roles)
     payload, errors = reconciliation_audit_payload(
         target_root=target_root,
+        expected_item=args.item,
         phase_number=args.phase,
         fr_number=args.fr,
         issue_number=args.issue,
-        pr_number=args.pr,
+        pr_number=effective_pr_number,
         project_number=args.project,
         branch_name=args.branch,
         owner=owner,
@@ -21714,6 +24412,8 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             }
         )
     payload["runtime_state"] = runtime_state
+    payload["pr_roles"] = pr_roles
+    payload["current_pr_role"] = pr_roles["current"]
     if args.operation == "audit":
         return emit(payload)
 
@@ -21874,6 +24574,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
 
     refreshed_payload, refreshed_errors = reconciliation_audit_payload(
         target_root=target_root,
+        expected_item=args.item,
         phase_number=args.phase,
         fr_number=args.fr,
         issue_number=args.issue,
@@ -24381,6 +27082,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_host_lifecycle(args)
     if args.command == "closeout":
         return handle_closeout(args)
+    if args.command == "closeout-queue":
+        return handle_closeout_queue(args)
     if args.command == "reconciliation":
         return handle_reconciliation(args)
     if args.command == "shadow-parity":
@@ -24397,6 +27100,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_checkpoint(args)
     if args.command == "workspace":
         return handle_workspace(args)
+    if args.command == "work-item-audit":
+        return handle_work_item_audit(args)
     return handle_purity(args)
 
 
