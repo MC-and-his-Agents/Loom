@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1596
-- Goal: Execute v0.15.0 release closeout for milestone 13 and parent FR #1594.
-- Scope: Issue #1596 only: read back all milestone #13 issues/PRs/merge commits/target branch/hosted checks, advance release surfaces to v0.15.0 if authorized, record release/no-release closeout evidence, consume WI-1598 terminal carrier, and close #1594 only after GitHub and repo carriers agree. Do not backfill prerequisite implementation issues or publish without explicit authorization.
-- Execution Path: issue #1596 -> branch work/1596-release-closeout -> release closeout PR -> hosted checks -> controlled merge -> main-push release workflow or authorized waiver -> terminal carrier sync
+- Item ID: WI-1452
+- Goal: 让 controlled-merge 在 required checks 全绿时仍阻断当前 PR head 上已触发的失败或未完成非 required checks。
+- Scope: Issue #1452 only: implement triggered check rollup consumption in controlled-merge, expose triggered_check_rollup JSON, add targeted fixtures/docs, sync generated/runtime/demo surfaces, and do not mutate live branch protection, release, #1292, #1293, or parent #1285 closeout.
+- Execution Path: issue #1452 -> branch work/1452-controlled-merge-triggered-checks -> PR #1614 -> hosted checks -> controlled merge -> issue closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1596.md
-- Review Entry: .loom/reviews/WI-1596.json
-- Validation Entry: workspace audit; release readback/resume; version/release/npm/package checks; PR metadata preflight; hosted checks; release evidence readback
-- Closing Condition: Milestone #13, #1594, #1596, #1598, release/tag/npm evidence, target branch, and repo carriers are terminal and mutually consistent.
-- Current Checkpoint: closed
-- Current Stop: WI-1596 release PR #1612 merged to main at b27df020d2cbf54a0a29e7440ecad540108bfb45; v0.15.0 published via loom-cli-release run 27812319903.
-- Next Step: No further WI-1596 action after this carrier sync merges; milestone #13, #1594, #1596, and #1598 are terminal in GitHub readback.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19: controlled merge PR #1612 passed and merged; loom-cli-release run 27812319903 succeeded; release readback classified v0.15.0 as published with tag v0.15.0 -> b27df020d2cbf54a0a29e7440ecad540108bfb45, GitHub Release published at 2026-06-19T07:40:56Z, npm @mc-and-his-agents/loom@0.15.0 latest, and isolated npm exec smoke reported repo_version v0.15.0.
-- Recovery Boundary: Issue #1596 release closeout only; post-merge carrier sync consumes completed release facts and does not add implementation scope.
-- Current Lane: Release closeout lane
+- Recovery Entry: .loom/progress/WI-1452.md
+- Review Entry: .loom/reviews/WI-1452.json
+- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py tools/check_cli_contract.py examples/new-project/.loom/bin/loom_flow.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; git diff --check; PR metadata readback; hosted checks
+- Closing Condition: PR #1614 passes local and hosted gates, controlled merge consumes required and triggered check readbacks, #1452 is closed, and later #1292/#1293 consume the completed behavior without scope expansion.
+- Current Checkpoint: merge
+- Current Stop: WI-1452 implementation, carrier sync, shadow parity, and review records are aligned for PR #1614 current-head gate consumption.
+- Next Step: Refresh PR #1614 metadata to the current head, rerun/read back hosted checks, then run controlled-merge check and merge #1452 before continuing to #1292.
+- Blockers: None recorded
+- Latest Validation Summary: 2026-06-19: py_compile passed for src/skills/shared/scripts/loom_flow.py, tools/check_cli_contract.py, and examples/new-project/.loom/bin/loom_flow.py; merge-wrapper and controlled-merge CLI contract surfaces passed; generated-tree-drift passed; make loom-demo-new-project-check passed after fixture sync; git diff --check passed; shadow-parity passed for all surfaces after Work Item artifact and shadow evidence sync; PR #1614 metadata-update/readback passed for WI-1452 current-head carrier.
+- Recovery Boundary: WI-1452 only: triggered-check rollup behavior, targeted fixtures/docs, generated/runtime/demo sync, PR #1614 metadata/gate evidence. Excludes live branch protection mutation, #1292 fixture closeout, #1293 release convergence, parent #1285 closeout, VERSION/tag/GitHub Release/npm publish.
+- Current Lane: controlled-merge-triggered-checks
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1596.md
-- Dynamic Truth: .loom/progress/WI-1596.md
+- Static Truth: .loom/work-items/WI-1452.md
+- Dynamic Truth: .loom/progress/WI-1452.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

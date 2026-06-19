@@ -382,6 +382,9 @@ CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
 PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
 HOST_MERGEABILITY_HARD_BLOCK_STATUSES = {"DIRTY", "DRAFT"}
 HOST_MERGEABILITY_DELEGATED_STATUSES = {"BLOCKED"}
+TRIGGERED_CHECK_ALLOWED_CONCLUSIONS = {"SUCCESS", "SKIPPED", "NEUTRAL"}
+TRIGGERED_CHECK_BLOCKING_CONCLUSIONS = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
+TRIGGERED_CHECK_PENDING_STATUSES = {"QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "PENDING"}
 MERGE_GATE_RESULT_SCHEMAS = {"loom-flow-merge-ready/v1", "loom-merge-gate/v1"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
@@ -20620,6 +20623,15 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
         name = run.get("name") or run.get("context")
         if isinstance(name, str):
             by_name.setdefault(name, []).append(run)
+
+    def is_success(entry: dict[str, Any]) -> bool:
+        return entry.get("conclusion") == "SUCCESS" or entry.get("state") == "SUCCESS"
+
+    def is_pending(entry: dict[str, Any]) -> bool:
+        status = entry.get("status")
+        state = entry.get("state")
+        return status not in {None, "COMPLETED"} or state in {"EXPECTED", "PENDING"}
+
     missing: list[str] = []
     pending: list[str] = []
     failing: list[str] = []
@@ -20628,12 +20640,13 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
         if not entries:
             missing.append(context)
             continue
-        if any(entry.get("conclusion") == "SUCCESS" or entry.get("state") == "SUCCESS" for entry in entries):
+        if any(is_success(entry) for entry in entries):
             continue
-        if any(entry.get("status") not in {None, "COMPLETED"} for entry in entries):
+        if any(is_pending(entry) for entry in entries):
             pending.append(context)
         else:
             failing.append(context)
+
     result = "pass" if not missing and not pending and not failing else "block"
     return {
         "result": result,
@@ -20641,6 +20654,93 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
         "missing": missing,
         "pending": pending,
         "failing": failing,
+    }
+
+
+def triggered_check_name(run: dict[str, Any]) -> str | None:
+    name = run.get("name") or run.get("context")
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def triggered_check_workflow(run: dict[str, Any]) -> str | None:
+    workflow = run.get("workflowName") or run.get("workflow")
+    if isinstance(workflow, str) and workflow.strip():
+        return workflow
+    if isinstance(workflow, dict) and isinstance(workflow.get("name"), str):
+        return workflow["name"]
+    return None
+
+
+def triggered_check_rollup_payload(status_rollup: Any) -> dict[str, Any]:
+    if not isinstance(status_rollup, list):
+        return {
+            "result": "block",
+            "summary": "triggered check rollup is unreadable.",
+            "triggered_checks": [],
+            "blocking": [],
+            "pending": [],
+            "allowed": [],
+            "unknown": [],
+            "missing_inputs": ["triggered check rollup unreadable"],
+        }
+    triggered_checks: list[dict[str, Any]] = []
+    blocking: list[str] = []
+    pending: list[str] = []
+    allowed: list[str] = []
+    unknown: list[str] = []
+    for index, run in enumerate(status_rollup, start=1):
+        if not isinstance(run, dict):
+            unknown.append(f"check[{index}]")
+            triggered_checks.append(
+                {
+                    "name": f"check[{index}]",
+                    "workflow": None,
+                    "status": None,
+                    "conclusion": None,
+                    "classification": "unknown",
+                    "details_url": None,
+                }
+            )
+            continue
+        name = triggered_check_name(run) or f"check[{index}]"
+        status = str(run.get("status")).upper() if isinstance(run.get("status"), str) and run.get("status") else None
+        conclusion = str(run.get("conclusion")).upper() if isinstance(run.get("conclusion"), str) and run.get("conclusion") else None
+        state = str(run.get("state")).upper() if isinstance(run.get("state"), str) and run.get("state") else None
+        if status in TRIGGERED_CHECK_PENDING_STATUSES or (status is not None and status != "COMPLETED"):
+            classification = "pending"
+            pending.append(name)
+        elif conclusion in TRIGGERED_CHECK_BLOCKING_CONCLUSIONS or state in TRIGGERED_CHECK_BLOCKING_CONCLUSIONS:
+            classification = "failed"
+            blocking.append(name)
+        elif conclusion in TRIGGERED_CHECK_ALLOWED_CONCLUSIONS or state == "SUCCESS":
+            classification = "allowed"
+            allowed.append(name)
+        else:
+            classification = "unknown"
+            unknown.append(name)
+        triggered_checks.append(
+            {
+                "name": name,
+                "workflow": triggered_check_workflow(run),
+                "status": status,
+                "conclusion": conclusion or state,
+                "classification": classification,
+                "details_url": run.get("detailsUrl") or run.get("details_url") or run.get("targetUrl"),
+            }
+        )
+    missing_inputs = [f"triggered check `{name}` failed" for name in blocking]
+    missing_inputs.extend(f"triggered check `{name}` is pending" for name in pending)
+    missing_inputs.extend(f"triggered check `{name}` has unknown conclusion" for name in unknown)
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "summary": "triggered checks are allowed." if result == "pass" else "triggered checks include blocking or unreadable states.",
+        "triggered_checks": triggered_checks,
+        "blocking": blocking,
+        "pending": pending,
+        "allowed": allowed,
+        "unknown": unknown,
+        "missing_inputs": missing_inputs,
     }
 
 
@@ -20847,6 +20947,7 @@ def current_pr_drift_readback(
     pr_gate_consumption: dict[str, Any],
     merge_gate_consumption: dict[str, Any] | None,
     required_checks: dict[str, Any],
+    triggered_check_rollup: dict[str, Any],
     host_enforcement: dict[str, Any],
 ) -> dict[str, Any]:
     head_sha = current_pr.get("headRefOid")
@@ -20864,6 +20965,7 @@ def current_pr_drift_readback(
             "retained_pr_gate": pr_gate_consumption,
             "retained_merge_gate": merge_gate_consumption,
             "required_checks": required_checks,
+            "triggered_check_rollup": triggered_check_rollup,
             "host_enforcement": host_enforcement,
             "mergeability": mergeability,
             "merge_method": {
@@ -21101,6 +21203,9 @@ def controlled_merge_payload(
         status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
         required_contexts,
     )
+    triggered_check_rollup = triggered_check_rollup_payload(
+        status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
+    )
     if protection_payload is None and ruleset_payload is None:
         missing_inputs.append("branch protection or ruleset readback is unavailable")
     if PR_MERGE_GATE_CHECK_NAME not in required_contexts:
@@ -21110,6 +21215,8 @@ def controlled_merge_payload(
         for key in ("missing", "pending", "failing"):
             for context in required_checks[key]:
                 missing_inputs.append(f"required check `{context}` is {labels[key]}")
+    if triggered_check_rollup["result"] != "pass":
+        missing_inputs.extend(str(message) for message in triggered_check_rollup.get("missing_inputs", []))
     host_enforcement = {
         "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
         "required_contexts": required_contexts,
@@ -21141,6 +21248,7 @@ def controlled_merge_payload(
         pr_gate_consumption=retained_results["pr_gate"]["consumption"],
         merge_gate_consumption=merge_gate_consumption,
         required_checks=required_checks,
+        triggered_check_rollup=triggered_check_rollup,
         host_enforcement=host_enforcement,
     )
 
@@ -21152,6 +21260,8 @@ def controlled_merge_payload(
         merge_ready_consumption_missing.append("fresh retained PR gate consumption")
     if required_checks["result"] != "pass":
         merge_ready_consumption_missing.append("required checks readback")
+    if triggered_check_rollup["result"] != "pass":
+        merge_ready_consumption_missing.append("triggered checks readback")
     pr_head = (
         pr_payload.get("headRefOid") or pr_payload.get("headRefName")
         if isinstance(pr_payload, dict)
@@ -21178,11 +21288,13 @@ def controlled_merge_payload(
         "observed_pr_head": pr_head,
         "merge_method": merge_method,
         "required_checks_snapshot": required_checks,
+        "triggered_check_rollup": triggered_check_rollup,
         "fail_closed_conditions": [
             "missing-allow-result",
             "stale-head",
             "target-mismatch",
             "required-checks-drift",
+            "triggered-checks-drift",
             "malformed-merge-ready-result",
         ],
     }
@@ -21229,6 +21341,8 @@ def controlled_merge_payload(
         "retained_results": retained_results,
         "drift_readback": drift_readback,
         "required_checks": required_checks,
+        "triggered_check_rollup": triggered_check_rollup,
+        "triggered_checks": triggered_check_rollup.get("triggered_checks", []),
         "host_enforcement": host_enforcement,
         "controlled_merge_consumption": controlled_merge_consumption,
         "merge": merge_result,
