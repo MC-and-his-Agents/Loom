@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1595
-- Goal: Strengthen PR metadata dry-run and preflight diagnostics.
-- Scope: Issue #1595 only: make PR metadata update dry-run by default, require explicit apply for host writes, and expose enum/head/branch/surface diagnostics with targeted fixtures; do not change host API auth, closeout role model, release resume, or issue dependency parser semantics.
-- Execution Path: issue #1595 -> branch work/1595-pr-metadata-preflight -> PR #1603 -> merge-ready
+- Item ID: WI-1600
+- Goal: Disable issue prose active dependency inference.
+- Scope: Issue #1600 only: stop treating issue prose as active dependencies, consume only GitHub native dependency relationships or structured Loom machine blocks, and update parser fixtures/docs for dependency provenance; do not change docs convergence or closeout PR role behavior.
+- Execution Path: issue #1600 -> branch work/1600-native-dependency-only -> PR #1604 -> merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1595.md
-- Review Entry: .loom/reviews/WI-1595.json
-- Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface pr-metadata; skills_surface check; demo bootstrap fixture check; PR metadata render/readback/preflight; hosted loom-check
-- Closing Condition: Issue #1595 and PR #1603 are terminal only after PR body metadata, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
+- Recovery Entry: .loom/progress/WI-1600.md
+- Review Entry: .loom/reviews/WI-1600.json
+- Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface governance-closeout/dependency parser; skills_surface check; demo bootstrap fixture check; PR metadata readback/preflight; hosted loom-check
+- Closing Condition: Issue #1600 and PR #1604 are terminal only after dependency parser behavior, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-1595 is ready for PR #1603 merge gate: implementation, minimal suite, evidence map, task carrier, spec review, implementation review, PR body metadata, and local carrier checks are aligned.
-- Next Step: Wait for hosted checks and hosted loom-pr-merge-gate on PR #1603, then merge when required checks are green.
+- Current Stop: WI-1600 is ready for PR #1604 merge gate: dependency parser implementation, minimal suite, evidence map, and task carrier are in place.
+- Next Step: Record current-head spec and implementation reviews, refresh shadow carriers, update PR #1604 metadata, and wait for hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19 WI-1595 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; spec review allow; implementation review allow with carrier-only head binding accepted; PR #1603 metadata readback/preflight passed and must be re-read after the final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at readback.
-- Recovery Boundary: Work item carrier, minimal suite, evidence map, task carrier, review records, PR metadata, and shadow carrier for #1595 / PR #1603 only.
-- Current Lane: PR metadata lane
+- Latest Validation Summary: 2026-06-19 WI-1600 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface governance-closeout passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; PR #1604 metadata readback/preflight must be re-read after final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile had passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at last readback.
+- Recovery Boundary: Work item carrier, minimal suite, evidence map, task carrier, review records, PR metadata, and shadow carrier for #1600 / PR #1604 only.
+- Current Lane: Issue dependency parser lane
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1595.md
-- Dynamic Truth: .loom/progress/WI-1595.md
+- Static Truth: .loom/work-items/WI-1600.md
+- Dynamic Truth: .loom/progress/WI-1600.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
