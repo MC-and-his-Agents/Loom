@@ -39,6 +39,7 @@ def main() -> int:
     errors.extend(require_contains(MATRIX, HOSTS))
     errors.extend(require_contains(MATRIX, REQUIRED_FIELDS))
     errors.extend(require_contains(MATRIX, ("loom-init", "skills/<skill-id>", "fail closed", "static adapter check")))
+    errors.extend(require_contains(MATRIX, ("gh api", "host_api_unreadable", "permission", "CODEX_EXPORT_GH_TOKEN=1")))
     errors.extend(require_contains(UNIFIED, ("root CLI", "native", "single-skill", "skills/<skill-id>", "loom-init")))
     if errors:
         print("host adapter check failed:", file=sys.stderr)

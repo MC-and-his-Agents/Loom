@@ -25,7 +25,7 @@ Stable native read states:
 The native dependency reader compares:
 
 - repo-authored dependency statements
-- issue body dependency statements
+- issue body dependency machine blocks
 - GitHub native `blocked_by` / `blocking` edges
 - Project status when a Project read is requested
 

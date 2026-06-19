@@ -25,6 +25,7 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
+RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "release-readback-fixtures.json"
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
     ".loom/work-items/WI-truth.md",
@@ -99,6 +100,8 @@ REQUIRED_COMMANDS = {
     "gate freeze check",
     "gate freeze write",
     "gate closeout",
+    "release readback",
+    "release resume",
     "closeout run",
     "host list",
     "host doctor",
@@ -309,6 +312,9 @@ def assert_repo_local_closeout_runtime_argument_contract() -> None:
     help_text = completed.stdout + completed.stderr
     if "--item" not in help_text:
         raise AssertionError("repo-local closeout runtime must accept --item for wrapper/runtime contract parity")
+    for flag in ("--implementation-pr", "--release-pr", "--carrier-sync-pr", "--final-closeout-pr", "--pr-role"):
+        if flag not in help_text:
+            raise AssertionError(f"repo-local closeout runtime must accept {flag} for PR role contract parity")
 
 
 def assert_merge_wrapper_pr_argument_contract() -> None:
@@ -394,6 +400,46 @@ def assert_closeout_wrapper_argument_contract() -> None:
         captured["fallback_to"] = fallback_to
         return 0
 
+    def arg_value(flow_args: list[str], flag: str) -> str | None:
+        if flag not in flow_args:
+            return None
+        index = flow_args.index(flag)
+        return flow_args[index + 1] if index + 1 < len(flow_args) else None
+
+    def int_arg_value(flow_args: list[str], flag: str) -> int | None:
+        value = arg_value(flow_args, flag)
+        return int(value) if value is not None else None
+
+    def closeout_pr_roles_from_flow_args(flow_args: list[str]) -> dict[str, Any]:
+        roles = {
+            role: number
+            for role, number in (
+                ("implementation_pr", int_arg_value(flow_args, "--implementation-pr")),
+                ("release_pr", int_arg_value(flow_args, "--release-pr")),
+                ("carrier_sync_pr", int_arg_value(flow_args, "--carrier-sync-pr")),
+                ("final_closeout_pr", int_arg_value(flow_args, "--final-closeout-pr")),
+            )
+            if number is not None
+        }
+        requested_role = arg_value(flow_args, "--pr-role")
+        legacy_pr = int_arg_value(flow_args, "--pr")
+        if requested_role is not None:
+            current_role = requested_role
+            current_number = roles.get(requested_role, legacy_pr)
+            source = f"--{requested_role.replace('_', '-')}" if requested_role in roles else "--pr plus --pr-role"
+        else:
+            current_role = "implementation_pr" if legacy_pr is not None else None
+            current_number = legacy_pr
+            source = "--pr" if legacy_pr is not None else None
+        return {
+            "schema_version": "loom-closeout-pr-roles/v1",
+            "supported_roles": ["implementation_pr", "release_pr", "carrier_sync_pr", "final_closeout_pr"],
+            "roles": roles,
+            "legacy_pr": legacy_pr,
+            "requested_role": requested_role,
+            "current": {"role": current_role, "number": current_number, "source": source},
+        }
+
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         captured.clear()
         captured["command"] = command
@@ -402,20 +448,25 @@ def assert_closeout_wrapper_argument_contract() -> None:
         flow_payload_calls.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
         payload: dict[str, Any] = {"command": command, "result": "pass"}
         if flow_args[:2] == ["closeout", "check"]:
+            pr_roles = closeout_pr_roles_from_flow_args(flow_args)
+            current_pr = pr_roles["current"]["number"] or int_arg_value(flow_args, "--pr")
+            issue_number = int_arg_value(flow_args, "--issue") or 1555
             payload.update(
                 {
+                    "pr_roles": pr_roles,
+                    "current_pr_role": pr_roles["current"],
                     "issue": {
-                        "number": 1555,
+                        "number": issue_number,
                         "state": "CLOSED",
                         "closedAt": "2026-06-18T10:00:00Z",
-                        "url": "https://github.com/MC-and-his-Agents/Loom/issues/1555",
+                        "url": f"https://github.com/MC-and-his-Agents/Loom/issues/{issue_number}",
                     },
                     "pr": {
-                        "number": 1563,
+                        "number": current_pr,
                         "state": "MERGED",
                         "baseRefName": "main",
                         "mergedAt": "2026-06-18T09:55:00Z",
-                        "url": "https://github.com/MC-and-his-Agents/Loom/pull/1563",
+                        "url": f"https://github.com/MC-and-his-Agents/Loom/pull/{current_pr}",
                         "mergeCommit": {"oid": "fixture-merge-sha"},
                     },
                 }
@@ -444,6 +495,16 @@ def assert_closeout_wrapper_argument_contract() -> None:
                 "1554",
                 "--pr",
                 "1562",
+                "--pr-role",
+                "final_closeout_pr",
+                "--implementation-pr",
+                "1592",
+                "--release-pr",
+                "1592",
+                "--carrier-sync-pr",
+                "1593",
+                "--final-closeout-pr",
+                "1593",
                 "--project",
                 "4",
                 "--phase",
@@ -488,6 +549,11 @@ def assert_closeout_wrapper_argument_contract() -> None:
             "--item": "WI-1554",
             "--issue": "1554",
             "--pr": "1562",
+            "--pr-role": "final_closeout_pr",
+            "--implementation-pr": "1592",
+            "--release-pr": "1592",
+            "--carrier-sync-pr": "1593",
+            "--final-closeout-pr": "1593",
             "--project": "4",
             "--phase": "1504",
             "--fr": "1505",
@@ -624,6 +690,54 @@ def assert_closeout_wrapper_argument_contract() -> None:
             raise AssertionError("closeout run dry-run did not delegate carrier closeout-sync as dry-run")
         if not emitted_payloads or emitted_payloads[-1].get("schema_version") != "loom-closeout-run/v1":
             raise AssertionError("closeout run must emit loom-closeout-run/v1")
+
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1515",
+                "--issue",
+                "1515",
+                "--implementation-pr",
+                "1592",
+                "--release-pr",
+                "1592",
+                "--final-closeout-pr",
+                "1593",
+                "--pr-role",
+                "final_closeout_pr",
+                "--branch",
+                "work/1515-post-release-closeout",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run PR role fixture regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [["reconciliation", "sync"], ["closeout", "check"], ["carrier", "closeout-sync"]]:
+            raise AssertionError(f"closeout run PR role fixture delegated unexpected runtime sequence: {call_heads}")
+        reconciliation_args = flow_payload_calls[0]["flow_args"]
+        closeout_args = flow_payload_calls[1]["flow_args"]
+        carrier_args = flow_payload_calls[2]["flow_args"]
+        for args_name, flow_args in (("reconciliation", reconciliation_args), ("closeout-check", closeout_args)):
+            for flag, expected in {
+                "--implementation-pr": "1592",
+                "--release-pr": "1592",
+                "--final-closeout-pr": "1593",
+                "--pr-role": "final_closeout_pr",
+            }.items():
+                if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                    raise AssertionError(f"closeout run {args_name} step did not preserve {flag} for PR role fixture")
+            if "--pr" in flow_args:
+                raise AssertionError(f"closeout run {args_name} step leaked legacy --pr for role-only fixture")
+        if carrier_args[carrier_args.index("--pr") + 1] != "1593":
+            raise AssertionError("closeout run PR role fixture did not consume final_closeout_pr for carrier metadata")
+        role_payload = emitted_payloads[-1].get("current_pr_role") if emitted_payloads else {}
+        if role_payload != {"role": "final_closeout_pr", "number": 1593, "source": "--final-closeout-pr"}:
+            raise AssertionError(f"closeout run PR role fixture emitted unexpected current role: {role_payload}")
 
         flow_payload_calls.clear()
         emitted_payloads.clear()
@@ -1244,6 +1358,58 @@ def assert_reconciliation_suite_taxonomy_contract() -> None:
     )
     if [finding.get("kind") for finding in missing_gate_findings] != ["missing_suite_gate"]:
         raise AssertionError("reconciliation did not classify missing suite gate drift")
+
+
+def assert_issue_dependency_machine_block_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    historical_issue_body = (
+        "## Historical Notes\n\n"
+        "- depends on #1514 and blocked by #1513 were prior planning notes only.\n"
+        "- 前置：#1542、#1544 已在历史收口中消费，不代表当前 active blocker。\n"
+        "- 依赖 #1529 的说明只是归档文字，不应生成 active edge。\n"
+    )
+    historical_edges = loom_flow.parse_authored_dependency_edges(historical_issue_body, 1515)
+    if historical_edges:
+        raise AssertionError(f"historical issue prose must not produce authored dependency edges: {historical_edges}")
+    historical_graph = loom_flow.dependency_graph_payload(
+        issue_number=1515,
+        issue_payload={"number": 1515, "state": "closed", "body": historical_issue_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    if historical_graph.get("authored_edges") or historical_graph.get("findings"):
+        raise AssertionError("historical issue prose must not create active dependency drift or findings")
+
+    machine_block_body = (
+        "## Dependency Carrier\n\n"
+        '<!-- loom:issue-dependencies {"schema_version":"loom-issue-dependencies/v1","blocked_by":["#793"],"blocks":[795]} -->\n'
+    )
+    machine_edges = loom_flow.parse_authored_dependency_edges(machine_block_body, 794)
+    edge_keys = {
+        (edge.get("source_issue"), edge.get("blocking_issue"), edge.get("direction"))
+        for edge in machine_edges
+        if isinstance(edge, dict)
+    }
+    if edge_keys != {(794, 793, "blocked_by"), (795, 794, "blocking")}:
+        raise AssertionError(f"structured issue dependency machine block parsed unexpected edges: {machine_edges}")
+    if not all(
+        isinstance(edge, dict)
+        and edge.get("source_of_truth") == "issue_body_machine_block"
+        and edge.get("provenance", {}).get("source_owner") == "github_issue_machine_block"
+        for edge in machine_edges
+    ):
+        raise AssertionError("structured issue dependency machine block must retain machine-block provenance")
+    machine_graph = loom_flow.dependency_graph_payload(
+        issue_number=794,
+        issue_payload={"number": 794, "state": "open", "body": machine_block_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    missing_native_findings = [
+        finding
+        for finding in machine_graph.get("findings", [])
+        if isinstance(finding, dict) and finding.get("kind") == "missing_native_edge"
+    ]
+    if len(missing_native_findings) != 2:
+        raise AssertionError("structured issue dependency machine block must remain consumable as authored proof")
 
 
 def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
@@ -4047,6 +4213,24 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
                 raise AssertionError(f"pr metadata-update wrapper did not pass {flag}")
             if flow_args[flow_args.index(flag) + 1] != expected:
                 raise AssertionError(f"pr metadata-update wrapper changed {flag} value")
+        if "--dry-run" not in flow_args or "--apply" in flow_args:
+            raise AssertionError("pr metadata-update wrapper must default to dry-run delegation")
+
+        status = module.handle_pr(
+            [
+                "metadata-update",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--apply",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("pr metadata-update wrapper apply regression did not complete")
+        flow_args = captured.get("flow_args")
+        if "--apply" not in flow_args or "--dry-run" in flow_args:
+            raise AssertionError("pr metadata-update wrapper did not forward explicit --apply")
     finally:
         module.emit_flow = original_emit_flow
 
@@ -4116,6 +4300,33 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     if not isinstance(governance_fields, dict) or governance_fields.get("head_sha") != head_sha:
         raise AssertionError("readback did not expose parsed governance fields")
 
+    _, update_dry_run_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "update",
+            "--target",
+            str(target),
+            "--surface",
+            "closeout",
+            "--item",
+            "WI-1541",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1541-render",
+            "--output-file",
+            ".loom/runtime/pr/update-rendered.md",
+        ]
+    )
+    if (
+        update_dry_run_payload.get("result") != "pass"
+        or update_dry_run_payload.get("dry_run") is not True
+        or update_dry_run_payload.get("host_mutations") is not False
+        or update_dry_run_payload.get("apply_required") is not True
+        or update_dry_run_payload.get("readback") is not None
+    ):
+        raise AssertionError("pr metadata-update must default to dry-run local render/preflight without host mutation")
+
 
 def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     target = tmp / "governance-intensity-metadata"
@@ -4149,6 +4360,7 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
                 "review_requirement": "current_head_review_required",
             },
         },
+        "branch-conflict.md": {"branch": "feature/not-a-work-branch"},
         "head-conflict.md": {"head_sha": "2222222222222222222222222222222222222222"},
     }
     for body_name, overrides in negative_cases.items():
@@ -4158,6 +4370,85 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
             raise AssertionError(f"governance intensity metadata negative fixture did not block: {body_name}")
         if "PR metadata machine block invalid: loom-governance-intensity" not in payload.get("missing_inputs", []):
             raise AssertionError(f"governance intensity metadata fixture did not report invalid block: {body_name}")
+
+    unknown_intensity_payload = governance_metadata_preflight_payload(target, "unknown-intensity.md", expect=1)
+    first_unknown_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in unknown_intensity_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(first_unknown_diagnostic, dict)
+        or first_unknown_diagnostic.get("classifier") != "enum_violation"
+        or "fields.governance_intensity" not in (first_unknown_diagnostic.get("allowed_values") or {})
+        or "allowed values" not in str(first_unknown_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("enum violations must expose legal values and a rewrite next_action")
+
+    head_conflict_payload = governance_metadata_preflight_payload(target, "head-conflict.md", expect=1)
+    head_conflict_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in head_conflict_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict) and "fields.head_sha" in diagnostic.get("missing_fields", [])
+        ),
+        None,
+    )
+    if (
+        not isinstance(head_conflict_diagnostic, dict)
+        or head_conflict_diagnostic.get("classifier") != "head_sha_drift"
+        or "--head-sha" not in str(head_conflict_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("head_sha drift diagnostics must expose a targeted next_action")
+
+    branch_conflict_payload = governance_metadata_preflight_payload(target, "branch-conflict.md", expect=1)
+    branch_conflict_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in branch_conflict_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict) and "fields.branch" in diagnostic.get("missing_fields", [])
+        ),
+        None,
+    )
+    if (
+        not isinstance(branch_conflict_diagnostic, dict)
+        or branch_conflict_diagnostic.get("classifier") != "branch_drift"
+        or "--branch" not in str(branch_conflict_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("branch drift diagnostics must expose a targeted next_action")
+
+    surface_mismatch = target / "surface-mismatch.md"
+    surface_mismatch.write_text(governance_metadata_body(surface="closeout"), encoding="utf-8")
+    _, surface_mismatch_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            "surface-mismatch.md",
+        ],
+        expect=1,
+    )
+    surface_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in surface_mismatch_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(surface_diagnostic, dict)
+        or surface_diagnostic.get("classifier") != "surface_drift"
+        or "`merge_ready`" not in str(surface_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("surface drift diagnostics must expose the expected surface next_action")
 
     docs_governance_lite = target / "docs-governance-lite.md"
     docs_governance_lite.write_text(
@@ -6764,6 +7055,7 @@ def run_governance_closeout_contract() -> None:
     assert_active_closeout_contract(active_item)
     assert_idle_root_self_governance_direct_contract()
     assert_reconciliation_suite_taxonomy_contract()
+    assert_issue_dependency_machine_block_contract()
     with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
@@ -6810,6 +7102,52 @@ def run_work_item_audit_surface() -> None:
     if "shadow_freshness" not in payload:
         raise AssertionError("workspace audit must expose shadow freshness")
     print("work item audit surface checks passed")
+
+
+def run_release_readback_surface() -> None:
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    for command in ("release readback", "release resume"):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
+            raise AssertionError(f"{command} must be declared as an implemented delivery command")
+
+    expected = {
+        "unpublished-release-required": ("release", "readback", "unpublished"),
+        "v0.14.2-manual-resume-published": ("release", "resume", "published"),
+        "partial-release-missing-github-release": ("release", "readback", "partial_published"),
+        "no-release-docs-only": ("release", "resume", "no_release"),
+    }
+    for fixture, (domain, operation, classification) in expected.items():
+        args = [
+            domain,
+            operation,
+            "--target",
+            str(REPO_ROOT),
+            "--fixture-file",
+            str(RELEASE_READBACK_FIXTURES),
+            "--fixture",
+            fixture,
+            "--json",
+        ]
+        if classification == "no_release":
+            args.extend(["--release-judgment", "no_release"])
+        _, payload = run_json(args, expect=0)
+        if payload.get("schema") != "loom-release-readback/v1" or payload.get("mutates") is not False:
+            raise AssertionError(f"{fixture} release readback did not emit the non-mutating schema contract")
+        observed = payload.get("classification", {}).get("classification")
+        if observed != classification:
+            raise AssertionError(f"{fixture} classified as {observed}, expected {classification}")
+        target = payload.get("release_target", {})
+        if not all(target.get(field) for field in ("version", "tag", "npm_version", "npm_package")):
+            raise AssertionError(f"{fixture} did not expose target version/tag/npm package readback context")
+        readbacks = payload.get("readbacks", {})
+        for surface in ("tag", "github_release", "npm_package", "workflow_run"):
+            if surface not in readbacks:
+                raise AssertionError(f"{fixture} missing {surface} readback")
+        if operation == "resume" and not isinstance(payload.get("resume_contract"), dict):
+            raise AssertionError(f"{fixture} release resume did not expose the non-mutating resume contract")
+
+    print("release readback surface checks passed")
 
 
 def run_pr_metadata_surface() -> None:
@@ -6876,6 +7214,9 @@ def run_aggregate_cli_contract() -> None:
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #890/#891")
+    for command in ("release readback", "release resume"):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
+            raise AssertionError(f"{command} must be implemented for #1601")
     for command in ("gate freeze check", "gate freeze write"):
         if matrix[command]["domain"] != "gate" or matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be declared as an implemented gate command for #1508")
@@ -6923,6 +7264,20 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError(f"failure classifier mapping missing {sorted(required_classifiers - observed_classifiers)}")
     if not all(finding.get("next_action") for finding in classifier_payload.get("findings", [])):
         raise AssertionError("failure classifier findings must include next_action")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["host_api_unreadable"]:
+        raise AssertionError("host_api_unreadable next_action must expose the single-command token bridge")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["permission"]:
+        raise AssertionError("permission next_action must expose the single-command token bridge")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: API rate limit exceeded"]) != "host_api_unreadable":
+        raise AssertionError("GitHub API rate-limit diagnostics must classify as host_api_unreadable")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: Resource not accessible by integration"]) != "permission":
+        raise AssertionError("GitHub permission diagnostics must classify as permission")
+    rate_limit_diagnostic = loom_flow.host_api_diagnostic_message(
+        "gh api repos/example/repo",
+        ["HTTP 403 Forbidden: API rate limit exceeded"],
+    )
+    if "classifier=host_api_unreadable" not in rate_limit_diagnostic or "CODEX_EXPORT_GH_TOKEN=1" not in rate_limit_diagnostic:
+        raise AssertionError("host API diagnostics must include classifier and token bridge next_action")
     subject = freeze_payload.get("snapshot_subject")
     input_bindings = freeze_payload.get("input_bindings", {})
     pr_metadata = input_bindings.get("pr_metadata") if isinstance(input_bindings, dict) else None
@@ -8991,6 +9346,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="work-item-audit",
             fixture_group="work-item-audit",
             run=run_work_item_audit_surface,
+        ),
+        SurfaceCheck(
+            name="release-readback",
+            fixture_group="release-readback",
+            run=run_release_readback_surface,
         ),
         SurfaceCheck(
             name="pr-metadata",
