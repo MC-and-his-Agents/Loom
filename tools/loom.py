@@ -2901,6 +2901,8 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("--suite-na-recheck-condition")
     parser.add_argument("--suite-na-scope-proof")
     parser.add_argument("--suite-na-review-requirement")
+    parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument("--apply", dest="dry_run", action="store_false")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     command = f"pr {args.action}"
@@ -3006,6 +3008,7 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--suite-na-scope-proof", args.suite_na_scope_proof])
         if args.suite_na_review_requirement:
             flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
+        flow_args.append("--apply" if not args.dry_run else "--dry-run")
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-render --surface merge_ready --json", "loom pr metadata-readback --surface merge_ready --pr <number> --json"])
     if args.action == "metadata-preflight":
         flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", args.surface]
