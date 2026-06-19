@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1596.json
 - Validation Entry: workspace audit; release readback/resume; version/release/npm/package checks; PR metadata preflight; hosted checks; release evidence readback
 - Closing Condition: Milestone #13, #1594, #1596, #1598, release/tag/npm evidence, target branch, and repo carriers are terminal and mutually consistent.
-- Current Checkpoint: build checkpoint
-- Current Stop: WI-1596 release version surfaces, release readiness evidence, and WI-1598 terminal carrier are authored for local validation.
-- Next Step: Run release/package/skills/suite validation, record current-head review, render PR metadata, and open the v0.15.0 release PR. Do not merge or publish without explicit authorization.
-- Blockers: Release publish authorization is required before merging the release PR or dispatching publish=true.
-- Latest Validation Summary: 2026-06-19: pre-edit release readback/resume for v0.15.0 passed and classified unpublished with release_required judgment; workspace audit passed with no blocking active carrier drift; milestone #13 host readback found #1595 closeout drift, then #1595 was closed after terminal carrier readback.
-- Recovery Boundary: Issue #1596 release closeout only; version advancement and release evidence are in scope, but release PR merge and live publish require explicit authorization.
+- Current Checkpoint: merge checkpoint
+- Current Stop: WI-1596 release candidate PR #1612 is open at head d9c64d439db31489f390cd8e02a2d66f0b1cc338 with PR body readback/preflight passed; hosted checks are being classified before any merge action.
+- Next Step: Wait for hosted checks on PR #1612, classify failures before rerun, then perform controlled merge only after explicit release publish authorization.
+- Blockers: None recorded.
+- Latest Validation Summary: 2026-06-19: release readback/resume for v0.15.0 passed and classified unpublished with release_required judgment; workspace audit, carrier refresh, suite validate, suite evidence validate, suite carrier validate, version surface, release surface, npm package, package tests, npm pack dry-run, CLI version, skills release-check, skills surface, skills check, git diff check, and aggregate CLI contract passed. Aggregate CLI contract passed in 405.81s. Milestone #13 host readback found #1595 closeout drift, then #1595 was closed after terminal carrier readback.
+- Recovery Boundary: Issue #1596 release closeout only; version advancement and release evidence are in scope. Release PR merge and live publish remain authorization-gated merge/publish actions.
 - Current Lane: Release closeout lane
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-19 WI-1515 v0.14.2 release-required closeout preparation
-- Logs Entry: local command output retained in current Codex milestone/12 thread
-- Diagnostics Entry: #1515 is release_required because #1554/#1555 shipped CLI/runtime behavior after v0.14.1; v0.14.2 release PR merge remains publish-capable and requires explicit user approval before merge.
-- Verification Entry: pre-merge release validation passed for the WI-1515 v0.14.2 release payload and PR #1591 metadata: version/release/npm/package/skills/CLI contract/suite/fact-chain/audit/build/review/shadow checks passed; PR metadata render/readback/preflight passed; post-merge release evidence remains pending.
-- Lane Entry: milestone-12-release-closeout
+- Run Entry: 2026-06-19 WI-1596 v0.15.0 release-required closeout preparation
+- Logs Entry: local command output retained in current Codex milestone/13 thread
+- Diagnostics Entry: #1596 is release_required because milestone #13 advances Loom merge/release/closeout behavior and the root Loom CLI candidate is unpublished at v0.15.0; release PR merge remains publish-capable and requires explicit user approval before merge.
+- Verification Entry: pre-merge release validation passed for the WI-1596 v0.15.0 release payload and PR #1612 metadata: version/release/npm/package/skills/CLI contract/suite/fact-chain/audit/build/review/shadow checks passed; PR metadata render/readback/preflight passed; post-merge release evidence remains pending.
+- Lane Entry: milestone-13-release-closeout
 
 ## Sources
 
