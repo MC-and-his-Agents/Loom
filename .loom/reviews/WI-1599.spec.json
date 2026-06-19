@@ -3,11 +3,11 @@
   "item_id": "WI-1599",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1599 minimal suite approved at merge checkpoint head: spec, plan, evidence map, task carrier, validation mapping, and ownership constraints cover the closeout PR role slice without expanding into release publishing, dependency parsing, host auth, or PR metadata semantics.",
+  "summary": "Spec remains aligned after repo-local runtime parity repair; closeout PR role contract scope unchanged and validations passed.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-19T04:21:24Z",
-  "reviewed_head": "6e8a695c342f8b9c527d59cfc4e6e0586dc7680a",
-  "reviewed_validation_summary": "2026-06-19 WI-1599 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface governance-closeout passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; PR #1605 metadata readback/preflight must be re-read after final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile had passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at last readback.",
+  "authored_at": "2026-06-19T04:35:21Z",
+  "reviewed_head": "c09aed7aa26792b9cf82d117d6dbdd1e461d8e94",
+  "reviewed_validation_summary": "2026-06-19: governance-closeout CLI contract passed; loom_init verify passed; governance-profile status passed; runtime-parity validate passed; adopt verify passed; git diff --check passed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
