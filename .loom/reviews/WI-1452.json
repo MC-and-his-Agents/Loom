@@ -3,10 +3,10 @@
   "item_id": "WI-1452",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Review allow for WI-1452 at implementation head 07bb4651cc662c008e2855f877fa6ee7844cc931: controlled-merge keeps required checks unchanged while adding fail-closed triggered_check_rollup consumption; targeted merge-wrapper/controlled-merge fixtures cover allowed, failed, pending, and unreadable triggered checks; docs and generated/runtime/demo surfaces are synchronized. No live branch protection mutation, release action, #1292/#1293 scope, or parent #1285 closeout is included.",
+  "summary": "Review allow for WI-1452 at carrier-complete head bdef8863ccb5151f5f3635eb261c981d5f0aca33: controlled-merge keeps required checks unchanged while adding fail-closed triggered_check_rollup consumption; targeted fixtures cover allowed, failed, pending, and unreadable triggered checks; docs, generated/runtime/demo, and Loom carriers are synchronized. No live branch protection mutation, release action, #1292/#1293 scope, or parent #1285 closeout is included.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-19T08:45:01Z",
-  "reviewed_head": "07bb4651cc662c008e2855f877fa6ee7844cc931",
+  "authored_at": "2026-06-19T08:46:26Z",
+  "reviewed_head": "bdef8863ccb5151f5f3635eb261c981d5f0aca33",
   "reviewed_validation_summary": "2026-06-19: py_compile passed for src/skills/shared/scripts/loom_flow.py, tools/check_cli_contract.py, and examples/new-project/.loom/bin/loom_flow.py; merge-wrapper and controlled-merge CLI contract surfaces passed; generated-tree-drift passed; make loom-demo-new-project-check passed after fixture sync; git diff --check passed; PR #1614 metadata-update/readback passed for WI-1452 at head 07bb4651cc662c008e2855f877fa6ee7844cc931.",
   "fallback_to": null,
   "findings": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
