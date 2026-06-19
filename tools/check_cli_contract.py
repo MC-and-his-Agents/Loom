@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
 RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "release-readback-fixtures.json"
+CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS = 60
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
     ".loom/work-items/WI-truth.md",
@@ -254,15 +255,22 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
     if env_overrides:
         env.update(env_overrides)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    completed = subprocess.run(
-        [sys.executable, str(LOOM), *args],
-        cwd=REPO_ROOT,
-        env=env,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(LOOM), *args],
+            cwd=REPO_ROOT,
+            env=env,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            f"{args} timed out after {CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS}s\n"
+            f"{exc.stderr or ''}\n{exc.stdout or ''}"
+        ) from exc
     if expect is not None and completed.returncode != expect:
         raise AssertionError(f"{args} returned {completed.returncode}, expected {expect}\n{completed.stderr}\n{completed.stdout}")
     raw = completed.stdout or completed.stderr
@@ -276,15 +284,22 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
 def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    completed = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
-        cwd=cwd,
-        env=env,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
+            cwd=cwd,
+            env=env,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            f"loom_flow.py {args} timed out after {CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS}s\n"
+            f"{exc.stderr or ''}\n{exc.stdout or ''}"
+        ) from exc
     if expect is not None and completed.returncode != expect:
         raise AssertionError(f"loom_flow.py {args} returned {completed.returncode}, expected {expect}\n{completed.stderr}\n{completed.stdout}")
     raw = completed.stdout or completed.stderr
@@ -8628,11 +8643,23 @@ def run_aggregate_cli_contract() -> None:
             if status == 0 or scenario_payload["schema"] != "loom-scenario-control/v1" or not scenario_payload.get("fallback_to"):
                 raise AssertionError(f"{command_name} did not fail closed with a structured locator payload")
         status, build_payload = run_json(["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
-        if build_payload["command"] != "build" or build_payload.get("wrapped_command") != "flow":
-            raise AssertionError("build did not wrap the flow runtime")
+        if (
+            status == 0
+            or build_payload["command"] != "build"
+            or build_payload.get("wrapped_command") != "flow"
+            or build_payload.get("result") != "block"
+            or build_payload.get("fallback_to") != "admission"
+        ):
+            raise AssertionError("build did not fail closed through the flow runtime for a non-current item")
         status, pre_review_payload = run_json(["pre-review", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
-        if pre_review_payload["command"] != "pre-review" or pre_review_payload.get("wrapped_command") != "flow":
-            raise AssertionError("pre-review did not wrap the flow runtime")
+        if (
+            status == 0
+            or pre_review_payload["command"] != "pre-review"
+            or pre_review_payload.get("wrapped_command") != "flow"
+            or pre_review_payload.get("result") != "block"
+            or pre_review_payload.get("fallback_to") != "admission"
+        ):
+            raise AssertionError("pre-review did not fail closed through the flow runtime for a non-current item")
         active_item = active_work_item_id()
         status, active_build = run_json_preserving_attempts(
             ["build", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
