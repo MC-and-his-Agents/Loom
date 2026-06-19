@@ -3,11 +3,11 @@
   "item_id": "WI-1596",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allow for WI-1596 at head b67ecea8: release candidate code/evidence remains unchanged after spec review carrier commit; version authority surfaces advance to v0.15.0, WI-1598 terminal carrier is consumed, release readiness evidence records unpublished/release_required state, and validation passed before PR creation.",
+  "summary": "Closeout review allow for WI-1596 at head 48ab12e5: post-merge carrier sync records only completed release facts, terminal issue state, and v0.15.0 release evidence. No implementation behavior changes were added.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-19T07:19:47Z",
-  "reviewed_head": "b67ecea8272dd32d9f3e4bad1e55fc62938353f7",
-  "reviewed_validation_summary": "2026-06-19: release readback/resume for v0.15.0 passed and classified unpublished with release_required judgment; workspace audit, carrier refresh, suite validate, suite evidence validate, suite carrier validate, version surface, release surface, npm package, package tests, npm pack dry-run, CLI version, skills release-check, skills surface, skills check, git diff check, and aggregate CLI contract passed. Aggregate CLI contract passed in 405.81s. Milestone #13 host readback found #1595 closeout drift, then #1595 was closed after terminal carrier readback.",
+  "authored_at": "2026-06-19T07:50:00Z",
+  "reviewed_head": "48ab12e55e68ba0d21fa15a91544d352b26d1c50",
+  "reviewed_validation_summary": "2026-06-19: controlled merge PR #1612 passed and merged; loom-cli-release run 27812319903 succeeded; release readback classified v0.15.0 as published with tag v0.15.0 -> b27df020d2cbf54a0a29e7440ecad540108bfb45, GitHub Release published at 2026-06-19T07:40:56Z, npm @mc-and-his-agents/loom@0.15.0 latest, and isolated npm exec smoke reported repo_version v0.15.0.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -33,8 +33,8 @@
     "engine_adapter": null,
     "engine_evidence": null,
     "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1596-release-closeout/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1596-release-closeout --item WI-1596 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1596-release-closeout/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1596-release-closeout --item WI-1596 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1596 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1596 --json",
     "suite_evidence_map": ".loom/specs/WI-1596/evidence-map.md",
     "suite_consistency_analysis": null,
     "suite_task_carriers": [
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored closeout review approved the post-merge carrier sync head for terminal closeout consumption."
   }
 }
