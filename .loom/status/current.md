@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1318
-- Goal: Add a concise AGENTS governance principle requiring classification before execution.
-- Scope: Issue #1318 only: update AGENTS.md with the short classify-before-execute principle and add minimal docs review evidence; do not change Loom schemas, runtime behavior, release, fact-chain, review, or closeout semantics.
-- Execution Path: issue #1318 -> branch work/1318-agents-classify-first -> docs governance PR #1602 -> merge-ready
+- Item ID: WI-1598
+- Goal: Converge milestone 13 main-path docs, skills protocol, fixtures, and parity evidence.
+- Scope: Issue #1598 only: consume completed #1595/#1597/#1599/#1600/#1601/#1318 facts and document docs/skills/fixtures convergence; do not add prerequisite runtime behavior or perform v0.15.0 release closeout.
+- Execution Path: issue #1598 -> branch work/1598-docs-skills-fixtures -> convergence PR -> merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1318.md
-- Review Entry: .loom/reviews/WI-1318.json
-- Validation Entry: workspace audit; py_compile_clean not_applicable docs-only; git diff --check; hosted loom-check
-- Closing Condition: Issue #1318 and PR #1602 are terminal only after PR body metadata, fact-chain, review record, hosted checks, target branch, and closeout evidence are consistent.
+- Recovery Entry: .loom/progress/WI-1598.md
+- Review Entry: .loom/reviews/WI-1598.json
+- Validation Entry: workspace audit; suite evidence/carrier validation; targeted docs/skills/fixture checks; aggregate CLI fixture after inputs stable; hosted loom-check
+- Closing Condition: Issue #1598 and convergence PR are terminal only after docs/skills/fixtures evidence, fact-chain, review record, PR metadata, hosted checks, target branch, and downstream #1596 closeout inputs are consistent.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-1318 AGENTS principle, mainline carrier consumption, and WI-1601 terminal carrier sync are ready for merge-ready.
-- Next Step: Record current-head review, update PR body, and rerun hosted merge gate.
+- Current Stop: WI-1598 convergence evidence, docs/skills/fixtures parity, prerequisite terminal carriers, formal-suite not_applicable rationale, and aggregate fixture validation are ready for review.
+- Next Step: Record current-head review, update PR body, create the convergence PR, and run hosted merge gate.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19: merged origin/main through PR #1606 into WI-1318 at head b9524a54aef550cd06906edc0f0fd87c0e0cf3ab; consumed WI-1601 terminal carrier metadata; carrier refresh passed; workspace audit passed with no blocking findings; suite evidence validate passed; suite carrier validate passed; git diff --check passed.
-- Recovery Boundary: Scope remains issue #1318 docs-only AGENTS classify-before-execute principle; no runtime, gate, release, dependency parser, host auth, PR metadata, or closeout behavior changes.
-- Current Lane: AGENTS governance lane
+- Latest Validation Summary: 2026-06-19: suite validate returned not_applicable with valid formal-suite rationale and no blocking gaps; carrier refresh passed with no refresh-needed shadow; workspace audit passed with no blocking active carrier drift; suite evidence validate and suite carrier validate passed for WI-1598; adoption-host-metadata, pr-metadata, release-readback targeted surfaces passed; generated-tree-drift, skills check, release-doc-contract, git diff --check passed; aggregate check_cli_contract passed in 371.88s after fixture fail-closed stabilization for non-current build/pre-review paths.
+- Recovery Boundary: Issue #1598 only: docs/skills/fixtures convergence plus targeted fixture stabilization; no v0.15.0 release closeout, host auth, PR metadata renderer semantics, dependency parser semantics, or release publishing behavior changes.
+- Current Lane: Docs/skills/fixtures convergence lane
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1318.md
-- Dynamic Truth: .loom/progress/WI-1318.md
+- Static Truth: .loom/work-items/WI-1598.md
+- Dynamic Truth: .loom/progress/WI-1598.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
