@@ -11,12 +11,12 @@
 - Review Entry: .loom/reviews/WI-1595.json
 - Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface pr-metadata; skills_surface check; demo bootstrap fixture check; PR metadata render/readback/preflight; hosted loom-check
 - Closing Condition: Issue #1595 and PR #1603 are terminal only after PR body metadata, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
-- Current Checkpoint: build checkpoint
-- Current Stop: PR metadata implementation, minimal suite, evidence map, and task carrier are in place.
-- Next Step: Record current-head spec and implementation reviews, refresh carrier shadows, then run PR gate for PR #1603.
+- Current Checkpoint: merge checkpoint
+- Current Stop: WI-1595 is ready for PR #1603 merge gate: implementation, minimal suite, evidence map, task carrier, spec review, implementation review, PR body metadata, and local carrier checks are aligned.
+- Next Step: Wait for hosted checks and hosted loom-pr-merge-gate on PR #1603, then merge when required checks are green.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19 WI-1595 validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; PR #1603 metadata readback/preflight passed at head 526bb465c150bda5aa8282cdbf9c117b526c5a32; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync.
-- Recovery Boundary: Work item carrier, minimal suite, evidence map, and task carrier for #1595 / PR #1603 only.
+- Latest Validation Summary: 2026-06-19 WI-1595 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; spec review allow; implementation review allow with carrier-only head binding accepted; PR #1603 metadata readback/preflight passed and must be re-read after the final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at readback.
+- Recovery Boundary: Work item carrier, minimal suite, evidence map, task carrier, review records, PR metadata, and shadow carrier for #1595 / PR #1603 only.
 - Current Lane: PR metadata lane
 
 ## Runtime Evidence
