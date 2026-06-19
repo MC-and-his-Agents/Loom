@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1599
-- Goal: Define explicit closeout PR role model.
-- Scope: Issue #1599 only: add closeout PR role inputs and readback for implementation_pr, release_pr, carrier_sync_pr, and final_closeout_pr or equivalent roles in closeout check/run; do not change release publishing logic or issue prose dependency parser semantics.
-- Execution Path: issue #1599 -> branch work/1599-closeout-pr-roles -> PR #1605 -> merge-ready
+- Item ID: WI-1601
+- Goal: Add release readback and resume classification.
+- Scope: Issue #1601 only: add release intent/readback/resume classification for tag, GitHub Release, npm, and workflow state including partial publish cases; do not replace GitHub Actions publishing and do not perform v0.15.0 release closeout.
+- Execution Path: issue #1601 -> branch work/1601-release-resume -> PR #1606 -> merge-ready
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1599.md
-- Review Entry: .loom/reviews/WI-1599.json
-- Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface governance-closeout/closeout roles; skills_surface check; demo bootstrap fixture check; PR metadata readback/preflight; hosted loom-check
-- Closing Condition: Issue #1599 and PR #1605 are terminal only after closeout PR role behavior, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
+- Recovery Entry: .loom/progress/WI-1601.md
+- Review Entry: .loom/reviews/WI-1601.json
+- Validation Entry: workspace audit; py_compile_clean; check_cli_contract --surface release-readback; release surface checks; PR metadata readback/preflight; hosted loom-check
+- Closing Condition: Issue #1601 and PR #1606 are terminal only after release resume behavior, fact-chain, spec review, implementation review, hosted checks, target branch, release/no-release evidence, and closeout evidence are consistent.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Repo-local closeout role runtime parity repaired after hosted release-judgment failure.
-- Next Step: Commit runtime carrier, refresh review evidence, update PR body, and rerun hosted checks.
+- Current Stop: Release readback/resume implementation, mainline carrier consumption, and current-head validations are ready for merge-ready.
+- Next Step: Record current-head spec and implementation reviews, update PR body, and rerun merge-ready checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19: governance-closeout CLI contract passed; loom_init verify passed; governance-profile status passed; runtime-parity validate passed; adopt verify passed; git diff --check passed.
-- Recovery Boundary: Scope remains issue #1599 closeout PR role model and repo-local runtime parity; no release publishing or dependency parser changes.
-- Current Lane: closeout PR role lane
+- Latest Validation Summary: 2026-06-19: merged origin/main through PR #1605 into WI-1601 at head 1dcd2dd7b6ba3f0096c2bdf0f1abefa1ddc11cb5; consumed WI-1599 terminal carrier metadata; carrier refresh runtime hashes were current and then blocked only on stale review as expected; workspace audit passed with no blocking findings; release-readback CLI contract passed; release-doc-contract check passed; git diff --check passed; v0.15.0 release readback/resume passed as non-mutating evidence and classified unpublished.
+- Recovery Boundary: Scope remains issue #1601 release readback/resume classification only; no v0.15.0 publishing, GitHub Actions replacement, closeout role, dependency parser, host auth, or PR metadata changes.
+- Current Lane: release resume lane
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1599.md
-- Dynamic Truth: .loom/progress/WI-1599.md
+- Static Truth: .loom/work-items/WI-1601.md
+- Dynamic Truth: .loom/progress/WI-1601.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

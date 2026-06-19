@@ -64,6 +64,7 @@ SCENARIO_SCHEMA = "loom-scenario-control/v1"
 PROFILE_SCHEMA = "loom-governance-profile-control/v1"
 GATE_SCHEMA = "loom-gate-control/v1"
 DELIVERY_SCHEMA = "loom-delivery-control/v1"
+RELEASE_READBACK_SCHEMA = "loom-release-readback/v1"
 CLOSEOUT_PR_ROLES = (
     "implementation_pr",
     "release_pr",
@@ -248,6 +249,20 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Run the closeout gate over host readback, release/no-release evidence, and repo carrier consistency without performing host writes.",
     },
+    {
+        "command": "release readback",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read target VERSION, git tag, GitHub Release, npm package, and loom-cli-release workflow state without publishing.",
+    },
+    {
+        "command": "release resume",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Classify release recovery state from readback evidence without triggering publish or closeout.",
+    },
     {"command": "workspace create", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace locate", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace check", "domain": "host-control", "status": "implemented", "json": True},
@@ -416,6 +431,526 @@ def read_optional_json(path: Path) -> Any | None:
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def run_readback_command(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def release_normalize_tag(version: str) -> str:
+    return version if version.startswith("v") else f"v{version}"
+
+
+def release_npm_version(version: str) -> str:
+    return version[1:] if version.startswith("v") else version
+
+
+def release_package_context(target: Path, *, version: str | None, package_name: str | None) -> dict[str, Any]:
+    package_path = target / "package.json"
+    package_data: dict[str, Any] = {}
+    if package_path.exists():
+        try:
+            loaded = json.loads(package_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                package_data = loaded
+        except (OSError, json.JSONDecodeError):
+            package_data = {}
+    resolved_version = version
+    if not resolved_version and (target / "VERSION").exists():
+        resolved_version = (target / "VERSION").read_text(encoding="utf-8").strip()
+    if not resolved_version and isinstance(package_data.get("version"), str):
+        resolved_version = release_normalize_tag(package_data["version"])
+    if not resolved_version:
+        resolved_version = "unknown"
+    resolved_package = package_name or package_data.get("name") or "@mc-and-his-agents/loom"
+    return {
+        "version": resolved_version,
+        "tag": release_normalize_tag(resolved_version),
+        "npm_version": release_npm_version(resolved_version),
+        "npm_package": resolved_package,
+        "package_json_version": package_data.get("version"),
+    }
+
+
+def infer_github_repo(target: Path) -> str | None:
+    completed = run_readback_command(["git", "remote", "get-url", "origin"], cwd=target)
+    if completed.returncode != 0:
+        return None
+    remote = completed.stdout.strip()
+    patterns = (
+        re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$"),
+        re.compile(r"github\.com/(?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$"),
+    )
+    for pattern in patterns:
+        match = pattern.search(remote)
+        if match:
+            return f"{match.group('owner')}/{match.group('repo')}"
+    return None
+
+
+def release_target_commit(target: Path, explicit_commit: str | None) -> str | None:
+    if explicit_commit:
+        return explicit_commit
+    completed = run_readback_command(["git", "rev-parse", "HEAD"], cwd=target)
+    if completed.returncode == 0:
+        return completed.stdout.strip()
+    return None
+
+
+def release_tag_readback(target: Path, *, tag: str, target_commit: str | None) -> dict[str, Any]:
+    completed = run_readback_command(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], cwd=target)
+    if completed.returncode != 0:
+        return {
+            "kind": "git_tag",
+            "tag": tag,
+            "exists": False,
+            "source": f"git rev-parse -q --verify refs/tags/{tag}",
+        }
+    commit = run_readback_command(["git", "rev-list", "-n", "1", tag], cwd=target)
+    resolved_commit = commit.stdout.strip() if commit.returncode == 0 else None
+    return {
+        "kind": "git_tag",
+        "tag": tag,
+        "exists": True,
+        "object": completed.stdout.strip(),
+        "commit": resolved_commit,
+        "target_commit": target_commit,
+        "matches_target_commit": bool(target_commit and resolved_commit == target_commit),
+        "source": f"git rev-list -n 1 {tag}",
+    }
+
+
+def github_release_readback(target: Path, *, repo: str | None, tag: str) -> dict[str, Any]:
+    if not repo:
+        return {
+            "kind": "github_release",
+            "tag": tag,
+            "exists": None,
+            "read_error": "missing GitHub repo locator",
+            "failure_kind": "host_api_unreadable",
+        }
+    completed = run_readback_command(
+        [
+            "gh",
+            "release",
+            "view",
+            tag,
+            "--repo",
+            repo,
+            "--json",
+            "tagName,name,url,isDraft,isPrerelease,createdAt,publishedAt,targetCommitish",
+        ],
+        cwd=target,
+    )
+    if completed.returncode != 0:
+        error = completed.stderr.strip()
+        lowered = error.lower()
+        if "not found" in lowered or "404" in lowered:
+            return {
+                "kind": "github_release",
+                "tag": tag,
+                "repo": repo,
+                "exists": False,
+                "source": f"gh release view {tag} --repo {repo}",
+            }
+        return {
+            "kind": "github_release",
+            "tag": tag,
+            "repo": repo,
+            "exists": None,
+            "read_error": error or "gh release view failed",
+            "failure_kind": "host_api_unreadable",
+            "source": f"gh release view {tag} --repo {repo}",
+        }
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return {
+            "kind": "github_release",
+            "tag": tag,
+            "repo": repo,
+            "exists": None,
+            "read_error": "gh release view returned non-JSON output",
+            "failure_kind": "host_api_unreadable",
+        }
+    payload.update({"kind": "github_release", "repo": repo, "exists": True})
+    return payload
+
+
+def npm_package_readback(target: Path, *, package_name: str, npm_version: str) -> dict[str, Any]:
+    package_spec = f"{package_name}@{npm_version}"
+    completed = run_readback_command(["npm", "view", package_spec, "version", "dist-tags", "--json"], cwd=target)
+    if completed.returncode != 0:
+        error = completed.stderr.strip()
+        lowered = error.lower()
+        if "e404" in lowered or "404 not found" in lowered or "is not in this registry" in lowered:
+            latest = run_readback_command(["npm", "view", package_name, "version", "--json"], cwd=target)
+            latest_version = None
+            if latest.returncode == 0:
+                try:
+                    latest_version = json.loads(latest.stdout)
+                except json.JSONDecodeError:
+                    latest_version = latest.stdout.strip().strip('"') or None
+            return {
+                "kind": "npm_package",
+                "package": package_name,
+                "version": npm_version,
+                "version_exists": False,
+                "latest": latest_version,
+                "source": f"npm view {package_spec} version dist-tags --json",
+            }
+        return {
+            "kind": "npm_package",
+            "package": package_name,
+            "version": npm_version,
+            "version_exists": None,
+            "read_error": error or "npm view failed",
+            "failure_kind": "host_api_unreadable",
+            "source": f"npm view {package_spec} version dist-tags --json",
+        }
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return {
+            "kind": "npm_package",
+            "package": package_name,
+            "version": npm_version,
+            "version_exists": None,
+            "read_error": "npm view returned non-JSON output",
+            "failure_kind": "host_api_unreadable",
+        }
+    if isinstance(payload, dict):
+        observed_version = payload.get("version")
+        dist_tags = payload.get("dist-tags", {})
+    else:
+        observed_version = payload
+        dist_tags = {}
+    return {
+        "kind": "npm_package",
+        "package": package_name,
+        "version": npm_version,
+        "observed_version": observed_version,
+        "version_exists": observed_version == npm_version,
+        "dist_tags": dist_tags if isinstance(dist_tags, dict) else {},
+        "source": f"npm view {package_spec} version dist-tags --json",
+    }
+
+
+def workflow_run_readback(target: Path, *, repo: str | None, workflow: str, target_commit: str | None) -> dict[str, Any]:
+    if not repo:
+        return {
+            "kind": "workflow_run",
+            "workflow": workflow,
+            "exists": None,
+            "read_error": "missing GitHub repo locator",
+            "failure_kind": "host_api_unreadable",
+        }
+    completed = run_readback_command(
+        [
+            "gh",
+            "run",
+            "list",
+            "--repo",
+            repo,
+            "--workflow",
+            workflow,
+            "--limit",
+            "20",
+            "--json",
+            "databaseId,displayTitle,event,headSha,headBranch,status,conclusion,createdAt,updatedAt,url",
+        ],
+        cwd=target,
+    )
+    if completed.returncode != 0:
+        return {
+            "kind": "workflow_run",
+            "workflow": workflow,
+            "repo": repo,
+            "exists": None,
+            "read_error": completed.stderr.strip() or "gh run list failed",
+            "failure_kind": "host_api_unreadable",
+            "source": f"gh run list --repo {repo} --workflow {workflow}",
+        }
+    try:
+        runs = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return {
+            "kind": "workflow_run",
+            "workflow": workflow,
+            "repo": repo,
+            "exists": None,
+            "read_error": "gh run list returned non-JSON output",
+            "failure_kind": "host_api_unreadable",
+        }
+    if not isinstance(runs, list):
+        runs = []
+    matching = [run for run in runs if isinstance(run, dict) and target_commit and run.get("headSha") == target_commit]
+    selected = matching[0] if matching else (runs[0] if runs else None)
+    return {
+        "kind": "workflow_run",
+        "workflow": workflow,
+        "repo": repo,
+        "exists": bool(selected),
+        "target_commit": target_commit,
+        "selected": selected,
+        "matching_target_commit_count": len(matching),
+        "source": f"gh run list --repo {repo} --workflow {workflow}",
+    }
+
+
+def release_read_errors(readbacks: dict[str, Any]) -> list[dict[str, Any]]:
+    errors: list[dict[str, Any]] = []
+    for name, readback in readbacks.items():
+        if isinstance(readback, dict) and readback.get("read_error"):
+            errors.append(
+                {
+                    "surface": name,
+                    "failure_kind": readback.get("failure_kind") or "host_api_unreadable",
+                    "summary": readback.get("read_error"),
+                    "source": readback.get("source"),
+                }
+            )
+    return errors
+
+
+def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any]) -> dict[str, Any]:
+    if release_judgment == "no_release":
+        return {
+            "classification": "no_release",
+            "reason": "release judgment declares no release required",
+            "gaps": [],
+            "resume_action": "record no-release rationale evidence; do not publish",
+        }
+
+    tag = readbacks.get("tag", {})
+    release = readbacks.get("github_release", {})
+    npm = readbacks.get("npm_package", {})
+    workflow = readbacks.get("workflow_run", {})
+    tag_exists = tag.get("exists") is True
+    tag_matches = tag.get("matches_target_commit") is True
+    release_exists = release.get("exists") is True
+    npm_exists = npm.get("version_exists") is True
+    workflow_selected = workflow.get("selected") if isinstance(workflow.get("selected"), dict) else None
+    workflow_target_commit = workflow.get("target_commit")
+    workflow_matches_target = (
+        workflow_selected is not None
+        and (
+            not workflow_target_commit
+            or workflow.get("matching_target_commit_count", 0) > 0
+            or workflow_selected.get("headSha") == workflow_target_commit
+        )
+    )
+    workflow_success = (
+        workflow.get("exists") is True
+        and workflow_selected is not None
+        and workflow_matches_target
+        and workflow_selected.get("status") == "completed"
+        and workflow_selected.get("conclusion") == "success"
+    )
+
+    present_count = sum(1 for present in (tag_exists, release_exists, npm_exists) if present)
+    gaps: list[str] = []
+    if not tag_exists:
+        gaps.append("tag_missing")
+    elif not tag_matches:
+        gaps.append("tag_target_commit_mismatch")
+    if not release_exists:
+        gaps.append("github_release_missing")
+    if not npm_exists:
+        gaps.append("npm_version_missing")
+    if not workflow.get("exists"):
+        gaps.append("workflow_run_missing")
+    elif not workflow_matches_target:
+        gaps.append("workflow_run_target_commit_missing")
+    elif not workflow_success:
+        gaps.append("workflow_run_not_success")
+
+    if present_count == 0:
+        return {
+            "classification": "unpublished",
+            "reason": "release-required readback found no tag, GitHub Release, or npm version",
+            "gaps": gaps,
+            "resume_action": "publish path is still unoccupied; use the release workflow only after the release intent is authorized",
+        }
+    if tag_exists and tag_matches and release_exists and npm_exists and workflow_success:
+        return {
+            "classification": "published",
+            "reason": "tag, GitHub Release, npm package, and workflow run read back consistently",
+            "gaps": [],
+            "resume_action": "consume release closeout evidence; do not republish",
+        }
+    return {
+        "classification": "partial_published",
+        "reason": "at least one release artifact exists but the release evidence set is incomplete or mismatched",
+        "gaps": gaps,
+        "resume_action": "repair only the missing release evidence; do not overwrite existing tag, release, or npm version",
+    }
+
+
+def release_fixture_payload(fixture_file: Path, fixture_name: str) -> dict[str, Any] | None:
+    try:
+        data = json.loads(fixture_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    fixtures = data.get("fixtures") if isinstance(data, dict) else None
+    if not isinstance(fixtures, list):
+        return None
+    for fixture in fixtures:
+        if isinstance(fixture, dict) and fixture.get("name") == fixture_name:
+            return fixture
+    return None
+
+
+def release_readback_payload(
+    *,
+    command: str,
+    target: Path,
+    release_judgment: str,
+    version: str | None,
+    package_name: str | None,
+    repo: str | None,
+    commit: str | None,
+    workflow: str,
+    fixture_file: Path | None,
+    fixture_name: str | None,
+) -> dict[str, Any]:
+    fixture: dict[str, Any] | None = None
+    if fixture_file or fixture_name:
+        if not fixture_file or not fixture_name:
+            return output(
+                command,
+                "block",
+                schema=RELEASE_READBACK_SCHEMA,
+                summary="Release readback fixture mode requires both --fixture-file and --fixture.",
+                target=str(target),
+                mutates=False,
+                failed_layer="release-readback-input",
+                fail_closed_reason="missing_fixture_input",
+                fallback_to=["loom release readback --target <repo> --json"],
+            )
+        fixture = release_fixture_payload(fixture_file, fixture_name)
+        if fixture is None:
+            return output(
+                command,
+                "block",
+                schema=RELEASE_READBACK_SCHEMA,
+                summary="Release readback fixture was not found or unreadable.",
+                target=str(target),
+                mutates=False,
+                failed_layer="release-readback-fixture",
+                fail_closed_reason=f"missing fixture: {fixture_name}",
+                fallback_to=["docs/evidence/fixtures/release-readback-fixtures.json"],
+            )
+        fixture_target = fixture.get("target") if isinstance(fixture.get("target"), dict) else {}
+        context = {
+            "version": fixture_target.get("version") or version or "unknown",
+            "tag": fixture_target.get("tag") or release_normalize_tag(fixture_target.get("version") or version or "unknown"),
+            "npm_version": fixture_target.get("npm_version") or release_npm_version(fixture_target.get("version") or version or "unknown"),
+            "npm_package": fixture_target.get("npm_package") or package_name or "@mc-and-his-agents/loom",
+            "package_json_version": fixture_target.get("package_json_version"),
+        }
+        target_commit = fixture_target.get("target_commit") or commit
+        resolved_repo = fixture_target.get("repo") or repo
+        readbacks = fixture.get("readbacks") if isinstance(fixture.get("readbacks"), dict) else {}
+    else:
+        context = release_package_context(target, version=version, package_name=package_name)
+        target_commit = release_target_commit(target, commit)
+        resolved_repo = repo or infer_github_repo(target)
+        readbacks = {
+            "tag": release_tag_readback(target, tag=context["tag"], target_commit=target_commit),
+            "github_release": github_release_readback(target, repo=resolved_repo, tag=context["tag"]),
+            "npm_package": npm_package_readback(target, package_name=context["npm_package"], npm_version=context["npm_version"]),
+            "workflow_run": workflow_run_readback(target, repo=resolved_repo, workflow=workflow, target_commit=target_commit),
+        }
+
+    errors = release_read_errors(readbacks)
+    classification = classify_release_readback(release_judgment=release_judgment, readbacks=readbacks)
+    result = "block" if errors else "pass"
+    summary = (
+        f"Release readback classified {classification['classification']}."
+        if result == "pass"
+        else "Release readback could not read one or more host surfaces."
+    )
+    payload = output(
+        command,
+        result,
+        schema=RELEASE_READBACK_SCHEMA,
+        summary=summary,
+        target=str(target),
+        mutates=False,
+        host_mutations=False,
+        carrier_mutations=False,
+        release_judgment=release_judgment,
+        release_target={
+            **context,
+            "target_commit": target_commit,
+            "repo": resolved_repo,
+            "workflow": workflow,
+        },
+        classification=classification,
+        readbacks=readbacks,
+        read_errors=errors,
+        failed_layer="release-readback" if errors else None,
+        fail_closed_reason="host_readback_unavailable" if errors else None,
+        fallback_to=["resolve host readback/auth via #1597 before retrying"] if errors else None,
+    )
+    if fixture is not None:
+        payload["fixture"] = {
+            "file": str(fixture_file),
+            "name": fixture_name,
+            "story": fixture.get("story"),
+            "expected_classification": fixture.get("expected_classification"),
+        }
+    return payload
+
+
+def handle_release(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("release", "block", schema=RELEASE_READBACK_SCHEMA, summary="Release requires an operation.", failed_layer="release-input", fail_closed_reason="missing release operation", fallback_to=["loom release readback --target <repo> --json"]))
+    operation = argv[0]
+    if operation not in {"readback", "resume"}:
+        return emit(output("release", "block", schema=RELEASE_READBACK_SCHEMA, summary="Unsupported release operation.", failed_layer="release-input", fail_closed_reason=f"unsupported release operation: {operation}", fallback_to=["loom release readback --target <repo> --json"]))
+    parser = argparse.ArgumentParser(prog=f"loom release {operation}")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--version")
+    parser.add_argument("--package", dest="package_name")
+    parser.add_argument("--repo")
+    parser.add_argument("--commit")
+    parser.add_argument("--workflow", default="loom-cli-release.yml")
+    parser.add_argument("--release-judgment", choices=("release_required", "no_release"), default="release_required")
+    parser.add_argument("--fixture-file")
+    parser.add_argument("--fixture")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv[1:])
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target(f"release {operation}", target, "target path does not exist"))
+    payload = release_readback_payload(
+        command=f"release {operation}",
+        target=target,
+        release_judgment=args.release_judgment,
+        version=args.version,
+        package_name=args.package_name,
+        repo=args.repo,
+        commit=args.commit,
+        workflow=args.workflow,
+        fixture_file=Path(args.fixture_file).resolve() if args.fixture_file else None,
+        fixture_name=args.fixture,
+    )
+    if operation == "resume":
+        payload["resume_contract"] = {
+            "mutates": False,
+            "summary": "Release resume is a readback classifier; it does not trigger workflow_dispatch, create tags, publish npm, create GitHub Releases, or write closeout carriers.",
+            "next_action": payload.get("classification", {}).get("resume_action"),
+        }
+    return emit(payload)
 
 
 def copy_tree(source: Path, target: Path) -> None:
@@ -6888,6 +7423,9 @@ def main(argv: list[str]) -> int:
     if command == "repair" or command.startswith("repair "):
         repair_args = command.split()[1:] + forwarded if command.startswith("repair ") else forwarded
         return handle_repair(repair_args)
+    if command == "release" or command.startswith("release "):
+        release_args = command.split()[1:] + forwarded if command.startswith("release ") else forwarded
+        return handle_release(release_args)
     if command in {"install", "upgrade-plan", "upgrade", "rollback", "verify"}:
         return handle_delivery(command, forwarded)
     if command == "workspace" or command.startswith("workspace "):
