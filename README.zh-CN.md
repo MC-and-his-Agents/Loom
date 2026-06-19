@@ -97,8 +97,10 @@ Loom CLI 发布面是执行行为的唯一 active 发布线。它的权威来源
 1. 先运行 `loom doctor --target . --json` 或 `loom verify --target . --json`，判断仓库当前 Loom 层。
 2. 变更 installed runtime、skills、plugin 或 companion surface 前，先运行 `loom upgrade-plan --target . --json`。
 3. 需要场景路由时，从 `loom-init` 开始，再使用 `loom-adopt`、`loom-resume`、`loom-build`、`loom-review`、`loom-merge-ready` 等 scenario skills。
-4. 用 `loom checkpoint merge`、`loom gate pr`、`loom gate closeout` 等 CLI-backed gate 消费 readiness evidence。
+4. 用 `loom pr gate`、`loom merge check`、`loom merge run`、`loom gate closeout` 等 CLI-backed gate 消费 readiness evidence。
 5. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
+
+标准受控合并链路是先运行 `loom pr gate <pr> --head-sha <sha> --work-item <WI> --json`，再运行 `loom merge check <pr> --head-sha <sha> --work-item <WI> --json`，最后运行 `loom merge run <pr> --head-sha <sha> --work-item <WI> --apply --json`。required CI、非 required triggered checks 与宿主 branch protection 都会被这条链路消费，但它们不能替代绑定同一 PR head 的 authored Loom semantic review record。
 
 智能体不能把“已经有改动文件”当作完成。对 Loom 来说，只有目标、文档、review 状态、验证证据、主干真相和宿主控制面全部对齐，才算真正完成。
 

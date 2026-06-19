@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1293",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1293 release/docs/version closeout at head adca2f330e8787b1acc68ee70407051398fbe530: VERSION, package.json, and generated skill package metadata advance to v0.16.0; README/adoption/CLI help surfaces document controlled merge and semantic review boundaries; release readiness evidence records unpublished v0.16.0 occupancy and pre-PR validation; recovery/status carriers remain advanced to merge after PR/readback/dependency cleanup; the release workflow PR diff readback avoids shallow-fetch merge-base loss; the branch has absorbed origin/main while preserving WI-1293 as the active carrier. No #1452 runtime logic, #1292 fixture logic, live branch protection/rulesets, or external repositories were modified.",
+  "reviewer": "Codex main-control",
+  "authored_at": "2026-06-19T11:57:00Z",
+  "reviewed_head": "adca2f330e8787b1acc68ee70407051398fbe530",
+  "reviewed_validation_summary": "2026-06-19T11:06Z-2026-06-19T11:15Z local release validation passed: release readback classified `v0.16.0` as unpublished; tag/GitHub Release/npm occupancy readback found no `v0.16.0`; version/release/npm/package/skills checks passed; CLI contract `merge-wrapper`, `release-readback`, and `aggregate` passed; suite validate/evidence/carrier passed; fact-chain, shadow parity, and `git diff --check` passed. First raw `py_compile` produced `tools/__pycache__`; classified as local validation artifact, removed, and replaced with `python3 tools/py_compile_clean.py ...`, which passed without package payload pollution. 2026-06-19T11:33Z hosted `release-judgment` run `27823076402` failed from PR diff shallow-fetch merge-base loss (`fatal: origin/main...HEAD: no merge base`); `.github/workflows/loom-cli-release.yml` now fetches the base branch without `--depth=1`, and local `git fetch origin main && git merge-base origin/main HEAD && git diff --name-only origin/main...HEAD` passes. 2026-06-19T11:52Z-2026-06-19T11:54Z after merging `origin/main`, `git diff --check`, `python3 tools/check_release_surface.py`, and `python3 tools/check_npm_package.py --surface npm-package-manifest` passed; PR #1646 metadata update/readback matched head `adca2f330e8787b1acc68ee70407051398fbe530`; hosted `loom-pr-merge-gate` run `27824138394` correctly blocked the previous stale review binding before this refresh.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1293.md",
+    "recovery_entry": ".loom/progress/WI-1293.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1293 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1293 --json",
+    "suite_evidence_map": ".loom/specs/WI-1293/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1293/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the release branch implementation head for PR gate and controlled-merge consumption; post-merge publication evidence remains a closeout requirement."
+  }
+}
