@@ -6964,9 +6964,7 @@ def run_aggregate_cli_contract() -> None:
     carrier_drift_body = runtime_pr_dir / "cli-contract-carrier-drift.md"
     try:
         freeze_item = active_work_item_id()
-        branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=REPO_ROOT, text=True).strip()
-        if not branch:
-            branch = "work/cli-contract-fixture"
+        branch = "work/cli-contract-fixture"
         body = governance_metadata_body(item=freeze_item, branch=branch, head_sha=head_sha)
         rendered_pr_body.write_text(body, encoding="utf-8")
         readback_pr_body.write_text(body, encoding="utf-8")
