@@ -47,6 +47,16 @@ loom reconcile
 
 These commands use JSON wrappers over existing harness control-plane readers. GitHub and git remain the host-owned truth sources; Loom only freezes the command names, output shape, fail-closed reasons, and fallback names.
 
+Standard Loom-governed merge usage is:
+
+```bash
+loom pr gate <pr> --head-sha <head-sha> --work-item <WI> --json
+loom merge check <pr> --head-sha <head-sha> --work-item <WI> --json
+loom merge run <pr> --head-sha <head-sha> --work-item <WI> --merge-method merge --delete-branch --apply --json
+```
+
+`loom pr gate` consumes the authored Loom semantic review record for the current PR head. `loom merge check` consumes the retained PR gate, required checks, triggered check rollup, branch protection or ruleset readback, and mergeability without mutating host state. `loom merge run --apply` delegates the host merge only after those inputs pass.
+
 #894 implements the host adapter command family:
 
 ```text

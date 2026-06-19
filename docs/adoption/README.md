@@ -50,6 +50,7 @@ Runtime provider modes:
 边界约束：
 
 - Adoption 只负责说明项目如何进入 Loom operating layer，不把 Loom 收窄成治理套件。
+- GitHub adoption 的 strong profile 明确区分 authored semantic review 与 CI/checks；required checks、triggered checks、guardian/integration/advisory signals 只能作为证据或阻断输入，不能替代绑定 PR head 的 Loom review approval。
 - 外部方法论来源只进入抽象入口、分发、行为回归和 adapter 边界；本目录不新增来源专属文档树，也不复制外部 skill/file layout。
 
 当前目录对应的主要 `EXT-*` 条目：

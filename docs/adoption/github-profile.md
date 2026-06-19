@@ -142,6 +142,12 @@ GitHub host 下的 strong governance 默认要求：
 - 若仓库声明了目标 `release / version`，closeout 必须能区分 `merged but unreleased`、`released but unreconciled` 与 release evidence gap
 - merge 默认走受控 PR 合入，默认方法为 `squash`
 
+### Semantic review 与 checks 边界
+
+GitHub required checks、非 required triggered checks、guardian、integration、advisory verdict、GitHub review comment 和 CI-only signal 都不能替代 Loom semantic review。strong governance 的合并放行必须消费同一 PR head 上的 authored Loom review record、`pr gate`、`merge check` 和 host readback；checks 只能证明执行/宿主状态，不能自行成为 approval truth。
+
+`SKIPPED` / `NEUTRAL` triggered checks 可以作为 allowed non-success readback 进入 controlled merge JSON；failed、cancelled、timed out、action required、startup failure、unknown、pending、queued、in progress 或 unreadable triggered checks 必须 fail closed。
+
 ## 6. 三档 profile
 
 ### Light

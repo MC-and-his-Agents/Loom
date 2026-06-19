@@ -148,8 +148,10 @@ Do not use npm `@mc-and-his-agents/loom-installer` `latest` or `loom-installer-v
 1. Run `loom doctor --target . --json` or `loom verify --target . --json` to understand the repository's current Loom layer.
 2. Run `loom upgrade-plan --target . --json` before changing installed runtime, skills, plugin, or companion surfaces.
 3. Start from `loom-init` when you need scenario routing, then use scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`, `loom-review`, and `loom-merge-ready`.
-4. Use CLI-backed gates such as `loom checkpoint merge`, `loom gate pr`, and `loom gate closeout` to consume readiness evidence.
+4. Use CLI-backed gates such as `loom pr gate`, `loom merge check`, `loom merge run`, and `loom gate closeout` to consume readiness evidence.
 5. Use `loom-handoff` or `loom-retire` to leave the worksite in a recoverable local state, then use host closeout readback and `loom carrier closeout-sync` for versioned terminal carrier sync when the issue/PR/project are already complete.
+
+The standard controlled merge path is `loom pr gate <pr> --head-sha <sha> --work-item <WI> --json`, then `loom merge check <pr> --head-sha <sha> --work-item <WI> --json`, then `loom merge run <pr> --head-sha <sha> --work-item <WI> --apply --json`. Required CI, optional triggered checks, and host branch protection are consumed by this path, but they do not replace the authored Loom semantic review record bound to the same PR head.
 
 Agents should not treat "there are changed files" as completion. In Loom, work is only done when goals, documents, review state, validation evidence, trunk truth, and host control plane all agree.
 
