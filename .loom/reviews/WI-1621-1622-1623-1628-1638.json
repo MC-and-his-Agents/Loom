@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1621-1622-1623-1628-1638",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "合同文档变更将 #1621/#1622/#1623/#1628/#1638 收敛到纯全局 CLI + Codex 用户级 plugin + metadata-only repository adoption；suite path 已正式声明 not_applicable，未发现阻断问题，范围未触碰 CLI 实现、release/package surface 或 generated skills。",
+  "reviewer": "Codex same-thread review",
+  "authored_at": "2026-06-19T10:18:11Z",
+  "reviewed_head": "d12aaedddb153f9484fa6d405293642edea632d6",
+  "reviewed_validation_summary": "2026-06-19T10:16:30Z on branch `work/1621-1628-global-install-contracts`: `git diff --check` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 tools/host_adapter_check.py` passed after preserving legacy vocabulary anchors; `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns` passed; `python3 tools/check_cli_contract.py --surface adoption-host-metadata` passed; `python3 tools/loom.py suite inspect --target . --item WI-1621-1622-1623-1628-1638 --json` reported `suite_path=not_applicable`; `python3 tools/loom_flow.py review record ...` recorded allow with no findings.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1621-1622-1623-1628-1638.md",
+    "recovery_entry": ".loom/progress/WI-1621-1622-1623-1628-1638.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/default-codex-exec",
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

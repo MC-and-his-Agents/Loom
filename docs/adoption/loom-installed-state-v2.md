@@ -4,6 +4,10 @@
 Artifact type, scope, authority, adoption mode, skills granularity, and
 compatibility-mode terms are defined by
 [installation-taxonomy.md](./installation-taxonomy.md).
+The milestone #14 target state is defined by
+[global-cli-user-plugin-contract.md](./global-cli-user-plugin-contract.md):
+global CLI runtime provider, Codex user-level skills provider, and
+metadata-only repository adoption.
 
 The canonical target path is:
 
@@ -23,9 +27,9 @@ The CLI also reads `.loom/installed-state.v2.json` and `.loom/installed-state/in
   "upgrade_eligibility": "current",
   "layers": [
     {
-      "id": "runtime",
-      "layer_type": "full-repo-runtime",
-      "installed_path": ".loom/bin",
+      "id": "adoption-metadata",
+      "layer_type": "repository-adoption-metadata",
+      "installed_path": ".loom/installed-state.json",
       "version_context": {
         "repo_version": "v0.13.0",
         "runtime_core_version": "1.0.0"
@@ -39,13 +43,40 @@ The CLI also reads `.loom/installed-state.v2.json` and `.loom/installed-state/in
           "suite validate"
         ]
       },
-      "provides": ["loom runtime wrappers"],
+      "provides": ["repository adoption truth"],
+      "consumes": ["global-cli-provider", "user-skills-provider"]
+    },
+    {
+      "id": "global-cli-provider",
+      "layer_type": "global-cli-runtime-provider",
+      "installed_path": "workstation:loom-cli",
+      "version_context": {
+        "provider": "loom-cli"
+      },
+      "runtime_state": "unknown",
+      "upgrade_eligibility": "unknown",
+      "provides": ["loom command semantics", "runtime provider"],
+      "consumes": []
+    },
+    {
+      "id": "user-skills-provider",
+      "layer_type": "user-level-skills-provider",
+      "installed_path": "workstation:codex-loom-plugin",
+      "version_context": {
+        "provider": "codex-loom-plugin"
+      },
+      "runtime_state": "unknown",
+      "upgrade_eligibility": "unknown",
+      "provides": ["Loom scenario skills"],
       "consumes": []
     }
   ],
   "installation_graph": {
-    "layers": ["runtime"],
-    "edges": []
+    "layers": ["adoption-metadata", "global-cli-provider", "user-skills-provider"],
+    "edges": [
+      {"from": "adoption-metadata", "to": "global-cli-provider", "relationship": "requires-external-provider"},
+      {"from": "adoption-metadata", "to": "user-skills-provider", "relationship": "requires-external-provider"}
+    ]
   }
 }
 ```
@@ -92,7 +123,7 @@ external runtime/provider surface without owning it:
       "required": true,
       "provider": "loom-cli",
       "authority": "workstation",
-      "compatibility_mode_allowed": true
+      "compatibility_mode_allowed": false
     }
   }
 }
@@ -125,10 +156,11 @@ not make suite validation universally blocking.
 The graph exists so `loom upgrade-plan`, `loom repair plan`, host adapters, skills sync, and installer shims can reason about layer ordering without reading unrelated governance files.
 Every edge endpoint must reference a known layer id. Unknown edge endpoints fail closed because repair and upgrade ordering would otherwise be ambiguous.
 
-## Codex Plugin Mode
+## Codex Metadata-Only Mode
 
-For downstream Codex plugin mode, installed-state must distinguish embedded
-repository payload from metadata-only adoption.
+For downstream Codex, installed-state records metadata-only adoption and the
+external user-level provider requirements. Repo-local embedded payload is legacy
+migration input only.
 
 ### Metadata-Only Mode
 
@@ -139,9 +171,12 @@ from repository truth:
 
 ```json
 {
+  "runtime_provider": "global-cli",
   "repo_payload": {
     "mode": "metadata-only",
     "intentional_absent_paths": [
+      ".loom/bin",
+      "plugins/loom/.codex-plugin/plugin.json",
       "plugins/loom/skills",
       ".agents/skills",
       "skills"
@@ -196,9 +231,10 @@ installed-state must keep the two dependencies separate:
 - global CLI runtime availability remains a provider/runtime check;
 - neither check may be rewritten as embedded repository payload drift.
 
-### Embedded Payload Mode
+### Legacy Embedded Payload Mode
 
-Embedded payload mode models Loom skills as a repository plugin payload:
+Embedded payload mode is legacy repository payload state. It is diagnosable
+migration input, not the milestone #14 current install target:
 
 ```json
 {
@@ -231,19 +267,18 @@ Embedded payload mode models Loom skills as a repository plugin payload:
 }
 ```
 
-Downstream top-level `skills/` is not a required plugin-mode layer. If it exists
-beside a current plugin-mode installed-state, Loom diagnostics treat it as
-legacy residue or target-owned surface until ownership is proven. Repair and
-upgrade plans must not delete or overwrite target-owned non-Loom skills
-automatically.
+Current downstream adoption must not create these layers. If they exist, Loom
+diagnostics treat them as unsupported legacy residue or target-owned surface
+until ownership is proven. Repair and upgrade plans must not delete or overwrite
+target-owned non-Loom skills automatically.
 
 `.agents/skills` is likewise a compatibility export surface, not a default Loom
 downstream layer.
 
-## Repo-Local Wrapper And Global CLI Provider
+## Legacy Repo-Local Wrapper And Global CLI Provider
 
-Installed-state may describe repositories that still carry a repo-local wrapper
-while the active runtime/provider is the global CLI:
+Installed-state may describe legacy repositories that still carry a repo-local
+wrapper while the active runtime/provider is the global CLI:
 
 ```json
 {
@@ -284,17 +319,16 @@ while the active runtime/provider is the global CLI:
 }
 ```
 
-This mode means:
+This legacy mode means:
 
-- `.loom/bin` may remain present as a compatibility carrier;
+- `.loom/bin` may remain present as migration residue;
 - the wrapper does not become the authority for runtime/provider version truth;
 - the global CLI provider remains external workstation/user state;
 - diagnostics must explain whether a failure belongs to wrapper residue,
   provider availability, or repository metadata drift.
 
-Detected `.loom/bin` by itself is still only a hint. It becomes meaningful only
-when installed-state explicitly models a current, retained, audit, obsolete, or
-compatibility-only carrier state.
+Detected `.loom/bin` by itself is still only a hint. For the milestone #14 target
+it blocks as unsupported legacy residue until migration or cleanup resolves it.
 
 ### Global CLI Without Repo-Local Wrapper
 
@@ -362,7 +396,7 @@ cache state, or registration outcomes into repository truth.
 Compatibility mode is valid installed-state only when the metadata says so. It
 is not inferred from legacy residue alone.
 
-Typical compatibility-mode cases:
+Typical legacy compatibility-mode cases:
 
 - a repo-local wrapper remains while execution is delegated to the global CLI
   runtime provider;

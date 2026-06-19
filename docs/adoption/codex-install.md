@@ -1,10 +1,11 @@
 # Installing Loom for Codex
 
-Use the root `loom` CLI as the only primary install entry. CLI-managed payloads
-are written by the CLI, not by the legacy installer. Codex adoption has two
-repository modes: metadata-only adoption with a user-level Codex Loom plugin
-provider, and explicit embedded repository payload mode. The authority terms are
-defined in [installation-taxonomy.md](./installation-taxonomy.md).
+Use the root `loom` CLI as the only primary install entry. Codex adoption uses
+metadata-only repository adoption plus a Codex user-level Loom plugin provider.
+The milestone #14 target contract is
+[global-cli-user-plugin-contract.md](./global-cli-user-plugin-contract.md), and
+the authority terms are defined in
+[installation-taxonomy.md](./installation-taxonomy.md).
 
 ## Prerequisites
 
@@ -19,11 +20,19 @@ defined in [installation-taxonomy.md](./installation-taxonomy.md).
    npm install -g @mc-and-his-agents/loom
    ```
 
-2. Choose the repository adoption mode.
+2. Install and register the Codex user-level Loom plugin:
+
+   ```bash
+   loom host install --host codex --scope user --apply --json
+   loom host register --host codex --scope user --apply --json
+   ```
+
+3. Adopt the target repository with metadata only.
 
 Metadata-only adoption records repository adoption truth and relies on the
 user-level Codex Loom plugin provider. It must not write `plugins/loom/skills/`,
-`.agents/skills`, or root `skills/`:
+`plugins/loom/.codex-plugin/plugin.json`, `.loom/bin`, `.agents/skills`, or root
+`skills/`:
 
    ```bash
    loom install --target . --mode metadata-only --apply --json
@@ -33,53 +42,31 @@ user-level Codex Loom plugin provider. It must not write `plugins/loom/skills/`,
    loom doctor --target . --json
    ```
 
-Embedded payload mode is explicit opt-in for repositories that need a
-self-contained repo-local plugin payload:
+4. Verify the target repository mode:
 
    ```bash
-   loom host install --host codex --mode plugin --target . --apply --json
-   ```
-
-3. Verify the selected target repository mode:
-
-   ```bash
-   loom host verify --host codex --mode plugin --target . --json
+   loom host verify --host codex --mode metadata-only --target . --json
    loom skills check --target . --json
    loom doctor --target . --json
    ```
 
 `loom host verify --host codex --mode metadata-only` verifies repository
 adoption metadata and reports the user-level provider requirement separately.
-`loom host verify --host codex --mode plugin` verifies the embedded target
-repository plugin payload only. In embedded mode it checks
-`.loom/installed-state.json`, `plugins/loom/.codex-plugin/plugin.json`, and
-the embedded `plugins/loom/skills/` payload. Neither mode requires downstream
-top-level `skills/`, and neither mode proves Codex Desktop has registered,
-enabled, or loaded the plugin on the current workstation.
+It does not require downstream top-level `skills/`, and it does not prove Codex
+Desktop has registered, enabled, or loaded the plugin on the current
+workstation.
 
-If the repository still carries `.loom/bin` or another repo-local wrapper
-surface, treat that as a diagnosable compatibility carrier. It may provide
-starter aliases or migration handshakes, but it is not automatic proof that the
-active runtime/provider is repo-local; the active provider may still be the
-global `loom` CLI runtime or the user-level Codex Loom plugin.
-
-4. Register the repo-local Codex plugin payload with this workstation when the
-   repository is used in Codex Desktop:
-
-   ```bash
-   loom host register --host codex --source ./plugins/loom --scope user --dry-run --json
-   loom host register --host codex --source ./plugins/loom --scope user --apply --json
-   ```
+If the repository still carries `.loom/bin`, `.loom/bootstrap`, `plugins/loom/`,
+`.agents/skills`, or Loom-owned root `skills/`, treat those paths as unsupported
+legacy residue until `doctor` classifies them.
 
 Codex should start from `loom-init` after host discovery reloads. In
 metadata-only adoption, the user-level Codex Loom plugin is the skills provider.
-In embedded payload mode, the target repository plugin directory contains the
-embedded `plugins/loom/skills/` payload. Downstream top-level `skills/` belongs
-to the target repository namespace unless explicit Loom ownership is proven;
-`.agents/skills` is an opt-in compatibility export. Workstation registration is
-a user-level Codex Desktop state: personal marketplace entry, user plugin cache
-payload, and Codex config enablement. It is reported by `loom doctor` but is not
-written into target repository truth.
+Downstream top-level `skills/` belongs to the target repository namespace unless
+explicit Loom ownership is proven. Workstation registration is a user-level
+Codex Desktop state: personal marketplace entry, user plugin cache payload, and
+Codex config enablement. It is reported by `loom doctor` but is not written into
+target repository truth.
 
 Global CLI runtime availability is a separate provider dependency from Codex
 Desktop registration. A repository may depend on both during migration or
@@ -90,19 +77,17 @@ If Codex Desktop already loaded its plugin list, start a new Codex session or
 restart Codex Desktop after registration. Loom reports this reload requirement;
 it does not claim that the current session hot-loads newly registered plugins.
 
-This installs Loom's generated skill and plugin payloads for the target
-repository. It does not define which `.loom` files an adopted target repository
-should commit. Target repository `.loom` carrier visibility is defined in
+This installs the Codex user-level Loom plugin and records metadata-only
+repository adoption. Target repository `.loom` carrier visibility is defined in
 [loom-surfaces-version-control.md](./loom-surfaces-version-control.md).
 
 ## Update
 
 ```bash
 npm update -g @mc-and-his-agents/loom
-loom host install --host codex --mode plugin --target . --apply --force --json
-loom host verify --host codex --mode plugin --target . --json
-loom host register --host codex --source ./plugins/loom --scope user --dry-run --json
-loom host register --host codex --source ./plugins/loom --scope user --apply --json
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --scope user --apply --json
+loom host verify --host codex --mode metadata-only --target . --json
 ```
 
 ## Compatibility
@@ -111,11 +96,11 @@ The npm installer is not the Codex default path. `@mc-and-his-agents/loom-instal
 is a deprecated historical artifact. It is not the Codex install path and must
 not be used as evidence that the root `loom` CLI was installed or published.
 
-## Legacy Top-Level Skills
+## Legacy Repository Payload
 
 Repositories adopted under the older downstream plugin layout may still contain
-Loom-generated top-level `skills/` next to `plugins/loom/skills/`. In plugin
-mode, that top-level directory is legacy residue, not a required current layer.
-`loom doctor`, `loom repair plan`, and `loom upgrade-plan` report it before any
-operator considers removal. Loom must not delete or overwrite target-owned
-non-Loom skills automatically.
+`.loom/bin`, `.loom/bootstrap`, `plugins/loom/`, `.agents/skills`, or
+Loom-generated top-level `skills/`. These paths are unsupported legacy residue,
+not a required current layer. `loom doctor`, `loom repair plan`, and
+`loom upgrade-plan` report them before any operator considers removal. Loom must
+not delete or overwrite target-owned non-Loom skills automatically.
