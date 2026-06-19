@@ -3,11 +3,11 @@
   "item_id": "WI-1595",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1595 implementation approved at merge checkpoint: dry-run/apply behavior, preflight diagnostics, wrapper forwarding, generated runtime sync, demo fixture updates, suite evidence carriers, and merge checkpoint carrier match the issue scope and validation evidence.",
+  "summary": "WI-1595 terminal carrier sync approved: PR #1603 is merged, progress/status checkpoint is terminalized as merged, shadow hashes are refreshed, and no runtime or PR metadata behavior changed.",
   "reviewer": "Codex main thread",
-  "authored_at": "2026-06-19T04:11:57Z",
-  "reviewed_head": "e5ad3865aea2712f0194da92215e120f9ece66e0",
-  "reviewed_validation_summary": "2026-06-19 WI-1595 merge-ready validation: workspace audit passed; py_compile_clean passed; check_cli_contract --surface pr-metadata passed; skills_surface check passed; make loom-demo-new-project-check passed; suite validate passed; suite evidence validate passed; suite carrier validate passed; spec review allow; implementation review allow with carrier-only head binding accepted; PR #1603 metadata readback/preflight passed and must be re-read after the final carrier-only head update; hosted demo-bootstrap, repo-local-cli, root-self-governance, and py-compile passed after fixture sync; hosted loom-check/node-installer/release-judgment pending at readback.",
+  "authored_at": "2026-06-19T05:20:00Z",
+  "reviewed_head": "59146b3df600315a48ae477f961c5110eb76e638",
+  "reviewed_validation_summary": "2026-06-19: PR #1603 merged at 313bbf5ceda915eb67ae5e5f71d43d31674f33f7; carrier sync PRs #1608/#1609 recorded terminal merge metadata; hosted checks passed for the carrier sync PRs.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+      "reason": "Authored terminal carrier review approved the current head for merge checkpoint consumption."
   }
 }
