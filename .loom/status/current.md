@@ -12,10 +12,10 @@
 - Validation Entry: workspace audit; py_compile_clean not_applicable docs-only; git diff --check; hosted loom-check
 - Closing Condition: Issue #1318 and PR #1602 are terminal only after PR body metadata, fact-chain, review record, hosted checks, target branch, and closeout evidence are consistent.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-1318 docs-governance evidence and task carriers added for hosted freeze admission.
-- Next Step: Commit carrier update, refresh review evidence, update PR body, and rerun hosted merge gate.
+- Current Stop: WI-1318 AGENTS principle, mainline carrier consumption, and WI-1601 terminal carrier sync are ready for merge-ready.
+- Next Step: Record current-head review, update PR body, and rerun hosted merge gate.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-19: suite validate returned not_applicable with valid rationale and evidence/task carrier locators present; suite evidence validate passed; suite carrier validate passed; workspace audit passed; git diff --check passed.
+- Latest Validation Summary: 2026-06-19: merged origin/main through PR #1606 into WI-1318 at head b9524a54aef550cd06906edc0f0fd87c0e0cf3ab; consumed WI-1601 terminal carrier metadata; carrier refresh passed; workspace audit passed with no blocking findings; suite evidence validate passed; suite carrier validate passed; git diff --check passed.
 - Recovery Boundary: Scope remains issue #1318 docs-only AGENTS classify-before-execute principle; no runtime, gate, release, dependency parser, host auth, PR metadata, or closeout behavior changes.
 - Current Lane: AGENTS governance lane
 
