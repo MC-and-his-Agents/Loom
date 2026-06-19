@@ -4036,6 +4036,265 @@ def assert_pr_gate_blocks(
     return payload
 
 
+def assert_cross_repo_review_gate_fixtures(tmp: Path) -> None:
+    hotcp_target = tmp / "hotcp-review-gate-fixtures"
+    hotcp_target.mkdir()
+    hotcp_fixture = write_semantic_review_pr_gate_fixture(hotcp_target)
+    hotcp_review_path = hotcp_target / hotcp_fixture["review_path"]
+
+    (hotcp_target / "hotcp-unreviewed-drift.txt").write_text("HotCP stale head drift\n", encoding="utf-8")
+    commit_fixture_file(hotcp_target, "hotcp-unreviewed-drift.txt", "fixture HotCP stale head drift")
+    update_fixture_pr_head(hotcp_target, hotcp_fixture)
+    hotcp_stale = semantic_pr_gate_fixture_payload(hotcp_target, hotcp_fixture)
+    if (
+        hotcp_stale.get("result") != "block"
+        or "review_stale" not in hotcp_stale.get("failure_taxonomy", [])
+        or "head_binding_drift" not in hotcp_stale.get("failure_taxonomy", [])
+    ):
+        raise AssertionError("HotCP-style stale/head drift fixture did not fail closed")
+
+    hotcp_review = json.loads(hotcp_review_path.read_text(encoding="utf-8"))
+    hotcp_review["authored_at"] = "2026-05-31T00:00:00Z"
+    hotcp_review_path.write_text(json.dumps(hotcp_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(hotcp_target, hotcp_fixture["review_path"], "fixture HotCP post merge review")
+    update_fixture_pr_head(hotcp_target, hotcp_fixture, state="MERGED", extra={"mergedAt": "2026-05-30T00:00:00Z"})
+    hotcp_post_merge = semantic_pr_gate_fixture_payload(hotcp_target, hotcp_fixture)
+    hotcp_diagnostic = hotcp_post_merge.get("post_merge_review_diagnostic", {})
+    if (
+        hotcp_post_merge.get("result") != "block"
+        or "post_merge_review_bypass" not in hotcp_post_merge.get("failure_taxonomy", [])
+        or hotcp_diagnostic.get("finding", {}).get("kind") != "post_merge_review_bypass"
+        or "backdate review evidence" not in hotcp_diagnostic.get("repair_plan", {}).get("forbidden_repairs", [])
+    ):
+        raise AssertionError("HotCP-style post-merge review fixture did not expose bypass repair semantics")
+
+    hotcp_ci_target = tmp / "hotcp-ci-only-bypass"
+    hotcp_ci_target.mkdir()
+    hotcp_ci_fixture = write_semantic_review_pr_gate_fixture(hotcp_ci_target)
+    hotcp_ci_review_path = hotcp_ci_target / hotcp_ci_fixture["review_path"]
+    hotcp_ci_review = json.loads(hotcp_ci_review_path.read_text(encoding="utf-8"))
+    hotcp_ci_review["semantic_review_disposition"] = {"status": "required"}
+    hotcp_ci_review_path.write_text(json.dumps(hotcp_ci_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(hotcp_ci_target, hotcp_ci_fixture["review_path"], "fixture HotCP CI-only review required")
+    update_fixture_pr_head(
+        hotcp_ci_target,
+        hotcp_ci_fixture,
+        extra={"statusCheckRollup": [{"name": "hotcp-ci", "conclusion": "SUCCESS", "status": "COMPLETED"}]},
+    )
+    hotcp_ci_only = semantic_pr_gate_fixture_payload(hotcp_ci_target, hotcp_ci_fixture)
+    if hotcp_ci_only.get("result") != "block" or "ci_only_bypass" not in hotcp_ci_only.get("failure_taxonomy", []):
+        raise AssertionError("HotCP-style CI-only bypass fixture did not fail closed")
+
+    webenvoy_target, webenvoy_fixture, _, webenvoy_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="webenvoy-guardian-triggered-block",
+        branch_protection_contexts=["loom-pr-merge-gate"],
+    )
+    (webenvoy_dir / "checks-webenvoy-guardian-block.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {
+                    "name": "webenvoy-guardian",
+                    "workflowName": "webenvoy-guardian",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                    "detailsUrl": "https://example.invalid/webenvoy/guardian",
+                },
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, webenvoy_guardian = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(webenvoy_target),
+            "--item",
+            webenvoy_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            webenvoy_fixture["head_sha"],
+            "--pr-payload-file",
+            webenvoy_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-webenvoy-guardian-block.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        webenvoy_guardian.get("result") != "block"
+        or webenvoy_guardian.get("required_checks", {}).get("result") != "pass"
+        or "webenvoy-guardian" not in webenvoy_guardian.get("triggered_check_rollup", {}).get("blocking", [])
+    ):
+        raise AssertionError("WebEnvoy-style guardian block was not consumed as a triggered-check merge blocker")
+    (webenvoy_dir / "checks-webenvoy-guardian-pending.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "webenvoy-guardian", "workflowName": "webenvoy-guardian", "status": "IN_PROGRESS"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, webenvoy_pending = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(webenvoy_target),
+            "--item",
+            webenvoy_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            webenvoy_fixture["head_sha"],
+            "--pr-payload-file",
+            webenvoy_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-webenvoy-guardian-pending.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        webenvoy_pending.get("result") != "block"
+        or webenvoy_pending.get("required_checks", {}).get("result") != "pass"
+        or "webenvoy-guardian" not in webenvoy_pending.get("triggered_check_rollup", {}).get("pending", [])
+    ):
+        raise AssertionError("WebEnvoy-style pending guardian check was not consumed as a triggered-check merge blocker")
+
+    syvert_target = tmp / "syvert-guardian-advisory-cannot-replace-review"
+    syvert_target.mkdir()
+    syvert_fixture = write_semantic_review_pr_gate_fixture(syvert_target)
+    syvert_review_path = syvert_target / syvert_fixture["review_path"]
+    syvert_review = json.loads(syvert_review_path.read_text(encoding="utf-8"))
+    syvert_review["semantic_review_disposition"] = {"status": "required"}
+    syvert_review_path.write_text(json.dumps(syvert_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(syvert_target, syvert_fixture["review_path"], "fixture Syvert advisory review required")
+    update_fixture_pr_head(
+        syvert_target,
+        syvert_fixture,
+        extra={
+            "statusCheckRollup": [
+                {"name": "syvert-guardian", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-integration-advisory", "conclusion": "NEUTRAL", "status": "COMPLETED"},
+            ]
+        },
+    )
+    syvert_advisory = semantic_pr_gate_fixture_payload(syvert_target, syvert_fixture)
+    syvert_disposition = syvert_advisory.get("review_approval", {}).get("semantic_review_disposition", {})
+    if (
+        syvert_advisory.get("result") != "block"
+        or syvert_disposition.get("consumable") is not False
+        or "ci_only_bypass" not in syvert_advisory.get("failure_taxonomy", [])
+        or not any("host-review signal cannot satisfy" in item for item in syvert_advisory.get("missing_inputs", []))
+    ):
+        raise AssertionError("Syvert-style guardian/integration advisory signals replaced Loom semantic review")
+
+    syvert_merge_target, syvert_merge_fixture, _, syvert_merge_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="syvert-verdict-conflict-triggered-block",
+        branch_protection_contexts=["loom-pr-merge-gate"],
+    )
+    (syvert_merge_dir / "checks-syvert-verdict-conflict.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-guardian", "workflowName": "syvert-guardian", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {
+                    "name": "syvert-integration",
+                    "workflowName": "syvert-integration",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                },
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, syvert_conflict = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(syvert_merge_target),
+            "--item",
+            syvert_merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            syvert_merge_fixture["head_sha"],
+            "--pr-payload-file",
+            syvert_merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-syvert-verdict-conflict.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        syvert_conflict.get("result") != "block"
+        or syvert_conflict.get("required_checks", {}).get("result") != "pass"
+        or "syvert-integration" not in syvert_conflict.get("triggered_check_rollup", {}).get("blocking", [])
+    ):
+        raise AssertionError("Syvert-style guardian/integration verdict conflict did not block controlled merge")
+    (syvert_merge_dir / "checks-syvert-verdict-pending.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-guardian", "workflowName": "syvert-guardian", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-integration", "workflowName": "syvert-integration", "status": "QUEUED"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, syvert_pending = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(syvert_merge_target),
+            "--item",
+            syvert_merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            syvert_merge_fixture["head_sha"],
+            "--pr-payload-file",
+            syvert_merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-syvert-verdict-pending.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        syvert_pending.get("result") != "block"
+        or syvert_pending.get("required_checks", {}).get("result") != "pass"
+        or "syvert-integration" not in syvert_pending.get("triggered_check_rollup", {}).get("pending", [])
+    ):
+        raise AssertionError("Syvert-style pending integration verdict did not block controlled merge")
+
+
 def write_governance_metadata_contract_fixture(target: Path) -> None:
     companion = target / ".loom" / "companion"
     companion.mkdir(parents=True, exist_ok=True)
@@ -5269,6 +5528,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
     assert_controlled_merge_ruleset_trigger_fixture(tmp)
+    assert_cross_repo_review_gate_fixtures(tmp)
 
     pr_path = target / fixture["pr_file"]
     merge_target, merge_fixture, merge_pass_payload, fixture_dir = prepare_controlled_merge_fixture(

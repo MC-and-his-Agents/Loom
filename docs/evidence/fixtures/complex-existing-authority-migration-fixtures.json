@@ -270,6 +270,84 @@
           "result": "block",
           "fail_closed": true
         }
+      },
+      {
+        "id": "webenvoy-triggered-check-failed-drift",
+        "input": {
+          "schema_version": "loom-controlled-merge-consumption/v1",
+          "style": "WebEnvoy",
+          "merge_ready_result": "pass",
+          "head_sha": "HEAD1",
+          "required_checks": "pass",
+          "triggered_check_rollup": {
+            "blocking": [
+              "webenvoy-guardian"
+            ]
+          }
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      },
+      {
+        "id": "webenvoy-triggered-check-pending-drift",
+        "input": {
+          "schema_version": "loom-controlled-merge-consumption/v1",
+          "style": "WebEnvoy",
+          "merge_ready_result": "pass",
+          "head_sha": "HEAD1",
+          "required_checks": "pass",
+          "triggered_check_rollup": {
+            "pending": [
+              "webenvoy-guardian"
+            ]
+          }
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      },
+      {
+        "id": "syvert-triggered-check-failed-drift",
+        "input": {
+          "schema_version": "loom-controlled-merge-consumption/v1",
+          "style": "Syvert",
+          "merge_ready_result": "pass",
+          "review_authority": "current-head Loom semantic review",
+          "head_sha": "HEAD1",
+          "required_checks": "pass",
+          "triggered_check_rollup": {
+            "blocking": [
+              "syvert-integration"
+            ]
+          }
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      },
+      {
+        "id": "syvert-triggered-check-pending-drift",
+        "input": {
+          "schema_version": "loom-controlled-merge-consumption/v1",
+          "style": "Syvert",
+          "merge_ready_result": "pass",
+          "review_authority": "current-head Loom semantic review",
+          "head_sha": "HEAD1",
+          "required_checks": "pass",
+          "triggered_check_rollup": {
+            "pending": [
+              "syvert-integration"
+            ]
+          }
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
       }
     ]
   }
