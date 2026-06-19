@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1452
-- Goal: 让 controlled-merge 在 required checks 全绿时仍阻断当前 PR head 上已触发的失败或未完成非 required checks。
-- Scope: Issue #1452 only: implement triggered check rollup consumption in controlled-merge, expose triggered_check_rollup JSON, add targeted fixtures/docs, sync generated/runtime/demo surfaces, and do not mutate live branch protection, release, #1292, #1293, or parent #1285 closeout.
-- Execution Path: issue #1452 -> branch work/1452-controlled-merge-triggered-checks -> PR #1614 -> hosted checks -> controlled merge -> issue closeout
+- Item ID: WI-1292
+- Goal: 添加 HotCP/WebEnvoy/Syvert review gate 回归夹具，并消费 #1452 triggered-check controlled-merge 行为。
+- Scope: Issue #1292 only: add cross-repo review/merge gate regression fixtures in tools/check_cli_contract.py; consume #1452 triggered_check_rollup behavior without changing runtime product logic, release files, #1293, or parent #1285 closeout.
+- Execution Path: issue #1292 -> branch work/1292-review-gate-fixtures -> PR -> hosted checks -> controlled merge -> issue closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1452.md
-- Review Entry: .loom/reviews/WI-1452.json
-- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py tools/check_cli_contract.py examples/new-project/.loom/bin/loom_flow.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; git diff --check; PR metadata readback; hosted checks
-- Closing Condition: PR #1614 passes local and hosted gates, controlled merge consumes required and triggered check readbacks, #1452 is closed, and later #1292/#1293 consume the completed behavior without scope expansion.
-- Current Checkpoint: merge
-- Current Stop: WI-1452 implementation, carrier sync, shadow parity, and review records are aligned for PR #1614 current-head gate consumption.
-- Next Step: Refresh PR #1614 metadata to the current head, rerun/read back hosted checks, then run controlled-merge check and merge #1452 before continuing to #1292.
-- Blockers: None recorded
-- Latest Validation Summary: 2026-06-19: py_compile passed for src/skills/shared/scripts/loom_flow.py, tools/check_cli_contract.py, and examples/new-project/.loom/bin/loom_flow.py; merge-wrapper and controlled-merge CLI contract surfaces passed; generated-tree-drift passed; make loom-demo-new-project-check passed after fixture sync; git diff --check passed; shadow-parity passed for all surfaces after Work Item artifact and shadow evidence sync; PR #1614 metadata-update/readback passed for WI-1452 current-head carrier.
-- Recovery Boundary: WI-1452 only: triggered-check rollup behavior, targeted fixtures/docs, generated/runtime/demo sync, PR #1614 metadata/gate evidence. Excludes live branch protection mutation, #1292 fixture closeout, #1293 release convergence, parent #1285 closeout, VERSION/tag/GitHub Release/npm publish.
-- Current Lane: controlled-merge-triggered-checks
+- Recovery Entry: .loom/progress/WI-1292.md
+- Review Entry: .loom/reviews/WI-1292.json
+- Validation Entry: python3 -m py_compile tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge; git diff --check
+- Closing Condition: PR passes local and hosted gates, controlled merge consumes review gate fixtures, #1292 is closed, and #1293 can consume the completed fixture coverage.
+- Current Checkpoint: review checkpoint
+- Current Stop: #1292 HotCP/WebEnvoy/Syvert review gate fixtures, downstream triggered-check inventory, suite mappings, and fresh verification evidence are implemented and locally validated in the worktree.
+- Next Step: Commit implementation/carrier changes, record current-head reviews, push PR, and wait for hosted checks.
+- Blockers: None recorded.
+- Latest Validation Summary: 2026-06-19: `python3 -m py_compile tools/check_cli_contract.py` passed; `python3 -m json.tool docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json >/dev/null` passed; `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge` passed in 2.02s; `python3 tools/loom.py suite validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1292 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1292 --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed.
+- Recovery Boundary: WI-1292 worktree branch `work/1292-review-gate-fixtures`; implementation artifacts in `tools/check_cli_contract.py` and `docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json`.
+- Current Lane: main-control integrating Lane C read-only inventory
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-19 WI-1596 v0.15.0 release-required closeout preparation
-- Logs Entry: local command output retained in current Codex milestone/13 thread
-- Diagnostics Entry: #1596 release_required closeout is complete; v0.15.0 tag, GitHub Release, npm package, and release workflow readback are consistent.
-- Verification Entry: pre-merge release validation passed for the WI-1596 v0.15.0 release payload and PR #1612 metadata; post-merge release readback classified v0.15.0 as published and isolated npm exec smoke reported repo_version v0.15.0.
-- Lane Entry: milestone-13-release-closeout
+- Run Entry: 2026-06-19 WI-1292 milestone/9 review gate fixture closeout
+- Logs Entry: local command output retained in current Codex milestone/9 thread
+- Diagnostics Entry: #1292 consumes completed #1452 triggered-check behavior through fixture and inventory updates without changing runtime product logic.
+- Verification Entry: local targeted validation and suite/shadow checks passed on 2026-06-19T09:39:21Z.
+- Lane Entry: milestone-9-main-control
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1452.md
-- Dynamic Truth: .loom/progress/WI-1452.md
+- Static Truth: .loom/work-items/WI-1292.md
+- Dynamic Truth: .loom/progress/WI-1292.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
