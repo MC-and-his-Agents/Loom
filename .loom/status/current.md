@@ -15,7 +15,7 @@
 - Current Stop: PR #1663 merged into main at 2026-06-20T16:06:11Z with merge commit 042d6fd0f66466c3ff8b1b8f4fb628b8d9732565; issues #1495 and #1496 are closed; WI-1495 terminal metadata is recorded below.
 - Next Step: No further WI-1495/WI-1496 implementation action; consume terminal carrier during milestone/11 convergence and release closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-20 WI-1495 closeout readback passed: PR #1663 MERGED at 2026-06-20T16:06:11Z with merge commit 042d6fd0f66466c3ff8b1b8f4fb628b8d9732565; #1495 CLOSED at 2026-06-20T16:08:42Z; #1496 CLOSED at 2026-06-20T16:09:01Z. Pre-merge validation and hosted required checks passed on PR head bff074cbf14a6fb2df5e194001fd0a60344e1d51.
+- Latest Validation Summary: 2026-06-20 WI-1495 closeout readback passed: PR #1663 MERGED at 2026-06-20T16:06:11Z with merge commit 042d6fd0f66466c3ff8b1b8f4fb628b8d9732565; #1495 CLOSED at 2026-06-20T16:08:42Z; #1496 CLOSED at 2026-06-20T16:09:01Z. Current PR #1664 validation passed: make py-compile; host_read_unavailable classifier smoke for classifier=host_api_unreadable; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .; git diff --check.
 - Recovery Boundary: WI-1495/WI-1496 terminal closeout metadata only. Do not add repo-local runtime/plugin/skills installation paths, single-skill package distribution, or legacy installer compatibility.
 - Current Lane: milestone-11-retained-closeout-fixtures-docs
 
