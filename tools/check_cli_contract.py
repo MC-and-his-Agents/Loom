@@ -2654,15 +2654,14 @@ def assert_generated_skills_surface_parity_contract(skills_check: dict[str, Any]
         skill_id = entry.get("id")
         if not isinstance(skill_id, str) or not skill_id:
             raise AssertionError("src/skills registry contains an invalid skill entry")
-        package_root = REPO_ROOT / "skills" / skill_id
-        runtime_root = package_root / ".loom-runtime"
-        for relative in ("registry.json", "install-layout.json", "route-matrix.md"):
-            source = REPO_ROOT / "src" / "skills" / relative
-            runtime = runtime_root / relative
-            if not runtime.is_file():
-                raise AssertionError(f"{skill_id} package runtime missing {relative}")
-            if source.read_bytes() != runtime.read_bytes():
-                raise AssertionError(f"{skill_id} package runtime drifted for {relative}")
+        for payload_root in (REPO_ROOT / "skills", REPO_ROOT / "plugins" / "loom" / "skills"):
+            package_root = payload_root / skill_id
+            if not (package_root / "SKILL.md").is_file():
+                raise AssertionError(f"{payload_root.relative_to(REPO_ROOT)}/{skill_id} missing SKILL.md")
+            if not (package_root / "contract.json").is_file():
+                raise AssertionError(f"{payload_root.relative_to(REPO_ROOT)}/{skill_id} missing contract.json")
+            if (package_root / "loom-package.json").exists() or (package_root / ".loom-runtime").exists():
+                raise AssertionError(f"{payload_root.relative_to(REPO_ROOT)}/{skill_id} still exposes single-skill package artifacts")
 
 
 def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, project_done: bool = True) -> dict[str, str]:
@@ -8955,8 +8954,14 @@ def run_aggregate_cli_contract() -> None:
         _, skills_check = run_json(["skills", "check", "--target", str(REPO_ROOT), "--json"], expect=0)
         assert_generated_skills_surface_parity_contract(skills_check)
         _, skills_package = run_json(["skills", "package", "--json"], expect=0)
-        if not skills_package["packages"]:
-            raise AssertionError("skills package did not emit package metadata")
+        plugin_payload = skills_package.get("plugin_payload") or {}
+        if (
+            skills_package.get("result") != "pass"
+            or plugin_payload.get("skills_root") != "plugins/loom/skills"
+            or plugin_payload.get("single_skill_packages") is not False
+            or not plugin_payload.get("skills")
+        ):
+            raise AssertionError("skills package did not emit plugin payload metadata")
         _, skills_release_check = run_json(["skills", "release-check", "--json"], expect=0)
         release_check_commands = [
             item.get("command", "")
@@ -9137,7 +9142,7 @@ def run_aggregate_cli_contract() -> None:
         mixed_target = tmp / "mixed"
         mixed_target.mkdir()
         bad_state = valid_state(mixed_target)
-        bad_state["layers"][1]["version_context"]["skill_package_version"] = "unknown"
+        bad_state["layers"][1]["version_context"]["plugin_surface_version"] = "unknown"
         write_state(mixed_target, bad_state)
         status, mixed_payload = run_json(["installed-state", "validate", "--target", str(mixed_target), "--json"])
         if status == 0 or mixed_payload["result"] != "block":

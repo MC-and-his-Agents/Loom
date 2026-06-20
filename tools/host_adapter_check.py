@@ -14,7 +14,6 @@ UNIFIED = ROOT / "docs" / "adoption" / "unified-install-experience.md"
 HOSTS = ("Codex", "Claude Code", "OpenCode", "Gemini", "Cursor")
 REQUIRED_FIELDS = (
     "default_install_path",
-    "advanced_single_skill_path",
     "install_surface",
     "discovery_surface",
     "bootstrap_or_session_start_surface",
@@ -38,9 +37,9 @@ def main() -> int:
     errors: list[str] = []
     errors.extend(require_contains(MATRIX, HOSTS))
     errors.extend(require_contains(MATRIX, REQUIRED_FIELDS))
-    errors.extend(require_contains(MATRIX, ("loom-init", "skills/<skill-id>", "fail closed", "static adapter check")))
+    errors.extend(require_contains(MATRIX, ("loom-init", "plugins/loom/skills", "fail closed", "static adapter check")))
     errors.extend(require_contains(MATRIX, ("gh api", "host_api_unreadable", "permission", "CODEX_EXPORT_GH_TOKEN=1")))
-    errors.extend(require_contains(UNIFIED, ("root CLI", "native", "single-skill", "skills/<skill-id>", "loom-init")))
+    errors.extend(require_contains(UNIFIED, ("root CLI", "native", "plugins/loom/skills", "metadata-only", "loom-init")))
     if errors:
         print("host adapter check failed:", file=sys.stderr)
         for error in errors:

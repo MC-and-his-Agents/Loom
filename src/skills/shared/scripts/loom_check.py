@@ -4934,11 +4934,14 @@ def require_generated_skills_surface_parity_validation(
     for relative in stable_surface_files:
         source = root / "src/skills" / relative
         generated = root / "skills" / relative
-        if not source.is_file() or not generated.is_file():
+        plugin_generated = root / "plugins" / "loom" / "skills" / relative
+        if not source.is_file() or not generated.is_file() or not plugin_generated.is_file():
             failures.append(Failure(category, f"{context} generated skills parity missing `{relative}`"))
             continue
         if source.read_bytes() != generated.read_bytes():
             failures.append(Failure(category, f"{context} generated skills parity drifted for `{relative}`"))
+        if source.read_bytes() != plugin_generated.read_bytes():
+            failures.append(Failure(category, f"{context} plugin payload parity drifted for `{relative}`"))
 
     registry = load_json_file(root / "src/skills/registry.json")
     entries = registry.get("entries") if isinstance(registry, dict) else None
@@ -4950,15 +4953,19 @@ def require_generated_skills_surface_parity_validation(
         if not isinstance(skill_id, str) or not skill_id:
             failures.append(Failure(category, f"{context} source skills registry contains an invalid entry"))
             continue
-        runtime_root = root / "skills" / skill_id / ".loom-runtime"
-        for relative in ("registry.json", "install-layout.json", "route-matrix.md"):
-            source = root / "src/skills" / relative
-            runtime = runtime_root / relative
-            if not runtime.is_file():
-                failures.append(Failure(category, f"{context} `{skill_id}` runtime missing `{relative}`"))
+        generated_skill = root / "skills" / skill_id
+        plugin_skill = root / "plugins" / "loom" / "skills" / skill_id
+        for relative in ("SKILL.md", "contract.json"):
+            source = root / "src" / "skills" / skill_id / relative
+            generated = generated_skill / relative
+            plugin_generated = plugin_skill / relative
+            if not source.is_file() or not generated.is_file() or not plugin_generated.is_file():
+                failures.append(Failure(category, f"{context} `{skill_id}` generated/plugin payload missing `{relative}`"))
                 continue
-            if source.read_bytes() != runtime.read_bytes():
-                failures.append(Failure(category, f"{context} `{skill_id}` runtime drifted for `{relative}`"))
+            if source.read_bytes() != generated.read_bytes():
+                failures.append(Failure(category, f"{context} `{skill_id}` generated skills drifted for `{relative}`"))
+            if source.read_bytes() != plugin_generated.read_bytes():
+                failures.append(Failure(category, f"{context} `{skill_id}` plugin payload drifted for `{relative}`"))
 
 def author_suite_negative_fail_closed_fixtures(target: Path) -> tuple[str, str]:
     full_item = "WI-full-missing-negative"
@@ -5600,8 +5607,8 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
 
     if "agent-first project operating layer" not in readme:
         failures.append(Failure(category, "`README.md` must present Loom as an agent-first project operating layer"))
-    if "Advanced / Compatibility" not in readme:
-        failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
+    if "global `loom` CLI" not in skills_readme or "Codex user plugin" not in skills_readme:
+        failures.append(Failure(category, "`skills/README.md` must describe the global CLI plus Codex user plugin install model"))
     if "[中文版本](./README.zh-CN.md)" not in readme or "[English version](./README.md)" not in readme_zh:
         failures.append(Failure(category, "root README language switch links must stay in sync"))
     if "agent-first project operating layer" not in readme_zh:
@@ -5616,7 +5623,7 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
         failures.append(Failure(category, "`skills/route-matrix.md` must keep explicit routing as the first priority"))
     if "若无法稳定判断，回退到 `loom-init`" not in route_matrix:
         failures.append(Failure(category, "`skills/route-matrix.md` must keep fallback-to-loom-init semantics"))
-    if "`plugin` 与 `single-skill` 两类安装结果边界" not in route_matrix and "fallback_to: \"loom-init\"" not in route_matrix:
+    if "fallback_to: \"loom-init\"" not in route_matrix:
         failures.append(Failure(category, "`skills/route-matrix.md` must keep the stable fallback payload contract"))
 
     if contract.get("id") != "loom-init":
@@ -5628,7 +5635,7 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(routing, dict):
         failures.append(Failure(category, "`skills/loom-init/contract.json` must declare `routing`"))
     else:
-        if routing.get("reference") not in {"../route-matrix.md", ".loom-runtime/route-matrix.md"}:
+        if routing.get("reference") != "../route-matrix.md":
             failures.append(Failure(category, "`skills/loom-init/contract.json` must reference the generated route matrix"))
         if routing.get("fallback_entry") != "loom-init":
             failures.append(Failure(category, "`skills/loom-init/contract.json` fallback entry must remain `loom-init`"))
@@ -6086,7 +6093,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
     with loom_check_temporary_directory(prefix="loom-check-route-registry-") as tmp:
         broken_skills = Path(tmp) / "skills"
         shutil.copytree(root / "skills", broken_skills)
-        registry_path = broken_skills / "loom-init" / ".loom-runtime" / "registry.json"
+        registry_path = broken_skills / "registry.json"
         registry = load_json_file(registry_path)
         if isinstance(registry, dict):
             entries = registry.get("entries")
@@ -9848,7 +9855,7 @@ raise SystemExit(1)
         shutil.copytree(example_target, retire_target)
         for layout_path in (
             broken_install / "install-layout.json",
-            broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json",
+            broken_install / "install-layout.json",
         ):
             if layout_path.exists():
                 layout_path.unlink()
@@ -9939,7 +9946,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
         broken_install = tmp_root / "broken-install" / "skills"
         shutil.copytree(root / "skills", broken_install)
-        (broken_install / "loom-init" / ".loom-runtime" / "shared" / "scripts" / "loom_flow.py").unlink()
+        (broken_install / "shared" / "scripts" / "loom_flow.py").unlink()
         payload, error = load_command_json(
             root,
             ["python3", str(broken_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
@@ -9951,7 +9958,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
         drift_install = tmp_root / "drift-install" / "skills"
         shutil.copytree(root / "skills", drift_install)
-        (drift_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
+        (drift_install / "install-layout.json").unlink()
         payload, error = load_command_json(
             root,
             ["python3", str(drift_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
@@ -11758,8 +11765,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
                 broken_install = tmp_root / "broken-install" / "skills"
                 shutil.copytree(root / "skills", broken_install)
-                (broken_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
-                (broken_install / "loom-pre-review" / ".loom-runtime" / "install-layout.json").unlink()
+                (broken_install / "install-layout.json").unlink()
                 payload, error = load_command_json(
                     root,
                     [
@@ -12171,7 +12177,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
             shutil.copytree(root / "skills", broken_install)
             (broken_install / "install-layout.json").unlink()
-            (broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json").unlink()
+            (broken_install / "install-layout.json").unlink()
             for label, args in (
                 (
                     "installed closeout check missing install-layout",

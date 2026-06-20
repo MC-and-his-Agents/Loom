@@ -128,7 +128,7 @@ When release-required work publishes a Loom CLI release, pre-merge evidence must
 
 - the Work Item, branch, PR, current head, base, and parent release-required issue;
 - the chosen `VERSION` and matching `package.json` npm version;
-- generated `skills/*/loom-package.json` repo version surfaces synchronized when the release ships generated skills/runtime payloads;
+- plugin payload `plugins/loom/skills/registry.json`, generated skills mirror, and skill `contract.json` surfaces synchronized when the release ships skills payload changes;
 - target GitHub `v*` tag and npm `@mc-and-his-agents/loom` version are unoccupied before publish;
 - `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, `installed-global-cli-smoke`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
 - PR-event `release-judgment-only`, if present, is recorded only as pre-merge judgment evidence and not as final release evidence.
@@ -150,7 +150,7 @@ If release execution is unavailable, blocked, or partially complete, closeout mu
 When a Work Item does not publish a release, closeout must record an explicit `no_release` rationale. The rationale is valid only when it states:
 
 - the changed scope does not ship user-visible CLI, skills, package, workflow, release validation, npm payload, runtime provider, or external-visible behavior;
-- `VERSION`, `package.json`, generated `skills/*/loom-package.json`, release workflows, npm publish behavior, and package payload semantics were not changed, or any touched release-control docs/checks are contract-only and do not publish by themselves;
+- `VERSION`, `package.json`, plugin payload registry/contract surfaces, release workflows, npm publish behavior, and package payload semantics were not changed, or any touched release-control docs/checks are contract-only and do not publish by themselves;
 - release-surface validation that is relevant to the touched docs/checks passed or was intentionally not required with a recheck condition;
 - PR-event `release-judgment-only` is not being used as final no-release proof;
 - current head, PR, merge commit or target branch readback, review/gate status, and closeout evidence locator remain bound to the same Work Item.

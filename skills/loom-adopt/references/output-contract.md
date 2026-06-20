@@ -4,7 +4,7 @@
 
 它必须直接复用：
 
-- [../../loom-init/references/output-contract.md](../.loom-runtime/loom-init/references/output-contract.md)
+- [../../loom-init/references/output-contract.md](../../loom-init/references/output-contract.md)
 
 对场景入口本身，最少还要让执行者能直接读出：
 

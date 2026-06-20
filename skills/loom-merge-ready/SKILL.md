@@ -48,9 +48,9 @@ description: 负责 merge 前统一放行。Use when Codex needs to confirm whet
 
 Merge-ready 消费的共享合同见：
 
-- [spec-suite.md](.loom-runtime/shared/references/templates/spec-suite.md)
-- [evidence-map.md](.loom-runtime/shared/references/templates/evidence-map.md)
-- [consistency-analysis.md](.loom-runtime/shared/references/templates/consistency-analysis.md)
-- [gate-chain.md](.loom-runtime/shared/references/harness/gate-chain.md)
-- [lane-orchestration.md](.loom-runtime/shared/references/harness/lane-orchestration.md)
-- [../shared/references/harness/pr-merge-gate.md](.loom-runtime/shared/references/harness/pr-merge-gate.md)
+- [spec-suite.md](../shared/references/templates/spec-suite.md)
+- [evidence-map.md](../shared/references/templates/evidence-map.md)
+- [consistency-analysis.md](../shared/references/templates/consistency-analysis.md)
+- [gate-chain.md](../shared/references/harness/gate-chain.md)
+- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)
+- [../shared/references/harness/pr-merge-gate.md](../shared/references/harness/pr-merge-gate.md)

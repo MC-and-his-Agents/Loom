@@ -44,7 +44,6 @@ Each host adapter must define:
 - `host`
 - `support_status`
 - `default_install_path`
-- `advanced_single_skill_path`
 - `install_surface`
 - `discovery_surface`
 - `bootstrap_or_session_start_surface`
@@ -70,8 +69,8 @@ Loom package.
 Adapters must surface machine-readable version context instead of implying one global Loom version. The minimum version metadata locations are:
 
 - root CLI install: `@mc-and-his-agents/loom`, `VERSION`, and the matching GitHub `v*` tag/release evidence
-- generated skill surface: `skills/registry.json` and `skills/upgrade-contract.json`
-- single-skill package: `skills/<skill-id>/loom-package.json`
+- plugin payload: `plugins/loom/skills/registry.json` and `plugins/loom/skills/upgrade-contract.json`
+- generated skills mirror: `skills/registry.json` and `skills/upgrade-contract.json`
 - plugin surface: the host plugin manifest, such as `plugins/loom/.codex-plugin/plugin.json`
 - deprecated installer evidence: `packages/loom-installer/package.json`
 
@@ -82,8 +81,8 @@ The authority rules for these surfaces live in `version-authority-map.md`.
 Adapters must fail closed and report failure instead of partial success when:
 
 - `SKILL.md` is missing
-- `contract.json` or `loom-package.json` is missing
-- `.loom-runtime/` is missing
+- `contract.json` is missing
+- `plugins/loom/skills/registry.json` or shared runtime assets are missing
 - the launcher cannot report `installed-runtime`
 - host discovery cannot observe the installed skill
 - version metadata cannot be read

@@ -2,7 +2,7 @@
 
 Loom does not use one global version number for every distribution surface. Versions are not globally synchronized.
 
-The Loom CLI release version, installer package version, plugin surface version, host adapter version, skill package version, contract version, and schema version are separate authority lines.
+The Loom CLI release version, installer package version, plugin surface version, host adapter version, plugin payload registry_version, contract version, and schema version are separate authority lines.
 
 Target repository release / version truth is also separate from Loom's own distribution version lines. Loom may read a target repository release target through repo companion locators, but it must not infer that a target release id, `VERSION`, installer version, plugin version, runtime version, or schema version are the same thing.
 
@@ -17,18 +17,17 @@ Target repository release / version truth is also separate from Loom's own distr
 | Deprecated installer legacy artifact | `packages/loom-installer/package.json` | Historical npm package metadata only. The last active baseline is `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`. It is not a current CLI, recommended install path, active release line, or evidence that the `loom` CLI was published. |
 | Plugin surface version | host plugin manifest, currently `plugins/loom/.codex-plugin/plugin.json` | Version of the plugin adapter surface, not the Loom repo version. |
 | Host adapter version | plugin metadata `x-loom.host_adapter_version` or adapter manifest | Version of host wiring semantics. |
-| Generated skill package version | `skills/<skill-id>/loom-package.json` `skill_package_version` | Version of the generated single-skill package surface. |
 | Skill contract version | `skills/<skill-id>/contract.json` `contract_version` | Version of the named skill behavioral contract. |
-| Skills registry version | `skills/registry.json` `registry_version` | Version of the full generated skills registry. |
-| Runtime core version | `skills/<skill-id>/loom-package.json` `runtime_core_version` | Version of the package-internal runtime closure. |
+| Plugin payload registry_version | `plugins/loom/skills/registry.json` `registry_version` | Version of the Codex user plugin skills payload generated from `src/skills/`. |
+| Skills registry version | `skills/registry.json` `registry_version` | Compatibility mirror of the plugin payload registry version while root `skills/` remains checked in. |
 | External runtime schema version | external runtime locator `schema_version` | Protocol/schema version for adopted repos consuming external runtime. |
 
 ## Machine-Readable Metadata
 
-Each generated single-skill package exposes version context in:
+The Codex user plugin payload exposes version context in:
 
 ```text
-skills/<skill-id>/loom-package.json
+plugins/loom/skills/registry.json
 ```
 
 The plugin surface exposes adapter version context in:
@@ -59,11 +58,11 @@ docs/adoption/cli-only-install-contract.md
 
 Upgrades compare the version surface relevant to the installed layer:
 
-- full repo install compares repository revision plus generated `skills/` metadata
+- full repo install is legacy and must not be used as a current version authority
 - `loom` CLI release compares `VERSION` plus the GitHub `v*` tag and Release state
 - root `loom` CLI npm install compares `@mc-and-his-agents/loom` package version plus the GitHub `v*` tag and Release state
-- plugin install compares plugin surface and host adapter versions
-- single-skill install compares `skill_package_version`, `skill_contract_version`, `runtime_core_version`, and `source_revision`
+- plugin install compares plugin surface, host adapter versions, and plugin payload registry_version
+- single-skill install is not a current Loom distribution surface
 - installer upgrade compares npm package version only for legacy status reporting and must not make installer `latest` the current Loom CLI version
 
 No check may infer that `VERSION`, plugin version, installer version, contract version, and schema version must be equal.
