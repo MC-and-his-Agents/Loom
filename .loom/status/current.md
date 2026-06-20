@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1484
-- Goal: 让流程门禁命令支持摘要与工件化输出，避免 `flow` / gate / scenario 默认路径把完整诊断写入 agent stdout。
-- Scope: #1484/#1485 CLI runtime only: wrap global `loom` flow, delegated, scenario, PR gate, merge, reconcile, carrier, and closeout queue command paths with agent-safe stdout and explicit `--full-output`; expose output policy in `loom help --json`; add focused output envelope regression tests. Do not update executable skill text, migration docs, release workflow, package metadata, or downstream repository adoption instructions.
-- Execution Path: issues #1484/#1485 -> branch work/1484-1485-cli-agent-safe-output -> PR #1665 -> merge commit c6da850fec86c74e4cbf0d84fd34b6e1f2ef1c02 -> issue closeout
+- Item ID: WI-1486
+- Goal: 更新 Codex 用户级 plugin payload 中的可执行技能，让恢复、构建、审查、merge-ready 和交接流程默认使用全局 `loom` CLI 的摘要与工件定位输出。
+- Scope: #1486 skill payload only: update `src/skills`, generated `skills`, and `plugins/loom/skills` so executable command examples and output contracts use global `loom` CLI agent-safe summary/artifact locator defaults and explicit `--full-output` only for debugging. Ownership constraints are limited to `src/skills`, generated `skills`, `plugins/loom/skills`, `tools/check_cli_contract.py`, demo bootstrap fixture files under `examples/new-project/.loom`, `.loom/work-items/WI-1486.md`, `.loom/progress/WI-1486.md`, `.loom/progress/WI-1486-build-evidence.json`, `.loom/reviews/WI-1486.json`, `.loom/reviews/WI-1486.spec.json`, `.loom/status/current.md`, `.loom/shadow/merge-ready-loom.json`, `.loom/shadow/closeout-loom.json`, `.loom/specs/WI-1486`, and PR #1667 metadata. Do not update README, migration docs, ordinary help text, release evidence, package metadata, or downstream repository instructions.
+- Execution Path: issue #1486 -> branch work/1486-agent-safe-skills -> PR pending -> merge -> issue closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1484.md
-- Review Entry: .loom/reviews/WI-1484.json
-- Validation Entry: python3 test/output_envelope_test.py; python3 -m py_compile tools/loom.py test/output_envelope_test.py; python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata --surface controlled-merge --surface closeout-wrapper; git diff --check
-- Closing Condition: PR #1665 merged after local/hosted gates proved high-noise global CLI paths default to summary/artifact output, explicit `--full-output` remains available for full JSON diagnostics, and #1478/#1484/#1485 consume the evidence without changing docs/skills/release scope.
-- Current Checkpoint: closed_out
-- Current Stop: PR #1665 merged into main at 2026-06-20T17:42:29Z with merge commit c6da850fec86c74e4cbf0d84fd34b6e1f2ef1c02; WI-1484/WI-1485 implementation and #1478 convergence evidence are terminalized below.
-- Next Step: Close GitHub issues #1484, #1485, and #1478 with PR #1665 / merge commit / required-check evidence, then continue milestone/11 with #1486/#1488/#1658/#1489.
+- Recovery Entry: .loom/progress/WI-1486.md
+- Review Entry: .loom/reviews/WI-1486.json
+- Validation Entry: python3 tools/skills_surface.py check --surface generated-tree-drift --surface plugin-payload-metadata --surface reference-integrity; targeted stale command rg; python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py; python3 tools/loom.py suite validate --target . --item WI-1486 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1486 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1486 --json; python3 tools/loom.py fact-chain --target . --json; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1486 --write; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py pr metadata-preflight --surface merge_ready --body-file .loom/tmp/pr/WI-1486-pr-body.md --compare-body-file .loom/tmp/pr/WI-1486-pr-readback.md --json; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; python3 tools/check_cli_contract.py; git diff --check
+- Closing Condition: PR merged after local/hosted gates prove the Codex user-level plugin skill payload calls global `loom` CLI agent-safe output paths by default, full diagnostics remain explicit, generated mirrors and plugin payload are synchronized, and #1486 closeout evidence is recorded without changing #1488/#1658/#1489 scope.
+- Current Checkpoint: merge checkpoint
+- Current Stop: PR #1667 local branch is at head 27ffb6bae90aebe72279c732108629701468bc90 with build evidence consumed and implementation review refreshed for merge-ready validation.
+- Next Step: Commit the refreshed review binding, rerun carrier/fact/shadow/PR gate, update PR metadata to the final head, push, and wait for hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-20 local validation passed on branch work/1484-1485-cli-agent-safe-output: python3 test/output_envelope_test.py; python3 -m py_compile tools/loom.py test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata --surface controlled-merge --surface closeout-wrapper; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py build --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge-ready --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; git diff --check.
-- Recovery Boundary: WI-1484/WI-1485 terminal closeout metadata only. Do not update Codex plugin skill text (#1486), documentation/migration text (#1488), release evidence (#1658), or final regression closeout (#1489) in this work item.
-- Current Lane: milestone-11-cli-agent-safe-output
+- Latest Validation Summary: 2026-06-21 WI-1486 validation passed on branch work/1486-agent-safe-skills after PR #1667 gate blocker fixes and build evidence refresh: python3 tools/skills_surface.py check --surface generated-tree-drift --surface plugin-payload-metadata --surface reference-integrity; targeted rg for stale repo-local script / CLI JSON wording returned no matches; python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py; python3 tools/loom.py suite validate --target . --item WI-1486 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1486 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1486 --json; python3 tools/loom.py fact-chain --target . --json; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1486 --write; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py pr metadata-preflight --surface merge_ready --body-file .loom/tmp/pr/WI-1486-pr-body.md --compare-body-file .loom/tmp/pr/WI-1486-pr-readback.md --json; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_flow.py flow build --target . --item WI-1486 --build-evidence .loom/progress/WI-1486-build-evidence.json; git diff --check.
+- Recovery Boundary: WI-1486 skill payload only. Do not update README/help/migration docs (#1488), release evidence (#1658), final regression closeout (#1489), downstream repositories, or old installer compatibility in this Work Item.
+- Current Lane: milestone-11-agent-safe-skills
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-20 WI-1484/WI-1485 PR #1665 merged closeout sync.
+- Run Entry: 2026-06-21 WI-1486 skill payload update in progress.
 - Logs Entry: local command output retained in current Codex milestone/11 thread.
-- Diagnostics Entry: High-noise global CLI paths now use agent-safe output envelopes when stdout exceeds budget and keep full JSON behind explicit `--full-output`; PR #1665 merged to main at c6da850fec86c74e4cbf0d84fd34b6e1f2ef1c02.
-- Verification Entry: `python3 test/output_envelope_test.py`; `python3 -m py_compile tools/loom.py test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata --surface controlled-merge --surface closeout-wrapper`; `LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py build --target . --item WI-1484 --json`; `LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge-ready --target . --item WI-1484 --json`; `git diff --check`.
-- Lane Entry: milestone-11-cli-agent-safe-output
+- Diagnostics Entry: Skill payload now defaults to global `loom` CLI agent-safe summary/artifact locator output and explicit `--full-output` only for debugging; user docs/help/migration remain deferred to #1488.
+- Verification Entry: `python3 tools/skills_surface.py check --surface generated-tree-drift --surface plugin-payload-metadata --surface reference-integrity`; targeted stale-command `rg`; `python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py`; `python3 tools/loom.py suite validate --target . --item WI-1486 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1486 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1486 --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1486 --write`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/loom.py pr metadata-preflight --surface merge_ready --body-file .loom/tmp/pr/WI-1486-pr-body.md --compare-body-file .loom/tmp/pr/WI-1486-pr-readback.md --json`; `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift`; `python3 tools/check_cli_contract.py`; `git diff --check`.
+- Lane Entry: milestone-11-agent-safe-skills
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1484.md
-- Dynamic Truth: .loom/progress/WI-1484.md
+- Static Truth: .loom/work-items/WI-1486.md
+- Dynamic Truth: .loom/progress/WI-1486.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

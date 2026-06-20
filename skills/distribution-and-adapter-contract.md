@@ -33,7 +33,7 @@ Loom 当前唯一的 skills 发布形态是 Codex 用户级 plugin payload：
 
 ## 宿主适配器职责
 
-宿主适配器只负责把用户级 plugin payload 映射到宿主的发现、安装、启用和升级机制。
+宿主适配器只负责把用户级 plugin payload 映射到宿主的发现、安装、启用和升级机制。运行时执行由全局 `loom` CLI 提供，plugin payload 不 vendored runtime。
 
 适配器应保证：
 
@@ -49,7 +49,7 @@ Loom 当前唯一的 skills 发布形态是 Codex 用户级 plugin payload：
 - 把单个 skill 伪装成完整 Loom 安装。
 - 把目标仓库内的 plugin/skills/runtime payload 当作当前安装成功证据。
 - 在 adapter 内复制 Loom 治理规则并长期维护第二份事实真相。
-- 把 repo-local `loom` CLI 或 repo-local payload 升格成用户级 plugin provider。
+- 把目标仓库内 CLI、plugin 或 payload 升格成用户级 plugin provider。
 
 ## 公开接口
 
@@ -57,7 +57,7 @@ Loom skills 对外只承诺三类接口：
 
 - root entry：`loom-init` 负责初始化入口和场景路由。
 - scenario skills：每个 scenario skill 负责一个稳定执行场景。
-- shared runtime/resources：`shared/scripts`、`shared/assets`、`shared/references` 为完整 plugin payload 的共享执行与知识层。
+- shared plugin resources：`shared/scripts`、`shared/assets`、`shared/references` 为完整 plugin payload 的共享执行与知识层，不是目标仓库 runtime 安装面。
 
 `skills/registry.json` 和 `plugins/loom/skills/registry.json` 必须保持一致。`skills/` mirror 只服务本仓库检查和源码阅读；发布、安装、升级、host registration 应消费 `plugins/loom/skills/`。
 

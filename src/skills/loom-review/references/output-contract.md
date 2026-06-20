@@ -60,4 +60,6 @@
 - 若已有 normalized findings，应从哪个 `findings_file` 继续
 - 最小 `review record` 写回命令骨架是什么
 
+输出只能内联 agent-safe summary 和 locator。完整诊断只可通过 artifact locator 在明确调试、审计或阻断分类时读取；不得把完整命令 JSON、raw engine output、完整报告或长 stdout 复制进 review record。
+
 这个 skill 负责正式 review 执行层，不替代 `loom-pre-review` 的机械预检，也不替代 `loom-merge-ready` 的 `merge gate` 聚合放行判断。

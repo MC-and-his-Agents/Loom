@@ -15,7 +15,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 不要把 root skill 继续扩成第二套事实真相源。它负责先判断，再导向正确场景。
 
-对执行者的首层说明仍应以 `loom-init` 作为 root entry。repo-local 自动化、验证、调试和宿主编排可以统一落到 repo-local `loom CLI`，但这不改变 `loom-init` 的 route 语义，也不把 CLI 升格成用户第一入口。
+对执行者的首层说明仍应以 `loom-init` 作为 root entry。自动化、验证、调试和宿主编排统一调用全局 `loom` CLI；默认消费 agent-safe summary / artifact locator 输出，只有明确调试完整诊断时才使用 `--full-output`。这不改变 `loom-init` 的 route 语义，也不把 CLI 升格成用户第一入口。
 
 ## Quick Path
 

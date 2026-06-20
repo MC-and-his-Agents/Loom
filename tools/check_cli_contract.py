@@ -280,6 +280,23 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
     return completed.returncode, payload
 
 
+def runtime_payload_from_agent_safe_output(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("envelope_schema") != "loom-agent-output-envelope/v1":
+        return payload
+    full_output = payload.get("full_output")
+    locator = full_output.get("artifact_locator") if isinstance(full_output, dict) else None
+    if not isinstance(locator, str) or not locator.strip():
+        raise AssertionError("agent-safe output envelope did not expose full output artifact locator")
+    path = Path(locator)
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    runtime_payload = artifact.get("payload")
+    if not isinstance(runtime_payload, dict):
+        raise AssertionError("agent-safe full output artifact did not contain a runtime payload")
+    return runtime_payload
+
+
 def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -1265,6 +1282,7 @@ def assert_closeout_blocks_missing_suite_evidence(active_item: str, closeout_pay
         if path.exists():
             path.unlink()
         status, payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+        payload = runtime_payload_from_agent_safe_output(payload)
         if status == 0 or payload.get("result") != "block":
             raise AssertionError("closeout did not fail closed when suite evidence was missing")
         suite_gate = payload.get("suite_gate_validation")
@@ -7551,6 +7569,7 @@ def assert_governance_closeout_help_contract() -> None:
 
 def assert_active_closeout_contract(active_item: str) -> None:
     status, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+    closeout_payload = runtime_payload_from_agent_safe_output(closeout_payload)
     if closeout_payload["command"] != "closeout" or closeout_payload.get("schema_version") != "loom-scenario-control/v1":
         raise AssertionError("closeout did not wrap the closeout check runtime")
     if closeout_payload.get("result") not in {"pass", "block", "fallback"}:
@@ -7768,6 +7787,7 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError(f"{command} must be declared as an implemented gate command for #1508")
 
     freeze_status, freeze_payload = run_json(["gate", "freeze", "check", "--target", str(REPO_ROOT), "--json"], expect=None)
+    freeze_payload = runtime_payload_from_agent_safe_output(freeze_payload)
     if freeze_status == 0 and freeze_payload.get("result") != "pass":
         raise AssertionError("gate freeze check returned success without a pass result")
     if freeze_payload.get("schema_version") != "loom-gate-freeze/v1":
@@ -7887,6 +7907,7 @@ def run_aggregate_cli_contract() -> None:
             ],
             expect=None,
         )
+        body_pin_payload = runtime_payload_from_agent_safe_output(body_pin_payload)
         body_pin = body_pin_payload.get("input_bindings", {}).get("pr_body_pin")
         if not isinstance(body_pin, dict) or body_pin.get("result") != "pass":
             raise AssertionError(f"gate freeze PR body pin positive fixture did not pass: {body_pin}")
@@ -7917,6 +7938,7 @@ def run_aggregate_cli_contract() -> None:
             ],
             expect=1,
         )
+        body_hash_drift_payload = runtime_payload_from_agent_safe_output(body_hash_drift_payload)
         body_hash_drift = body_hash_drift_payload.get("input_bindings", {}).get("pr_body_pin")
         if not isinstance(body_hash_drift, dict) or body_hash_drift.get("result") != "block":
             raise AssertionError("gate freeze PR body pin must block rendered/readback body hash drift")
@@ -7969,6 +7991,7 @@ def run_aggregate_cli_contract() -> None:
             ],
             expect=1,
         )
+        carrier_drift_payload = runtime_payload_from_agent_safe_output(carrier_drift_payload)
         carrier_drift = carrier_drift_payload.get("input_bindings", {}).get("pr_body_pin")
         if not isinstance(carrier_drift, dict) or carrier_drift.get("result") != "block":
             raise AssertionError("gate freeze PR body pin must block machine carrier binding drift")
@@ -8009,6 +8032,7 @@ def run_aggregate_cli_contract() -> None:
         ],
         expect=1,
     )
+    invalid_write = runtime_payload_from_agent_safe_output(invalid_write)
     if outside_freeze_path.exists():
         outside_freeze_path.unlink()
         raise AssertionError("gate freeze write must not write outside .loom/runtime/gate-freeze/")
@@ -9067,6 +9091,7 @@ def run_aggregate_cli_contract() -> None:
         if legacy_evidence.get("tag") != "loom-installer-v0.1.119":
             raise AssertionError("skills release-check did not keep installer tag as legacy baseline evidence")
         _, route_payload = run_json(["route", "--target", str(REPO_ROOT), "--task", "adopt existing repo", "--json"], expect=0)
+        route_payload = runtime_payload_from_agent_safe_output(route_payload)
         if route_payload["command"] != "route" or route_payload["selected_skill"] != "loom-adopt":
             raise AssertionError("route did not expose CLI-first scenario routing")
         _, status_payload = run_json(["status", "--target", str(REPO_ROOT), "--json", "--full-output"])
@@ -9081,18 +9106,23 @@ def run_aggregate_cli_contract() -> None:
         if fact_chain_payload["command"] != "fact-chain" or fact_chain_payload.get("result") != "pass":
             raise AssertionError("fact-chain wrapper did not consume loom_flow fact-chain JSON")
         _, profile_status = run_json(["profile", "status", "--target", str(REPO_ROOT), "--json"], expect=0)
+        profile_status = runtime_payload_from_agent_safe_output(profile_status)
         if profile_status["command"] != "profile status" or profile_status.get("wrapped_command") != "governance-profile":
             raise AssertionError("profile status did not wrap governance-profile status")
         _, profile_plan = run_json(["profile", "upgrade-plan", "--target", str(REPO_ROOT), "--json"])
+        profile_plan = runtime_payload_from_agent_safe_output(profile_plan)
         if profile_plan["command"] != "profile upgrade-plan" or profile_plan.get("wrapped_command") != "governance-profile":
             raise AssertionError("profile upgrade-plan did not wrap governance-profile upgrade-plan")
         _, profile_upgrade = run_json(["profile", "upgrade", "--target", str(REPO_ROOT), "--to", "standard", "--json"])
+        profile_upgrade = runtime_payload_from_agent_safe_output(profile_upgrade)
         if profile_upgrade["command"] != "profile upgrade" or profile_upgrade.get("wrapped_command") != "governance-profile":
             raise AssertionError("profile upgrade did not wrap governance-profile upgrade")
         _, adoption_verify = run_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        adoption_verify = runtime_payload_from_agent_safe_output(adoption_verify)
         if adoption_verify["command"] != "adopt" or adoption_verify.get("schema_version") != "loom-adoption-verify/v1":
             raise AssertionError("adopt verify did not expose adoption verification JSON")
         _, story_payload = run_json(["story", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"], expect=0)
+        story_payload = runtime_payload_from_agent_safe_output(story_payload)
         if story_payload["command"] != "story" or story_payload.get("wrapped_command") != "flow":
             raise AssertionError("story did not wrap the flow runtime")
         for command_name in ("spec", "plan"):
@@ -9100,6 +9130,7 @@ def run_aggregate_cli_contract() -> None:
             if status == 0 or scenario_payload["schema"] != "loom-scenario-control/v1" or not scenario_payload.get("fallback_to"):
                 raise AssertionError(f"{command_name} did not fail closed with a structured locator payload")
         status, build_payload = run_json(["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        build_payload = runtime_payload_from_agent_safe_output(build_payload)
         if (
             status == 0
             or build_payload["command"] != "build"
@@ -9109,6 +9140,7 @@ def run_aggregate_cli_contract() -> None:
         ):
             raise AssertionError("build did not fail closed through the flow runtime for a non-current item")
         status, pre_review_payload = run_json(["pre-review", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        pre_review_payload = runtime_payload_from_agent_safe_output(pre_review_payload)
         if (
             status == 0
             or pre_review_payload["command"] != "pre-review"
@@ -9122,12 +9154,14 @@ def run_aggregate_cli_contract() -> None:
             ["build", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_build = runtime_payload_from_agent_safe_output(active_build)
         assert_suite_build_consumption(active_build)
         assert_review_record_consumed_locators(tmp)
         _, active_pre_review = run_json_preserving_attempts(
             ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_pre_review = runtime_payload_from_agent_safe_output(active_pre_review)
         assert_suite_gate_consumption(active_pre_review, expected_surface="pre_review")
         active_guard = active_pre_review.get("readiness_cost_guard")
         if not isinstance(active_guard, dict):
@@ -9166,6 +9200,7 @@ def run_aggregate_cli_contract() -> None:
                 ],
                 item=active_item,
             )
+            drift_pre_review = runtime_payload_from_agent_safe_output(drift_pre_review)
         finally:
             if drift_fixture.exists():
                 drift_fixture.unlink()
@@ -9178,16 +9213,20 @@ def run_aggregate_cli_contract() -> None:
             ["gate", "review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_review_gate = runtime_payload_from_agent_safe_output(active_review_gate)
         assert_suite_gate_consumption(active_review_gate, expected_surface="review")
         _, active_merge_ready = run_json_preserving_attempts(
             ["merge-ready", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_merge_ready = runtime_payload_from_agent_safe_output(active_merge_ready)
         assert_suite_gate_consumption(active_merge_ready, expected_surface="merge_ready")
         status, handoff_payload = run_json(["handoff", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        handoff_payload = runtime_payload_from_agent_safe_output(handoff_payload)
         if handoff_payload["command"] != "handoff" or handoff_payload.get("wrapped_command") != "flow":
             raise AssertionError("handoff did not wrap the flow runtime")
         status, retire_payload = run_json(["retire", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        retire_payload = runtime_payload_from_agent_safe_output(retire_payload)
         if retire_payload["command"] != "retire" or not retire_payload.get("retire_contract"):
             raise AssertionError("retire did not expose structured non-mutating contract")
         assert_active_closeout_contract(active_item)
@@ -9200,12 +9239,15 @@ def run_aggregate_cli_contract() -> None:
         assert_carrier_closeout_sync_contract(tmp)
         assert_repair_apply_carrier_closeout_contract(tmp)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        checkpoint_admission = runtime_payload_from_agent_safe_output(checkpoint_admission)
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")
         _, checkpoint_build = run_json(["checkpoint", "build", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        checkpoint_build = runtime_payload_from_agent_safe_output(checkpoint_build)
         if checkpoint_build["command"] != "checkpoint build" or checkpoint_build.get("checkpoint") != "build":
             raise AssertionError("checkpoint build did not wrap checkpoint JSON")
         _, checkpoint_merge = run_json(["checkpoint", "merge", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        checkpoint_merge = runtime_payload_from_agent_safe_output(checkpoint_merge)
         if checkpoint_merge["command"] != "checkpoint merge" or checkpoint_merge.get("checkpoint") != "merge":
             raise AssertionError("checkpoint merge did not wrap checkpoint JSON")
         for gate_command in (
@@ -9214,6 +9256,7 @@ def run_aggregate_cli_contract() -> None:
             ["gate", "closeout", "--json"],
         ):
             status, gate_payload = run_json(gate_command)
+            gate_payload = runtime_payload_from_agent_safe_output(gate_payload)
             if status == 0 or gate_payload["result"] not in {"block", "fallback"} or not gate_payload.get("fallback_to"):
                 raise AssertionError(f"{gate_command} did not fail closed with structured JSON")
 

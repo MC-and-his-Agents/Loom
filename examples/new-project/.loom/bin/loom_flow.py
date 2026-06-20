@@ -7578,7 +7578,7 @@ def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
                 "failed_layer": "suite",
                 "source_locator": "tools/loom.py",
                 "consumer_impact": "scenario skills cannot decide suite readiness without the canonical CLI JSON envelope",
-                "remediation_direction": "Run or install the repo-local `loom suite validate --target <repo> --item <item> --json` surface.",
+                "remediation_direction": "Run the global `loom suite validate --target <repo> --item <item> --json` surface.",
                 "fallback_to": "loom suite validate --target <repo> --item <item> --json",
                 "binding": "scenario-skill-suite-cli-consumption",
             }

@@ -36,4 +36,6 @@
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> spec-review-entry` 顺序列出
 
+输出只能内联 agent-safe summary 和 locator。完整诊断只可通过 artifact locator 在明确调试、审计或阻断分类时读取；不得把完整命令 JSON、完整状态表或长 stdout 复制进 spec review truth。
+
 这个 skill 只给出 `spec gate`，不替代 implementation review，也不替代 merge-ready。

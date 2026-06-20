@@ -1,0 +1,50 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1486",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1486 at head 27ffb6bae90aebe72279c732108629701468bc90: executable skill payload text now calls the global loom CLI, defaults to agent-safe summary/artifact locator output, keeps full diagnostics explicit, synchronizes source/generated/plugin skill mirrors, refreshes the demo bootstrap fixture for the updated runtime payload, updates CLI contract checks to consume agent-safe artifact locators, records build evidence / ownership constraints, and moves the carrier to merge checkpoint without changing #1488 docs/help/migration, #1658 release evidence, downstream repositories, repo-local runtime/plugin/skills installs, single-skill package distribution, or old installer paths.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-21T03:47:02+08:00",
+  "reviewed_head": "27ffb6bae90aebe72279c732108629701468bc90",
+  "reviewed_validation_summary": "2026-06-21 WI-1486 validation passed on branch work/1486-agent-safe-skills after PR #1667 gate blocker fixes and build evidence refresh: python3 tools/skills_surface.py check --surface generated-tree-drift --surface plugin-payload-metadata --surface reference-integrity; targeted rg for stale repo-local script / CLI JSON wording returned no matches; python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py; python3 tools/loom.py suite validate --target . --item WI-1486 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1486 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1486 --json; python3 tools/loom.py fact-chain --target . --json; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1486 --write; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py pr metadata-preflight --surface merge_ready --body-file .loom/tmp/pr/WI-1486-pr-body.md --compare-body-file .loom/tmp/pr/WI-1486-pr-readback.md --json; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_flow.py flow build --target . --item WI-1486 --build-evidence .loom/progress/WI-1486-build-evidence.json; git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1486.md",
+    "recovery_entry": ".loom/progress/WI-1486.md",
+    "status_surface": ".loom/status/current.md",
+    "suite": [
+      ".loom/specs/WI-1486/spec.md",
+      ".loom/specs/WI-1486/plan.md",
+      ".loom/specs/WI-1486/implementation-contract.md",
+      ".loom/specs/WI-1486/evidence-map.md",
+      ".loom/specs/WI-1486/task-carrier.md"
+    ],
+    "skill_payload_sources": [
+      "src/skills",
+      "skills",
+      "plugins/loom/skills"
+    ],
+    "validation": [
+      "python3 tools/skills_surface.py check --surface generated-tree-drift --surface plugin-payload-metadata --surface reference-integrity",
+      "targeted rg for stale repo-local script / CLI JSON wording",
+      "python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py",
+      "python3 tools/loom.py suite validate --target . --item WI-1486 --json",
+      "python3 tools/loom.py suite evidence validate --target . --item WI-1486 --json",
+      "python3 tools/loom.py suite carrier validate --target . --item WI-1486 --json",
+      "python3 tools/loom.py fact-chain --target . --json",
+      "python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking",
+      "python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift",
+      "python3 tools/check_cli_contract.py",
+      "python3 .loom/bin/loom_flow.py flow build --target . --item WI-1486 --build-evidence .loom/progress/WI-1486-build-evidence.json",
+      "git diff --check"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored review approved the current skill payload, contract-test, demo-fixture, build-evidence, ownership-scope, and merge-checkpoint carrier state for merge checkpoint consumption; later review/carrier-only commits must not alter implementation scope."
+  }
+}

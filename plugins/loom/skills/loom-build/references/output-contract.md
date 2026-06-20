@@ -35,4 +35,6 @@
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate -> build-execution` 顺序列出
 
+输出只能内联 agent-safe summary 和 locator。完整诊断只可通过 artifact locator 在明确调试、审计或阻断分类时读取；不得把完整命令 JSON、完整状态表或长 stdout 复制进 build evidence、handoff 或线程正文。
+
 `loom-build` 不直接写 review 或 merge-ready records。它只证明 build/readiness evidence 是否已进入既有 Loom carriers。

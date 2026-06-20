@@ -46,9 +46,11 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 
 本 skill 不新增新 CLI，固定复用：
 
-- `python3 scripts/loom-adopt.py bootstrap --target <repo> [--intent observe-only|skill-install-only|attach-only|light-governance|execution-control|strong-governance]`
-- `python3 scripts/loom-adopt.py verify --target <repo>`
-- `python3 scripts/loom-adopt.py fact-chain --target <repo>`
+- `loom adopt --target <repo> [--intent observe-only|skill-install-only|attach-only|light-governance|execution-control|strong-governance] --json`
+- `loom verify --target <repo> --json`
+- `loom fact-chain --target <repo> --json`
+
+默认输出必须保持 agent-safe summary / artifact locator；只有明确调试完整诊断时才加 `--full-output`。
 
 执行顺序固定为：
 
