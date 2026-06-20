@@ -8677,26 +8677,44 @@ def run_aggregate_cli_contract() -> None:
         valid_target.mkdir()
         write_state(valid_target, valid_state(valid_target))
         run_json(["installed-state", "validate", "--target", str(valid_target), "--json"], expect=0)
-        _, valid_doctor = run_json(["doctor", "--target", str(valid_target), "--json"], expect=0)
-        if valid_doctor["result"] != "pass":
-            raise AssertionError("valid installed-state doctor did not pass")
-        undeclared_suite_check = next((check for check in valid_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
-        if not undeclared_suite_check or undeclared_suite_check.get("result") != "pass" or undeclared_suite_check.get("declared_support") is not False:
-            raise AssertionError("doctor did not pass undeclared suite command support")
-        _, valid_plan = run_json(["repair", "plan", "--target", str(valid_target), "--json"], expect=0)
-        if valid_plan["actions"]:
-            raise AssertionError("current installed-state repair plan should be no-op")
-        _, exported = run_json(["installed-state", "export", "--target", str(valid_target), "--json"], expect=0)
-        if exported["installation_graph"]["layers"] != ["adoption-metadata", "user-skills-provider", "global-cli-provider"]:
-            raise AssertionError("installed-state export did not include graph")
-        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(valid_target), "--json"], expect=0)
-        if upgrade_plan["schema"] != "loom-delivery-control/v1" or not upgrade_plan["actions"]:
-            raise AssertionError("upgrade-plan did not emit delivery control actions")
-        _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
-        if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
-            raise AssertionError("verify did not consume doctor success")
-        if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
-            raise AssertionError("verify should not require suite validation without profile or Work Item demand")
+        valid_home = tmp / "valid-codex-home"
+        valid_home.mkdir()
+        with isolated_codex_workstation(valid_home):
+            run_json(
+                [
+                    "host",
+                    "register",
+                    "--host",
+                    "codex",
+                    "--source",
+                    str(REPO_ROOT / "plugins" / "loom"),
+                    "--scope",
+                    "user",
+                    "--apply",
+                    "--json",
+                ],
+                expect=0,
+            )
+            _, valid_doctor = run_json(["doctor", "--target", str(valid_target), "--json"], expect=0)
+            if valid_doctor["result"] != "pass":
+                raise AssertionError("valid installed-state doctor did not pass")
+            undeclared_suite_check = next((check for check in valid_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
+            if not undeclared_suite_check or undeclared_suite_check.get("result") != "pass" or undeclared_suite_check.get("declared_support") is not False:
+                raise AssertionError("doctor did not pass undeclared suite command support")
+            _, valid_plan = run_json(["repair", "plan", "--target", str(valid_target), "--json"], expect=0)
+            if valid_plan["actions"]:
+                raise AssertionError("current installed-state repair plan should be no-op")
+            _, exported = run_json(["installed-state", "export", "--target", str(valid_target), "--json"], expect=0)
+            if exported["installation_graph"]["layers"] != ["adoption-metadata", "user-skills-provider", "global-cli-provider"]:
+                raise AssertionError("installed-state export did not include graph")
+            _, upgrade_plan = run_json(["upgrade-plan", "--target", str(valid_target), "--json"], expect=0)
+            if upgrade_plan["schema"] != "loom-delivery-control/v1" or not upgrade_plan["actions"]:
+                raise AssertionError("upgrade-plan did not emit delivery control actions")
+            _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
+            if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
+                raise AssertionError("verify did not consume doctor success")
+            if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
+                raise AssertionError("verify should not require suite validation without profile or Work Item demand")
         repo_local_target = tmp / "repo-local-wrapper-compatibility"
         repo_local_target.mkdir()
         write_state(repo_local_target, valid_state(repo_local_target))
