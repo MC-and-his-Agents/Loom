@@ -7,7 +7,7 @@
   "reviewer": "codex-manual-review",
   "authored_at": "2026-06-20T13:13:02Z",
   "reviewed_head": "280e4fdea99c68af22957481fcee6d5f528b0578",
-  "reviewed_validation_summary": "2026-06-20 local validation passed for , , py_compile_clean: OK (2 files), and .",
+  "reviewed_validation_summary": "2026-06-20 WI-1482 validation passed: `python3 test/output_envelope_test.py`; `python3 -m unittest discover -s test -p 'output_envelope_test.py'`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `git diff --check`; `python3 tools/loom.py suite validate --target . --item WI-1482 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1482 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1482 --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all`; `python3 .loom/bin/loom_flow.py runtime-parity validate --target . --item WI-1482`; `python3 tools/check_cli_contract.py --surface aggregate`; hosted PR #1660 checks passed except the draft-timing gate run, which was reclassified as carrier checkpoint drift before merge gate rerun.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
