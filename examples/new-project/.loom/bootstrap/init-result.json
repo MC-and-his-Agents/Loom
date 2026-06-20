@@ -456,7 +456,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "3a7ace33bbce94684797722006c5efe2fa80a1477a7fc6890ad987a7397bc494"
+      "sha256": "eec7e6b4fb2f54832049f9463483cdbe5318a70bd25d187ec4b60251d90024ac"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",

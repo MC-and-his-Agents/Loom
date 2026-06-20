@@ -373,7 +373,6 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
 )
 
 GENERATED_TRACKED_PATHS = (
-    "plugins/loom/skills",
     "packages/skills",
     "packages/loom-installer/payload",
 )
@@ -5648,8 +5647,9 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
 
     installation_commands = (
         "npm install -g @mc-and-his-agents/loom",
-        "loom host install --host codex --mode plugin --target . --apply --json",
-        "loom host verify --host codex --mode plugin --target . --json",
+        "loom host register --host codex --source <global-loom-package>/plugins/loom --scope user --apply --json",
+        "loom install --target . --apply --json",
+        "loom skills check --target . --json",
     )
     for command in installation_commands:
         if command not in skills_readme:
