@@ -21,11 +21,11 @@
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-20 WI-1487 thread handoff rules lane
+- Run Entry: 2026-06-20 WI-1495 retained closeout fixture/docs lane, resynced after PR #1662 merged to main.
 - Logs Entry: local command output retained in current Codex milestone/11 thread.
-- Diagnostics Entry: current branch updates docs/contract only; #1486 owns command example and skill text migration.
-- Verification Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/loom.py suite validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1487 --json`.
-- Lane Entry: milestone-11-thread-handoff-rules
+- Diagnostics Entry: current branch owns #1495 canonical retained Work Item lookup fixture and #1496 metadata-only downstream guidance; #1662 output-envelope implementation is consumed from main.
+- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py tools/check_cli_contract.py test/retained_item_lookup_test.py`; `git diff --check`.
+- Lane Entry: milestone-11-retained-closeout-fixtures-docs
 
 ## Sources
 

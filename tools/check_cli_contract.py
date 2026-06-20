@@ -2199,6 +2199,7 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "verify",
     "fact-chain",
     "status",
+    "shadow-parity",
     "story",
 ]
 
@@ -6244,14 +6245,14 @@ def assert_idle_read_surface_contract(tmp: Path) -> None:
     idle_target = tmp / "idle-read-surface"
     idle_target.mkdir()
     write_idle_fact_chain_target(idle_target)
-    _, fact_chain = run_json(["fact-chain", "--target", str(idle_target), "--json"], expect=0)
+    _, fact_chain = run_json(["fact-chain", "--target", str(idle_target), "--json", "--full-output"], expect=0)
     if (
         fact_chain.get("result") != "pass"
         or fact_chain.get("report", {}).get("repository_execution_state") != "idle"
         or fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
     ):
         raise AssertionError("idle fact-chain did not pass with no_active_item")
-    _, status = run_json(["status", "--target", str(idle_target), "--json"], expect=0)
+    _, status = run_json(["status", "--target", str(idle_target), "--json", "--full-output"], expect=0)
     if (
         status.get("result") != "pass"
         or status.get("item", {}).get("status") != "idle"
@@ -6272,7 +6273,7 @@ def assert_idle_read_surface_contract(tmp: Path) -> None:
     payload = json.loads(init_result.read_text(encoding="utf-8"))
     payload["fact_chain"]["entry_points"]["current_item_id"] = "WI-other"
     init_result.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    status_code, locator_drift = run_json(["fact-chain", "--target", str(locator_drift_target), "--json"])
+    status_code, locator_drift = run_json(["fact-chain", "--target", str(locator_drift_target), "--json", "--full-output"])
     if status_code == 0 or locator_drift.get("result") != "block":
         raise AssertionError("active locator drift did not fail closed")
 
@@ -6284,7 +6285,7 @@ def assert_idle_read_surface_contract(tmp: Path) -> None:
         status_path.read_text(encoding="utf-8").replace("- Goal: Fixture for explicit carrier closeout sync.", "- Goal: stale status value."),
         encoding="utf-8",
     )
-    status_code, stale_status = run_json(["fact-chain", "--target", str(stale_status_target), "--json"])
+    status_code, stale_status = run_json(["fact-chain", "--target", str(stale_status_target), "--json", "--full-output"])
     if status_code == 0 or stale_status.get("result") != "block":
         raise AssertionError("active stale status surface did not fail closed")
 
@@ -6538,7 +6539,7 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
         or init_payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
     ):
         raise AssertionError("repair apply did not terminalize active carrier and switch repo to idle")
-    _, fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0, env_overrides=env)
+    _, fact_chain = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0, env_overrides=env)
     if (
         fact_chain.get("result") != "pass"
         or fact_chain.get("report", {}).get("repository_execution_state") != "idle"
@@ -6877,7 +6878,7 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
         "init_result": init_result.read_text(encoding="utf-8"),
     }
 
-    _, active_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0, env_overrides=env)
+    _, active_fact_chain = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0, env_overrides=env)
     active_entry_points = active_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
     if (
         active_fact_chain.get("result") != "pass"
@@ -6922,7 +6923,7 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
         expect=0,
         env_overrides=env,
     )
-    _, idle_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0, env_overrides=env)
+    _, idle_fact_chain = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0, env_overrides=env)
     idle_entry_points = idle_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
     if (
         applied.get("result") != "pass"
@@ -6951,7 +6952,7 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
         expect=0,
         env_overrides=env,
     )
-    _, retained_fact_chain = run_json(["fact-chain", "--target", str(retained_target), "--json"], expect=0, env_overrides=env)
+    _, retained_fact_chain = run_json(["fact-chain", "--target", str(retained_target), "--json", "--full-output"], expect=0, env_overrides=env)
     retained_progress = retained_target / ".loom" / "progress" / f"{retained_item}.md"
     if (
         retained_plan.get("result") != "pass"
@@ -7835,9 +7836,6 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError("gate freeze check must expose a carrier refresh binding")
     if not isinstance(shadow_freshness, dict) or shadow_freshness.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1":
         raise AssertionError("gate freeze check must expose a shadow freshness binding")
-    refresh_suggestions = freeze_payload.get("readiness", {}).get("refresh_suggestions", [])
-    if any("loom shadow-parity" in str(suggestion) for suggestion in refresh_suggestions):
-        raise AssertionError("gate freeze refresh suggestions must not reference an unsupported loom shadow-parity command")
     if isinstance(subject, dict) and isinstance(pr_metadata, dict) and pr_metadata.get("result") == "pass":
         for contract in pr_metadata.get("metadata_contracts", []):
             if not isinstance(contract, dict):
@@ -8870,11 +8868,11 @@ def run_aggregate_cli_contract() -> None:
                 or command_mismatch_check.get("missing_commands") != ["loom imaginary"]
             ):
                 raise AssertionError("global-cli provider command mismatch did not fail closed with stable diagnostics")
-        _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json"], expect=0)
+        _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json", "--full-output"], expect=0)
         read_entry = global_fact_chain.get("report", {}).get("fact_chain", {}).get("read_entry")
         if not isinstance(read_entry, str) or ".loom/bin" in read_entry or not read_entry.startswith("loom fact-chain "):
             raise AssertionError(f"global-cli fact-chain read_entry was not a global loom command: {read_entry}")
-        _, global_status = run_json(["status", "--target", str(global_cli_target), "--json"])
+        _, global_status = run_json(["status", "--target", str(global_cli_target), "--json", "--full-output"])
         if ".loom/bin" in str(global_status.get("current_runtime_entrypoint", "")) or not str(global_status.get("status_entrypoint", "")).startswith("loom status "):
             raise AssertionError("global-cli status did not report global loom entrypoint")
         governance_spec = importlib.util.spec_from_file_location(
@@ -9071,15 +9069,15 @@ def run_aggregate_cli_contract() -> None:
         _, route_payload = run_json(["route", "--target", str(REPO_ROOT), "--task", "adopt existing repo", "--json"], expect=0)
         if route_payload["command"] != "route" or route_payload["selected_skill"] != "loom-adopt":
             raise AssertionError("route did not expose CLI-first scenario routing")
-        _, status_payload = run_json(["status", "--target", str(REPO_ROOT), "--json"])
+        _, status_payload = run_json(["status", "--target", str(REPO_ROOT), "--json", "--full-output"])
         if status_payload["command"] != "status" or status_payload.get("result") not in {"pass", "block", "fallback"}:
             raise AssertionError("status wrapper did not emit structured status JSON")
         missing_status_target = tmp / "missing-status"
         missing_status_target.mkdir()
-        status, missing_status = run_json(["status", "--target", str(missing_status_target), "--json"])
+        status, missing_status = run_json(["status", "--target", str(missing_status_target), "--json", "--full-output"])
         if status == 0 or missing_status["result"] != "block" or not missing_status.get("blocking_failures"):
             raise AssertionError("status missing-carrier fixture did not fail closed")
-        _, fact_chain_payload = run_json(["fact-chain", "--target", str(REPO_ROOT), "--json"], expect=0)
+        _, fact_chain_payload = run_json(["fact-chain", "--target", str(REPO_ROOT), "--json", "--full-output"], expect=0)
         if fact_chain_payload["command"] != "fact-chain" or fact_chain_payload.get("result") != "pass":
             raise AssertionError("fact-chain wrapper did not consume loom_flow fact-chain JSON")
         _, profile_status = run_json(["profile", "status", "--target", str(REPO_ROOT), "--json"], expect=0)
