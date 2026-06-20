@@ -37,8 +37,8 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 补充约束：
 
 - formal spec 路径不存在时，`flow spec-review` 必须 fail-closed
-- formal spec suite readiness 必须来自 repo-local `loom suite validate --json`
-  输出；缺少可读 CLI JSON 时 fail closed，不在 skill runtime 中重新判定 suite 规则
+- formal spec suite readiness 必须来自全局 `loom suite validate --json`
+  输出；缺少可读 CLI JSON 或 artifact locator 时 fail closed，不在 skill runtime 中重新判定 suite 规则
 - spec review 只写回单一 spec review record，不替代 implementation review record
 - `reviewed_head` 与 stale 语义必须显式暴露，供后续 gate 消费
 - full path 必须消费 suite path locator、必需工件 locator、provenance，以及

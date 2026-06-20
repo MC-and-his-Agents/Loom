@@ -16,7 +16,7 @@
 - `loom-merge-ready`
 - `controlled merge`
 - `closeout`
-- repo-local `loom_status`
+- 全局 `loom status`
 - host-backed GitHub 状态消费
 
 它不新增 authored 真相，只统一读取已有真相与 host signals。
@@ -186,7 +186,7 @@ Governance lint result 也只能作为 derived evidence 被第 4 层展示和映
 
 ### 3.6.2 `goal_execution_contract`
 
-`resume` 与 repo-local `loom_status` 必须能展示从 Work Item 派生的 `/goal` execution contract：
+`loom resume` 与 `loom status` 必须能展示从 Work Item 派生的 `/goal` execution contract：
 
 - `schema_version`: `loom-goal-execution-contract/v1`
 - `objective`

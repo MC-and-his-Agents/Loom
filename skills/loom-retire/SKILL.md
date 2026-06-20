@@ -9,13 +9,13 @@ description: 负责清理并退休当前事项现场。Use when Codex needs to c
 
 优先入口：
 
-- `python3 scripts/loom-retire.py purity-check --target <repo> [--item <id>]`
-- `python3 scripts/loom-retire.py workspace cleanup --target <repo> --item <id>`
-- `python3 scripts/loom-retire.py workspace retire --target <repo> --item <id>`
+- `loom retire --target <repo> --item <id> --json`
+- `loom workspace retire --target <repo> --item <id> --json`
 
 执行要求：
 
 - 默认先解释 retire 前置条件，再按 `purity-check -> workspace cleanup -> workspace retire` 顺序执行
+- 默认输出只传递 agent-safe summary / artifact locator；完整诊断必须显式加 `--full-output`
 - 若当前事项刚完成 host merge 后 closeout，先确认 `reconciliation audit|sync` 与 `closeout check|sync` 已消费完主干 / issue / PR / project 事实，再退休现场
 - 不自动丢弃用户改动，不默认删除现场目录
 - `workspace retire` 是 post-merge local cleanup / runtime evidence，不写 `.loom/progress/**` 或 `.loom/status/current.md` 这类版本化 carrier

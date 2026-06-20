@@ -126,7 +126,7 @@ Work Item goal 是主 `/goal` execution contract 的默认来源。
 主 `/goal` 从 Work Item goal 派生，用于当前会话的 execution contract。
 
 机器可读 schema 固定为 `loom-goal-execution-contract/v1`。校验输出固定为
-`loom-goal-readiness/v1`，并由 `flow resume`、repo-local `loom_status`、`goal validate`
+`loom-goal-readiness/v1`，并由全局 `loom resume`、`loom status`、`goal validate`
 和 closeout 前置读面消费。
 
 字段：

@@ -48,4 +48,6 @@
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge -> governance-lint` 顺序列出
 
+输出只能内联 agent-safe summary 和 locator。完整诊断只可通过 artifact locator 在明确调试、审计或阻断分类时读取；不得把完整命令 JSON、完整状态表或长 stdout 复制进 merge-ready truth。
+
 这个 skill 只给出 `merge gate` 摘要，不替代宿主平台 merge，也不直接执行平台动作。
