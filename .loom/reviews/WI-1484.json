@@ -1,0 +1,58 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1484",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1484 at head 4d8e4892: global CLI flow/delegated/scenario/PR/merge/reconcile/carrier/closeout queue paths now default to agent-safe stdout when output exceeds budget, explicit --full-output remains available for full JSON diagnostics, help JSON exposes the output policy, and the refreshed minimal suite/checkpoint carriers are ready for PR gate consumption without expanding skills/docs/release scope.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T17:34:41Z",
+  "reviewed_head": "4d8e48925b89db0660ec4109e1e2bad4cdb99d4a",
+  "reviewed_validation_summary": "2026-06-20 local validation passed on branch work/1484-1485-cli-agent-safe-output: python3 test/output_envelope_test.py; python3 -m py_compile tools/loom.py test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata --surface controlled-merge --surface closeout-wrapper; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py build --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge-ready --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1484.md",
+    "recovery_entry": ".loom/progress/WI-1484.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "local_validation"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1484 --json",
+    "suite_carrier_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1484 --json",
+    "suite_evidence_map": ".loom/specs/WI-1484/evidence-map.md",
+    "suite_implementation_contract": ".loom/specs/WI-1484/implementation-contract.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1484/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+        "reason": "Authored implementation review approved the current implementation, suite carrier, and merge checkpoint head for PR merge consumption."
+  }
+}

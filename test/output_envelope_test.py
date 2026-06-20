@@ -231,6 +231,197 @@ class OutputEnvelopeTest(unittest.TestCase):
         finally:
             loom_cli.flow_payload = original
 
+    def test_flow_wrapper_defaults_to_agent_safe_stdout(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+
+                def fake_payload(*_args, **_kwargs):
+                    return loom_cli.output(
+                        "checkpoint build",
+                        "block",
+                        summary="Checkpoint emitted large diagnostics.",
+                        missing_inputs=["review"],
+                        diagnostic="x" * 4096,
+                    )
+
+                loom_cli.flow_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.handle_checkpoint(["build", "--target", ".", "--json"])
+
+                rendered = stream.getvalue()
+                payload = json.loads(rendered)
+                self.assertEqual(code, 1)
+                self.assertLessEqual(len(rendered.encode("utf-8")), 1024)
+                self.assertEqual(payload["command"], "checkpoint build")
+                self.assertEqual(payload["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
+                self.assertEqual(payload["key_gaps"], ["review"])
+                self.assertTrue(Path(payload["full_output"]["artifact_locator"]).exists())
+                self.assertNotIn('"diagnostic":', rendered)
+        finally:
+            loom_cli.flow_payload = original
+
+    def test_flow_wrapper_supports_full_output_escape_hatch(self) -> None:
+        original = loom_cli.flow_payload
+        seen_args: list[str] = []
+        try:
+            def fake_payload(_command, flow_args, **_kwargs):
+                seen_args.extend(flow_args)
+                return loom_cli.output(
+                    "checkpoint build",
+                    "block",
+                    summary="Checkpoint full output.",
+                    diagnostic="x" * 4096,
+                )
+
+            loom_cli.flow_payload = fake_payload
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                code = loom_cli.handle_checkpoint(["build", "--target", ".", "--json", "--full-output"])
+
+            payload = json.loads(stream.getvalue())
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["command"], "checkpoint build")
+            self.assertIn("diagnostic", payload)
+            self.assertNotIn("envelope_schema", payload)
+            self.assertNotIn("--full-output", seen_args)
+        finally:
+            loom_cli.flow_payload = original
+
+    def test_scenario_build_defaults_to_agent_safe_stdout(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+
+                def fake_payload(*_args, **_kwargs):
+                    return loom_cli.output(
+                        "build",
+                        "block",
+                        summary="Build emitted large diagnostics.",
+                        blocking_failures=["suite evidence missing"],
+                        diagnostic="x" * 4096,
+                    )
+
+                loom_cli.flow_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.handle_scenario("build", ["--target", ".", "--item", "WI-test", "--json"])
+
+                rendered = stream.getvalue()
+                payload = json.loads(rendered)
+                self.assertEqual(code, 1)
+                self.assertLessEqual(len(rendered.encode("utf-8")), 1024)
+                self.assertEqual(payload["command"], "build")
+                self.assertEqual(payload["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
+                self.assertEqual(payload["key_gaps"], ["suite evidence missing"])
+                self.assertTrue(Path(payload["full_output"]["artifact_locator"]).exists())
+                self.assertNotIn('"diagnostic":', rendered)
+        finally:
+            loom_cli.flow_payload = original
+
+    def test_scenario_build_supports_full_output_escape_hatch(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            def fake_payload(*_args, **_kwargs):
+                return loom_cli.output(
+                    "build",
+                    "block",
+                    summary="Build full output.",
+                    diagnostic="x" * 4096,
+                )
+
+            loom_cli.flow_payload = fake_payload
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                code = loom_cli.handle_scenario("build", ["--target", ".", "--item", "WI-test", "--json", "--full-output"])
+
+            payload = json.loads(stream.getvalue())
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["command"], "build")
+            self.assertIn("diagnostic", payload)
+            self.assertNotIn("envelope_schema", payload)
+        finally:
+            loom_cli.flow_payload = original
+
+    def test_dispatch_defaults_to_agent_safe_stdout(self) -> None:
+        original = loom_cli.delegated_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+
+                def fake_payload(*_args, **_kwargs):
+                    return loom_cli.output(
+                        "merge-ready",
+                        "block",
+                        summary="Merge-ready emitted large diagnostics.",
+                        missing_inputs=["review approval"],
+                        diagnostic="x" * 4096,
+                    )
+
+                loom_cli.delegated_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.dispatch("merge-ready", ["--target", ".", "--json"])
+
+                rendered = stream.getvalue()
+                payload = json.loads(rendered)
+                self.assertEqual(code, 1)
+                self.assertLessEqual(len(rendered.encode("utf-8")), 1024)
+                self.assertEqual(payload["command"], "merge-ready")
+                self.assertEqual(payload["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
+                self.assertEqual(payload["key_gaps"], ["review approval"])
+                self.assertTrue(Path(payload["full_output"]["artifact_locator"]).exists())
+                self.assertNotIn('"diagnostic":', rendered)
+        finally:
+            loom_cli.delegated_payload = original
+
+    def test_dispatch_supports_full_output_escape_hatch(self) -> None:
+        original = loom_cli.delegated_payload
+        seen_args: list[str] = []
+        try:
+            def fake_payload(_command, _tool_name, delegated_args, **_kwargs):
+                seen_args.extend(delegated_args)
+                return loom_cli.output(
+                    "merge-ready",
+                    "block",
+                    summary="Merge-ready full output.",
+                    diagnostic="x" * 4096,
+                )
+
+            loom_cli.delegated_payload = fake_payload
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                code = loom_cli.dispatch("merge-ready", ["--target", ".", "--json", "--full-output"])
+
+            payload = json.loads(stream.getvalue())
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["command"], "merge-ready")
+            self.assertIn("diagnostic", payload)
+            self.assertNotIn("envelope_schema", payload)
+            self.assertNotIn("--full-output", seen_args)
+        finally:
+            loom_cli.delegated_payload = original
+
+    def test_help_exposes_agent_safe_output_contract(self) -> None:
+        stream = io.StringIO()
+        with contextlib.redirect_stdout(stream):
+            code = loom_cli.handle_help(["--json"])
+
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["output_modes"]["stdout_budget_bytes_default"], loom_cli.DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES)
+        self.assertEqual(payload["output_modes"]["summary_target_bytes_default"], loom_cli.DEFAULT_AGENT_SAFE_SUMMARY_TARGET_BYTES)
+        by_command = {entry["command"]: entry for entry in payload["commands"]}
+        self.assertEqual(by_command["build"]["output_policy"]["full_output_flag"], "--full-output")
+        self.assertEqual(by_command["gate pr"]["output_policy"]["full_output_flag"], "--full-output")
+        self.assertTrue(by_command["build"]["output_policy"]["artifact_on_over_budget"])
+
 
 if __name__ == "__main__":
     unittest.main()
