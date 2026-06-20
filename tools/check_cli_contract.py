@@ -2091,9 +2091,22 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     if validate.get("runtime_state") != "ready":
         raise AssertionError("metadata-only installed-state validate did not pass")
 
-    _, host_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"], expect=0)
-    if host_verify.get("verifies") != "repository-adoption-metadata":
-        raise AssertionError("metadata-only host verify did not verify repository adoption metadata")
+    host_home = tmp / "metadata-only-codex-home"
+    host_home.mkdir()
+    with isolated_codex_workstation(host_home):
+        status, missing_provider = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"])
+        if (
+            status == 0
+            or missing_provider.get("result") != "block"
+            or missing_provider.get("failed_layer") != "workstation-registration"
+        ):
+            raise AssertionError("metadata-only host verify did not require Codex user-level provider registration")
+        register_fixture_codex_plugin()
+        _, host_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"], expect=0)
+    if host_verify.get("verifies") != "repository-adoption-metadata-and-codex-user-plugin-provider":
+        raise AssertionError("metadata-only host verify did not verify repository adoption metadata and Codex provider")
+    if host_verify.get("workstation_registration", {}).get("result") != "pass":
+        raise AssertionError("metadata-only host verify did not read back Codex provider registration")
     host_paths = {check["path"]: check["status"] for check in host_verify.get("checks", [])}
     if host_paths.get(".loom/installed-state.json") != "pass":
         raise AssertionError("metadata-only host verify did not check installed-state")
@@ -2113,7 +2126,9 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
 
     plugin_payload = target / "plugins" / "loom" / "skills"
     plugin_payload.mkdir(parents=True)
-    status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"])
+    with isolated_codex_workstation(host_home):
+        register_fixture_codex_plugin()
+        status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"])
     if status == 0 or polluted_verify.get("result") != "block":
         raise AssertionError("metadata-only host verify did not block unexpected embedded skills payload")
     old_mode = subprocess.run(

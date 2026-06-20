@@ -12,7 +12,7 @@ Spec-driven development is an execution discipline inside Loom, not a narrower r
 
 Loom is now CLI-first. The `loom` command is the execution control plane: it diagnoses installed state, reads fact chains, runs verification, exposes upgrade and repair plans, and wraps scenario execution with structured fail-closed output.
 
-`SKILLS` remain the agent-facing entrances, but users do not install them as a separate surface. The root `loom` CLI installs, synchronizes, and verifies the generated skills and host plugin payloads. Plugins and host adapters provide native discovery and wiring under CLI management. `.loom/` remains the repository execution fact surface. The npm `loom-installer` package is a deprecated legacy artifact. It is not the current CLI, release line, or recommended installation path.
+`SKILLS` remain the agent-facing entrances, but users do not install them as a separate surface. The root `loom` CLI installs and verifies metadata-only repository adoption, and it installs/registers the Codex user-level Loom plugin from the global package. The published skills payload lives in the Codex user plugin, not in each target repository. `.loom/` remains the repository execution fact surface. The npm `loom-installer` package is a deprecated legacy artifact. It is not the current CLI, release line, or recommended installation path.
 
 Agents can still start from `loom-init` when they need routing help. Once inside the work, the CLI is the stable machine interface:
 
@@ -59,16 +59,13 @@ Install the root Loom CLI:
 npm install -g @mc-and-his-agents/loom
 ```
 
-Choose the repository runtime provider mode explicitly:
+Use the pure global install model:
 
-- `global-cli`: the repository records Loom adoption metadata and depends on
-  the installed root `loom` command as the runtime provider. No `.loom/bin`
-  runtime carrier is expected in this mode; workstation/global CLI availability
-  is diagnosed separately from repository truth.
-- `repo-local-wrapper`: the repository intentionally keeps repo-local wrapper
-  carriers such as `.loom/bin`. Those carriers remain valid when installed-state
-  declares them, including compatibility windows where the wrapper delegates to
-  the global CLI provider.
+- the workstation has the global `loom` CLI;
+- Codex has a user-level Loom plugin installed and registered from that global
+  package;
+- each adopted repository records metadata-only Loom adoption and keeps no
+  repo-local Loom runtime, plugin payload, or generated skills payload.
 
 See [docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md),
 [docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md),
@@ -88,14 +85,13 @@ loom doctor --target . --json
 
 `loom host install` and `loom host register` mutate only Codex user workstation
 state. `loom install` writes repository adoption metadata and the Loom bootstrap
-block, and `loom host verify` verifies that the target repository has no
-repo-local Loom runtime, plugin, or skills payload.
+block. `loom host verify` verifies both the metadata-only repository boundary
+and the Codex user-level plugin provider registration.
 
 When a repository still carries repo-local wrappers or vendored runtime residue
-such as `.loom/bin`, treat those surfaces as repository/runtime-carrier facts,
-not as automatic proof of the active provider. The active provider may instead
-be the global `loom` CLI runtime or a workstation/user-level skills provider,
-and Loom diagnostics must keep those boundaries explicit.
+such as `.loom/bin`, `.loom/bootstrap`, `plugins/loom`, `.agents/skills`, or
+Loom-owned root `skills`, current verification blocks until that legacy residue
+is explicitly migrated or removed.
 
 On a second development machine for an already adopted repository, install and
 register the Codex user-level plugin from the global Loom package:
@@ -113,10 +109,8 @@ It does not write target repository truth. Start a new Codex session, or restart
 Codex Desktop if the plugin list was already loaded; Loom does not claim that an
 existing session hot-loads newly registered plugins.
 
-This means compatibility mode stays diagnosable: repo-local wrapper residue,
-global CLI runtime availability, and workstation registration are separate
-states, even when the same adopted repository depends on all three during a
-migration window.
+See [docs/adoption/legacy-install-migration.md](./docs/adoption/legacy-install-migration.md)
+for the explicit migration path from older repo-local installs.
 
 Use `npx @mc-and-his-agents/loom ...` only as an ephemeral way to run the same root `loom` CLI.
 

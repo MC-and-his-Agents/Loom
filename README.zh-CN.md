@@ -10,7 +10,7 @@ Loom 是一个 agent-first project operating layer。
 
 Loom 现在采用 CLI-first。`loom` 命令是执行控制面：它诊断 installed state、读取 fact chain、执行验证、输出 upgrade / repair plan，并用结构化 fail-closed 输出包装场景执行。
 
-`SKILLS` 仍然是 agent-facing 入口，但用户不再把它们作为独立安装面安装。根 `loom` CLI 负责安装、同步和验证生成 skills 与宿主 plugin payload。Plugins 和宿主 adapter 在 CLI 管理下负责原生发现与 wiring。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` package 是 deprecated legacy artifact；它不是当前 CLI、发布线或推荐安装路径。
+`SKILLS` 仍然是 agent-facing 入口，但用户不再把它们作为独立安装面安装。根 `loom` CLI 负责验证 metadata-only 仓库采用，并从全局包安装/注册 Codex 用户级 Loom plugin。发布的 skills payload 在 Codex 用户级 plugin 中，不进入每个目标仓库。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` package 是 deprecated legacy artifact；它不是当前 CLI、发布线或推荐安装路径。
 
 智能体仍可在需要路由帮助时从 `loom-init` 起步。进入执行后，CLI 是稳定的机器接口：
 
@@ -39,14 +39,12 @@ python3 tools/loom.py skills release-check --json
 npm install -g @mc-and-his-agents/loom
 ```
 
-明确选择仓库 runtime provider mode：
+使用纯全局安装模型：
 
-- `global-cli`：仓库记录 Loom adoption metadata，并依赖已安装的根
-  `loom` 命令作为 runtime provider。该模式不期望存在 `.loom/bin`
-  runtime carrier；workstation/global CLI 可用性会和仓库真相分开诊断。
-- `repo-local-wrapper`：仓库有意保留 `.loom/bin` 等 repo-local wrapper
-  carrier。只要 installed-state 明确声明，这些 carrier 仍然有效；在
-  wrapper 委托给 global CLI provider 的兼容窗口中也同样有效。
+- 工作站安装全局 `loom` CLI；
+- Codex 从这个全局包安装并注册用户级 Loom plugin；
+- 每个采用 Loom 的仓库只记录 metadata-only adoption，不保存 repo-local
+  Loom runtime、plugin payload 或生成 skills payload。
 
 详细接入合同与验证命令见
 [docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)、
@@ -66,8 +64,13 @@ loom doctor --target . --json
 
 `loom host install` 和 `loom host register` 只写 Codex 用户级工作站状态。
 `loom install` 只写仓库 adoption metadata 和 Loom bootstrap 指令；
-`loom host verify` 验证目标仓库没有 repo-local Loom runtime、plugin 或
-skills payload。
+`loom host verify` 同时验证 metadata-only 仓库边界和 Codex 用户级 plugin
+provider 注册。
+
+如果仓库里还存在 `.loom/bin`、`.loom/bootstrap`、`plugins/loom`、
+`.agents/skills` 或 Loom-owned 根 `skills`，当前验证会阻断，直到显式完成
+迁移或删除。迁移路径见
+[docs/adoption/legacy-install-migration.md](./docs/adoption/legacy-install-migration.md)。
 
 `npx @mc-and-his-agents/loom ...` 只能作为临时运行同一个根 `loom` CLI 的方式。
 

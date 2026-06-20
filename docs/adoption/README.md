@@ -30,6 +30,7 @@
 - 统一安装体验：[unified-install-experience.md](./unified-install-experience.md)
 - CLI-only 安装合同：[cli-only-install-contract.md](./cli-only-install-contract.md)
 - 纯全局 CLI 与 Codex 用户级 plugin 安装合同：[global-cli-user-plugin-contract.md](./global-cli-user-plugin-contract.md)
+- 旧安装迁移说明：[legacy-install-migration.md](./legacy-install-migration.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
 - 安装 taxonomy 与权威边界：[installation-taxonomy.md](./installation-taxonomy.md)
 - 已安装 Loom status 与升级演练：[installed-loom-status.md](./installed-loom-status.md)

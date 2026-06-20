@@ -50,15 +50,16 @@ user-level Codex Loom plugin provider. It must not write `plugins/loom/skills/`,
    loom doctor --target . --json
    ```
 
-`loom host verify --host codex` verifies repository
-adoption metadata and reports the user-level provider requirement separately.
-It does not require downstream top-level `skills/`, and it does not prove Codex
-Desktop has registered, enabled, or loaded the plugin on the current
-workstation.
+`loom host verify --host codex` verifies both repository adoption metadata and
+Codex user-level plugin provider registration. It does not require downstream
+top-level `skills/`, and it does not hot-load the plugin into an already running
+Codex session.
 
 If the repository still carries `.loom/bin`, `.loom/bootstrap`, `plugins/loom/`,
 `.agents/skills`, or Loom-owned root `skills/`, treat those paths as unsupported
-legacy residue until `doctor` classifies them.
+legacy residue. Current verification blocks until the residue is explicitly
+migrated or removed. See
+[legacy-install-migration.md](./legacy-install-migration.md).
 
 <!-- legacy-installer-doc-sync-anchor: loom host install --host codex --scope user --apply --json -->
 <!-- legacy-installer-doc-sync-anchor: loom host verify --host codex --target . --json -->

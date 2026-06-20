@@ -128,8 +128,8 @@ Loom separates two first-class states:
   enablement.
 
 `loom host verify --host codex --target . --json` verifies
-repository adoption metadata. It is not evidence that Codex Desktop on this
-machine has registered, enabled, loaded, or hot-loaded the plugin.
+repository adoption metadata and Codex user-level plugin provider registration.
+It is not evidence that an already running Codex session hot-loaded the plugin.
 
 For Codex Desktop, use the explicit workstation registration surface:
 
@@ -142,9 +142,9 @@ loom host register --host codex --scope user --apply --json
 
 Registration is a user workstation mutation and must require `--apply`. Repair
 and upgrade planning may recommend it when the target repository payload is
-current but local Codex registration is missing. `loom doctor` may report both
-states, but Codex Desktop private registration state must not become target
-repository truth.
+current but local Codex registration is missing. `loom host verify` and
+`loom doctor` may report both states, but Codex Desktop private registration
+state must not become target repository truth.
 
 If an adopted downstream repository still has `.loom/bin`, `.loom/bootstrap`,
 `plugins/loom/`, `.agents/skills`, or Loom-generated top-level `skills/` from
