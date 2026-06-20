@@ -3,10 +3,10 @@
   "item_id": "WI-1484",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allows WI-1484 at head 9bb23536: global CLI flow/delegated/scenario/PR/merge/reconcile/carrier/closeout queue paths now default to agent-safe stdout when output exceeds budget, explicit --full-output remains available for full JSON diagnostics, and help JSON exposes the output policy without expanding skills/docs/release scope.",
+  "summary": "Implementation review allows WI-1484 at head 8f18e832: global CLI flow/delegated/scenario/PR/merge/reconcile/carrier/closeout queue paths now default to agent-safe stdout when output exceeds budget, explicit --full-output remains available for full JSON diagnostics, help JSON exposes the output policy, and the minimal suite includes the implementation contract without expanding skills/docs/release scope.",
   "reviewer": "codex-manual-review",
-  "authored_at": "2026-06-20T17:25:28Z",
-  "reviewed_head": "9bb23536a4f2f65cc19a99d9cba20f6034396563",
+  "authored_at": "2026-06-20T17:31:28Z",
+  "reviewed_head": "8f18e8328eb1850c88ff500ec850e7c061e0c2e3",
   "reviewed_validation_summary": "2026-06-20 local validation passed on branch work/1484-1485-cli-agent-safe-output: python3 test/output_envelope_test.py; python3 -m py_compile tools/loom.py test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata --surface controlled-merge --surface closeout-wrapper; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py build --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge-ready --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; git diff --check.",
   "fallback_to": null,
   "findings": [],
@@ -36,6 +36,7 @@
     "suite_evidence_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1484 --json",
     "suite_carrier_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1484 --json",
     "suite_evidence_map": ".loom/specs/WI-1484/evidence-map.md",
+    "suite_implementation_contract": ".loom/specs/WI-1484/implementation-contract.md",
     "suite_consistency_analysis": null,
     "suite_task_carriers": [
       ".loom/specs/WI-1484/task-carrier.md"
@@ -52,6 +53,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current implementation head for PR merge consumption."
+    "reason": "Authored implementation review approved the current implementation and suite carrier head for PR merge consumption."
   }
 }
