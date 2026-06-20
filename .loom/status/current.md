@@ -15,7 +15,7 @@
 - Current Stop: Agent-safe output implementation, minimal suite carriers, and PR metadata are prepared for PR #1662.
 - Next Step: Refresh carrier/shadow inputs, record current-head review, rerun local PR gate, then consume hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-20 WI-1483 validation passed on head 519210b01e1d32c2691e9938ccf1185ab43130a8: PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py; python3 tools/loom.py suite validate --target . --item WI-1483 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1483 --json; python3 tools/loom.py fact-chain --target . --json --full-output; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; git diff --check.
+- Latest Validation Summary: 2026-06-20 WI-1483 validation passed on current PR head at review time: PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py; python3 tools/loom.py suite validate --target . --item WI-1483 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1483 --json; python3 tools/loom.py fact-chain --target . --json --full-output; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; git diff --check.
 - Recovery Boundary: WI-1483 only. Do not implement #1484 flow gate summaries, #1485 unified default rollout, #1486 plugin text migration, or repo-local runtime compatibility.
 - Current Lane: milestone-11-fact-status-shadow-output
 
