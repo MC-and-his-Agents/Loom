@@ -1,0 +1,41 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1487",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1487 at head d274ffff: recovery model and handoff output contract now define thread rotation triggers, minimal handoff package fields, agent-safe summary/artifact locator boundaries, and the ban on replaying old full thread turns; no scheduler or repo-local runtime path is introduced.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T13:50:00Z",
+  "reviewed_head": "d274fffffd8c2d90c0cb0d75374bc60296f52f20",
+  "reviewed_validation_summary": "2026-06-20 WI-1487 docs-only validation passed: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1487.md",
+    "recovery_entry": ".loom/progress/WI-1487.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "docs_sources": [
+      "docs/methodology/harness/recovery-model.md",
+      "skills/shared/references/harness/recovery-model.md",
+      "skills/loom-handoff/references/output-contract.md",
+      "src/skills/shared/references/harness/recovery-model.md",
+      "src/skills/loom-handoff/references/output-contract.md",
+      "plugins/loom/skills/shared/references/harness/recovery-model.md",
+      "plugins/loom/skills/loom-handoff/references/output-contract.md"
+    ],
+    "validation": [
+      "git diff --check",
+      "python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py",
+      "python3 tools/loom.py fact-chain --target . --json",
+      "python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking",
+      "python3 tools/skills_surface.py check --surface generated-tree-drift"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
