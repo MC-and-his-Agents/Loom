@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,10 @@ spec.loader.exec_module(loom_cli)
 
 
 class OutputEnvelopeTest(unittest.TestCase):
+    def tearDown(self) -> None:
+        os.environ.pop("LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES", None)
+        os.environ.pop("LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES", None)
+
     def test_output_envelope_contains_agent_safe_fields(self) -> None:
         envelope = loom_cli.output_envelope(
             "fact-chain",
@@ -71,8 +76,55 @@ class OutputEnvelopeTest(unittest.TestCase):
             self.assertEqual(safe["key_gaps"], [f"gap-{index}" for index in range(10)])
             self.assertEqual(safe["full_output"]["available"], True)
             self.assertEqual(safe["full_output"]["truncated"], True)
+            self.assertEqual(safe["stdout_budget_bytes"], 512)
             self.assertTrue(locator.exists())
             self.assertNotIn('"diagnostic":', json.dumps(safe))
+
+    def test_default_budget_keeps_large_payload_out_of_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            payload = loom_cli.output(
+                "fixture",
+                "pass",
+                summary="Large fixture output.",
+                diagnostic="x" * (loom_cli.DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES * 2),
+            )
+
+            safe = loom_cli.agent_safe_payload(payload, artifact_dir=Path(tempdir))
+            rendered = json.dumps(safe, indent=2, ensure_ascii=False)
+
+            self.assertLessEqual(len(rendered.encode("utf-8")), loom_cli.DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES)
+            self.assertEqual(safe["stdout_budget_bytes"], loom_cli.DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES)
+            self.assertTrue(Path(safe["full_output"]["artifact_locator"]).exists())
+            self.assertNotIn('"diagnostic":', rendered)
+
+    def test_budget_can_be_configured_with_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "768"
+            os.environ["LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES"] = "32"
+            payload = loom_cli.output(
+                "fixture",
+                "block",
+                summary="s" * 128,
+                blocking_gaps=[f"gap-{index}" for index in range(20)],
+                diagnostic="x" * 4096,
+            )
+
+            safe = loom_cli.agent_safe_payload(payload, artifact_dir=Path(tempdir))
+
+            self.assertEqual(safe["stdout_budget_bytes"], 768)
+            self.assertEqual(safe["summary_target_bytes"], 32)
+            self.assertLessEqual(len(safe["summary"].encode("utf-8")), 32)
+            self.assertEqual(safe["key_gaps"], [f"gap-{index}" for index in range(10)])
+
+    def test_explicit_full_output_mode_returns_payload(self) -> None:
+        payload = loom_cli.output(
+            "fixture",
+            "pass",
+            summary="debug",
+            diagnostic="x" * (loom_cli.DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES * 2),
+        )
+
+        self.assertIs(loom_cli.agent_safe_payload(payload, full_output=True), payload)
 
 
 if __name__ == "__main__":
