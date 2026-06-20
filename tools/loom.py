@@ -1342,12 +1342,13 @@ def flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str]) 
 
 
 def emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
-    payload = flow_payload(command, flow_args, fallback_to=fallback_to)
+    forwarded_args, full_output = split_agent_output_args(flow_args)
+    payload = flow_payload(command, forwarded_args, fallback_to=fallback_to)
     payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
-    return emit(payload)
+    return emit(agent_safe_payload(payload, full_output=full_output))
 
 
 def delegated_payload(command: str, tool_name: str, delegated_args: list[str], *, failed_layer: str, fallback_to: list[str]) -> dict[str, Any]:
@@ -1356,12 +1357,13 @@ def delegated_payload(command: str, tool_name: str, delegated_args: list[str], *
 
 
 def emit_delegated(command: str, tool_name: str, delegated_args: list[str], *, failed_layer: str, fallback_to: list[str]) -> int:
-    payload = delegated_payload(command, tool_name, delegated_args, failed_layer=failed_layer, fallback_to=fallback_to)
+    forwarded_args, full_output = split_agent_output_args(delegated_args)
+    payload = delegated_payload(command, tool_name, forwarded_args, failed_layer=failed_layer, fallback_to=fallback_to)
     payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
-    return emit(payload)
+    return emit(agent_safe_payload(payload, full_output=full_output))
 
 
 def strip_json_flag(argv: list[str]) -> list[str]:
@@ -1377,6 +1379,11 @@ def split_agent_output_args(argv: list[str]) -> tuple[list[str], bool]:
             continue
         forwarded.append(arg)
     return forwarded, full_output
+
+
+def append_full_output_flag(flow_args: list[str], args: argparse.Namespace) -> None:
+    if getattr(args, "full_output", False):
+        flow_args.append("--full-output")
 
 
 def target_from_args(argv: list[str]) -> Path:
@@ -1431,9 +1438,52 @@ def command_matrix() -> list[dict[str, Any]]:
             "status": entry["status"],
             "json": entry.get("json", True),
             "summary": entry.get("summary", ""),
+            "output_policy": command_output_policy(entry["command"]),
         }
         for entry in COMMANDS
     ]
+
+
+def command_output_policy(command: str) -> dict[str, Any]:
+    full_output_supported = (
+        command
+        in {
+            "init",
+            "adopt",
+            "route",
+            "flow",
+            "status",
+            "fact-chain",
+            "shadow-parity",
+            "story",
+            "build",
+            "pre-review",
+            "handoff",
+            "retire",
+            "closeout",
+            "closeout queue status",
+            "resume",
+            "merge-ready",
+            "spec-review",
+            "review",
+            "check",
+            "reconcile",
+            "carrier closeout-sync",
+        }
+        or command.startswith("profile ")
+        or command.startswith("checkpoint ")
+        or command.startswith("gate ")
+        or command.startswith("pr ")
+        or command.startswith("merge ")
+    )
+    return {
+        "default_stdout": "agent_safe_summary_or_json_within_budget" if full_output_supported else "direct_json",
+        "artifact_on_over_budget": full_output_supported,
+        "full_output_flag": "--full-output" if full_output_supported else None,
+        "stdout_budget_env": "LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES",
+        "summary_target_env": "LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES",
+        "artifact_dir_env": "LOOM_OUTPUT_ARTIFACT_DIR",
+    }
 
 
 def normalize_support_marker(value: Any) -> str | None:
@@ -1669,6 +1719,19 @@ def handle_help(argv: list[str]) -> int:
         summary="Frozen CLI command matrix.",
         command_count=len(COMMANDS),
         commands=command_matrix(),
+        output_modes={
+            "default": "agent-safe stdout: JSON is emitted directly only when it fits the effective stdout budget; otherwise stdout contains a summary envelope and an artifact locator.",
+            "full_output": "Pass --full-output on supported command families to explicitly request full JSON diagnostics on stdout.",
+            "stdout_budget_bytes_default": DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES,
+            "summary_target_bytes_default": DEFAULT_AGENT_SAFE_SUMMARY_TARGET_BYTES,
+            "configuration": {
+                "stdout_budget_env": "LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES",
+                "summary_target_env": "LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES",
+                "artifact_dir_env": "LOOM_OUTPUT_ARTIFACT_DIR",
+                "artifact_dir_default": str(DEFAULT_OUTPUT_ARTIFACT_DIR),
+            },
+            "artifact_lifecycle": "Artifacts are local diagnostic files under the configured artifact directory; callers should share locators by default and request full JSON only for explicit debugging.",
+        },
         fail_closed_on=[
             "unknown command",
             "reserved command invoked before implementation",
@@ -3642,6 +3705,7 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("--dry-run", action="store_true", default=True)
     parser.add_argument("--apply", dest="dry_run", action="store_false")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     command = f"pr {args.action}"
     if not args.pr and not (
@@ -3653,6 +3717,7 @@ def handle_pr(argv: list[str]) -> int:
         flow_args = ["host-binding", "inspect", "--target", ".", "--pr", args.pr]
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
+        append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "manual-reconciliation"])
     if args.action == "metadata-render":
         flow_args = ["pr-metadata", "render", "--target", ".", "--surface", args.surface]
@@ -3688,6 +3753,7 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--suite-na-scope-proof", args.suite_na_scope_proof])
         if args.suite_na_review_requirement:
             flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
+        append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
     if args.action == "metadata-readback":
         flow_args = ["pr-metadata", "readback", "--target", ".", "--surface", args.surface]
@@ -3707,6 +3773,7 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--compare-body-file", args.compare_body_file])
         if args.pr_payload_file:
             flow_args.extend(["--pr-payload-file", args.pr_payload_file])
+        append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
     if args.action == "metadata-update":
         flow_args = ["pr-metadata", "update", "--target", ".", "--surface", args.surface]
@@ -3747,6 +3814,7 @@ def handle_pr(argv: list[str]) -> int:
         if args.suite_na_review_requirement:
             flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
         flow_args.append("--apply" if not args.dry_run else "--dry-run")
+        append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-render --surface merge_ready --json", "loom pr metadata-readback --surface merge_ready --pr <number> --json"])
     if args.action == "metadata-preflight":
         flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", args.surface]
@@ -3764,6 +3832,7 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--compare-body-file", args.compare_body_file])
         if args.pr_payload_file:
             flow_args.extend(["--pr-payload-file", args.pr_payload_file])
+        append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["update PR body", "loom pr inspect <pr> --json"])
     flow_args = ["pr-gate", "check", "--target", ".", "--pr", args.pr]
     if args.surface:
@@ -3780,6 +3849,7 @@ def handle_pr(argv: list[str]) -> int:
         flow_args.extend(["--pr-payload-file", args.pr_payload_file])
     if args.gate_freeze_snapshot_file:
         flow_args.extend(["--gate-freeze-snapshot-file", args.gate_freeze_snapshot_file])
+    append_full_output_flag(flow_args, args)
     return emit_flow(command, flow_args, fallback_to=["loom pr inspect <pr> --json", "manual-reconciliation"])
 
 
@@ -3799,6 +3869,7 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--pr-gate-result-file")
     parser.add_argument("--merge-gate-result-file")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     command = f"merge {args.action}"
     flow_args = [
@@ -3829,6 +3900,7 @@ def handle_merge(argv: list[str]) -> int:
             flow_args.extend([option, value])
     if args.action == "run" and args.apply:
         flow_args.append("--execute")
+    append_full_output_flag(flow_args, args)
     return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])
 
 
@@ -3839,6 +3911,7 @@ def handle_reconcile(argv: list[str]) -> int:
     parser.add_argument("--work-item")
     parser.add_argument("--head-sha")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     flow_args = ["reconciliation", "audit", "--target", "."]
     if args.issue:
@@ -3847,6 +3920,7 @@ def handle_reconcile(argv: list[str]) -> int:
         flow_args.extend(["--pr", args.pr])
     if args.work_item:
         flow_args.extend(["--item", args.work_item])
+    append_full_output_flag(flow_args, args)
     return emit_flow("reconcile", flow_args, fallback_to=["manual-reconciliation"])
 
 
@@ -3866,6 +3940,7 @@ def handle_carrier(argv: list[str]) -> int:
     parser.add_argument("--dry-run", action="store_true", default=True)
     parser.add_argument("--apply", dest="dry_run", action="store_false")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     target = resolve_target(args.target)
     flow_args = ["carrier", args.action, "--target", str(target)]
@@ -3884,13 +3959,14 @@ def handle_carrier(argv: list[str]) -> int:
             flow_args.extend([flag, str(value)])
     if not args.dry_run:
         flow_args.append("--apply")
+    append_full_output_flag(flow_args, args)
     command = f"carrier {args.action}"
     payload = flow_payload(command, flow_args, fallback_to=["loom closeout --target <repo> --json"])
     payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
-    return emit(payload)
+    return emit(agent_safe_payload(payload, full_output=args.full_output))
 
 
 def add_closeout_host_args(flow_args: list[str], args: argparse.Namespace, *, include_comment: bool) -> None:
@@ -4730,6 +4806,7 @@ def handle_closeout_queue_status(argv: list[str]) -> int:
     parser.add_argument("--queue-file")
     parser.add_argument("--output")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     target = resolve_target(args.target)
     if not target.exists():
@@ -4760,6 +4837,7 @@ def handle_closeout_queue_status(argv: list[str]) -> int:
     ):
         if value is not None:
             flow_args.extend([flag, value])
+    append_full_output_flag(flow_args, args)
     payload = flow_payload(
         "closeout queue status",
         flow_args,
@@ -4769,7 +4847,7 @@ def handle_closeout_queue_status(argv: list[str]) -> int:
     if payload.get("command") and payload.get("command") != "closeout queue status":
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = "closeout queue status"
-    return emit(payload)
+    return emit(agent_safe_payload(payload, full_output=args.full_output))
 
 
 def handle_scenario(command: str, argv: list[str]) -> int:
@@ -4814,6 +4892,7 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     parser.add_argument("--skip-gate", action="store_true")
     parser.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     target = resolve_target(args.target)
     if not target.exists():
@@ -4856,25 +4935,28 @@ def handle_scenario(command: str, argv: list[str]) -> int:
                 "summary": "Retire currently exposes the handoff/cleanup checklist and does not delete worktrees or host objects.",
                 "fallback_to": ["loom workspace retire --target <repo> --json", "loom handoff --target <repo> --json"],
             }
-        return emit(payload)
+        return emit(agent_safe_payload(payload, full_output=args.full_output))
 
     if command in {"spec", "plan"}:
         item = args.item or "unknown-item"
         relative = f".loom/specs/{item}/{'spec.md' if command == 'spec' else 'plan.md'}"
         locator = target / relative
         return emit(
-            output(
-                command,
-                "block" if not locator.exists() else "pass",
-                schema=SCENARIO_SCHEMA,
-                summary=f"{command} scenario locator {'exists' if locator.exists() else 'is missing'}; authoring remains caller-owned.",
-                target=str(target),
-                item=item,
-                locator=relative,
-                mutates=False,
-                failed_layer=None if locator.exists() else f"{command}-carrier",
-                fail_closed_reason=None if locator.exists() else f"missing {relative}",
-                fallback_to=None if locator.exists() else ["loom story --target <repo> --item <item> --json", "docs/methodology/templates/spec-suite.md"],
+            agent_safe_payload(
+                output(
+                    command,
+                    "block" if not locator.exists() else "pass",
+                    schema=SCENARIO_SCHEMA,
+                    summary=f"{command} scenario locator {'exists' if locator.exists() else 'is missing'}; authoring remains caller-owned.",
+                    target=str(target),
+                    item=item,
+                    locator=relative,
+                    mutates=False,
+                    failed_layer=None if locator.exists() else f"{command}-carrier",
+                    fail_closed_reason=None if locator.exists() else f"missing {relative}",
+                    fallback_to=None if locator.exists() else ["loom story --target <repo> --item <item> --json", "docs/methodology/templates/spec-suite.md"],
+                ),
+                full_output=args.full_output,
             )
         )
 
@@ -4914,7 +4996,7 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         if payload.get("command") and payload.get("command") != command:
             payload["wrapped_command"] = payload.get("command")
         payload["command"] = command
-        return emit(payload)
+        return emit(agent_safe_payload(payload, full_output=args.full_output))
 
     return emit(output(command, "block", schema=SCENARIO_SCHEMA, summary="Unsupported scenario command.", failed_layer="scenario-input", fail_closed_reason=command, fallback_to=["loom help --json"]))
 
@@ -4934,8 +5016,19 @@ def dispatch(command: str, forwarded_args: list[str]) -> int:
             ),
             stream=sys.stderr,
         )
-    completed = subprocess.run([sys.executable, str(tool_path), *prefix, *strip_json_flag(forwarded_args)], check=False)
-    return completed.returncode
+    forwarded_args, full_output = split_agent_output_args(forwarded_args)
+    payload = delegated_payload(
+        command,
+        tool_name,
+        [*prefix, *strip_json_flag(forwarded_args)],
+        failed_layer="delegated-wrapper",
+        fallback_to=["loom help --json"],
+    )
+    payload.setdefault("schema_version", OUTPUT_SCHEMA)
+    if payload.get("command") and payload.get("command") != command:
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = command
+    return emit(agent_safe_payload(payload, full_output=full_output))
 
 
 def reserved_command(command: str, argv: list[str]) -> int:

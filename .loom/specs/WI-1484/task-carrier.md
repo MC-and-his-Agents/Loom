@@ -1,0 +1,6 @@
+# WI-1484 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1484 | Flow/gate command summary and artifact output | in_progress | primary | .loom/work-items/WI-1484.md | .loom/specs/WI-1484/plan.md#phases | .loom/specs/WI-1484/spec.md#key-scenarios | .loom/specs/WI-1484/plan.md#phases | .loom/specs/WI-1484/evidence-map.md | Branch work/1484-1485-cli-agent-safe-output; PR pending | Recheck issue state, PR metadata, review record, suite evidence, and hosted checks after head changes. |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1485 | Unified global CLI default agent-safe output | in_progress | mirror | .loom/work-items/WI-1484.md | .loom/specs/WI-1484/plan.md#phases | .loom/specs/WI-1484/spec.md#key-scenarios | .loom/specs/WI-1484/plan.md#phases | .loom/specs/WI-1484/evidence-map.md | Same branch because #1484 and #1485 share the global CLI output wrapper implementation | Recheck help matrix, full-output support, PR metadata, and hosted checks after head changes. |
