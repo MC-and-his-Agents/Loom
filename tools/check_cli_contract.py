@@ -1066,6 +1066,24 @@ def isolated_codex_workstation(home: Path):
             os.environ["CODEX_HOME"] = old_codex_home
 
 
+def register_fixture_codex_plugin() -> None:
+    run_json(
+        [
+            "host",
+            "register",
+            "--host",
+            "codex",
+            "--source",
+            str(REPO_ROOT / "plugins" / "loom"),
+            "--scope",
+            "user",
+            "--apply",
+            "--json",
+        ],
+        expect=0,
+    )
+
+
 def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: str) -> None:
     suite_gate = payload.get("suite_gate_validation")
     if not isinstance(suite_gate, dict):
@@ -6286,6 +6304,11 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
     item = "WI-repair"
     write_host_complete_active_repair_target(target, item)
     env = write_fake_closed_host_gh(tmp / "fake-gh-bin")
+    fixture_home = tmp / "repair-active-carrier-codex-home"
+    fixture_home.mkdir()
+    with isolated_codex_workstation(fixture_home):
+        register_fixture_codex_plugin()
+    env.update({"HOME": str(fixture_home), "CODEX_HOME": str(fixture_home / ".codex")})
     progress = target / ".loom" / "progress" / f"{item}.md"
     status = target / ".loom" / "status" / "current.md"
     init_result = target / ".loom" / "bootstrap" / "init-result.json"
@@ -6445,7 +6468,7 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
         or init_payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
     ):
         raise AssertionError("repair apply did not terminalize active carrier and switch repo to idle")
-    _, fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0)
+    _, fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0, env_overrides=env)
     if (
         fact_chain.get("result") != "pass"
         or fact_chain.get("report", {}).get("repository_execution_state") != "idle"
@@ -6766,6 +6789,11 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
     item = "WI-hotcp-root"
     write_host_complete_active_repair_target(target, item)
     env = write_fake_closed_host_gh(tmp / "fake-hotcp-gh-bin")
+    fixture_home = tmp / "hotcp-stale-active-codex-home"
+    fixture_home.mkdir()
+    with isolated_codex_workstation(fixture_home):
+        register_fixture_codex_plugin()
+    env.update({"HOME": str(fixture_home), "CODEX_HOME": str(fixture_home / ".codex")})
 
     progress = target / ".loom" / "progress" / f"{item}.md"
     status = target / ".loom" / "status" / "current.md"
@@ -6776,7 +6804,7 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
         "init_result": init_result.read_text(encoding="utf-8"),
     }
 
-    _, active_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0)
+    _, active_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0, env_overrides=env)
     active_entry_points = active_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
     if (
         active_fact_chain.get("result") != "pass"
@@ -6786,7 +6814,7 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
     ):
         raise AssertionError("HotCP fixture did not start as a stale active carrier pointing at the completed Work Item")
 
-    _, retire = run_json(["workspace", "retire", "--target", str(target), "--item", item, "--json"], expect=0)
+    _, retire = run_json(["workspace", "retire", "--target", str(target), "--item", item, "--json"], expect=0, env_overrides=env)
     if (
         retire.get("result") != "pass"
         or retire.get("retire_scope") != "local_only"
@@ -6821,7 +6849,7 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
         expect=0,
         env_overrides=env,
     )
-    _, idle_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0)
+    _, idle_fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0, env_overrides=env)
     idle_entry_points = idle_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
     if (
         applied.get("result") != "pass"
@@ -6850,7 +6878,7 @@ def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
         expect=0,
         env_overrides=env,
     )
-    _, retained_fact_chain = run_json(["fact-chain", "--target", str(retained_target), "--json"], expect=0)
+    _, retained_fact_chain = run_json(["fact-chain", "--target", str(retained_target), "--json"], expect=0, env_overrides=env)
     retained_progress = retained_target / ".loom" / "progress" / f"{retained_item}.md"
     if (
         retained_plan.get("result") != "pass"
@@ -8680,21 +8708,7 @@ def run_aggregate_cli_contract() -> None:
         valid_home = tmp / "valid-codex-home"
         valid_home.mkdir()
         with isolated_codex_workstation(valid_home):
-            run_json(
-                [
-                    "host",
-                    "register",
-                    "--host",
-                    "codex",
-                    "--source",
-                    str(REPO_ROOT / "plugins" / "loom"),
-                    "--scope",
-                    "user",
-                    "--apply",
-                    "--json",
-                ],
-                expect=0,
-            )
+            register_fixture_codex_plugin()
             _, valid_doctor = run_json(["doctor", "--target", str(valid_target), "--json"], expect=0)
             if valid_doctor["result"] != "pass":
                 raise AssertionError("valid installed-state doctor did not pass")
@@ -8756,21 +8770,7 @@ def run_aggregate_cli_contract() -> None:
         global_cli_home = tmp / "global-cli-codex-home"
         global_cli_home.mkdir()
         with isolated_codex_workstation(global_cli_home):
-            run_json(
-                [
-                    "host",
-                    "register",
-                    "--host",
-                    "codex",
-                    "--source",
-                    str(REPO_ROOT / "plugins" / "loom"),
-                    "--scope",
-                    "user",
-                    "--apply",
-                    "--json",
-                ],
-                expect=0,
-            )
+            register_fixture_codex_plugin()
             _, global_doctor = run_json(["doctor", "--target", str(global_cli_target), "--json"], expect=0)
             provider_check = next((check for check in global_doctor.get("checks", []) if check.get("name") == "global-cli-runtime-provider"), None)
             if global_doctor.get("result") != "pass" or not provider_check or provider_check.get("result") != "pass":
@@ -8860,21 +8860,7 @@ def run_aggregate_cli_contract() -> None:
         declared_home = tmp / "declared-suite-codex-home"
         declared_home.mkdir()
         with isolated_codex_workstation(declared_home):
-            run_json(
-                [
-                    "host",
-                    "register",
-                    "--host",
-                    "codex",
-                    "--source",
-                    str(REPO_ROOT / "plugins" / "loom"),
-                    "--scope",
-                    "user",
-                    "--apply",
-                    "--json",
-                ],
-                expect=0,
-            )
+            register_fixture_codex_plugin()
             _, declared_doctor = run_json(["doctor", "--target", str(declared_target), "--json"], expect=0)
             declared_suite_check = next((check for check in declared_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
             if (
@@ -8894,25 +8880,33 @@ def run_aggregate_cli_contract() -> None:
         write_state(required_target, required_state)
         write_minimal_suite(required_target, "WI-verify")
         assert_minimal_suite_happy_path_fixture(required_target, "WI-verify")
-        _, required_verify = run_json(["verify", "--target", str(required_target), "--json"], expect=0)
-        if (
-            required_verify.get("suite_validation_requirement", {}).get("required") is not True
-            or required_verify.get("suite_validation", {}).get("result") != "pass"
-            or required_verify.get("suite_validation", {}).get("item_id") != "WI-verify"
-        ):
-            raise AssertionError("verify did not run required profile suite validation")
+        required_home = tmp / "verify-suite-required-codex-home"
+        required_home.mkdir()
+        with isolated_codex_workstation(required_home):
+            register_fixture_codex_plugin()
+            _, required_verify = run_json(["verify", "--target", str(required_target), "--json"], expect=0)
+            if (
+                required_verify.get("suite_validation_requirement", {}).get("required") is not True
+                or required_verify.get("suite_validation", {}).get("result") != "pass"
+                or required_verify.get("suite_validation", {}).get("item_id") != "WI-verify"
+            ):
+                raise AssertionError("verify did not run required profile suite validation")
         missing_suite_target = tmp / "verify-suite-missing"
         missing_suite_target.mkdir()
         write_state(missing_suite_target, valid_state(missing_suite_target))
-        status, missing_suite_verify = run_json(["verify", "--target", str(missing_suite_target), "--item", "WI-missing", "--json"])
-        if (
-            status == 0
-            or missing_suite_verify.get("result") != "block"
-            or missing_suite_verify.get("failed_layer") != "suite"
-            or missing_suite_verify.get("suite_validation_requirement", {}).get("required") is not True
-            or missing_suite_verify.get("suite_validation", {}).get("result") != "block"
-        ):
-            raise AssertionError("verify did not block when required Work Item suite validation failed")
+        missing_home = tmp / "verify-suite-missing-codex-home"
+        missing_home.mkdir()
+        with isolated_codex_workstation(missing_home):
+            register_fixture_codex_plugin()
+            status, missing_suite_verify = run_json(["verify", "--target", str(missing_suite_target), "--item", "WI-missing", "--json"])
+            if (
+                status == 0
+                or missing_suite_verify.get("result") != "block"
+                or missing_suite_verify.get("failed_layer") != "suite"
+                or missing_suite_verify.get("suite_validation_requirement", {}).get("required") is not True
+                or missing_suite_verify.get("suite_validation", {}).get("result") != "block"
+            ):
+                raise AssertionError("verify did not block when required Work Item suite validation failed")
         drift_target = tmp / "declared-suite-drift"
         drift_target.mkdir()
         drift_state = valid_state(drift_target)
