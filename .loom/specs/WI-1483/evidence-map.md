@@ -6,7 +6,7 @@
 - FR / parent locator: https://github.com/MC-and-his-Agents/Loom/issues/1483
 - Scope: global CLI fact-chain/status/shadow-parity default summary output.
 - Suite path: minimal
-- Current `HEAD`: 2eeafe3a8d0c251a74332729c7611c6a034ce322
+- Current `HEAD`: 519210b01e1d32c2691e9938ccf1185ab43130a8
 - PR locator: https://github.com/MC-and-his-Agents/Loom/pull/1662
 - Host state locator: GitHub issue #1483 and PR #1662
 
@@ -26,9 +26,9 @@
 
 | Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| EV-001 | behavior_evidence | `tools/loom.py`; `test/output_envelope_test.py`; `tools/check_cli_contract.py` | S1-S3 and A1-A4 in `.loom/specs/WI-1483/spec.md` | work_item=WI-1483; scope=global-cli-output; head_sha=2eeafe3a8d0c251a74332729c7611c6a034ce322; pr=1662 | present | review; merge-ready; closeout; #1484/#1485 | Recheck after target command wrapper, budget, artifact locator, or full-output behavior changes. |
-| EV-002 | test_evidence | `PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `git diff --check` | validation strategy in `.loom/specs/WI-1483/plan.md` | work_item=WI-1483; scope=global-cli-output; head_sha=2eeafe3a8d0c251a74332729c7611c6a034ce322 | present | review; merge-ready; closeout | Rerun after code, contract, carrier, or metadata changes. |
-| EV-003 | fresh_verification_input | `fact-chain=1150 bytes`; `status=1138 bytes`; `shadow-parity=1132 bytes`; `fact-chain --full-output=40892 bytes`; artifact locators under `.loom/tmp/output-artifacts` verified readable | EV-001 EV-002 current validation summary and PR head binding | work_item=WI-1483; reviewed_head=2eeafe3a8d0c251a74332729c7611c6a034ce322; pr=1662 | present | merge-ready; closeout; status | Mark stale and rerun validation/review if PR head or output envelope changes. |
+| EV-001 | behavior_evidence | `tools/loom.py`; `test/output_envelope_test.py`; `tools/check_cli_contract.py` | S1-S3 and A1-A4 in `.loom/specs/WI-1483/spec.md` | work_item=WI-1483; scope=global-cli-output; head_sha=519210b01e1d32c2691e9938ccf1185ab43130a8; pr=1662 | present | review; merge-ready; closeout; #1484/#1485 | Recheck after target command wrapper, budget, artifact locator, or full-output behavior changes. |
+| EV-002 | test_evidence | `PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py`; `git diff --check` | validation strategy in `.loom/specs/WI-1483/plan.md` | work_item=WI-1483; scope=global-cli-output; head_sha=519210b01e1d32c2691e9938ccf1185ab43130a8 | present | review; merge-ready; closeout | Rerun after code, contract, carrier, or metadata changes. |
+| EV-003 | fresh_verification_input | `fact-chain=1150 bytes`; `status=1138 bytes`; `shadow-parity=1132 bytes`; `fact-chain --full-output=40892 bytes`; artifact locators under `.loom/tmp/output-artifacts` verified readable | EV-001 EV-002 current validation summary and PR head binding | work_item=WI-1483; reviewed_head=519210b01e1d32c2691e9938ccf1185ab43130a8; pr=1662 | present | merge-ready; closeout; status | Mark stale and rerun validation/review if PR head or output envelope changes. |
 
 ## Deferred
 
