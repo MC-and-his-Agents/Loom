@@ -2020,87 +2020,27 @@ def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
     target.mkdir()
     home.mkdir()
     with isolated_codex_workstation(home):
-        _, installed = run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(target), "--apply", "--json"], expect=0)
-        if "skills" in installed.get("managed_writes", []):
-            raise AssertionError("plugin install must not write downstream top-level skills")
-        if (target / "skills").exists():
-            raise AssertionError("plugin install created downstream top-level skills")
-        if not (target / "plugins" / "loom" / "skills" / "registry.json").exists():
-            raise AssertionError("plugin install did not write embedded plugin skills")
-
-        state = json.loads((target / ".loom" / "installed-state.json").read_text(encoding="utf-8"))
-        layer_paths = {layer.get("installed_path") for layer in state.get("layers", []) if isinstance(layer, dict)}
-        layer_types = {layer.get("layer_type") for layer in state.get("layers", []) if isinstance(layer, dict)}
-        if "skills" in layer_paths:
-            raise AssertionError("plugin-mode installed-state must not require top-level skills")
-        if "plugins/loom/skills" not in layer_paths or "plugin-embedded-skills" not in layer_types:
-            raise AssertionError("plugin-mode installed-state must model embedded plugin skills")
-        edges = state.get("installation_graph", {}).get("edges", [])
-        if {"from": "host-adapter", "to": "plugin-embedded-skills", "relationship": "consumes"} not in edges:
-            raise AssertionError("host adapter must consume embedded plugin skills")
-
-        _, host_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(target), "--json"], expect=0)
-        verify_paths = {check["path"] for check in host_verify.get("checks", [])}
-        if "skills/registry.json" in verify_paths:
-            raise AssertionError("host verify must not require downstream top-level skills")
-        if "plugins/loom/skills/registry.json" not in verify_paths:
-            raise AssertionError("host verify must check embedded plugin skills")
-
-        _, skills_check = run_json(["skills", "check", "--target", str(target), "--json"], expect=0)
-        embedded_check_output = json.loads(skills_check["checks"][0]["stdout"])
-        skill_check_paths = {check["path"] for check in embedded_check_output}
-        if "skills/registry.json" in skill_check_paths:
-            raise AssertionError("skills check must not assume full-repo mode for plugin targets")
-        if "plugins/loom/skills/registry.json" not in skill_check_paths:
-            raise AssertionError("skills check must validate embedded plugin skills for plugin targets")
-
-        _, detected = run_json(["detect", "--target", str(target), "--json"], expect=0)
-        detected_kinds = {surface["kind"] for surface in detected["surfaces"]}
-        if detected["classification"] != "current" or "full-repo-skills" in detected_kinds:
-            raise AssertionError("plugin target without top-level skills must classify as current")
-
-        old_layout = tmp / "downstream-old-plugin-layout"
-        old_layout.mkdir()
-        run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(old_layout), "--apply", "--json"], expect=0)
-        shutil.copytree(REPO_ROOT / "skills", old_layout / "skills")
-        (old_layout / ".agents").mkdir()
-        shutil.copytree(REPO_ROOT / "skills", old_layout / ".agents" / "skills")
-        _, old_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(old_layout), "--json"], expect=0)
-        if any(check["status"] != "pass" for check in old_verify.get("checks", [])):
-            raise AssertionError("plugin verify must pass even when old top-level Loom skills residue exists")
-        _, repair_plan = run_json(["repair", "plan", "--target", str(old_layout), "--json"], expect=0)
-        repair_actions = {action["id"]: action for action in repair_plan.get("actions", [])}
-        migration = repair_actions.get("plan-top-level-loom-skills-migration")
-        if not migration or migration.get("surface", {}).get("ownership") != "loom-generated" or migration.get("mutates") is not False:
-            raise AssertionError("old plugin layout must produce a non-mutating top-level Loom skills migration plan")
-        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(old_layout), "--json"], expect=0)
-        if "plan-top-level-loom-skills-migration" not in {action["id"] for action in upgrade_plan.get("actions", [])}:
-            raise AssertionError("upgrade-plan must include top-level Loom skills migration guidance")
-
-        mixed_layout = tmp / "downstream-mixed-skills-layout"
-        mixed_layout.mkdir()
-        run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(mixed_layout), "--apply", "--json"], expect=0)
-        shutil.copytree(REPO_ROOT / "skills", mixed_layout / "skills")
-        custom_skill = mixed_layout / "skills" / "target-owned-skill"
-        custom_skill.mkdir()
-        (custom_skill / "SKILL.md").write_text("# Target Owned Skill\n", encoding="utf-8")
-        _, mixed_repair = run_json(["repair", "plan", "--target", str(mixed_layout), "--json"], expect=0)
-        mixed_actions = {action["id"]: action for action in mixed_repair.get("actions", [])}
-        ownership_review = mixed_actions.get("review-top-level-skills-ownership")
-        if not ownership_review or ownership_review.get("surface", {}).get("ownership") != "mixed-or-target-owned":
-            raise AssertionError("mixed top-level skills ownership must fail closed to manual review")
+        status, installed = run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(target), "--apply", "--json"])
+        if status == 0 or installed.get("failed_layer") != "host-payload":
+            raise AssertionError("repo-local plugin install did not fail closed")
+        for unexpected in ("plugins/loom", "skills", ".agents/skills", ".loom/bin", ".loom/installed-state.json"):
+            if (target / unexpected).exists():
+                raise AssertionError(f"repo-local plugin install wrote unsupported repository payload: {unexpected}")
 
 
 def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     target = tmp / "metadata-only-adoption"
     target.mkdir()
     _, installed = run_json(
-        ["install", "--target", str(target), "--mode", "metadata-only", "--apply", "--json"],
+        ["install", "--target", str(target), "--apply", "--json"],
         expect=0,
     )
     managed_writes = set(installed.get("managed_writes", []))
-    if managed_writes != {".loom/installed-state.json"}:
+    if managed_writes != {".loom/installed-state.json", "AGENTS.md"}:
         raise AssertionError(f"metadata-only install wrote unexpected artifacts: {sorted(managed_writes)}")
+    agents_text = (target / "AGENTS.md").read_text(encoding="utf-8")
+    if "<!-- LOOM_BOOTSTRAP_START -->" not in agents_text or "loom host install --host codex --scope user --apply --json" not in agents_text:
+        raise AssertionError("metadata-only install did not write Loom bootstrap block to AGENTS.md")
     for unexpected in ("plugins/loom/skills", ".agents/skills", "skills"):
         if (target / unexpected).exists():
             raise AssertionError(f"metadata-only install created {unexpected}")
@@ -2146,47 +2086,33 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"])
     if status == 0 or polluted_verify.get("result") != "block":
         raise AssertionError("metadata-only host verify did not block unexpected embedded skills payload")
+    old_mode = subprocess.run(
+        [sys.executable, str(LOOM), "install", "--target", str(target), "--mode", "plugin", "--json"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if old_mode.returncode == 0:
+        raise AssertionError("loom install still accepted legacy --mode plugin")
+    help_result = subprocess.run(
+        [sys.executable, str(LOOM), "--help"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    help_text = help_result.stdout + help_result.stderr
+    if help_result.returncode != 0 or "repo-local-wrapper repos keep declared .loom/bin carriers as valid wrappers" in help_text:
+        raise AssertionError("loom --help still advertises repo-local-wrapper .loom/bin as current")
 
 
 def valid_state(target: Path) -> dict[str, Any]:
-    return {
-        "schema_version": "loom-installed-state/v2",
-        "installation_id": "fixture-valid",
-        "target": str(target),
-        "upgrade_eligibility": "current",
-        "layers": [
-            {
-                "id": "runtime",
-                "layer_type": "full-repo-runtime",
-                "installed_path": ".loom/bin",
-                "version_context": {
-                    "repo_version": "v0.13.0",
-                    "runtime_core_version": "1.0.0",
-                },
-                "runtime_state": "ready",
-                "upgrade_eligibility": "current",
-                "provides": ["loom runtime wrappers"],
-                "consumes": [],
-            },
-            {
-                "id": "skills",
-                "layer_type": "generated-skills",
-                "installed_path": "skills",
-                "version_context": {
-                    "skills_registry_version": "1.7.0",
-                    "skill_package_version": "1.0.0",
-                },
-                "runtime_state": "ready",
-                "upgrade_eligibility": "current",
-                "provides": ["scenario skills"],
-                "consumes": ["runtime"],
-            },
-        ],
-        "installation_graph": {
-            "layers": ["runtime", "skills"],
-            "edges": [{"from": "skills", "to": "runtime", "relationship": "consumes"}],
-        },
-    }
+    return global_cli_state(target)
 
 
 GLOBAL_CLI_REQUIRED_COMMANDS = [
@@ -2215,13 +2141,19 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "package": "@mc-and-his-agents/loom",
                 "executable": "loom",
                 "version_requirement": "v0.13.0",
-                "required_commands": GLOBAL_CLI_REQUIRED_COMMANDS,
-                "compatibility_mode_allowed": True,
+                "required_commands": list(GLOBAL_CLI_REQUIRED_COMMANDS),
+                "compatibility_mode_allowed": False,
             }
         },
         "repo_payload": {
             "mode": "metadata-only",
-            "intentional_absent_paths": ["plugins/loom/skills", ".agents/skills", "skills", ".loom/bin"],
+            "intentional_absent_paths": [
+                ".loom/bin",
+                "plugins/loom/.codex-plugin/plugin.json",
+                "plugins/loom/skills",
+                ".agents/skills",
+                "skills",
+            ],
         },
         "layers": [
             {
@@ -2261,7 +2193,7 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "runtime_state": "unknown",
                 "upgrade_eligibility": "unknown",
                 "provides": ["loom command semantics", "runtime provider"],
-                "declared_support": {"commands": GLOBAL_CLI_REQUIRED_COMMANDS},
+                "declared_support": {"commands": list(GLOBAL_CLI_REQUIRED_COMMANDS)},
                 "consumes": [],
             },
         ],
@@ -8755,7 +8687,7 @@ def run_aggregate_cli_contract() -> None:
         if valid_plan["actions"]:
             raise AssertionError("current installed-state repair plan should be no-op")
         _, exported = run_json(["installed-state", "export", "--target", str(valid_target), "--json"], expect=0)
-        if exported["installation_graph"]["layers"] != ["runtime", "skills"]:
+        if exported["installation_graph"]["layers"] != ["adoption-metadata", "user-skills-provider", "global-cli-provider"]:
             raise AssertionError("installed-state export did not include graph")
         _, upgrade_plan = run_json(["upgrade-plan", "--target", str(valid_target), "--json"], expect=0)
         if upgrade_plan["schema"] != "loom-delivery-control/v1" or not upgrade_plan["actions"]:
@@ -8774,22 +8706,21 @@ def run_aggregate_cli_contract() -> None:
         _, repo_local_detect = run_json(["detect", "--target", str(repo_local_target), "--json"], expect=0)
         repo_local_runtime = next((surface for surface in repo_local_detect.get("surfaces", []) if surface.get("path") == ".loom/bin"), None)
         if (
-            repo_local_detect.get("classification") != "current"
+            repo_local_detect.get("classification") != "mixed"
             or not repo_local_runtime
             or repo_local_runtime.get("kind") != "legacy-loom-bin"
-            or repo_local_runtime.get("migration_status") != "current"
-            or repo_local_runtime.get("authority") != "loom-cli"
+            or repo_local_runtime.get("migration_status") != "legacy"
         ):
-            raise AssertionError("repo-local-wrapper .loom/bin compatibility fixture was not classified as current CLI-managed runtime")
-        _, repo_local_doctor = run_json(["doctor", "--target", str(repo_local_target), "--json"], expect=0)
-        if repo_local_doctor.get("result") != "pass":
-            raise AssertionError("repo-local-wrapper compatibility doctor did not pass")
-        _, repo_local_verify = run_json(["verify", "--target", str(repo_local_target), "--json"], expect=0)
-        if repo_local_verify.get("result") != "pass" or repo_local_verify.get("doctor", {}).get("result") != "pass":
-            raise AssertionError("repo-local-wrapper compatibility verify did not consume doctor success")
+            raise AssertionError("repo-local-wrapper .loom/bin fixture was not classified as unsupported legacy residue")
+        status, repo_local_doctor = run_json(["doctor", "--target", str(repo_local_target), "--json"])
+        if status == 0 or repo_local_doctor.get("result") != "block":
+            raise AssertionError("repo-local-wrapper legacy residue doctor did not block")
+        status, repo_local_verify = run_json(["verify", "--target", str(repo_local_target), "--json"])
+        if status == 0 or repo_local_verify.get("result") != "block" or repo_local_verify.get("doctor", {}).get("result") != "block":
+            raise AssertionError("repo-local-wrapper legacy residue verify did not consume doctor block")
         _, repo_local_repair = run_json(["repair", "plan", "--target", str(repo_local_target), "--json"], expect=0)
-        if repo_local_repair.get("actions"):
-            raise AssertionError("repo-local-wrapper compatibility fixture should not produce legacy repair actions")
+        if not repo_local_repair.get("actions"):
+            raise AssertionError("repo-local-wrapper legacy residue should produce non-mutating repair guidance")
         global_cli_target = tmp / "global-cli-no-bin"
         global_cli_target.mkdir()
         write_state(global_cli_target, global_cli_state(global_cli_target))
@@ -8873,43 +8804,28 @@ def run_aggregate_cli_contract() -> None:
         (stale_bin_target / ".loom" / "bin").mkdir(parents=True)
         (stale_bin_target / ".loom" / "bin" / "loom_flow.py").write_text("# stale fixture\n", encoding="utf-8")
         _, stale_detect = run_json(["detect", "--target", str(stale_bin_target), "--json"], expect=0)
-        retained = [surface for surface in stale_detect.get("surfaces", []) if surface.get("kind") == "retained-loom-bin"]
-        if stale_detect.get("classification") != "current-with-repairable-residue" or not retained:
-            raise AssertionError("global-cli stale .loom/bin was not classified as repairable residue")
+        legacy_bins = [surface for surface in stale_detect.get("surfaces", []) if surface.get("kind") == "legacy-loom-bin"]
+        if stale_detect.get("classification") != "mixed" or not legacy_bins:
+            raise AssertionError("global-cli stale .loom/bin was not classified as unsupported legacy residue")
         with isolated_codex_workstation(global_cli_home):
-            _, stale_doctor = run_json(["doctor", "--target", str(stale_bin_target), "--json"], expect=0)
-            if stale_doctor.get("result") != "pass":
-                raise AssertionError("global-cli stale .loom/bin should not block doctor as current provider proof")
+            status, stale_doctor = run_json(["doctor", "--target", str(stale_bin_target), "--json"])
+            if status == 0 or stale_doctor.get("result") != "block":
+                raise AssertionError("global-cli stale .loom/bin did not block doctor as unsupported legacy residue")
         _, stale_repair = run_json(["repair", "plan", "--target", str(stale_bin_target), "--json"], expect=0)
-        stale_actions = {action["id"]: action for action in stale_repair.get("actions", [])}
-        stale_migration = stale_actions.get("plan-global-cli-runtime-carrier-migration")
-        if not stale_migration:
-            raise AssertionError("global-cli stale .loom/bin did not produce a runtime-carrier migration plan")
-        if stale_migration.get("status") != "recommended" or stale_migration.get("deletes") != [".loom/bin"] or stale_migration.get("requires_confirmation") is not True:
-            raise AssertionError("global-cli stale .loom/bin did not keep deletion proposal-only with explicit confirmation")
-        if stale_migration.get("blocking_references") or stale_migration.get("guidance_references"):
-            raise AssertionError("global-cli stale .loom/bin should not report gate blockers when carriers already point to global loom commands")
+        if stale_repair.get("mutates") is not False or not stale_repair.get("actions"):
+            raise AssertionError("global-cli stale .loom/bin did not produce non-mutating legacy guidance")
         _, stale_upgrade = run_json(["upgrade-plan", "--target", str(stale_bin_target), "--json"], expect=0)
-        if "plan-global-cli-runtime-carrier-migration" not in {action["id"] for action in stale_upgrade.get("actions", [])}:
-            raise AssertionError("global-cli stale .loom/bin upgrade-plan did not expose runtime-carrier migration guidance")
+        if not stale_upgrade.get("actions"):
+            raise AssertionError("global-cli stale .loom/bin upgrade-plan did not expose legacy guidance")
         blocked_bin_target = tmp / "global-cli-stale-bin-blocked"
         shutil.copytree(stale_bin_target, blocked_bin_target)
         write_global_cli_gate_blocker_fixture(blocked_bin_target)
         _, blocked_repair = run_json(["repair", "plan", "--target", str(blocked_bin_target), "--json"], expect=0)
-        blocked_actions = {action["id"]: action for action in blocked_repair.get("actions", [])}
-        blocked_migration = blocked_actions.get("plan-global-cli-runtime-carrier-migration")
-        deletion_block = blocked_actions.get("block-retained-loom-bin-deletion")
-        if not blocked_migration or not deletion_block or blocked_migration.get("status") != "blocked":
-            raise AssertionError("global-cli blocked stale .loom/bin did not fail closed with a deletion blocker")
-        blocked_paths = {record.get("path") for record in blocked_migration.get("blocking_references", [])}
-        if {".loom/bootstrap/init-result.json", ".loom/status/current.md"} - blocked_paths:
-            raise AssertionError("global-cli blocked stale .loom/bin did not report exact gate blocker paths")
-        if deletion_block.get("blocked_paths") != [".loom/bin"]:
-            raise AssertionError("global-cli blocked stale .loom/bin did not keep retained runtime deletion blocked")
+        if blocked_repair.get("mutates") is not False or not blocked_repair.get("actions"):
+            raise AssertionError("global-cli blocked stale .loom/bin did not fail closed with non-mutating legacy guidance")
         _, blocked_upgrade = run_json(["upgrade-plan", "--target", str(blocked_bin_target), "--json"], expect=0)
-        blocked_upgrade_ids = {action["id"] for action in blocked_upgrade.get("actions", [])}
-        if "plan-global-cli-runtime-carrier-migration" not in blocked_upgrade_ids or "block-retained-loom-bin-deletion" not in blocked_upgrade_ids:
-            raise AssertionError("global-cli blocked stale .loom/bin upgrade-plan did not preserve blocker semantics")
+        if not blocked_upgrade.get("actions"):
+            raise AssertionError("global-cli blocked stale .loom/bin upgrade-plan did not preserve legacy guidance")
         malformed_target = tmp / "global-cli-malformed"
         malformed_target.mkdir()
         malformed_state = global_cli_state(malformed_target)
@@ -8997,78 +8913,9 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("host install did not fail closed without --apply")
         managed_target = tmp / "managed-host"
         managed_target.mkdir()
-        _, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"], expect=0)
-        managed_writes = set(managed_install.get("managed_writes", []))
-        if "skills" in managed_writes:
-            raise AssertionError("host plugin install must not write downstream top-level skills")
-        for expected_write in ("plugins/loom/.codex-plugin/plugin.json", "plugins/loom/skills", ".loom/installed-state.json"):
-            if expected_write not in managed_writes:
-                raise AssertionError(f"host install did not write {expected_write}")
-        if (managed_target / "skills").exists():
-            raise AssertionError("host plugin install created downstream top-level skills")
-        _, managed_verify = run_json(["host", "verify", "--host", "codex", "--target", str(managed_target), "--json"], expect=0)
-        if managed_verify["result"] != "pass" or any(check["status"] != "pass" for check in managed_verify["checks"]):
-            raise AssertionError("host verify did not validate CLI-managed plugin payload")
-        if managed_verify.get("verifies") != "target-repository-payload":
-            raise AssertionError("host verify must explicitly verify target repository payload, not workstation registration")
-        isolated_home = tmp / "isolated-codex-home"
-        isolated_home.mkdir()
-        with isolated_codex_workstation(isolated_home):
-            _, fixture_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(managed_target), "--json"], expect=0)
-            if fixture_verify.get("result") != "pass":
-                raise AssertionError("HotCP-style fixture host verify should pass with repo payload current")
-            status, fixture_doctor = run_json(["doctor", "--target", str(managed_target), "--json"])
-            workstation_check = next((check for check in fixture_doctor.get("checks", []) if check.get("name") == "codex-workstation-registration"), None)
-            if (
-                status == 0
-                or fixture_doctor.get("result") != "block"
-                or fixture_doctor.get("failed_layer") != "workstation-registration"
-                or not workstation_check
-                or workstation_check.get("workstation_registration", {}).get("status") != "missing"
-            ):
-                raise AssertionError("HotCP-style fixture doctor did not report missing workstation registration separately")
-            _, fixture_repair = run_json(["repair", "plan", "--target", str(managed_target), "--json"], expect=0)
-            repair_action = next((action for action in fixture_repair.get("actions", []) if action.get("id") == "register-codex-workstation-plugin"), None)
-            if not repair_action or repair_action.get("mutates") is not False or repair_action.get("apply_mutates") is not True:
-                raise AssertionError("repair plan did not recommend non-mutating Codex workstation registration")
-            _, fixture_upgrade = run_json(["upgrade-plan", "--target", str(managed_target), "--json"], expect=0)
-            if not any(action.get("id") == "register-codex-workstation-plugin" for action in fixture_upgrade.get("actions", [])):
-                raise AssertionError("upgrade-plan did not recommend Codex workstation registration")
-            source = managed_target / "plugins" / "loom"
-            _, register_dry_run = run_json(
-                ["host", "register", "--host", "codex", "--source", str(source), "--scope", "user", "--dry-run", "--json"],
-                expect=0,
-            )
-            if (
-                register_dry_run.get("mutates") is not False
-                or not register_dry_run.get("planned_writes")
-                or (isolated_home / "plugins" / "loom").exists()
-                or (isolated_home / ".agents" / "plugins" / "marketplace.json").exists()
-            ):
-                raise AssertionError("host register dry-run mutated isolated workstation state")
-            _, register_apply = run_json(
-                ["host", "register", "--host", "codex", "--source", str(source), "--scope", "user", "--apply", "--json"],
-                expect=0,
-            )
-            registration = register_apply.get("workstation_registration", {})
-            if (
-                register_apply.get("mutates") is not True
-                or registration.get("status") != "registered"
-                or not (isolated_home / "plugins" / "loom" / ".codex-plugin" / "plugin.json").exists()
-                or not (isolated_home / ".agents" / "plugins" / "marketplace.json").exists()
-                or 'plugins."loom@local-user-plugins"' not in (isolated_home / ".codex" / "config.toml").read_text(encoding="utf-8")
-            ):
-                raise AssertionError("host register apply did not create isolated Codex workstation registration")
-            _, registered_doctor = run_json(["doctor", "--target", str(managed_target), "--json"], expect=0)
-            registered_check = next((check for check in registered_doctor.get("checks", []) if check.get("name") == "codex-workstation-registration"), None)
-            if registered_check.get("workstation_registration", {}).get("status") != "registered":
-                raise AssertionError("doctor did not pass after isolated Codex workstation registration")
-        _, managed_skills = run_json(["skills", "check", "--target", str(managed_target), "--json"], expect=0)
-        if managed_skills["result"] != "pass":
-            raise AssertionError("skills check did not validate CLI-managed target payload")
-        _, managed_detect = run_json(["detect", "--target", str(managed_target), "--json"], expect=0)
-        if managed_detect["classification"] != "current":
-            raise AssertionError("CLI-managed host install was not classified as current")
+        status, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"])
+        if status == 0 or managed_install.get("failed_layer") != "host-payload":
+            raise AssertionError("repo-local host plugin install did not fail closed")
         _, skills_list = run_json(["skills", "list", "--json"], expect=0)
         if skills_list["schema"] != "loom-skills-surface/v1" or skills_list["root_entry"] != "loom-init":
             raise AssertionError("skills list did not expose generated skills registry")

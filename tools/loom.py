@@ -49,6 +49,27 @@ TOOLS_ROOT = REPO_ROOT / "tools"
 VERSION_FILE = REPO_ROOT / "VERSION"
 SKILLS_ROOT = REPO_ROOT / "skills"
 PLUGIN_MANIFEST = REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
+LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
+LOOM_BOOTSTRAP_END = "<!-- LOOM_BOOTSTRAP_END -->"
+LOOM_BOOTSTRAP_BLOCK = f"""{LOOM_BOOTSTRAP_START}
+## Loom Bootstrap
+
+本仓库采用 Loom 来管理 agent 执行流程、工作事实载体、review、merge-ready 和 closeout；开始实现、review、merge-ready 或 closeout 前，先完成以下 bootstrap 检查。
+
+1. 检查 `.loom/installed-state.json`。
+2. 若本机没有 `loom`，执行：
+   `npm install -g @mc-and-his-agents/loom`
+3. 运行：
+   `loom doctor --target . --json`
+4. 若 Codex Loom plugin 缺失，执行：
+   `loom host install --host codex --scope user --apply --json`
+   `loom host register --host codex --scope user --apply --json`
+5. 重新运行：
+   `loom doctor --target . --json`
+
+不要把 Loom runtime、plugin 或 skills payload 写入仓库；它们属于用户级全局安装。
+{LOOM_BOOTSTRAP_END}
+"""
 
 OUTPUT_SCHEMA = "loom-cli-output/v1"
 INSTALLED_STATE_SCHEMA = "loom-installed-state/v2"
@@ -134,7 +155,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "diagnostics",
         "status": "implemented",
         "json": True,
-        "summary": "Diagnose installed-state readiness and runtime provider mode: global-cli without .loom/bin, or repo-local-wrapper with declared .loom/bin carriers.",
+        "summary": "Diagnose metadata-only adoption, global CLI provider, user-level plugin provider, and unsupported legacy residue.",
     },
     {
         "command": "repair plan",
@@ -155,7 +176,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "delivery",
         "status": "implemented",
         "json": True,
-        "summary": "Install explicit repository adoption metadata, embedded payload, compatibility skills surfaces, or declared runtime-provider mode.",
+        "summary": "Install metadata-only repository adoption; does not write runtime, plugin, or skills payload into the repository.",
     },
     {
         "command": "upgrade-plan",
@@ -171,7 +192,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "delivery",
         "status": "implemented",
         "json": True,
-        "summary": "Verify the same readiness boundary as doctor, including global-cli versus repo-local-wrapper runtime provider mode.",
+        "summary": "Verify the same readiness boundary as doctor for metadata-only adoption and global providers.",
     },
     {"command": "init", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "adopt", "domain": "scenario", "status": "implemented", "json": True},
@@ -1375,7 +1396,7 @@ def print_usage(stream) -> None:
         "install, provider, and repair commands:\n"
         "  install, doctor, verify, upgrade-plan, repair plan\n"
         "  global-cli repos use the root loom provider and do not expect .loom/bin\n"
-        "  repo-local-wrapper repos keep declared .loom/bin carriers as valid wrappers\n\n"
+        "  repo-local runtime, plugin, and skills payloads are unsupported legacy surfaces\n\n"
         "scenario and gate commands:\n"
         "  init, adopt, route, status, fact-chain, profile, checkpoint, gate\n"
         "  resume, spec-review, review, merge-ready, check\n"
@@ -1451,141 +1472,66 @@ def installed_state_path(target: Path) -> Path | None:
 
 
 def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> dict[str, Any]:
+    if mode != "metadata-only":
+        raise ValueError("loom install only supports metadata-only adoption")
     versions = version_context()
     layers: list[dict[str, Any]] = []
     graph_layers: list[str] = []
     graph_edges: list[dict[str, str]] = []
-    runtime_provider = RUNTIME_PROVIDER_GLOBAL_CLI if mode == "metadata-only" else RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER
-    if mode == "metadata-only":
-        layers.extend(
-            [
-                {
-                    "id": "adoption-metadata",
-                    "layer_type": "repository-adoption-metadata",
-                    "installed_path": ".loom/installed-state.json",
-                    "version_context": {
-                        "repo_version": versions["repo_version"],
-                        "installed_state_schema": INSTALLED_STATE_SCHEMA,
-                    },
-                    "runtime_state": "ready",
-                    "upgrade_eligibility": "current",
-                    "provides": ["repository adoption truth"],
-                    "consumes": ["user-skills-provider", "global-cli-provider"],
-                },
-                {
-                    "id": "user-skills-provider",
-                    "layer_type": "user-level-skills-provider",
-                    "installed_path": "workstation:codex-loom-plugin",
-                    "version_context": {
-                        "plugin_surface_version": versions["plugin_surface_version"],
-                        "host_adapter_version": versions["host_adapter_version"],
-                    },
-                    "runtime_state": "ready",
-                    "upgrade_eligibility": "current",
-                    "provides": ["Loom scenario skills from user-level Codex plugin"],
-                    "consumes": [],
-                },
-                {
-                    "id": "global-cli-provider",
-                    "layer_type": GLOBAL_CLI_PROVIDER_LAYER,
-                    "installed_path": "workstation:loom-cli",
-                    "version_context": {
-                        "package": "@mc-and-his-agents/loom",
-                        "version_requirement": versions["repo_version"],
-                    },
-                    "runtime_state": "unknown",
-                    "upgrade_eligibility": "unknown",
-                    "provides": ["loom command semantics", "runtime provider"],
-                    "declared_support": {"commands": GLOBAL_CLI_REQUIRED_COMMANDS},
-                    "consumes": [],
-                },
-            ]
-        )
-        graph_layers.extend(["adoption-metadata", "user-skills-provider", "global-cli-provider"])
-        graph_edges.append({"from": "adoption-metadata", "to": "user-skills-provider", "relationship": "requires-external-provider"})
-        graph_edges.append({"from": "adoption-metadata", "to": "global-cli-provider", "relationship": "requires-runtime-provider"})
-    else:
-        layers.append(
+    runtime_provider = RUNTIME_PROVIDER_GLOBAL_CLI
+    layers.extend(
+        [
             {
-                "id": "runtime",
-                "layer_type": "full-repo-runtime",
-                "installed_path": ".loom/bin",
+                "id": "adoption-metadata",
+                "layer_type": "repository-adoption-metadata",
+                "installed_path": ".loom/installed-state.json",
                 "version_context": {
                     "repo_version": versions["repo_version"],
-                    "runtime_core_version": versions["runtime_core_version"],
+                    "installed_state_schema": INSTALLED_STATE_SCHEMA,
                 },
                 "runtime_state": "ready",
                 "upgrade_eligibility": "current",
-                "provides": ["loom runtime wrappers", "CLI-first control-plane entry"],
-                "declared_support": {
-                    "suite_commands": list(IMPLEMENTED_SUITE_COMMANDS),
-                },
-                "consumes": [],
-            }
-        )
-        graph_layers.append("runtime")
-    if mode in {"full-repo", "skill"}:
-        layers.append(
+                "provides": ["repository adoption truth"],
+                "consumes": ["user-skills-provider", "global-cli-provider"],
+            },
             {
-                "id": "skills",
-                "layer_type": "generated-skills",
-                "installed_path": "skills",
-                "version_context": {
-                    "skills_registry_version": versions["skills_registry_version"],
-                    "skill_package_version": versions["skill_package_version"],
-                },
-                "runtime_state": "ready",
-                "upgrade_eligibility": "current",
-                "provides": ["scenario skills"],
-                "consumes": ["runtime"],
-            }
-        )
-        graph_layers.append("skills")
-        graph_edges.append({"from": "skills", "to": "runtime", "relationship": "consumes"})
-    if mode == "plugin":
-        layers.append(
-            {
-                "id": "plugin-embedded-skills",
-                "layer_type": "plugin-embedded-skills",
-                "installed_path": "plugins/loom/skills",
-                "version_context": {
-                    "skills_registry_version": versions["skills_registry_version"],
-                    "skill_package_version": versions["skill_package_version"],
-                },
-                "runtime_state": "ready",
-                "upgrade_eligibility": "current",
-                "provides": ["scenario skills embedded in the Codex plugin payload"],
-                "consumes": ["runtime"],
-            }
-        )
-        graph_layers.append("plugin-embedded-skills")
-        graph_edges.append({"from": "plugin-embedded-skills", "to": "runtime", "relationship": "consumes"})
-    if mode in {"plugin", "skill"}:
-        layer_id = "host-adapter" if mode == "plugin" else "single-skill"
-        consumed_layer = "plugin-embedded-skills" if mode == "plugin" else "runtime"
-        layers.append(
-            {
-                "id": layer_id,
-                "layer_type": "host-adapter-plugin" if mode == "plugin" else "generated-single-skill",
-                "installed_path": "plugins/loom" if mode == "plugin" else f".agents/skills/{skill_id or 'loom-init'}",
+                "id": "user-skills-provider",
+                "layer_type": "user-level-skills-provider",
+                "installed_path": "workstation:codex-loom-plugin",
                 "version_context": {
                     "plugin_surface_version": versions["plugin_surface_version"],
                     "host_adapter_version": versions["host_adapter_version"],
                 },
                 "runtime_state": "ready",
                 "upgrade_eligibility": "current",
-                "provides": [f"{host} {mode} discovery surface"],
-                "consumes": [consumed_layer],
-            }
-        )
-        graph_layers.append(layer_id)
-        graph_edges.append({"from": layer_id, "to": consumed_layer, "relationship": "consumes"})
+                "provides": ["Loom scenario skills from user-level Codex plugin"],
+                "consumes": [],
+            },
+            {
+                "id": "global-cli-provider",
+                "layer_type": GLOBAL_CLI_PROVIDER_LAYER,
+                "installed_path": "workstation:loom-cli",
+                "version_context": {
+                    "package": "@mc-and-his-agents/loom",
+                    "version_requirement": versions["repo_version"],
+                },
+                "runtime_state": "unknown",
+                "upgrade_eligibility": "unknown",
+                "provides": ["loom command semantics", "runtime provider"],
+                "declared_support": {"commands": list(GLOBAL_CLI_REQUIRED_COMMANDS)},
+                "consumes": [],
+            },
+        ]
+    )
+    graph_layers.extend(["adoption-metadata", "user-skills-provider", "global-cli-provider"])
+    graph_edges.append({"from": "adoption-metadata", "to": "user-skills-provider", "relationship": "requires-external-provider"})
+    graph_edges.append({"from": "adoption-metadata", "to": "global-cli-provider", "relationship": "requires-runtime-provider"})
     return {
         "schema_version": INSTALLED_STATE_SCHEMA,
         "installation_id": f"loom-{target.name or 'repo'}",
         "target": str(target),
         "installed_at": now_iso(),
-        "installing_command": f"loom install --mode {mode}",
+        "installing_command": "loom install",
         "upgrade_eligibility": "current",
         "runtime_provider": runtime_provider,
         "provider_requirements": {
@@ -1596,19 +1542,25 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                 "package": "@mc-and-his-agents/loom",
                 "executable": "loom",
                 "version_requirement": versions["repo_version"],
-                "required_commands": GLOBAL_CLI_REQUIRED_COMMANDS,
-                "compatibility_mode_allowed": True,
+                "required_commands": list(GLOBAL_CLI_REQUIRED_COMMANDS),
+                "compatibility_mode_allowed": False,
             }
         },
         "repo_payload": {
-            "mode": "metadata-only" if mode == "metadata-only" else "embedded" if mode == "plugin" else mode,
-            "intentional_absent_paths": ["plugins/loom/skills", ".agents/skills", "skills", ".loom/bin"] if mode == "metadata-only" else [],
+            "mode": "metadata-only",
+            "intentional_absent_paths": [
+                ".loom/bin",
+                "plugins/loom/.codex-plugin/plugin.json",
+                "plugins/loom/skills",
+                ".agents/skills",
+                "skills",
+            ],
         },
         "skills_provider": {
             "provider": "codex-loom-plugin",
-            "scope": "user" if mode == "metadata-only" else "repository",
-            "required": mode in {"metadata-only", "plugin"},
-            "registration_authority": "workstation" if mode == "metadata-only" else "repository-payload",
+            "scope": "user",
+            "required": True,
+            "registration_authority": "workstation",
         },
         "layers": layers,
         "installation_graph": {
@@ -1852,11 +1804,6 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
                 migration = "current"
                 authority = "loom-cli"
                 summary = f"CLI-managed {summary[0].lower()}{summary[1:]}"
-            elif relative == ".loom/bin" and runtime_provider == RUNTIME_PROVIDER_GLOBAL_CLI:
-                kind = "retained-loom-bin"
-                authority = "repo-runtime-carrier"
-                migration = "repairable-residue"
-                summary = "Repo-local runtime wrappers are retained residue while installed-state declares global-cli as the active runtime provider."
             surfaces.append(surface(path, target, kind=kind, layer=layer, authority=authority, migration=migration, summary=summary))
 
     skill_dirs = target / "skills"
@@ -1889,11 +1836,8 @@ def classify_installation(surfaces: list[dict[str, Any]]) -> tuple[str, str]:
         return "uninstalled", "No Loom installation surfaces were detected."
     has_current = any(item["kind"] == "installed-state-v2" for item in surfaces)
     legacy = [item for item in surfaces if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
-    repairable = [item for item in surfaces if item.get("migration_status") == "repairable-residue"]
     authorities = {item.get("authority") for item in surfaces if item.get("authority")}
     if has_current and not legacy:
-        if repairable:
-            return "current-with-repairable-residue", "Versioned installed-state is present with repairable runtime-carrier residue."
         return "current", "Versioned installed-state is present and no legacy surface was detected."
     if has_current and legacy:
         return "mixed", "Versioned installed-state and legacy surfaces are both present."
@@ -2002,25 +1946,14 @@ def doctor_payload(target: Path) -> dict[str, Any]:
             }
         )
     legacy_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
-    repairable_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "repairable-residue"]
-    if repairable_surfaces:
-        checks.append(
-            {
-                "name": "repairable-runtime-residue",
-                "result": "pass",
-                "summary": "Runtime-carrier residue is present but installed-state declares global-cli as the active provider; repair planning may classify or retire it later.",
-                "surfaces": repairable_surfaces,
-                "fallback_to": ["loom repair plan"],
-            }
-        )
     if legacy_surfaces:
         checks.append(
             {
                 "name": "legacy-surfaces",
                 "result": "block",
-                "summary": "Legacy surfaces require an explicit repair plan before upgrade or apply.",
+                "summary": "Unsupported legacy Loom surfaces must be removed or migrated before this repository can pass current install diagnostics.",
                 "surfaces": legacy_surfaces,
-                "fallback_to": ["loom repair plan"],
+                "fallback_to": ["docs/adoption/codex-install.md", "loom install --target <repo> --apply --json"],
             }
         )
     blocking_checks = [check for check in checks if check["result"] != "pass"]
@@ -2488,6 +2421,24 @@ def planned_cli_managed_writes(*, mode: str, skill_id: str | None = None) -> lis
     return writes
 
 
+def ensure_agents_bootstrap(target: Path) -> str:
+    agents_path = target / "AGENTS.md"
+    existing = agents_path.read_text(encoding="utf-8") if agents_path.exists() else ""
+    block = LOOM_BOOTSTRAP_BLOCK.rstrip() + "\n"
+    if LOOM_BOOTSTRAP_START in existing and LOOM_BOOTSTRAP_END in existing:
+        pattern = re.compile(
+            rf"{re.escape(LOOM_BOOTSTRAP_START)}.*?{re.escape(LOOM_BOOTSTRAP_END)}",
+            re.DOTALL,
+        )
+        updated = pattern.sub(block.rstrip(), existing)
+    elif existing.strip():
+        updated = existing.rstrip() + "\n\n" + block
+    else:
+        updated = block
+    agents_path.write_text(updated, encoding="utf-8")
+    return relative_to_target(agents_path, target)
+
+
 def verify_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> tuple[bool, list[dict[str, str]]]:
     checks: list[dict[str, str]] = []
 
@@ -2904,12 +2855,11 @@ def handle_delivery(command: str, argv: list[str]) -> int:
     parser.add_argument("--target", default=".")
     parser.add_argument("--item")
     parser.add_argument("--host", default="codex", choices=("codex", "claude", "opencode", "gemini", "cursor"))
-    parser.add_argument("--mode", default="full-repo", choices=("full-repo", "metadata-only", "plugin", "skill"))
-    parser.add_argument("--skill-id")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    mode = "metadata-only"
     target = resolve_target(args.target)
     if not target.exists():
         return emit(block_target(command, target, "target path does not exist"))
@@ -2924,7 +2874,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
     ]
 
     if command == "install":
-        planned_state = build_installed_state(target, host=args.host, mode=args.mode, skill_id=args.skill_id)
+        planned_state = build_installed_state(target, host=args.host, mode=mode)
         state_path = target / ".loom" / "installed-state.json"
         if not args.apply:
             return emit(
@@ -2935,9 +2885,9 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     summary="Install is mutating and requires --apply before writing installed-state metadata.",
                     target=str(target),
                     host=args.host,
-                    mode=args.mode,
+                    mode=mode,
                     mutates=True,
-                    planned_writes=[relative_to_target(state_path, target), *planned_cli_managed_writes(mode=args.mode, skill_id=args.skill_id)],
+                    planned_writes=[relative_to_target(state_path, target), "AGENTS.md"],
                     detection=detection,
                     failed_layer="install-apply",
                     fail_closed_reason="explicit --apply is required before install writes installed-state",
@@ -2960,7 +2910,8 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 )
             )
         try:
-            managed_writes = install_cli_managed_surfaces(target, host=args.host, mode=args.mode, skill_id=args.skill_id)
+            managed_writes = install_cli_managed_surfaces(target, host=args.host, mode=mode)
+            managed_writes.append(ensure_agents_bootstrap(target))
         except RuntimeError as exc:
             return emit(
                 output(
@@ -2970,7 +2921,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     summary="CLI-managed install payload could not be written.",
                     target=str(target),
                     host=args.host,
-                    mode=args.mode,
+                    mode=mode,
                     failed_layer="cli-managed-install",
                     fail_closed_reason=str(exc),
                     fallback_to=["loom host doctor --host <host> --json", "loom skills check --target <repo> --json"],
@@ -2982,10 +2933,10 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 command,
                 "pass",
                 schema=DELIVERY_SCHEMA,
-                summary="CLI-managed plugin payload and installed-state metadata were written.",
+                summary="Metadata-only adoption metadata and Loom bootstrap instructions were written.",
                 target=str(target),
                 host=args.host,
-                mode=args.mode,
+                mode=mode,
                 mutates=True,
                 managed_writes=[*managed_writes, relative_to_target(state_path, target)],
                 installed_state_path=str(state_path),
@@ -3239,9 +3190,14 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
         layer_type = layer.get("layer_type")
         if isinstance(layer_type, str) and layer_type:
             layer_types.add(layer_type)
+            if layer_type in {"full-repo-runtime", "generated-skills", "plugin-embedded-skills", "host-adapter-plugin", "generated-single-skill"}:
+                errors.append({"path": f"{path}.layer_type", "reason": "repo-local runtime, plugin, and skills layers are unsupported legacy installed-state"})
         installed_path = layer.get("installed_path")
         if isinstance(installed_path, str) and installed_path:
-            layer_paths.add(installed_path.rstrip("/"))
+            normalized_installed_path = installed_path.rstrip("/")
+            layer_paths.add(normalized_installed_path)
+            if normalized_installed_path in {".loom/bin", "skills", "plugins/loom", "plugins/loom/skills"} or normalized_installed_path.startswith(".agents/skills"):
+                errors.append({"path": f"{path}.installed_path", "reason": "repo-local runtime, plugin, and skills paths are unsupported legacy installed-state"})
         if layer.get("runtime_state") not in {"ready", "blocked", "unknown"}:
             errors.append({"path": f"{path}.runtime_state", "reason": "must be ready, blocked, or unknown"})
         if layer.get("upgrade_eligibility") not in {"current", "upgrade-available", "drift", "incompatible", "unknown"}:
@@ -3278,8 +3234,8 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
     else:
         errors.append({"path": "installation_graph", "reason": "must be an object"})
     runtime_provider = state.get("runtime_provider")
-    if runtime_provider is not None and runtime_provider not in {RUNTIME_PROVIDER_GLOBAL_CLI, RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER}:
-        errors.append({"path": "runtime_provider", "reason": "unsupported runtime provider"})
+    if runtime_provider != RUNTIME_PROVIDER_GLOBAL_CLI:
+        errors.append({"path": "runtime_provider", "reason": "runtime provider must be global-cli"})
     inferred_runtime_provider = installed_state_runtime_provider(state)
     requires_global_cli = runtime_provider == RUNTIME_PROVIDER_GLOBAL_CLI or GLOBAL_CLI_PROVIDER_LAYER in layer_types
     global_cli_requirement = global_cli_provider_requirement(state)
@@ -3297,6 +3253,8 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
             for key, expected in expected_scalars.items():
                 if global_cli_requirement.get(key) != expected:
                     errors.append({"path": f"provider_requirements.global_cli.{key}", "reason": f"must be {expected!r}"})
+            if global_cli_requirement.get("compatibility_mode_allowed") is not False:
+                errors.append({"path": "provider_requirements.global_cli.compatibility_mode_allowed", "reason": "must be False"})
             version_requirement = global_cli_requirement.get("version_requirement")
             if not isinstance(version_requirement, str) or not version_requirement.strip():
                 errors.append({"path": "provider_requirements.global_cli.version_requirement", "reason": "must be a non-empty string"})
@@ -3313,11 +3271,11 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
     repo_payload = state.get("repo_payload")
     if isinstance(repo_payload, dict):
         mode = repo_payload.get("mode")
-        if mode not in {"metadata-only", "embedded", "full-repo", "skill"}:
-            errors.append({"path": "repo_payload.mode", "reason": "unsupported repo payload mode"})
+        if mode != "metadata-only":
+            errors.append({"path": "repo_payload.mode", "reason": "repo payload mode must be metadata-only"})
         if mode == "metadata-only":
-            if "plugins/loom/skills" in layer_paths or "plugin-embedded-skills" in layer_types:
-                errors.append({"path": "repo_payload.mode", "reason": "metadata-only mode must not declare embedded plugin skills payload"})
+            if ".loom/bin" in layer_paths or "plugins/loom/skills" in layer_paths or "plugin-embedded-skills" in layer_types:
+                errors.append({"path": "repo_payload.mode", "reason": "metadata-only mode must not declare repo-local runtime or embedded plugin skills payload"})
             provider = state.get("skills_provider")
             if not isinstance(provider, dict):
                 errors.append({"path": "skills_provider", "reason": "metadata-only mode must declare a skills provider"})
@@ -3326,8 +3284,8 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
                     errors.append({"path": "skills_provider.scope", "reason": "metadata-only mode requires user scoped skills provider"})
                 if provider.get("registration_authority") != "workstation":
                     errors.append({"path": "skills_provider.registration_authority", "reason": "metadata-only provider registration authority must be workstation"})
-        if mode == "embedded" and "plugins/loom/skills" not in layer_paths:
-            errors.append({"path": "repo_payload.mode", "reason": "embedded mode must declare plugins/loom/skills payload"})
+    else:
+        errors.append({"path": "repo_payload", "reason": "metadata-only repo payload declaration is required"})
     return errors
 
 
@@ -4293,6 +4251,26 @@ def handle_host(argv: list[str]) -> int:
     if args.mode == "skill" and not args.skill_id:
         return emit(output(command, "block", schema=HOST_SCHEMA, summary="Skill mode requires --skill-id.", failed_layer="host-input", fail_closed_reason="missing --skill-id", fallback_to=["loom skills list --json"]))
     if args.action in {"install", "upgrade"}:
+        if args.mode != "metadata-only":
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=HOST_SCHEMA,
+                    summary="Repo-local host payload install is unsupported; use user-level Codex plugin install/register.",
+                    target=str(target),
+                    host=host,
+                    mode=args.mode,
+                    mutates=True,
+                    failed_layer="host-payload",
+                    fail_closed_reason="repo-local runtime, plugin, and skills payload install is no longer supported",
+                    fallback_to=[
+                        "loom host install --host codex --scope user --apply --json",
+                        "loom host register --host codex --scope user --apply --json",
+                        "loom install --target <repo> --apply --json",
+                    ],
+                )
+            )
         try:
             managed_writes = install_cli_managed_surfaces(target, host=host, mode=args.mode, skill_id=args.skill_id)
         except RuntimeError as exc:
