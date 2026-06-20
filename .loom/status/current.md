@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1487
-- Goal: 补充交接状态摘要与线程轮换规则，让上下文预算紧张或工具输出污染后的工作能干净迁移到新线程。
-- Scope: 更新 recovery model 与 handoff output contract，定义最小交接包、summary/artifact locator 关系、新线程读取边界；不实现调度系统，不更新技能命令示例，不恢复 repo-local plugin/runtime/skills 路径。
-- Execution Path: issue #1487 -> branch work/1487-thread-handoff-rules -> docs/contract update -> PR gate -> merge -> issue closeout。
+- Item ID: WI-1495
+- Goal: 补齐 retained closeout Work Item 解析歧义的 canonical fixture 与下游采用说明，确保 closeout resolver 绑定宿主仓库事实载体而不是 repo-local runtime 形态。
+- Scope: #1495 canonical resolver fixture and #1496 downstream metadata-only adoption docs only; do not add repo-local runtime/plugin/skills installation paths.
+- Execution Path: issues #1495/#1496 -> branch work/1495-1496-retained-closeout-fixtures-docs -> PR #1663 -> hosted gate -> closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1487.md
-- Review Entry: .loom/reviews/WI-1487.json
-- Validation Entry: git diff --check; python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py; python3 tools/loom.py suite validate --target . --item WI-1487 --json
-- Closing Condition: Issue #1487 closes after PR merge and closeout evidence confirms thread rotation rules are documented without adding a scheduler or repo-local runtime path.
+- Recovery Entry: .loom/progress/WI-1495.md
+- Review Entry: .loom/reviews/WI-1495.json
+- Validation Entry: test/retained_item_lookup_test.py; test/work_item_audit_test.py; tools/check_cli_contract.py --surface governance-closeout; tools/skills_surface.py check --surface generated-tree-drift
+- Closing Condition: Issues #1495/#1496 close after PR #1663 merges and closeout confirms canonical retained-item binding plus metadata-only downstream guidance.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Thread rotation and handoff package contract changes are validated locally on branch work/1487-thread-handoff-rules, with minimal suite carriers added for PR gate consumption.
-- Next Step: Refresh review binding, update PR metadata to the minimal suite path, rerun local PR gate, and proceed through hosted PR gate.
-- Blockers: None
-- Latest Validation Summary: 2026-06-20 WI-1487 docs/contract validation passed after minimal suite carrier addition: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/loom.py suite validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1487 --json`.
-- Recovery Boundary: WI-1487 only. Do not implement a scheduler, update command examples owned by #1486, or restore repo-local plugin/runtime/skills paths.
-- Current Lane: milestone-11-thread-handoff-rules
+- Current Stop: Retained closeout resolver fixture, downstream metadata-only guidance, minimal suite carriers, and PR metadata are prepared for PR #1663.
+- Next Step: Record current-head review, rerun local PR gate, update PR body head binding, then consume hosted checks.
+- Blockers: None recorded.
+- Latest Validation Summary: 2026-06-20 WI-1495 validation passed on current PR head at review time: PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py tools/check_cli_contract.py test/retained_item_lookup_test.py; git diff --check.
+- Recovery Boundary: WI-1495/WI-1496 only. Do not add repo-local runtime/plugin/skills installation paths, single-skill package distribution, or legacy installer compatibility.
+- Current Lane: milestone-11-retained-closeout-fixtures-docs
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1487.md
-- Dynamic Truth: .loom/progress/WI-1487.md
+- Static Truth: .loom/work-items/WI-1495.md
+- Dynamic Truth: .loom/progress/WI-1495.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
