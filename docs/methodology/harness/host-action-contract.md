@@ -68,8 +68,8 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | controlled merge | `python3 tools/loom_flow.py controlled-merge check\|merge --target <repo> --pr <n> [--pr-gate-result-file <path>] [--merge-gate-result-file <path>]` | `merge` 会写宿主 | 先消费 live 或 retained PR merge gate、merge-ready 与 required checks，再委托 `gh pr merge` |
 | drift audit | `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 只读 issue / PR / project 控制面并输出 drift findings |
 | control-plane sync | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run\|--apply]` | `--apply` 会写宿主 | 默认 dry-run；只执行 safe sync plan 中有 proof 的机械动作 |
-| closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--gate-profile <profile>]` | 否 | 默认用 `closeout-contract` 校验 retained evidence backlink、main、issue、PR、project 与仓内结果是否一致；显式 profile 才执行 heavy local gate |
-| closeout sync | `python3 tools/loom_flow.py closeout sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 是，仅 host control-plane | 在可同步条件下继续做 closeout 控制面对齐；不写版本化 carrier |
+| closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>] [--gate-profile <profile>]` | 否 | 默认用 `closeout-contract` 校验 retained evidence backlink、main、issue、PR、project 与仓内结果是否一致；显式 profile 才执行 heavy local gate |
+| closeout sync | `python3 tools/loom_flow.py closeout sync --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>]` | 是，仅 host control-plane | 在可同步条件下继续做 closeout 控制面对齐；不写版本化 carrier |
 | carrier closeout sync | `python3 tools/loom_flow.py carrier closeout-sync --target <repo> --item <id> [--apply] ...` | 是，仅 repo carrier | 显式写结构化 terminal metadata 到 `.loom/progress/<item>.md`；不写 GitHub、Project、PR、issue 或 worktree |
 
 以下内容继续明确排除在 Loom 宿主动作面之外：

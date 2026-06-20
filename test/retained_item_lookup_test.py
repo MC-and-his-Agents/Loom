@@ -185,6 +185,30 @@ class RetainedItemLookupTest(unittest.TestCase):
             self.assertEqual(lookup["work_item_relative"], ".loom/work-items/WI-1544.md")
             self.assertEqual(lookup["missing_inputs"], [])
 
+    def test_canonical_wi_keeps_weak_text_matches_as_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            write_work_item(root, "WI-1495")
+            write_work_item(root, "WI-1493", issue=1495)
+            write_work_item(root, "WI-1496", issue=1495)
+
+            lookup = loom_flow.closeout_expected_item_lookup(root, 1495)
+
+            self.assertEqual(lookup["item_id"], "WI-1495")
+            self.assertEqual(lookup["work_item_relative"], ".loom/work-items/WI-1495.md")
+            self.assertEqual(lookup["missing_inputs"], [])
+            diagnostics = {
+                entry["item_id"]: entry
+                for entry in lookup["diagnostics"]
+                if isinstance(entry, dict) and "item_id" in entry
+            }
+            self.assertEqual(diagnostics["WI-1495"]["priority"], 1)
+            self.assertIn("canonical WI issue-number carrier path", diagnostics["WI-1495"]["reasons"])
+            self.assertEqual(diagnostics["WI-1493"]["priority"], 0)
+            self.assertEqual(diagnostics["WI-1496"]["priority"], 0)
+            self.assertIn("work item title/body metadata references issue", diagnostics["WI-1493"]["reasons"])
+            self.assertIn("recovery entry evidence references issue", diagnostics["WI-1496"]["reasons"])
+
     def test_ambiguous_retained_issue_matches_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

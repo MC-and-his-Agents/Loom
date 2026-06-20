@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1495",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1495 minimal suite at head 1ea54be2: retained closeout canonical resolver fixture, governance closeout auto lookup fixture, generated mirror synchronization, implementation contract, and metadata-only downstream adoption guidance remain covered after PR #1662 main sync without repo-local runtime paths; WI-1483 post-merge closeout carrier is terminal evidence only.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T15:57:20Z",
+  "reviewed_head": "1ea54be2ea9a6939023ed41c5ca3a9dd17e2666c",
+  "reviewed_validation_summary": "2026-06-20 WI-1495 post-main-sync validation passed on the current PR #1663 head after consuming PR #1662 from main: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1495 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1495 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1495 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py tools/check_cli_contract.py test/retained_item_lookup_test.py test/output_envelope_test.py.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1495.md",
+    "recovery_entry": ".loom/progress/WI-1495.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": net/http: TLS handshake timeout",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1495/spec.md",
+    "suite_plan": ".loom/specs/WI-1495/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1495/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1495/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

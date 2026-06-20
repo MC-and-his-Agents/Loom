@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1483
-- Goal: 让事实链、状态检查与影子一致性命令默认输出 agent-safe summary，并保留显式完整输出路径。
-- Scope: 改造全局 loom CLI 的 fact-chain/status/shadow-parity 输出面；不改变判定逻辑，不改流程门禁命令。
-- Execution Path: issue #1483 -> branch work/1483-fact-shadow-summary-output -> PR #1662 -> hosted gate -> closeout
+- Item ID: WI-1495
+- Goal: 补齐 retained closeout Work Item 解析歧义的 canonical fixture 与下游采用说明，确保 closeout resolver 绑定宿主仓库事实载体而不是 repo-local runtime 形态。
+- Scope: #1495 canonical resolver fixture and #1496 downstream metadata-only adoption docs only; do not add repo-local runtime/plugin/skills installation paths.
+- Execution Path: issues #1495/#1496 -> branch work/1495-1496-retained-closeout-fixtures-docs -> PR #1663 -> hosted gate -> closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1483.md
-- Review Entry: .loom/reviews/WI-1483.json
-- Validation Entry: test/output_envelope_test.py; tools/check_cli_contract.py; real stdout budget probes
-- Closing Condition: Issue #1483 closes after PR #1662 merges and closeout confirms default stdout under 16 KiB with full-output/artifact access preserved.
+- Recovery Entry: .loom/progress/WI-1495.md
+- Review Entry: .loom/reviews/WI-1495.json
+- Validation Entry: test/retained_item_lookup_test.py; test/work_item_audit_test.py; tools/check_cli_contract.py --surface governance-closeout; tools/skills_surface.py check --surface generated-tree-drift
+- Closing Condition: Issues #1495/#1496 close after PR #1663 merges and closeout confirms canonical retained-item binding plus metadata-only downstream guidance.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Agent-safe output implementation, minimal suite carriers, and PR metadata are prepared for PR #1662.
-- Next Step: Refresh carrier/shadow inputs, record current-head review, rerun local PR gate, then consume hosted checks.
+- Current Stop: PR #1663 has consumed PR #1662 from main, resolved shared carrier conflicts, refreshed PR metadata to the current head, and is ready for current-head gate readback.
+- Next Step: Rerun local PR gate, consume hosted checks on the current head, then controlled-merge PR #1663 if host mergeability is clean.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-20 WI-1483 validation passed on current PR head at review time: PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py; python3 tools/loom.py suite validate --target . --item WI-1483 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1483 --json; python3 tools/loom.py fact-chain --target . --json --full-output; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; git diff --check.
-- Recovery Boundary: WI-1483 only. Do not implement #1484 flow gate summaries, #1485 unified default rollout, #1486 plugin text migration, or repo-local runtime compatibility.
-- Current Lane: milestone-11-fact-status-shadow-output
+- Latest Validation Summary: 2026-06-20 WI-1495 post-main-sync validation passed on the current PR #1663 head after consuming PR #1662 from main: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1495 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1495 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1495 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py tools/check_cli_contract.py test/retained_item_lookup_test.py test/output_envelope_test.py.
+- Recovery Boundary: WI-1495/WI-1496 only. Do not add repo-local runtime/plugin/skills installation paths, single-skill package distribution, or legacy installer compatibility.
+- Current Lane: milestone-11-retained-closeout-fixtures-docs
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-20 WI-1483 agent-safe fact/status/shadow output lane
+- Run Entry: 2026-06-20 WI-1495 retained closeout fixture/docs lane, resynced after PR #1662 merged to main.
 - Logs Entry: local command output retained in current Codex milestone/11 thread.
-- Diagnostics Entry: current branch updates global CLI output envelope behavior and PR gate carriers for #1483 only.
-- Verification Entry: `PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `python3 tools/loom.py fact-chain --target . --json --full-output`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/loom.py suite validate --target . --item WI-1483 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1483 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1483 --json`; `git diff --check`.
-- Lane Entry: milestone-11-fact-status-shadow-output
+- Diagnostics Entry: current branch owns #1495 canonical retained Work Item lookup fixture and #1496 metadata-only downstream guidance; #1662 output-envelope implementation is consumed from main.
+- Verification Entry: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1495 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1495 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1495 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom_flow.py tools/loom.py tools/check_cli_contract.py test/retained_item_lookup_test.py test/output_envelope_test.py`.
+- Lane Entry: milestone-11-retained-closeout-fixtures-docs
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1483.md
-- Dynamic Truth: .loom/progress/WI-1483.md
+- Static Truth: .loom/work-items/WI-1495.md
+- Dynamic Truth: .loom/progress/WI-1495.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

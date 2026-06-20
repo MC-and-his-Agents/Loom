@@ -5862,6 +5862,18 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     ):
         raise AssertionError("governance chain closeout pass fixture did not consume PR, issue, Project, target branch, merge commit, review, and merge-ready evidence together")
 
+    auto_lookup_command = command.copy()
+    item_index = auto_lookup_command.index("--item")
+    del auto_lookup_command[item_index : item_index + 2]
+    _, auto_lookup_payload = run_flow_json(auto_lookup_command, expect=0)
+    auto_lookup_missing = auto_lookup_payload.get("missing_inputs", [])
+    if (
+        auto_lookup_payload.get("result") != "pass"
+        or not isinstance(auto_lookup_missing, list)
+        or any(isinstance(entry, str) and entry.startswith("retained-item lookup:") for entry in auto_lookup_missing)
+    ):
+        raise AssertionError("closeout --issue did not auto-resolve the canonical retained Work Item")
+
     _, reconciliation_payload = run_flow_json(
         [
             "reconciliation",
@@ -6788,6 +6800,9 @@ def assert_closeout_mode_docs_skill_protocol_contract() -> None:
         "`escalation_required`",
         "`blocking_inputs`",
         "`next_action`",
+        "## 2.3 Closeout Retained Work Item Binding",
+        "canonical Work Item identity",
+        "Weak text references",
     ]
     for snippet in required_gate_snippets:
         if snippet not in closeout_gate:
