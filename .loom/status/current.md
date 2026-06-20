@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1629.json
 - Validation Entry: python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/check_cli_contract.py; python3 tools/host_adapter_check.py; python3 tools/check_npm_package.py; python3 tools/check_release_surface.py; node --test test/npm-package-smoke.test.mjs; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; git diff --check
 - Closing Condition: PR3 merges into main, issue #1629 closes against the merged PR, and closeout check consumes PR/head/check evidence without starting PR4.
-- Current Checkpoint: build checkpoint
-- Current Stop: PR3 implementation is complete locally: host install/register now defaults to the global Loom package Codex plugin payload and writes only user-level Codex state; contract tests were updated.
-- Next Step: Commit, push, open PR for #1629, update PR metadata, then run review/merge-ready/hosted gate before merge and issue closeout.
+- Current Checkpoint: merge checkpoint
+- Current Stop: PR3 implementation, suite not_applicable marker, evidence-map, task-carrier, review record, PR metadata readback, and validation evidence are ready for hosted merge gate consumption.
+- Next Step: Wait for hosted checks, run PR3 merge-ready, then merge PR #1651 and close issue #1629 without starting PR4.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-20 local PR3 validation passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; git diff --check; python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/check_cli_contract.py --surface governance-closeout; full python3 tools/check_cli_contract.py; python3 tools/host_adapter_check.py; python3 tools/check_npm_package.py; python3 tools/check_release_surface.py; node --test test/npm-package-smoke.test.mjs; python3 tools/loom.py suite evidence validate --target . --item WI-1629 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1629 --json; temporary HOME smoke tests for host install/register confirmed no target repo writes.
 - Recovery Boundary: PR3 only: issue #1629. Do not implement PR4 CLI command deletion, PR5 package/gate/migration convergence, or v0.17.0 release execution in this lane.
