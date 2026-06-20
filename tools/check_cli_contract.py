@@ -8857,18 +8857,36 @@ def run_aggregate_cli_contract() -> None:
         declared_state = valid_state(declared_target)
         declared_state["declared_support"] = {"suite_commands": ["suite inspect", "suite validate", "suite evidence validate", "suite carrier validate"]}
         write_state(declared_target, declared_state)
-        _, declared_doctor = run_json(["doctor", "--target", str(declared_target), "--json"], expect=0)
-        declared_suite_check = next((check for check in declared_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
-        if (
-            declared_doctor.get("result") != "pass"
-            or not declared_suite_check
-            or declared_suite_check.get("declared_support") is not True
-            or declared_suite_check.get("schema_errors")
-        ):
-            raise AssertionError("doctor did not pass declared suite command support")
-        _, declared_verify = run_json(["verify", "--target", str(declared_target), "--json"], expect=0)
-        if declared_verify.get("suite_validation_requirement", {}).get("required") is not False or declared_verify.get("suite_validation") is not None:
-            raise AssertionError("declared suite support alone must not make verify run suite validation")
+        declared_home = tmp / "declared-suite-codex-home"
+        declared_home.mkdir()
+        with isolated_codex_workstation(declared_home):
+            run_json(
+                [
+                    "host",
+                    "register",
+                    "--host",
+                    "codex",
+                    "--source",
+                    str(REPO_ROOT / "plugins" / "loom"),
+                    "--scope",
+                    "user",
+                    "--apply",
+                    "--json",
+                ],
+                expect=0,
+            )
+            _, declared_doctor = run_json(["doctor", "--target", str(declared_target), "--json"], expect=0)
+            declared_suite_check = next((check for check in declared_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
+            if (
+                declared_doctor.get("result") != "pass"
+                or not declared_suite_check
+                or declared_suite_check.get("declared_support") is not True
+                or declared_suite_check.get("schema_errors")
+            ):
+                raise AssertionError("doctor did not pass declared suite command support")
+            _, declared_verify = run_json(["verify", "--target", str(declared_target), "--json"], expect=0)
+            if declared_verify.get("suite_validation_requirement", {}).get("required") is not False or declared_verify.get("suite_validation") is not None:
+                raise AssertionError("declared suite support alone must not make verify run suite validation")
         required_target = tmp / "verify-suite-required"
         required_target.mkdir()
         required_state = valid_state(required_target)
