@@ -153,7 +153,7 @@ not make suite validation universally blocking.
 {"from": "skills", "to": "runtime", "relationship": "consumes"}
 ```
 
-The graph exists so `loom upgrade-plan`, `loom repair plan`, host adapters, skills sync, and installer shims can reason about layer ordering without reading unrelated governance files.
+The graph exists so `loom upgrade-plan`, `loom repair plan`, host adapters, source plugin payload generation, and installer shims can reason about layer ordering without reading unrelated governance files.
 Every edge endpoint must reference a known layer id. Unknown edge endpoints fail closed because repair and upgrade ordering would otherwise be ambiguous.
 
 ## Codex Metadata-Only Mode

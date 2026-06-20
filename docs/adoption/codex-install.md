@@ -35,9 +35,9 @@ user-level Codex Loom plugin provider. It must not write `plugins/loom/skills/`,
 `skills/`:
 
    ```bash
-   loom install --target . --mode metadata-only --apply --json
+   loom install --target . --apply --json
    loom installed-state validate --target . --json
-   loom host verify --host codex --mode metadata-only --target . --json
+   loom host verify --host codex --target . --json
    loom skills check --target . --json
    loom doctor --target . --json
    ```
@@ -45,12 +45,12 @@ user-level Codex Loom plugin provider. It must not write `plugins/loom/skills/`,
 4. Verify the target repository mode:
 
    ```bash
-   loom host verify --host codex --mode metadata-only --target . --json
+   loom host verify --host codex --target . --json
    loom skills check --target . --json
    loom doctor --target . --json
    ```
 
-`loom host verify --host codex --mode metadata-only` verifies repository
+`loom host verify --host codex` verifies repository
 adoption metadata and reports the user-level provider requirement separately.
 It does not require downstream top-level `skills/`, and it does not prove Codex
 Desktop has registered, enabled, or loaded the plugin on the current
@@ -60,8 +60,8 @@ If the repository still carries `.loom/bin`, `.loom/bootstrap`, `plugins/loom/`,
 `.agents/skills`, or Loom-owned root `skills/`, treat those paths as unsupported
 legacy residue until `doctor` classifies them.
 
-<!-- legacy-installer-doc-sync-anchor: loom host install --host codex --mode plugin --target . --apply --json -->
-<!-- legacy-installer-doc-sync-anchor: loom host verify --host codex --mode plugin --target . --json -->
+<!-- legacy-installer-doc-sync-anchor: loom host install --host codex --scope user --apply --json -->
+<!-- legacy-installer-doc-sync-anchor: loom host verify --host codex --target . --json -->
 <!-- legacy-installer-doc-sync-anchor: CLI-managed payloads -->
 
 The legacy installer doc-sync anchor above is retained only for checker
@@ -96,7 +96,7 @@ repository adoption. Target repository `.loom` carrier visibility is defined in
 npm update -g @mc-and-his-agents/loom
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
-loom host verify --host codex --mode metadata-only --target . --json
+loom host verify --host codex --target . --json
 ```
 
 ## Compatibility

@@ -11,9 +11,10 @@ The target install shape is:
 
 ```text
 npm install -g @mc-and-his-agents/loom
-loom install <host>
-loom skills sync
-loom doctor
+loom host install --host codex --scope user --apply
+loom host register --host codex --scope user --apply
+loom install --target . --apply
+loom doctor --target .
 loom upgrade
 ```
 

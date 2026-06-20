@@ -132,7 +132,6 @@ REQUIRED_COMMANDS = {
     "reconcile",
     "skills list",
     "skills generate",
-    "skills sync",
     "skills check",
     "skills doctor",
     "skills package",
@@ -2072,7 +2071,7 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     agents_text = (target / "AGENTS.md").read_text(encoding="utf-8")
     if "<!-- LOOM_BOOTSTRAP_START -->" not in agents_text or "loom host install --host codex --scope user --apply --json" not in agents_text:
         raise AssertionError("metadata-only install did not write Loom bootstrap block to AGENTS.md")
-    for unexpected in ("plugins/loom/skills", ".agents/skills", "skills"):
+    for unexpected in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
         if (target / unexpected).exists():
             raise AssertionError(f"metadata-only install created {unexpected}")
 
@@ -2092,13 +2091,13 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     if validate.get("runtime_state") != "ready":
         raise AssertionError("metadata-only installed-state validate did not pass")
 
-    _, host_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"], expect=0)
+    _, host_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"], expect=0)
     if host_verify.get("verifies") != "repository-adoption-metadata":
         raise AssertionError("metadata-only host verify did not verify repository adoption metadata")
     host_paths = {check["path"]: check["status"] for check in host_verify.get("checks", [])}
     if host_paths.get(".loom/installed-state.json") != "pass":
         raise AssertionError("metadata-only host verify did not check installed-state")
-    for absent in ("plugins/loom/skills", ".agents/skills", "skills"):
+    for absent in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
         if host_paths.get(absent) != "pass":
             raise AssertionError(f"metadata-only host verify did not treat absent {absent} as intentional")
 
@@ -2114,7 +2113,7 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
 
     plugin_payload = target / "plugins" / "loom" / "skills"
     plugin_payload.mkdir(parents=True)
-    status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"])
+    status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"])
     if status == 0 or polluted_verify.get("result") != "block":
         raise AssertionError("metadata-only host verify did not block unexpected embedded skills payload")
     old_mode = subprocess.run(
@@ -2128,6 +2127,38 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     )
     if old_mode.returncode == 0:
         raise AssertionError("loom install still accepted legacy --mode plugin")
+    host_help = subprocess.run(
+        [sys.executable, str(LOOM), "host", "--help"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    host_help_text = host_help.stdout + host_help.stderr
+    if host_help.returncode != 0 or "--mode" in host_help_text or "--skill-id" in host_help_text:
+        raise AssertionError("loom host help still exposes legacy install mode or single-skill arguments")
+    skills_help = subprocess.run(
+        [sys.executable, str(LOOM), "skills", "--help"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    skills_help_text = skills_help.stdout + skills_help.stderr
+    if skills_help.returncode != 0 or "sync" in skills_help_text:
+        raise AssertionError("loom skills help still exposes downstream skills sync")
+    downstream_generate_target = tmp / "downstream-skills-generate"
+    downstream_generate_target.mkdir()
+    status, downstream_generate = run_json(["skills", "generate", "--target", str(downstream_generate_target), "--apply", "--json"])
+    if status == 0 or downstream_generate.get("failed_layer") != "skills-surface":
+        raise AssertionError("skills generate still allowed downstream repository skills payload writes")
+    for unexpected in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
+        if (downstream_generate_target / unexpected).exists():
+            raise AssertionError(f"downstream skills generate wrote unsupported repository payload: {unexpected}")
     help_result = subprocess.run(
         [sys.executable, str(LOOM), "--help"],
         cwd=REPO_ROOT,
@@ -8948,8 +8979,8 @@ def run_aggregate_cli_contract() -> None:
         if hosts["schema"] != "loom-host-orchestration/v1" or not any(host["id"] == "codex" for host in hosts["hosts"]):
             raise AssertionError("host list did not emit supported host adapter inventory")
         _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--target", str(valid_target), "--json"], expect=0)
-        if host_doctor["host"] != "codex" or host_doctor["mode"] != "plugin":
-            raise AssertionError("host doctor did not freeze host/mode output")
+        if host_doctor["host"] != "codex" or host_doctor.get("scope") != "user" or host_doctor.get("provider") != "codex-user-plugin":
+            raise AssertionError("host doctor did not freeze codex user-level provider output")
         status, host_install = run_json(["host", "install", "--host", "codex", "--target", str(valid_target), "--json"])
         if status == 0 or host_install["result"] != "block" or host_install["failed_layer"] != "host-install":
             raise AssertionError("host install did not fail closed without --apply")

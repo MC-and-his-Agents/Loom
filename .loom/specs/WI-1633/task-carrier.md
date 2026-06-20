@@ -1,0 +1,6 @@
+# WI-1633 Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1633 | 删除 repo-local plugin、skills 与 runtime 写入路径。 | in_progress | primary | .loom/work-items/WI-1633.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/evidence-map.md | PR4 branch work/1633-1639-cli-surface-cleanup | Recheck issue state, PR metadata, review record, hosted checks, and closeout after head changes. |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1639 | 清理 CLI command matrix、安装参数与 single-skill 命令面。 | in_progress | mirror | .loom/work-items/WI-1633.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/evidence-map.md | PR4 branch work/1633-1639-cli-surface-cleanup | Recheck issue state, PR metadata, review record, hosted checks, and closeout after head changes. |
