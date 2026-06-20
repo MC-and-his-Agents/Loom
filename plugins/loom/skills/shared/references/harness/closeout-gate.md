@@ -23,8 +23,8 @@ host/git/carrier readback performed by this file.
 ## 2. 稳定入口
 
 - `python3 skills/shared/scripts/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
-- `python3 skills/shared/scripts/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
-- `python3 skills/shared/scripts/loom_flow.py closeout sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
+- `python3 skills/shared/scripts/loom_flow.py closeout check --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>]`
+- `python3 skills/shared/scripts/loom_flow.py closeout sync --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>]`
 - `python3 skills/shared/scripts/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]`
 
 ## 2.1 Closeout Mode Protocol
@@ -81,6 +81,24 @@ operator can see exactly which role is being consumed. This classifier only
 chooses the host PR readback subject; release/no-release requiredness,
 target-release gaps, reconciliation findings, review freshness, and carrier
 sync eligibility continue to be decided by their existing closeout inputs.
+
+## 2.3 Closeout Retained Work Item Binding
+
+`closeout check` and `closeout sync` bind retained Work Items in this order:
+
+1. Explicit `--item <id>` is the strongest selector, but it must still match
+   the requested `--issue` when an issue is supplied.
+2. Automatic `--issue <n>` lookup prefers canonical Work Item identity from
+   `.loom/work-items/WI-<n>.md` and `Item ID: WI-<n>`.
+3. Exact issue locators in Work Item associated artifacts are treated as
+   explicit adoption metadata.
+4. Weak text references in goal, scope, execution path, closing condition, or
+   recovery evidence stay visible as diagnostics. They do not block when a
+   single canonical Work Item identity is present.
+
+Ambiguity remains blocking only when multiple strong canonical candidates exist
+or an explicit `--item` conflicts with the retained issue binding. Repo-local
+runtime, plugin, or installed skill paths are not canonical Work Item identity.
 
 ## 3. `check` 最小检查面
 

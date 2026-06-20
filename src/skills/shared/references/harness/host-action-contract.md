@@ -62,12 +62,15 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | 类别 | 稳定入口 | 宿主写入 | 说明 |
 | --- | --- | --- | --- |
 | boundary read | `python3 tools/loom_flow.py host-lifecycle --target <repo> [--item <id>]` | 否 | 读取 workspace / branch / PR / git worktree 的 ownership boundary |
+| PR merge gate | `python3 tools/loom_flow.py pr-gate check --target <repo> --pr <n>` | 否 | 证明当前 PR head 已有 fresh authored review approval |
 | merge control read | `python3 tools/loom_flow.py checkpoint merge --target <repo> [--item <id>]` | 否 | 读取 Loom 对 required checks / validation / review / risk rollback 的放行结论 |
 | merge control summary | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | 否 | 汇总进入 host merge 前的统一放行摘要 |
+| controlled merge | `python3 tools/loom_flow.py controlled-merge check\|merge --target <repo> --pr <n> [--pr-gate-result-file <path>] [--merge-gate-result-file <path>]` | `merge` 会写宿主 | 先消费 live 或 retained PR merge gate、merge-ready 与 required checks，再委托 `gh pr merge` |
 | drift audit | `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 只读 issue / PR / project 控制面并输出 drift findings |
-| control-plane sync | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]` | 是 | 只修机械可证明的 reconciliation drift |
-| closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--gate-profile <profile>]` | 否 | 默认用 `closeout-contract` 校验 retained evidence backlink、main、issue、PR、project 与仓内结果是否一致；显式 profile 才执行 heavy local gate |
-| closeout sync | `python3 tools/loom_flow.py closeout sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 是 | 在可同步条件下继续做 closeout 控制面对齐 |
+| control-plane sync | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run\|--apply]` | `--apply` 会写宿主 | 默认 dry-run；只执行 safe sync plan 中有 proof 的机械动作 |
+| closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>] [--gate-profile <profile>]` | 否 | 默认用 `closeout-contract` 校验 retained evidence backlink、main、issue、PR、project 与仓内结果是否一致；显式 profile 才执行 heavy local gate |
+| closeout sync | `python3 tools/loom_flow.py closeout sync --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>]` | 是，仅 host control-plane | 在可同步条件下继续做 closeout 控制面对齐；不写版本化 carrier |
+| carrier closeout sync | `python3 tools/loom_flow.py carrier closeout-sync --target <repo> --item <id> [--apply] ...` | 是，仅 repo carrier | 显式写结构化 terminal metadata 到 `.loom/progress/<item>.md`；不写 GitHub、Project、PR、issue 或 worktree |
 
 以下内容继续明确排除在 Loom 宿主动作面之外：
 
@@ -91,6 +94,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 
 - `host-lifecycle.objects`
 - `reconciliation.findings`
+- `reconciliation sync_plan`
 - `closeout.reconciliation`
 - `flow merge-ready` / `checkpoint merge` 的放行细节
 
@@ -103,8 +107,10 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | 入口 | 允许结果 | `fallback_to` 纪律 |
 | --- | --- | --- |
 | `host-lifecycle` | `pass` / `block` | 只在事实链无法读取时回到 `admission`；正常边界读取不产生 `fallback` 结果 |
+| `pr-gate check` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 gate 修复面；不得指向宿主 merge |
 | `checkpoint merge` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint，不得指向宿主控制面动作 |
 | `flow merge-ready` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint 摘要，不得把 host merge 伪装成回退目标 |
+| `controlled-merge check\|merge` | `pass` / `block` / `fallback` | `merge` 只有在所有前置为 `pass` 且显式执行时才委托宿主；否则不写宿主 |
 | `reconciliation audit` | `pass` / `warn` / `fix-needed` / `block` | 非 `pass` 时只允许 `manual-reconciliation` 或 `null`；它负责报 drift，不把 drift 伪装成 `fallback` |
 | `reconciliation sync` | `pass` / `block` | `block` 时只允许指向 `manual-reconciliation` 或 `null`；`--dry-run` 也不得把未解决 drift 伪装成通过 |
 | `closeout check` | `pass` / `block` | 普通 closeout 缺口指向 `merge`；若 reconciliation 为 `fix-needed` 必须指向 `reconciliation-sync`；若 reconciliation 为 `block` 必须指向 `manual-reconciliation` |
@@ -118,6 +124,10 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 - 宿主动作不得把 branch / PR / worktree 的真实生命周期命令当作 `fallback_to`
 - `closeout check` 默认不得无条件执行完整 `loom_check`；只有 `source-self-fixture`、`bootstrap-regression`、`distribution-regression` 或 `strong-profile-full-gate` profile 显式 opt-in 时才执行 heavy local gate
 - `closeout check` 的 host PR checks evidence 只作为当前 PR head freshness / backlink 输入，不替代 authored review record、merge-ready result 或 reconciliation audit
+- `reconciliation sync` 默认 `dry_run=true`；只有显式 `--apply` 才允许执行 GitHub 写入
+- `reconciliation sync` 必须输出 `loom-safe-sync-plan/v1`，包含 `planned_actions`、`skipped_actions`、`manual_actions` 与 `proof`
+- `planned_actions` 固定只允许 `close_issue`、`set_project_done`、`add_closeout_comment`，且每项必须带 `source_finding`、`proof_locator`、`write_target`、`rollback_note`
+- `skipped_actions` 与 `manual_actions` 不得执行；非 dry-run 也只能执行 `planned_actions`
 
 ## 5. Dynamic Tool 与 Host Action Locator
 
@@ -150,7 +160,7 @@ v0.7 只冻结 declaration-time locator contract。
 - dynamic tool availability locator 留在 `.loom/companion/repo-interface.json`
 - approval / sandbox policy read locator 留在 `.loom/companion/repo-interface.json`
 
-`controlled-merge check|merge` 可以通过显式 repo-relative locator 消费 retained `pr-gate` / `merge-gate` result。该消费只跳过重复读取完整 review / merge-ready 语义；current PR head、required checks、branch protection / ruleset、mergeability 与 merge method 必须重新 read back，并输出 `drift_readback.mode = drift-only`。`DIRTY` 与 `DRAFT` mergeability 继续 hard block；GitHub `BLOCKED` 只在 Loom authored approval、required checks、head binding 与 host enforcement readback 其余条件均通过后作为 delegated host policy signal 进入 `gh pr merge` 委托。
+`controlled-merge check|merge` 也可以通过显式 CLI locator 消费本次 PR 的 retained `pr-gate` / `merge-gate` result。该消费仍沿用同一 locator 纪律：路径必须 repo-relative、可读、不能越界，且 envelope 必须能回链 Work Item、PR、head、review approval、validation summary 与 merge checkpoint。fresh retained result 只允许跳过重复语义审查读取；当前 PR head、required checks、branch protection / active ruleset、mergeability 与 merge method 必须重新 read back，并以 `drift_readback.mode = drift-only` 输出。mergeability readback 中 `DIRTY` 与 `DRAFT` 是 hard-block host gate failure；GitHub `BLOCKED` 是 delegated host policy signal，只有在 Loom authored approval、required checks、head binding 与 host enforcement readback 其余条件均通过时才允许进入 `gh pr merge` 委托。
 
 明确排除：
 
