@@ -1,0 +1,30 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1643",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Manual semantic review approves release PR #1656 at head 50ccd53343f72ad916fe2e913b80c91f30c50b0a. The diff is limited to VERSION and package.json version bump for v0.17.0 plus WI-1643 release carriers, including hosted gate evidence-map and task-carrier inputs; local release/package/suite validation passed, pre-publish release readback correctly classifies v0.17.0 as unpublished, and publishing remains delegated to the main-branch loom-cli-release workflow after merge. No blocking issues found.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T10:22:00Z",
+  "reviewed_head": "50ccd53343f72ad916fe2e913b80c91f30c50b0a",
+  "reviewed_validation_summary": "2026-06-20 release PR validation passed: git diff --check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json classified v0.17.0 as unpublished with tag/GitHub Release/npm gaps; npm pack --dry-run --json --ignore-scripts produced @mc-and-his-agents/loom@0.17.0 with 386 files; python3 tools/loom.py suite evidence validate --target . --item WI-1643 --json passed; python3 tools/loom.py suite carrier validate --target . --item WI-1643 --json passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1643.md",
+    "recovery_entry": ".loom/progress/WI-1643.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_decision": ".loom/specs/WI-1643/spec.md",
+    "suite_evidence_map": ".loom/specs/WI-1643/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1643/task-carrier.md",
+    "release_readback": "python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json",
+    "package_validation": "python3 tools/check_npm_package.py",
+    "release_surface_validation": "python3 tools/check_release_surface.py"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Version-only release PR is approved for merge checkpoint consumption; publishing evidence must be read back after main merge."
+  }
+}
