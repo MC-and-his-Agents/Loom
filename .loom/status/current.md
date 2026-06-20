@@ -11,20 +11,20 @@
 - Review Entry: .loom/reviews/WI-1643.json
 - Validation Entry: git diff --check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json; npm pack --dry-run --json --ignore-scripts
 - Closing Condition: PR #1656 merges into main, `loom-cli-release` publishes v0.17.0, tag/GitHub Release/npm package readback passes, and #1643 closes with release evidence.
-- Current Checkpoint: merge checkpoint
-- Current Stop: Release PR #1656 is open for v0.17.0 with a version-only diff; local release/package validation and pre-publish readback passed, and hosted checks remain pending.
-- Next Step: Update PR #1656 metadata for WI-1643, wait for hosted checks, merge to main, then read back v0.17.0 tag, GitHub Release, npm package, workflow run, and close #1643.
+- Current Checkpoint: closed
+- Current Stop: PR #1656 merged to main, v0.17.0 was published, release readback passed, and issue #1643 was closed with release evidence.
+- Next Step: Close milestone #14 parent issue #1615 after confirming no milestone #14 issues remain open.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-20 release PR validation passed: git diff --check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json classified v0.17.0 as unpublished with tag/GitHub Release/npm gaps; npm pack --dry-run --json --ignore-scripts produced @mc-and-his-agents/loom@0.17.0 with 386 files; python3 tools/loom.py suite evidence validate --target . --item WI-1643 --json passed; python3 tools/loom.py suite carrier validate --target . --item WI-1643 --json passed.
-- Recovery Boundary: WI-1643 release execution only. Do not change runtime behavior, plugin/package payload, migration docs, release workflow semantics, tag/GitHub Release/npm manually before merge, or milestone parent closeout in this PR.
+- Latest Validation Summary: 2026-06-20 post-release readback passed: PR #1656 merged at e6baa02f584a052c218616c3d5d711e00ed8bd94; loom-cli-release.yml run 27868683974 succeeded on main; tag v0.17.0 peels to e6baa02f584a052c218616c3d5d711e00ed8bd94; GitHub Release https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.17.0 was published at 2026-06-20T10:44:33Z; npm @mc-and-his-agents/loom@0.17.0 was published with latest=0.17.0; python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json passed with classification published and gaps [].
+- Recovery Boundary: WI-1643 release closeout only. Do not change runtime behavior, plugin/package payload, migration docs, release workflow semantics, tag, GitHub Release, npm package, or closed issue evidence.
 - Current Lane: milestone-14-release-v0.17.0
 
 ## Runtime Evidence
 
 - Run Entry: 2026-06-20 WI-1643 v0.17.0 release lane
 - Logs Entry: local command output retained in current Codex milestone/14 thread and PR #1656 checks.
-- Diagnostics Entry: release_required judgment #1636 is closed; v0.17.0 tag, GitHub Release, and npm package are absent before PR #1656 merge; release PR is version-only.
-- Verification Entry: `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json`; `npm pack --dry-run --json --ignore-scripts`; suite not_applicable validation; carrier refresh and shadow parity.
+- Diagnostics Entry: release_required judgment #1636 is closed; PR #1656 merged; v0.17.0 tag, GitHub Release, npm package, workflow run, and release readback all point at main merge commit e6baa02f584a052c218616c3d5d711e00ed8bd94.
+- Verification Entry: `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json`; GitHub Release readback; npm package readback; suite not_applicable validation; carrier refresh and shadow parity.
 - Lane Entry: milestone-14-release-v0.17.0
 
 ## Sources
