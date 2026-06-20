@@ -20,7 +20,8 @@ npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
-Single-skill compatibility path:
+Single-skill compatibility commands are historical only and are not part of the
+current Loom distribution contract:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
@@ -55,11 +56,17 @@ Options:
 
 ## Payload Model
 
-The published package includes a generated payload. The payload is generated from the canonical `plugins/loom/.codex-plugin/` manifest and the checked-in generated `skills/` install surface during build, pack, and publish.
+The current Loom package publishes the Codex user plugin payload from the
+canonical `plugins/loom/.codex-plugin/` manifest and
+`plugins/loom/skills/`. The checked-in root `skills/` tree is a source mirror,
+not a single-skill distribution surface.
 
-Generated payload directories are not committed to git. The build step recreates them deterministically, and `check:payload` verifies rebuild stability. The root `skills/` surface itself is committed and verified with `check:distribution`.
+The plugin payload is committed and verified with the skills and release
+surface checks.
 
-Installer JSON output reports `distribution_layer`, `version_context`, and `failed_layer` so callers can distinguish host adapter plugin installs from generated single-skill installs.
+Installer JSON output reports `distribution_layer`, `version_context`, and
+`failed_layer` only as deprecated legacy evidence. Current Loom install flows
+must use the root `loom` CLI and Codex user plugin provider path.
 
 Installer-managed layers also write `loom-installed-surface-status/v1` metadata. `upgrade-plan` and `verify-upgrade` read that metadata, compare it to the package payload, and report `upgrade_eligibility`, `changed_paths`, `drift`, `rollback_path`, and fail-closed reasons without mutating the target repository. See `docs/adoption/installed-loom-status.md` for the status contract.
 

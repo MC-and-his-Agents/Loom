@@ -122,7 +122,7 @@ Loom 当前暴露一个 root entry 和十个 scenario skills：
 | `loom-merge-ready` | 验证 merge readiness。 |
 | `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-可编辑 skills 源码真相位于 `src/skills/`。Loom 源仓库生成且提交的 payload 表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 skill payload，由根 CLI 管理。下游 Codex plugin 安装把这份 payload 内嵌到 `plugins/loom/skills/`；下游顶层 `skills/` 不再是默认 Loom plugin 安装面。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host ...` 安装或验证。
+可编辑 skills 源码真相位于 `src/skills/`。Loom 源仓库生成且提交的 [skills/](./skills/) 是源码镜像。真正发布给 Codex 的 skills payload 位于 `plugins/loom/skills/`；`skills/<skill-id>` 不是自包含 single-skill package，也不再携带 `loom-package.json` 或 `.loom-runtime/` 作为分发产物。下游顶层 `skills/` 不再是默认 Loom plugin 安装面。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host ...` 安装或验证。
 
 ## 维护者文档
 

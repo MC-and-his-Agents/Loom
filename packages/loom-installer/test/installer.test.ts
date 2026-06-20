@@ -100,9 +100,9 @@ test('payload manifest tracks loom-spec-review as a public skill', () => {
   const manifest = JSON.parse(readFileSync(join(packageRoot(), 'payload', 'manifest.json'), 'utf8'));
   assert.equal(Array.isArray(manifest.skills), true);
   const skill = manifest.skills.find((entry: { id: string }) => entry.id === 'loom-spec-review');
-  assert.equal(skill.relative_path, 'skills/loom-spec-review');
-  assert.equal(skill.package_metadata, 'loom-package.json');
-  assert.equal(skill.runtime_root, '.loom-runtime');
+  assert.equal(skill.relative_path, 'plugin/loom/skills/loom-spec-review');
+  assert.equal(skill.package_metadata, 'plugin/loom/skills/registry.json');
+  assert.equal(skill.runtime_root, 'plugin/loom/skills');
   assert.equal(typeof skill.skill_package_version, 'string');
   assert.equal(typeof skill.runtime_core_version, 'string');
   assert.equal(typeof manifest.version_context.repo_version, 'string');
@@ -116,25 +116,11 @@ test('payload bundles shared references and runtime paths required by install la
     true,
   );
   assert.equal(
-    existsSync(
-      join(
-        packageRoot(),
-        'payload',
-        'skills',
-        'loom-init',
-        '.loom-runtime',
-        'shared',
-        'references',
-        'templates',
-        'implementation-contract-template.md',
-      ),
-    ),
+    existsSync(join(packageRoot(), 'payload', 'plugin', 'loom', 'skills', 'shared', 'references', 'templates', 'implementation-contract-template.md')),
     true,
   );
   assert.equal(
-    existsSync(
-      join(packageRoot(), 'payload', 'skills', 'loom-init', '.loom-runtime', 'loom-spec-review', 'references', 'input-signals.md'),
-    ),
+    existsSync(join(packageRoot(), 'payload', 'plugin', 'loom', 'skills', 'loom-spec-review', 'references', 'input-signals.md')),
     true,
   );
 });

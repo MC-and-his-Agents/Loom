@@ -8,8 +8,9 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(scriptDir, '..');
 const repoRoot = join(packageRoot, '..', '..');
 const payloadRoot = join(packageRoot, 'payload');
-const pluginManifestSource = join(repoRoot, 'plugins', 'loom', '.codex-plugin');
-const skillsSourceRoot = join(repoRoot, 'skills');
+const pluginSourceRoot = join(repoRoot, 'plugins', 'loom');
+const pluginManifestSource = join(pluginSourceRoot, '.codex-plugin');
+const skillsSourceRoot = join(pluginSourceRoot, 'skills');
 const pluginManifestPath = join(pluginManifestSource, 'plugin.json');
 const installLayoutPath = join(skillsSourceRoot, 'install-layout.json');
 const payloadLockDir = join(packageRoot, '.payload-lock');
@@ -124,44 +125,36 @@ function verifyRequiredPaths(rootDir, requiredPaths, label) {
 function buildPluginPayload(currentPayloadRoot) {
   const pluginTarget = join(currentPayloadRoot, 'plugin', 'loom');
   mkdirSync(pluginTarget, { recursive: true });
-  copyDirectoryFiltered(pluginManifestSource, join(pluginTarget, '.codex-plugin'));
-  copyDirectoryFiltered(skillsSourceRoot, join(pluginTarget, 'skills'));
+  copyDirectoryFiltered(pluginSourceRoot, pluginTarget);
   return pluginTarget;
 }
 
-function buildSingleSkillPayloads(currentPayloadRoot, entries, requiredPaths) {
-  const skillsPayloadRoot = join(currentPayloadRoot, 'skills');
-  mkdirSync(skillsPayloadRoot, { recursive: true });
-  const skills = [];
+function buildPluginSkillRecords(pluginTarget, entries, requiredPaths, registryVersion) {
   for (const entry of entries) {
     const skillId = entry.id;
-    const sourceDir = join(skillsSourceRoot, skillId);
-    if (!existsSync(sourceDir)) {
-      throw new Error(`missing skill source: ${sourceDir}`);
+    const skillDir = join(pluginTarget, 'skills', skillId);
+    if (!existsSync(skillDir)) {
+      throw new Error(`missing plugin skill payload: ${skillDir}`);
     }
-    const contract = readJson(join(sourceDir, 'contract.json'));
-    const packageMetadata = readJson(join(sourceDir, 'loom-package.json'));
-    const packageDir = join(skillsPayloadRoot, skillId);
-    mkdirSync(packageDir, { recursive: true });
-    copyDirectoryFiltered(sourceDir, packageDir);
-    const runtimeRoot = join(packageDir, packageMetadata.runtime_root ?? '.loom-runtime');
-    verifyRequiredPaths(runtimeRoot, requiredPaths, `single-skill runtime for ${skillId}`);
-    if (!existsSync(join(packageDir, 'SKILL.md')) || !existsSync(join(packageDir, 'loom-package.json'))) {
-      throw new Error(`single-skill package for ${skillId} is incomplete`);
+    verifyRequiredPaths(join(pluginTarget, 'skills'), requiredPaths, 'plugin payload');
+    if (!existsSync(join(skillDir, 'SKILL.md')) || !existsSync(join(skillDir, 'contract.json'))) {
+      throw new Error(`plugin skill payload for ${skillId} is incomplete`);
     }
-    skills.push({
+  }
+  return entries.map((entry) => {
+    const contract = readJson(join(pluginTarget, 'skills', entry.id, 'contract.json'));
+    return {
       id: contract.id,
       display_name: contract.display_name,
       contract_version: contract.contract_version,
-      skill_package_version: packageMetadata.skill_package_version,
-      runtime_core_version: packageMetadata.runtime_core_version,
-      package_metadata: 'loom-package.json',
-      runtime_root: packageMetadata.runtime_root,
-      launcher: packageMetadata.launcher,
-      relative_path: `skills/${skillId}`,
-    });
-  }
-  return skills;
+      skill_package_version: registryVersion,
+      runtime_core_version: '1.0.0',
+      package_metadata: 'plugin/loom/skills/registry.json',
+      runtime_root: 'plugin/loom/skills',
+      launcher: join('plugin', 'loom', 'skills', entry.id, 'scripts').replaceAll('\\', '/'),
+      relative_path: `plugin/loom/skills/${entry.id}`,
+    };
+  });
 }
 
 if (!existsSync(pluginManifestPath)) {
@@ -210,11 +203,11 @@ function buildPayload() {
     const requiredPaths = requiredInstallLayoutPaths();
     const pluginTarget = buildPluginPayload(stagingRoot);
     verifyRequiredPaths(join(pluginTarget, 'skills'), requiredPaths, 'plugin payload');
-    const skillRecords = buildSingleSkillPayloads(stagingRoot, publicSkillEntries(), requiredPaths);
     const pluginManifest = readJson(pluginManifestPath);
     const packageJson = readJson(packageJsonPath);
     const repoVersion = readFileSync(repoVersionPath, 'utf8').trim();
     const registry = readJson(join(skillsSourceRoot, 'registry.json'));
+    const skillRecords = buildPluginSkillRecords(pluginTarget, publicSkillEntries(), requiredPaths, registry.registry_version);
     const files = collectFiles(stagingRoot).filter((entry) => entry.path !== 'manifest.json');
     const hostAdapterVersion = pluginManifest['x-loom']?.host_adapter_version ?? '1.0.0';
 
@@ -231,7 +224,7 @@ function buildPayload() {
         plugin_surface_version: pluginManifest.version,
         host_adapter_version: hostAdapterVersion,
         skills_registry_version: registry.registry_version,
-        runtime_core_version: skillRecords[0]?.runtime_core_version ?? '1.0.0',
+        runtime_core_version: '1.0.0',
       },
       runtime: {
         python_minimum: '3.10',

@@ -15,7 +15,7 @@ npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
-单 skill 兼容路径：
+单 skill 兼容命令仅作为历史记录保留，不属于当前 Loom 分发合同：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
@@ -50,11 +50,11 @@ Options：
 
 ## Payload Model
 
-发布包会包含生成出来的 payload。该 payload 会在 build、pack 和 publish 阶段，从 canonical `plugins/loom/.codex-plugin/` manifest 与已提交的生成 `skills/` install surface 动态生成。
+当前 Loom package 从 canonical `plugins/loom/.codex-plugin/` manifest 和 `plugins/loom/skills/` 发布 Codex 用户级 plugin payload。已提交的根 `skills/` tree 是源码镜像，不是 single-skill 分发表面。
 
-生成出来的 payload 目录不会提交到 git。Build 步骤会以确定性方式重建它们，`check:payload` 会校验重建稳定性。根 `skills/` surface 本身会提交，并通过 `check:distribution` 校验。
+Plugin payload 会提交进仓库，并通过 skills 与 release surface checks 校验。
 
-Installer JSON output 会报告 `distribution_layer`、`version_context` 和 `failed_layer`，让调用方区分 host adapter plugin install 与 generated single-skill install。
+Installer JSON output 中的 `distribution_layer`、`version_context` 和 `failed_layer` 只作为 deprecated legacy evidence 保留。当前 Loom 安装流必须使用根 `loom` CLI 和 Codex 用户级 plugin provider 路径。
 
 Installer 管理的 layer 也会写入 `loom-installed-surface-status/v1` metadata。`upgrade-plan` 和 `verify-upgrade` 只读取该 metadata，并与 package payload 比对，报告 `upgrade_eligibility`、`changed_paths`、`drift`、`rollback_path` 和 fail-closed reason；它们不会修改目标仓库。状态合同见 `docs/adoption/installed-loom-status.md`。
 
