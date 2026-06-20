@@ -1842,7 +1842,11 @@ def host_read_unavailable(payload: dict[str, object]) -> bool:
             "http 403",
             "host_unavailable",
             "host unavailable",
+            "classifier=external_service_flake",
+            "classifier=host_api_unreadable",
+            "classifier=permission",
             "rate limit exceeded",
+            "resource not accessible",
         )
     )
 
