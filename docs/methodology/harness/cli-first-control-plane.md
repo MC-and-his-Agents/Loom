@@ -125,8 +125,10 @@ The CLI separates:
   package.
 - Contract-only hosts such as OpenCode, Gemini, and Cursor until adapter CLIs are available.
 
-`host list`, `host doctor`, and `host verify` are read-only. `host install`
-mutates only Codex user-level plugin cache state and requires `--apply`.
+`host list`, `host doctor`, and `host verify` are read-only. `host verify`
+checks both metadata-only repository adoption and Codex user-level plugin
+provider registration for Codex targets. `host install` mutates only Codex
+user-level plugin cache state and requires `--apply`.
 `host upgrade` and `host remove` no longer mutate repo-local host payloads and
 fail closed with the global install fallback.
 
@@ -158,7 +160,12 @@ Delivery commands therefore freeze the following provider boundary:
 
 `loom skills list`, `loom skills generate`, `loom skills check`, `loom skills doctor`, `loom skills package`, and `loom skills release-check` implement the #895 generated SKILLS surface with `loom-skills-surface/v1`.
 
-`skills list` and `skills package` read checked-in generated package metadata. `skills check`, `skills doctor`, and `skills release-check` delegate to the existing surface, host adapter, and version checks. `skills generate` mutates only the Loom source repository skills mirror and Codex plugin payload, so it fails closed unless `--apply` is supplied and the target is the source repository.
+`skills list` and `skills package` read the checked-in Codex plugin payload
+metadata under `plugins/loom/skills`. `skills check`, `skills doctor`, and
+`skills release-check` delegate to the existing source surface, host adapter,
+and version checks. `skills generate` mutates only the Loom source repository
+skills mirror and Codex plugin payload, so it fails closed unless `--apply` is
+supplied and the target is the source repository.
 
 `loom skills check --target <repo> --json` remains the aggregate merge-ready and release-readiness entrypoint for generated SKILLS validation. The aggregate must continue to consume the script-level skills surface check instead of promoting separate package semantics into the CLI.
 

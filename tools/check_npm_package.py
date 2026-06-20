@@ -25,8 +25,6 @@ REQUIRED_FILES = {
     "tools/loom_init.py",
     "tools/loom_check.py",
     "tools/check_npm_package.py",
-    "skills/registry.json",
-    "skills/loom-init/SKILL.md",
     "plugins/loom/.codex-plugin/plugin.json",
     "plugins/loom/skills/registry.json",
     "plugins/loom/skills/loom-init/SKILL.md",
@@ -35,6 +33,7 @@ REQUIRED_FILES = {
     "docs/adoption/loom-cli-release-surface.md",
     "docs/adoption/version-authority-map.md",
     "docs/adoption/codex-install.md",
+    "docs/adoption/legacy-install-migration.md",
     "docs/adoption/github-profile.md",
     "docs/methodology/harness/cli-command-matrix.md",
     "docs/methodology/harness/full-spec-suite-cli-surface.md",
@@ -57,6 +56,7 @@ FORBIDDEN_PREFIXES = (
     ".loom/",
     "examples/",
     "packages/loom-installer/",
+    "skills/",
 )
 FORBIDDEN_PATH_PARTS = (
     "/__pycache__/",
@@ -69,10 +69,10 @@ FORBIDDEN_MANIFEST_STRINGS = (
     "packages/loom-installer",
 )
 REQUIRED_MANIFEST_FILES = (
-    "skills",
     "src/skills",
     "plugins/loom",
     "docs/adoption/github-profile.md",
+    "docs/adoption/legacy-install-migration.md",
     "docs/methodology/harness/full-spec-suite-cli-surface.md",
     "docs/methodology/harness/gate-chain.md",
     "docs/methodology/harness/task-carrier-contract.md",
@@ -112,7 +112,7 @@ SURFACES: dict[str, SurfaceDefinition] = {
     SURFACE_MANIFEST: SurfaceDefinition(
         name=SURFACE_MANIFEST,
         command=f"python3 tools/check_npm_package.py --surface {SURFACE_MANIFEST}",
-        description="Root package manifest validation for name, version, bin, publish config, and managed files.",
+        description="Root package manifest validation for name, version, bin, publish config, global CLI, source skills, and Codex user plugin payload.",
         evidence_locators=("package.json", "VERSION"),
         evidence_labels=(SURFACE_MANIFEST,),
         failure_label="npm-package-manifest-failed",
@@ -254,7 +254,7 @@ def validate_manifest() -> dict[str, Any]:
     if missing_manifest_files:
         fail(
             SURFACE_MANIFEST,
-            f"package files must include CLI-managed payload surfaces: {missing_manifest_files}",
+            f"package files must include global CLI and Codex user plugin payload surfaces: {missing_manifest_files}",
             evidence_locators=("package.json:files",),
         )
     forbidden_manifest_files = sorted(item for item in manifest_files if isinstance(item, str) and item.startswith(FORBIDDEN_PREFIXES))

@@ -23,6 +23,7 @@ test("root npm package exposes the frozen loom bin contract", () => {
 test("root npm package includes suite contract source truth", () => {
   for (const requiredFile of [
     "docs/adoption/github-profile.md",
+    "docs/adoption/legacy-install-migration.md",
     "docs/methodology/harness/full-spec-suite-cli-surface.md",
     "docs/methodology/harness/gate-chain.md",
     "docs/methodology/harness/task-carrier-contract.md",
@@ -31,6 +32,22 @@ test("root npm package includes suite contract source truth", () => {
   ]) {
     assert.equal(packageJson.files.includes(requiredFile), true, requiredFile);
   }
+});
+
+test("root npm package publishes only source skills and Codex plugin payload", () => {
+  assert.equal(packageJson.files.includes("skills"), false);
+  assert.equal(packageJson.files.includes("src/skills"), true);
+  assert.equal(packageJson.files.includes("plugins/loom"), true);
+
+  const pluginManifest = JSON.parse(
+    readFileSync(new URL("../plugins/loom/.codex-plugin/plugin.json", import.meta.url), "utf8")
+  );
+  const pluginRegistry = JSON.parse(
+    readFileSync(new URL("../plugins/loom/skills/registry.json", import.meta.url), "utf8")
+  );
+  assert.equal(pluginManifest.name, "loom");
+  assert.equal(pluginRegistry.root_entry, "loom-init");
+  assert.equal(pluginRegistry.entries.some((entry) => entry.id === "loom-init"), true);
 });
 
 test("loom bin prints help", () => {

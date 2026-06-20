@@ -421,9 +421,10 @@ For #929-#943 it also checks:
 - host-control, host, and skills command names are implemented in `loom help --json`;
 - `loom host list` emits `loom-host-orchestration/v1`;
 - `loom host install` fails closed without `--apply`;
-- `loom skills list` emits the generated registry and root entry;
+- `loom skills list` emits the Codex plugin payload registry and root entry;
 - `loom skills generate` fails closed without `--apply`;
-- `loom skills package` emits package metadata for generated skills.
+- `loom skills package` emits Codex plugin payload metadata and confirms no
+  single-skill package semantics are exposed.
 
 For #910-#914 it also checks:
 

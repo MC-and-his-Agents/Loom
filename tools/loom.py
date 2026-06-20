@@ -49,6 +49,7 @@ TOOLS_ROOT = REPO_ROOT / "tools"
 VERSION_FILE = REPO_ROOT / "VERSION"
 SKILLS_ROOT = REPO_ROOT / "skills"
 PLUGIN_MANIFEST = REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
+PLUGIN_SKILLS_ROOT = REPO_ROOT / "plugins" / "loom" / "skills"
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
 LOOM_BOOTSTRAP_END = "<!-- LOOM_BOOTSTRAP_END -->"
 LOOM_BOOTSTRAP_BLOCK = f"""{LOOM_BOOTSTRAP_START}
@@ -1038,7 +1039,7 @@ def repo_version() -> str:
 
 
 def version_context() -> dict[str, Any]:
-    registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
+    registry = read_optional_json(PLUGIN_SKILLS_ROOT / "registry.json") or {}
     plugin = read_optional_json(PLUGIN_MANIFEST) or {}
     return {
         "repo_version": repo_version(),
@@ -2487,7 +2488,7 @@ def top_level_skills_assessment(target: Path) -> dict[str, Any] | None:
     registry_path = skills_root / "registry.json"
     if not registry_path.exists():
         return None
-    expected_registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
+    expected_registry = read_optional_json(PLUGIN_SKILLS_ROOT / "registry.json") or {}
     actual_registry = read_optional_json(registry_path) or {}
     expected_ids = {
         entry.get("id")
@@ -4273,12 +4274,35 @@ def handle_host(argv: list[str]) -> int:
     if args.action == "install":
         return emit(output(command, "block", schema=HOST_SCHEMA, summary="Codex user-level plugin install is implemented only for --host codex.", target=str(target), host=host, scope=args.scope, mutates=False, failed_layer="host-install", fail_closed_reason="repo-local plugin, runtime, and skills payload installation is no longer supported", fallback_to=["loom host install --host codex --scope user --apply --json", "loom install --target <repo> --apply --json"]))
     ok, checks = verify_cli_managed_surfaces(target, host=host)
+    registration = None
+    source_kind = None
+    if host == "codex":
+        source, source_kind = resolve_codex_plugin_source(args.source)
+        registration = codex_workstation_registration_status(source)
+    provider_ok = registration is None or registration.get("result") == "pass"
+    result = "pass" if ok and provider_ok else "block"
     summary = (
-        "Metadata-only repository adoption verified; workstation provider registration is reported separately."
-        if ok
-        else "Metadata-only repository adoption metadata is incomplete or has unsupported repo-local payload surfaces."
+        "Metadata-only repository adoption and Codex user-level plugin provider verified."
+        if result == "pass"
+        else "Metadata-only repository adoption or Codex user-level plugin provider verification failed."
     )
-    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary=summary, target=str(target), host=host, scope=args.scope, mutates=False, verifies="repository-adoption-metadata", workstation_registration_command="loom host register --host codex --scope user --dry-run --json" if host == "codex" else None, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more metadata-only target repository checks failed", fallback_to=None if ok else ["loom install --target <repo> --apply --json", "loom repair plan --target <repo> --json"]))
+    if not ok:
+        failed_layer = "host-payload"
+        fail_closed_reason = "one or more metadata-only target repository checks failed"
+        fallback_to = ["loom install --target <repo> --apply --json", "loom repair plan --target <repo> --json"]
+    elif not provider_ok:
+        failed_layer = "workstation-registration"
+        fail_closed_reason = "Codex user-level Loom plugin is not installed or registered for this workstation"
+        fallback_to = [
+            "loom host install --host codex --scope user --apply --json",
+            "loom host register --host codex --scope user --apply --json",
+            "loom host doctor --host codex --json",
+        ]
+    else:
+        failed_layer = None
+        fail_closed_reason = None
+        fallback_to = None
+    return emit(output(command, result, schema=HOST_SCHEMA, summary=summary, target=str(target), host=host, scope=args.scope, source_kind=source_kind, mutates=False, verifies="repository-adoption-metadata-and-codex-user-plugin-provider", workstation_registration=registration, checks=checks, failed_layer=failed_layer, fail_closed_reason=fail_closed_reason, fallback_to=fallback_to))
 
 
 def handle_skills(argv: list[str]) -> int:
@@ -4290,7 +4314,7 @@ def handle_skills(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     command = f"skills {args.action}"
     target = resolve_target(args.target)
-    registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
+    registry = read_optional_json(PLUGIN_SKILLS_ROOT / "registry.json") or {}
     entries = registry.get("entries") if isinstance(registry, dict) else []
     if args.action == "list":
         return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Codex plugin payload skills registry listed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), skills=entries, plugin_payload_root="plugins/loom/skills", fallback_to=None))
