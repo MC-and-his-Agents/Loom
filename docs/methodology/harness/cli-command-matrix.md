@@ -68,10 +68,12 @@ loom host list|doctor|install|verify|upgrade|remove
 #895 implements the generated SKILLS command family:
 
 ```text
-loom skills list|generate|sync|check|doctor|package|release-check
+loom skills list|generate|check|doctor|package|release-check
 ```
 
-`skills generate` and `skills sync` require `--apply`; check, doctor, package, and release-check are read-only.
+`skills generate` requires `--apply` and only mutates the Loom source repository
+skills mirror plus Codex plugin payload. Check, doctor, package, and
+release-check are read-only.
 
 #1261 splits the generated SKILLS validation bucket into named diagnostic surfaces without changing the aggregate command contract:
 

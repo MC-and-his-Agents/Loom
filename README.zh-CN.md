@@ -53,19 +53,21 @@ npm install -g @mc-and-his-agents/loom
 [docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md)
 和 [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)。
 
-为目标仓库安装并验证 Codex 宿主 payload：
+安装 Codex 用户级 plugin，并让目标仓库采用 Loom：
 
 ```bash
-loom host install --host codex --mode plugin --target . --apply --json
-loom host verify --host codex --mode plugin --target . --json
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --scope user --apply --json
+loom install --target . --apply --json
+loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
 ```
 
-`loom host install` 和 `loom host verify` 管理并验证目标仓库的 plugin
-payload：`.loom/installed-state.json`、`plugins/loom/.codex-plugin/plugin.json`
-以及内嵌的 `plugins/loom/skills/` skills payload。Codex plugin mode 不再默认写入
-或要求下游仓库顶层 `skills/`；如果下游仓库存在顶层 `skills/`，它默认属于目标仓库命名空间，旧 Loom 生成残留只通过 repair / upgrade plan 给出安全迁移建议。
+`loom host install` 和 `loom host register` 只写 Codex 用户级工作站状态。
+`loom install` 只写仓库 adoption metadata 和 Loom bootstrap 指令；
+`loom host verify` 验证目标仓库没有 repo-local Loom runtime、plugin 或
+skills payload。
 
 `npx @mc-and-his-agents/loom ...` 只能作为临时运行同一个根 `loom` CLI 的方式。
 
@@ -122,7 +124,7 @@ Loom 当前暴露一个 root entry 和十个 scenario skills：
 | `loom-merge-ready` | 验证 merge readiness。 |
 | `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-可编辑 skills 源码真相位于 `src/skills/`。Loom 源仓库生成且提交的 [skills/](./skills/) 是源码镜像。真正发布给 Codex 的 skills payload 位于 `plugins/loom/skills/`；`skills/<skill-id>` 不是自包含 single-skill package，也不再携带 `loom-package.json` 或 `.loom-runtime/` 作为分发产物。下游顶层 `skills/` 不再是默认 Loom plugin 安装面。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host ...` 安装或验证。
+可编辑 skills 源码真相位于 `src/skills/`。Loom 源仓库生成且提交的 [skills/](./skills/) 是源码镜像。真正发布给 Codex 的 skills payload 位于 `plugins/loom/skills/`；`skills/<skill-id>` 不是自包含 single-skill package，也不再携带 `loom-package.json` 或 `.loom-runtime/` 作为分发产物。下游顶层 `skills/` 不再是默认 Loom plugin 安装面。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host install --host codex --scope user --apply` 安装到用户级 Codex plugin。
 
 ## 维护者文档
 

@@ -75,21 +75,21 @@ See [docs/adoption/unified-install-experience.md](./docs/adoption/unified-instal
 and [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)
 for the detailed adoption contracts and validation commands.
 
-Install and verify the Codex host payload for a target repository:
+Install the Codex user-level plugin and adopt a target repository:
 
 ```bash
-loom host install --host codex --mode plugin --target . --apply --json
-loom host verify --host codex --mode plugin --target . --json
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --scope user --apply --json
+loom install --target . --apply --json
+loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
 ```
 
-`loom host install` and `loom host verify` manage and verify the target
-repository plugin payload: `.loom/installed-state.json`,
-`plugins/loom/.codex-plugin/plugin.json`, and the embedded
-`plugins/loom/skills/` skills payload. They do not write or require downstream
-top-level `skills/` in plugin mode, and they do not prove that Codex Desktop on
-the current workstation has registered, enabled, or loaded the plugin.
+`loom host install` and `loom host register` mutate only Codex user workstation
+state. `loom install` writes repository adoption metadata and the Loom bootstrap
+block, and `loom host verify` verifies that the target repository has no
+repo-local Loom runtime, plugin, or skills payload.
 
 When a repository still carries repo-local wrappers or vendored runtime residue
 such as `.loom/bin`, treat those surfaces as repository/runtime-carrier facts,
@@ -97,13 +97,13 @@ not as automatic proof of the active provider. The active provider may instead
 be the global `loom` CLI runtime or a workstation/user-level skills provider,
 and Loom diagnostics must keep those boundaries explicit.
 
-On a second development machine for an already adopted repository, register the
-repo-local plugin payload with the local Codex Desktop workstation explicitly:
+On a second development machine for an already adopted repository, install and
+register the Codex user-level plugin from the global Loom package:
 
 ```bash
-loom host verify --host codex --mode plugin --target . --json
-loom host register --host codex --source ./plugins/loom --scope user --dry-run --json
-loom host register --host codex --source ./plugins/loom --scope user --apply --json
+loom host verify --host codex --target . --json
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --scope user --apply --json
 loom doctor --target . --json
 ```
 

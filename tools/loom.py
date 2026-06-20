@@ -364,10 +364,27 @@ COMMANDS: list[dict[str, Any]] = [
     },
     {"command": "host upgrade", "domain": "host", "status": "implemented", "json": True},
     {"command": "host remove", "domain": "host", "status": "implemented", "json": True},
-    {"command": "skills list", "domain": "skills", "status": "implemented", "json": True},
-    {"command": "skills generate", "domain": "skills", "status": "implemented", "json": True},
-    {"command": "skills sync", "domain": "skills", "status": "implemented", "json": True},
-    {"command": "skills check", "domain": "skills", "status": "implemented", "json": True},
+    {
+        "command": "skills list",
+        "domain": "skills",
+        "status": "implemented",
+        "json": True,
+        "summary": "List the Loom source skills registry used to generate the Codex plugin payload.",
+    },
+    {
+        "command": "skills generate",
+        "domain": "skills",
+        "status": "implemented",
+        "json": True,
+        "summary": "Regenerate the Loom source repository skills mirror and Codex plugin payload; source repo only.",
+    },
+    {
+        "command": "skills check",
+        "domain": "skills",
+        "status": "implemented",
+        "json": True,
+        "summary": "Verify source plugin payload parity or metadata-only target repository adoption.",
+    },
     {"command": "skills doctor", "domain": "skills", "status": "implemented", "json": True},
     {"command": "skills package", "domain": "skills", "status": "implemented", "json": True},
     {"command": "skills release-check", "domain": "skills", "status": "implemented", "json": True},
@@ -2365,12 +2382,6 @@ def handle_repair(argv: list[str]) -> int:
     )
 
 
-def host_plugin_path(target: Path, host: str) -> Path:
-    if host == "claude":
-        return target / ".claude" / "marketplaces" / "loom-local" / "plugins" / "loom"
-    return target / "plugins" / "loom"
-
-
 def global_codex_plugin_source() -> Path:
     return REPO_ROOT / "plugins" / "loom"
 
@@ -2381,53 +2392,13 @@ def resolve_codex_plugin_source(raw_source: str | None) -> tuple[Path, str]:
     return global_codex_plugin_source(), "global-loom-package"
 
 
-def sync_skills_payload(target: Path) -> list[str]:
-    target_skills = target / "skills"
-    if target.resolve() == REPO_ROOT.resolve():
-        completed = run_capture([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "generate"])
-        if completed.returncode != 0:
-            raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "skills generation failed")
-        return ["skills"]
-    copy_tree(SKILLS_ROOT, target_skills)
-    return ["skills"]
-
-
-def install_host_plugin_payload(target: Path, host: str) -> list[str]:
-    if host != "codex":
-        raise RuntimeError(f"host plugin install is implemented for codex only in this Work Item: {host}")
-    plugin_root = host_plugin_path(target, host)
-    manifest_target = plugin_root / ".codex-plugin" / "plugin.json"
-    manifest_target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(PLUGIN_MANIFEST, manifest_target)
-    copy_tree(SKILLS_ROOT, plugin_root / "skills")
-    return [relative_to_target(manifest_target, target), relative_to_target(plugin_root / "skills", target)]
-
-
-def install_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> list[str]:
-    if mode == "metadata-only":
-        return []
-    if mode == "plugin":
-        return install_host_plugin_payload(target, host)
-    writes = sync_skills_payload(target)
-    if mode == "skill":
-        if not skill_id:
-            raise RuntimeError("skill mode requires --skill-id")
-        skill_source = SKILLS_ROOT / skill_id
-        if not skill_source.exists():
-            raise RuntimeError(f"unknown skill id: {skill_id}")
-        skill_target = target / ".agents" / "skills" / skill_id
-        copy_tree(skill_source, skill_target)
-        writes.append(relative_to_target(skill_target, target))
-    return writes
-
-
-def planned_cli_managed_writes(*, mode: str, skill_id: str | None = None) -> list[str]:
-    writes = [] if mode in {"metadata-only", "plugin"} else ["skills"]
-    if mode == "plugin":
-        writes.append("plugins/loom")
-    elif mode == "skill":
-        writes.append(f".agents/skills/{skill_id or '<skill-id>'}")
-    return writes
+def generate_source_skills_payload(target: Path) -> list[str]:
+    if target.resolve() != REPO_ROOT.resolve():
+        raise RuntimeError("skills generate is source-repo only and never writes downstream repository skills payload")
+    completed = run_capture([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "generate"])
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "skills generation failed")
+    return ["skills", "plugins/loom/skills"]
 
 
 def ensure_agents_bootstrap(target: Path) -> str:
@@ -2448,7 +2419,7 @@ def ensure_agents_bootstrap(target: Path) -> str:
     return relative_to_target(agents_path, target)
 
 
-def verify_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> tuple[bool, list[dict[str, str]]]:
+def verify_cli_managed_surfaces(target: Path, *, host: str) -> tuple[bool, list[dict[str, str]]]:
     checks: list[dict[str, str]] = []
 
     def check(relative: str, kind: str) -> None:
@@ -2456,39 +2427,17 @@ def verify_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id:
         checks.append({"kind": kind, "path": relative, "status": "pass" if path.exists() else "missing"})
 
     check(".loom/installed-state.json", "installed-state")
-    if mode == "metadata-only":
-        for relative in ("plugins/loom/skills", ".agents/skills", "skills"):
-            path = target / relative
-            checks.append(
-                {
-                    "kind": "intentional-absent-surface",
-                    "path": relative,
-                    "status": "unexpected" if path.exists() else "pass",
-                }
-            )
-        return all(item["status"] == "pass" for item in checks), checks
-
-    skills_root = target / "plugins" / "loom" / "skills" if mode == "plugin" else target / "skills"
-    registry_relative = "plugins/loom/skills/registry.json" if mode == "plugin" else "skills/registry.json"
-    check(registry_relative, "host-plugin-skills" if mode == "plugin" else "skills-registry")
-    registry_path = skills_root / "registry.json"
-    if registry_path.exists():
-        try:
-            registry = read_json(registry_path)
-            entries = registry.get("entries", []) if isinstance(registry, dict) else []
-            for entry in entries:
-                if isinstance(entry, dict) and isinstance(entry.get("id"), str):
-                    skill_relative = f"plugins/loom/skills/{entry['id']}/SKILL.md" if mode == "plugin" else f"skills/{entry['id']}/SKILL.md"
-                    check(skill_relative, "host-plugin-skill" if mode == "plugin" else "skill")
-        except (OSError, json.JSONDecodeError):
-            checks.append({"kind": "skills-registry-json", "path": registry_relative, "status": "invalid"})
-    if mode == "plugin":
-        if host == "codex":
-            check("plugins/loom/.codex-plugin/plugin.json", "host-plugin")
-        else:
-            checks.append({"kind": "host-plugin", "path": host, "status": "unsupported"})
-    if mode == "skill":
-        check(f".agents/skills/{skill_id or 'missing'}/SKILL.md", "single-skill")
+    if host != "codex":
+        checks.append({"kind": "host-provider", "path": host, "status": "unsupported"})
+    for relative in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
+        path = target / relative
+        checks.append(
+            {
+                "kind": "intentional-absent-surface",
+                "path": relative,
+                "status": "unexpected" if path.exists() else "pass",
+            }
+        )
     return all(item["status"] == "pass" for item in checks), checks
 
 
@@ -2531,10 +2480,6 @@ def declares_plugin_mode(target: Path) -> bool:
 
 def declares_metadata_only_mode(target: Path) -> bool:
     return installed_state_declared_mode(target) == "metadata-only"
-
-
-def skills_check_mode(target: Path) -> str:
-    return installed_state_declared_mode(target) or "full-repo"
 
 
 def top_level_skills_assessment(target: Path) -> dict[str, Any] | None:
@@ -2772,7 +2717,7 @@ def codex_workstation_registration_status(source: Path | None = None) -> dict[st
         "authority_boundary": {
             "kind": "developer-workstation-registration-state",
             "does_not_write_repo_truth": True,
-            "repo_payload_verify_command": "loom host verify --host codex --mode plugin --target <repo> --json",
+            "repo_payload_verify_command": "loom host verify --host codex --target <repo> --json",
         },
     }
 
@@ -2865,16 +2810,15 @@ def register_codex_workstation(source: Path) -> list[str]:
 
 
 def workstation_registration_action(target: Path, source: Path | None = None) -> dict[str, Any] | None:
-    mode = skills_check_mode(target)
     plugin_source = source or global_codex_plugin_source()
-    repo_ok, _ = verify_cli_managed_surfaces(target, host="codex", mode=mode)
+    repo_ok, _ = verify_cli_managed_surfaces(target, host="codex")
     registration = codex_workstation_registration_status(plugin_source)
     if repo_ok and registration["result"] != "pass":
         return {
             "id": "register-codex-workstation-plugin",
             "kind": "workstation-registration",
             "status": "recommended",
-            "reason": "repository adoption metadata is current, but Codex Desktop workstation registration is missing" if mode == "metadata-only" else "target repository plugin payload is current, but Codex Desktop workstation registration is missing",
+            "reason": "repository adoption metadata is current, but Codex Desktop workstation registration is missing",
             "command": "loom host register --host codex --scope user --dry-run --json",
             "apply_command": "loom host register --host codex --scope user --apply --json",
             "mutates": False,
@@ -2944,24 +2888,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     fallback_to=["loom upgrade-plan --target <repo> --json", "loom install --target <repo> --apply --force --json"],
                 )
             )
-        try:
-            managed_writes = install_cli_managed_surfaces(target, host=args.host, mode=mode)
-            managed_writes.append(ensure_agents_bootstrap(target))
-        except RuntimeError as exc:
-            return emit(
-                output(
-                    command,
-                    "block",
-                    schema=DELIVERY_SCHEMA,
-                    summary="CLI-managed install payload could not be written.",
-                    target=str(target),
-                    host=args.host,
-                    mode=mode,
-                    failed_layer="cli-managed-install",
-                    fail_closed_reason=str(exc),
-                    fallback_to=["loom host doctor --host <host> --json", "loom skills check --target <repo> --json"],
-                )
-            )
+        managed_writes = [ensure_agents_bootstrap(target)]
         write_json(state_path, planned_state)
         return emit(
             output(
@@ -4155,9 +4082,8 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
             "id": "codex",
             "support_status": "primary",
             "detected": codex_home.exists(),
-            "default_mode": "plugin",
-            "native_skill_path": str(home / ".agents" / "skills"),
-            "repo_payload_plugin_path": str(target / "plugins" / "loom"),
+            "default_scope": "user",
+            "provider": "codex-user-plugin",
             "workstation_plugin_cache_path": str(codex_paths["plugin_cache_path"]),
             "workstation_marketplace_path": str(codex_paths["marketplace_path"]),
             "workstation_config_path": str(codex_paths["config_path"]),
@@ -4166,13 +4092,11 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
             "id": "claude",
             "support_status": "adapter",
             "detected": claude_home.exists(),
-            "default_mode": "plugin",
-            "native_skill_path": str(claude_home / "skills"),
-            "plugin_path": str(target / ".claude" / "marketplaces" / "loom-local" / "plugins" / "loom"),
+            "provider": "unsupported-for-install",
         },
-        {"id": "opencode", "support_status": "adapter-contract", "detected": False, "default_mode": "full-repo"},
-        {"id": "gemini", "support_status": "adapter-contract", "detected": False, "default_mode": "full-repo"},
-        {"id": "cursor", "support_status": "adapter-contract", "detected": False, "default_mode": "full-repo"},
+        {"id": "opencode", "support_status": "adapter-contract", "detected": False, "provider": "unsupported-for-install"},
+        {"id": "gemini", "support_status": "adapter-contract", "detected": False, "provider": "unsupported-for-install"},
+        {"id": "cursor", "support_status": "adapter-contract", "detected": False, "provider": "unsupported-for-install"},
     ]
     return hosts
 
@@ -4181,8 +4105,6 @@ def handle_host(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom host")
     parser.add_argument("action", choices=("list", "doctor", "install", "verify", "register", "upgrade", "remove"))
     parser.add_argument("--host", default="auto", choices=("auto", "codex", "claude", "opencode", "gemini", "cursor"))
-    parser.add_argument("--mode", default="plugin", choices=("full-repo", "metadata-only", "plugin", "skill"))
-    parser.add_argument("--skill-id")
     parser.add_argument("--target", default=".")
     parser.add_argument("--source")
     parser.add_argument("--scope", default="user", choices=("user",))
@@ -4202,13 +4124,10 @@ def handle_host(argv: list[str]) -> int:
         return emit(output(command, "block", schema=HOST_SCHEMA, summary="Host auto-detection is ambiguous or unavailable.", target=str(target), hosts=hosts, failed_layer="host-detection", fail_closed_reason="pass --host explicitly when zero or multiple supported hosts are detected", fallback_to=["loom host list --json", "loom host doctor --host <host> --json"]))
     host = detected[0]["id"] if args.host == "auto" else args.host
     if args.action == "doctor":
-        warnings = []
-        if host == "codex" and args.mode == "plugin":
-            warnings.append("Codex repo payload verification is separate from Codex Desktop workstation registration.")
         source, source_kind = resolve_codex_plugin_source(args.source) if host == "codex" else (None, None)
         registration = codex_workstation_registration_status(source) if host == "codex" else None
         install_status = codex_workstation_plugin_install_status(source) if host == "codex" else None
-        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, mode=args.mode, hosts=hosts, warnings=warnings, source_kind=source_kind, workstation_install=install_status, workstation_registration=registration, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, scope=args.scope, provider="codex-user-plugin" if host == "codex" else "unsupported-for-install", hosts=hosts, source_kind=source_kind, workstation_install=install_status, workstation_registration=registration, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
     if args.action == "install" and host == "codex":
         source, source_kind = resolve_codex_plugin_source(args.source)
         paths = codex_workstation_paths()
@@ -4349,60 +4268,22 @@ def handle_host(argv: list[str]) -> int:
                 fallback_to=None if updated["result"] == "pass" else ["loom host doctor --host codex --json"],
             )
         )
-    if args.mode == "full-repo" and args.action in {"install", "upgrade", "remove"}:
-        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Full-repo host lifecycle remains operator-owned.", target=str(target), host=host, mode=args.mode, mutates=args.action != "verify", failed_layer="host-lifecycle", fail_closed_reason="CLI does not mutate full-repo clone/discovery state", fallback_to=["docs/adoption/host-adapter-matrix.md", "loom host verify --host <host> --mode plugin --json"]))
-    if args.action in {"install", "upgrade", "remove"} and not args.apply:
-        return emit(output(command, "block", schema=HOST_SCHEMA, summary=f"Host {args.action} is mutating and requires --apply.", target=str(target), host=host, mode=args.mode, mutates=True, failed_layer=f"host-{args.action}", fail_closed_reason="explicit --apply is required before adapter-managed host mutation", fallback_to=["loom host verify --host <host> --json", "loom host doctor --host <host> --json"]))
-    if args.action == "remove":
-        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Host remove only reports verified installed surfaces in this phase.", target=str(target), host=host, mode=args.mode, mutates=False, failed_layer="host-remove", fail_closed_reason="removal requires later rollback/delete ownership contract", fallback_to=["loom host verify --host <host> --json"]))
-    if args.mode == "skill" and not args.skill_id:
-        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Skill mode requires --skill-id.", failed_layer="host-input", fail_closed_reason="missing --skill-id", fallback_to=["loom skills list --json"]))
-    if args.action in {"install", "upgrade"}:
-        if args.mode != "metadata-only":
-            return emit(
-                output(
-                    command,
-                    "block",
-                    schema=HOST_SCHEMA,
-                    summary="Repo-local host payload install is unsupported; use user-level Codex plugin install/register.",
-                    target=str(target),
-                    host=host,
-                    mode=args.mode,
-                    mutates=True,
-                    failed_layer="host-payload",
-                    fail_closed_reason="repo-local runtime, plugin, and skills payload install is no longer supported",
-                    fallback_to=[
-                        "loom host install --host codex --scope user --apply --json",
-                        "loom host register --host codex --scope user --apply --json",
-                        "loom install --target <repo> --apply --json",
-                    ],
-                )
-            )
-        try:
-            managed_writes = install_cli_managed_surfaces(target, host=host, mode=args.mode, skill_id=args.skill_id)
-        except RuntimeError as exc:
-            return emit(output(command, "block", schema=HOST_SCHEMA, summary="Host adapter payload could not be installed by the Loom CLI.", target=str(target), host=host, mode=args.mode, mutates=True, failed_layer="host-payload", fail_closed_reason=str(exc), fallback_to=["loom host doctor --host <host> --json", "loom skills check --target <repo> --json"]))
-        state_path = target / ".loom" / "installed-state.json"
-        write_json(state_path, build_installed_state(target, host=host, mode=args.mode, skill_id=args.skill_id))
-        managed_writes.append(relative_to_target(state_path, target))
-        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host plugin payload installed by the Loom CLI.", target=str(target), host=host, mode=args.mode, mutates=True, managed_writes=managed_writes, installed_state_path=str(state_path), fallback_to=None))
-    ok, checks = verify_cli_managed_surfaces(target, host=host, mode=args.mode, skill_id=args.skill_id)
-    verifies = "repository-adoption-metadata" if args.mode == "metadata-only" else "target-repository-payload"
+    if args.action in {"upgrade", "remove"}:
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Repo-local host lifecycle commands are no longer supported by the Loom CLI.", target=str(target), host=host, scope=args.scope, mutates=False, failed_layer="host-lifecycle", fail_closed_reason="pure global install keeps host plugin state in the user workstation, not the target repository", fallback_to=["loom host install --host codex --scope user --apply --json", "loom host register --host codex --scope user --apply --json"]))
+    if args.action == "install":
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Codex user-level plugin install is implemented only for --host codex.", target=str(target), host=host, scope=args.scope, mutates=False, failed_layer="host-install", fail_closed_reason="repo-local plugin, runtime, and skills payload installation is no longer supported", fallback_to=["loom host install --host codex --scope user --apply --json", "loom install --target <repo> --apply --json"]))
+    ok, checks = verify_cli_managed_surfaces(target, host=host)
     summary = (
         "Metadata-only repository adoption verified; workstation provider registration is reported separately."
-        if ok and args.mode == "metadata-only"
-        else "Target repository plugin payload verified; workstation registration is reported separately."
         if ok
-        else "Metadata-only repository adoption metadata is incomplete or has unexpected payload surfaces."
-        if args.mode == "metadata-only"
-        else "Target repository plugin payload is incomplete."
+        else "Metadata-only repository adoption metadata is incomplete or has unsupported repo-local payload surfaces."
     )
-    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary=summary, target=str(target), host=host, mode=args.mode, mutates=False, verifies=verifies, workstation_registration_command="loom host register --host codex --source <plugin-source> --scope user --dry-run --json" if host == "codex" and args.mode in {"metadata-only", "plugin"} else None, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more CLI-managed target repository payload checks failed", fallback_to=None if ok else ["loom host install --host <host> --apply --json", "loom skills sync --target <repo> --apply --json"]))
+    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary=summary, target=str(target), host=host, scope=args.scope, mutates=False, verifies="repository-adoption-metadata", workstation_registration_command="loom host register --host codex --scope user --dry-run --json" if host == "codex" else None, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more metadata-only target repository checks failed", fallback_to=None if ok else ["loom install --target <repo> --apply --json", "loom repair plan --target <repo> --json"]))
 
 
 def handle_skills(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom skills")
-    parser.add_argument("action", choices=("list", "generate", "sync", "check", "doctor", "package", "release-check"))
+    parser.add_argument("action", choices=("list", "generate", "check", "doctor", "package", "release-check"))
     parser.add_argument("--target", default=".")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -4412,23 +4293,22 @@ def handle_skills(argv: list[str]) -> int:
     registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
     entries = registry.get("entries") if isinstance(registry, dict) else []
     if args.action == "list":
-        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Generated skills registry listed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), skills=entries, fallback_to=None))
-    if args.action in {"generate", "sync"} and not args.apply:
-        return emit(output(command, "block", schema=SKILLS_SCHEMA, summary=f"`loom {command}` mutates the generated skills surface and requires --apply.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason="explicit --apply is required before rewriting skills/", fallback_to=["loom skills check --target <repo> --json"]))
-    if args.action in {"generate", "sync"}:
+        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Codex plugin payload skills registry listed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), skills=entries, plugin_payload_root="plugins/loom/skills", fallback_to=None))
+    if args.action == "generate" and not args.apply:
+        return emit(output(command, "block", schema=SKILLS_SCHEMA, summary="`loom skills generate` mutates the Loom source repository skills mirror and Codex plugin payload, and requires --apply.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason="explicit --apply is required before rewriting source repository skills/plugin payload", fallback_to=["loom skills check --target <repo> --json"]))
+    if args.action == "generate":
         try:
-            managed_writes = sync_skills_payload(target)
+            managed_writes = generate_source_skills_payload(target)
         except RuntimeError as exc:
-            return emit(output(command, "block", schema=SKILLS_SCHEMA, summary="Skills payload sync failed.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason=str(exc), fallback_to=["python3 tools/skills_surface.py check"]))
-        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="CLI-managed skills payload synchronized.", target=str(target), mutates=True, managed_writes=managed_writes, fallback_to=None))
+            return emit(output(command, "block", schema=SKILLS_SCHEMA, summary="Source skills/plugin payload generation failed.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason=str(exc), fallback_to=["python3 tools/skills_surface.py check"]))
+        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Loom source skills mirror and Codex plugin payload generated.", target=str(target), mutates=True, managed_writes=managed_writes, fallback_to=None))
     if args.action in {"check", "doctor", "release-check"}:
         checks = []
         if target.resolve() == REPO_ROOT.resolve():
             checks.append([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "check"])
         else:
-            mode = skills_check_mode(target)
-            ok, managed_checks = verify_cli_managed_surfaces(target, host="codex", mode=mode)
-            checks.append({"command": "loom skills check installed payload", "returncode": 0 if ok else 1, "stdout": json.dumps(managed_checks, ensure_ascii=False), "stderr": "" if ok else "installed skills payload is incomplete"})
+            ok, managed_checks = verify_cli_managed_surfaces(target, host="codex")
+            checks.append({"command": "loom skills check metadata-only adoption", "returncode": 0 if ok else 1, "stdout": json.dumps(managed_checks, ensure_ascii=False), "stderr": "" if ok else "metadata-only adoption is incomplete or contains repo-local payload residue"})
         if args.action == "release-check":
             checks.extend(
                 [
@@ -4460,7 +4340,7 @@ def handle_skills(argv: list[str]) -> int:
                     "active_cli_evidence": False,
                 },
             }
-        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Skills surface checks passed." if result == "pass" else "Skills surface checks failed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), checks=results, release_authority=release_authority, failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else "one or more skills checks failed", fallback_to=None if result == "pass" else ["loom skills generate --apply --json"]))
+        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Skills/plugin payload checks passed." if result == "pass" else "Skills/plugin payload checks failed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), checks=results, release_authority=release_authority, failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else "one or more skills checks failed", fallback_to=None if result == "pass" else ["loom skills generate --apply --json"]))
     payload_root = REPO_ROOT / "plugins" / "loom" / "skills"
     missing_payload_inputs = []
     if not (REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json").is_file():

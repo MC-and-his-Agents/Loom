@@ -14,7 +14,7 @@ Loom defaults to a single root CLI install model:
   the Codex user-level Loom plugin from the global package
 - use `loom host register --host codex --scope user --apply --json` to register
   the user-level plugin
-- use `loom install --mode metadata-only` for downstream repository adoption
+- use `loom install --target . --apply --json` for downstream repository adoption
 - use `loom installed-state validate`, `loom host verify`, `loom skills check`, and `loom doctor` to verify the selected repository mode
 - start from `loom-init`
 - keep host-specific wiring in CLI-managed adapter surfaces
@@ -127,7 +127,7 @@ Loom separates two first-class states:
   Desktop's personal marketplace entry, user plugin cache payload, and config
   enablement.
 
-`loom host verify --host codex --mode metadata-only --target . --json` verifies
+`loom host verify --host codex --target . --json` verifies
 repository adoption metadata. It is not evidence that Codex Desktop on this
 machine has registered, enabled, loaded, or hot-loaded the plugin.
 

@@ -12,7 +12,7 @@ const requiredNeedles = [
     needles: [
       'agent-first project operating layer',
       'npm install -g @mc-and-his-agents/loom',
-      'loom host install --host codex --mode plugin --target . --apply --json',
+      'loom host install --host codex --scope user --apply --json',
       '`loom-installer` is not part of the primary install journey',
       'Loom CLI release surface',
       'loom-installer deprecated legacy line',
@@ -26,7 +26,7 @@ const requiredNeedles = [
     needles: [
       'agent-first project operating layer',
       'npm install -g @mc-and-his-agents/loom',
-      'loom host install --host codex --mode plugin --target . --apply --json',
+      'loom host install --host codex --scope user --apply --json',
       '`loom-installer` 不属于 primary install journey',
       'Loom CLI 发布面',
       'loom-installer deprecated legacy line',
@@ -40,8 +40,8 @@ const requiredNeedles = [
     needles: [
       'The npm installer is not the Codex default path',
       'npm install -g @mc-and-his-agents/loom',
-      'loom host install --host codex --mode plugin --target . --apply --json',
-      'loom host verify --host codex --mode plugin --target . --json',
+      'loom host install --host codex --scope user --apply --json',
+      'loom host verify --host codex --target . --json',
       'CLI-managed payloads',
     ],
   },

@@ -11,7 +11,7 @@ Loom has one supported downstream adoption model:
 npm install -g @mc-and-his-agents/loom
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
-loom install --target . --mode metadata-only --apply --json
+loom install --target . --apply --json
 loom doctor --target . --json
 ```
 
