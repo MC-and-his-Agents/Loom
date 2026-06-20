@@ -7,7 +7,7 @@
 - Scope: documentation/help/migration guidance for context-safe output and metadata-only global CLI/plugin adoption.
 - Suite path: minimal
 - Current `HEAD`: pending PR head readback before merge-ready consumption.
-- PR locator: pending PR creation.
+- PR locator: https://github.com/MC-and-his-Agents/Loom/pull/1669.
 - Host state locator: issue #1488.
 
 ## Input Snapshot
@@ -17,6 +17,7 @@
 | `spec.md` | .loom/specs/WI-1488/spec.md | required | authored WI-1488 suite | Recheck when #1488 scope or acceptance changes. |
 | `plan.md` | .loom/specs/WI-1488/plan.md | required | authored WI-1488 suite | Recheck when validation strategy changes. |
 | suite path decision | .loom/specs/WI-1488/spec.md#suite-contract | minimal | authored WI-1488 suite | Recheck if docs-only scope expands. |
+| implementation contract | .loom/specs/WI-1488/implementation-contract.md | required | PR gate / review readiness input | Recheck after docs/help/runtime boundary changes. |
 | execution breakdown / task carrier | .loom/specs/WI-1488/task-carrier.md | required | authored WI-1488 suite | Recheck issue state and branch/PR binding before review. |
 | review record | .loom/reviews/WI-1488.json | required after review | authored review truth | Required before merge-ready. |
 | merge-ready basis | pending PR gate | required after PR | merge-ready truth | Required before merge. |
