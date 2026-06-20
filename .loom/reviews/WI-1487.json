@@ -6,7 +6,7 @@
   "summary": "Implementation review allows WI-1487 at head d274ffff: recovery model and handoff output contract now define thread rotation triggers, minimal handoff package fields, agent-safe summary/artifact locator boundaries, and the ban on replaying old full thread turns; no scheduler or repo-local runtime path is introduced.",
   "reviewer": "codex-manual-review",
   "authored_at": "2026-06-20T13:50:00Z",
-  "reviewed_head": "d274fffffd8c2d90c0cb0d75374bc60296f52f20",
+  "reviewed_head": "d274ffff1d8437d123eb09981883befce9a36e43",
   "reviewed_validation_summary": "2026-06-20 WI-1487 docs-only validation passed: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`.",
   "fallback_to": null,
   "findings": [],
