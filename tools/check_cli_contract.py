@@ -1073,8 +1073,6 @@ def register_fixture_codex_plugin() -> None:
             "register",
             "--host",
             "codex",
-            "--source",
-            str(REPO_ROOT / "plugins" / "loom"),
             "--scope",
             "user",
             "--apply",
@@ -2038,12 +2036,24 @@ def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
     target.mkdir()
     home.mkdir()
     with isolated_codex_workstation(home):
-        status, installed = run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(target), "--apply", "--json"])
-        if status == 0 or installed.get("failed_layer") != "host-payload":
-            raise AssertionError("repo-local plugin install did not fail closed")
+        _, dry_run = run_json(["host", "install", "--host", "codex", "--scope", "user", "--target", str(target), "--dry-run", "--json"], expect=0)
+        if dry_run.get("source_kind") != "global-loom-package" or dry_run.get("mutates") is not False:
+            raise AssertionError("user-level host install dry-run did not use the global Loom package")
+        _, installed = run_json(["host", "install", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        if installed.get("source_kind") != "global-loom-package" or installed.get("workstation_install", {}).get("result") != "pass":
+            raise AssertionError("user-level host install did not read back the installed Codex plugin payload")
+        for write in installed.get("writes", []):
+            if Path(write).resolve().is_relative_to(target.resolve()):
+                raise AssertionError(f"user-level host install wrote inside the target repository: {write}")
+        _, registered = run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        if registered.get("source_kind") != "global-loom-package" or registered.get("workstation_registration", {}).get("result") != "pass":
+            raise AssertionError("user-level host register did not read back Codex registration")
+        for write in registered.get("writes", []):
+            if Path(write).resolve().is_relative_to(target.resolve()):
+                raise AssertionError(f"user-level host register wrote inside the target repository: {write}")
         for unexpected in ("plugins/loom", "skills", ".agents/skills", ".loom/bin", ".loom/installed-state.json"):
             if (target / unexpected).exists():
-                raise AssertionError(f"repo-local plugin install wrote unsupported repository payload: {unexpected}")
+                raise AssertionError(f"user-level host install/register wrote unsupported repository payload: {unexpected}")
 
 
 def assert_metadata_only_adoption_contract(tmp: Path) -> None:
@@ -8942,9 +8952,15 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("host install did not fail closed without --apply")
         managed_target = tmp / "managed-host"
         managed_target.mkdir()
-        status, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"])
-        if status == 0 or managed_install.get("failed_layer") != "host-payload":
-            raise AssertionError("repo-local host plugin install did not fail closed")
+        managed_home = tmp / "managed-host-codex-home"
+        managed_home.mkdir()
+        with isolated_codex_workstation(managed_home):
+            _, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"], expect=0)
+            if managed_install.get("source_kind") != "global-loom-package" or managed_install.get("workstation_install", {}).get("result") != "pass":
+                raise AssertionError("user-level host plugin install did not pass readback")
+            for unexpected in ("plugins/loom", "skills", ".agents/skills", ".loom/bin", ".loom/installed-state.json"):
+                if (managed_target / unexpected).exists():
+                    raise AssertionError(f"user-level host plugin install wrote unsupported repository payload: {unexpected}")
         _, skills_list = run_json(["skills", "list", "--json"], expect=0)
         if skills_list["schema"] != "loom-skills-surface/v1" or skills_list["root_entry"] != "loom-init":
             raise AssertionError("skills list did not expose generated skills registry")
