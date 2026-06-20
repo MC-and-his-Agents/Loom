@@ -4,18 +4,18 @@
 
 - Item ID: WI-1641-1630-1632
 - Goal: 完成 milestone #14 PR2：让 Codex plugin payload 成为唯一 skills 发布形态，删除 single-skill package 分发语义，并把 plugin manifest/skills payload 改成用户级 provider 语义。
-- Scope: issue #1641、#1630、#1632；允许修改 skills 生成/校验工具、`plugins/loom` payload、npm package surface、相关 adoption 文档、generated skills mirror，以及本 Work Item carrier。
+- Scope: issue #1641、#1630、#1632；允许修改 skills 生成/校验工具、`plugins/loom` payload、npm package surface、相关 adoption 文档、generated skills mirror、`.loom/shadow/` merge-ready evidence，以及本 Work Item carrier。
 - Execution Path: issue #1641/#1630/#1632 -> branch `work/1641-plugin-payload-only` -> PR2 -> targeted checks -> hosted gate -> merge -> issue closeout。
 - Workspace Entry: .
-- Recovery Entry: `.loom/progress/WI-1641-1630-1632.md`
-- Review Entry: `.loom/reviews/WI-1641-1630-1632.json`
-- Validation Entry: `python3 tools/skills_surface.py check`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_cli_contract.py --surface aggregate`; `make py-compile`; `git diff --check`
+- Recovery Entry: .loom/progress/WI-1641-1630-1632.md
+- Review Entry: .loom/reviews/WI-1641-1630-1632.json
+- Validation Entry: python3 tools/skills_surface.py check`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_cli_contract.py --surface aggregate`; `make py-compile`; `git diff --check
 - Closing Condition: PR2 merges into `main`, issues #1641/#1630/#1632 are closed or linked to the merged PR, and repo carriers consume the merge/head/check evidence without starting PR3.
-- Current Checkpoint: build checkpoint
-- Current Stop: PR2 current-head manual semantic review has been recorded with decision `allow`; shadow parity and adoption verify pass after refreshing the merge-ready and closeout shadow hashes.
-- Next Step: Commit and push the review/shadow carrier sync, then run hosted gate and merge-ready for PR #1650.
+- Current Checkpoint: merge checkpoint
+- Current Stop: PR2 implementation, demo fixture refresh, PR metadata readback, Work Item scope, and current review record are ready for hosted merge gate consumption.
+- Next Step: Wait for hosted checks, run PR2 merge-ready, then merge PR #1650 and close issues #1641/#1630/#1632 without starting PR3.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-20 local PR2 validation passed: `python3 tools/skills_surface.py check`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/loom.py skills package --json`; `python3 tools/loom.py skills release-check --json`; `make py-compile`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 tools/check_cli_contract.py --surface aggregate`; `python3 tools/loom.py suite validate --target . --item WI-1641-1630-1632 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1641-1630-1632 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1641-1630-1632 --json`; `git diff --check`; `make loom-self-plugin-check`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; `python3 .loom/bin/loom_flow.py flow pre-review --target . --item WI-1641-1630-1632`; `python3 .loom/bin/loom_flow.py review read --target . --item WI-1641-1630-1632`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1641-1630-1632`.
+- Latest Validation Summary: 2026-06-20 local PR2 validation passed at 10aefc8a plus carrier refresh: make loom-demo-new-project-check; python3 tools/skills_surface.py check; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/check_release_surface.py; python3 tools/loom.py skills package --json; python3 tools/loom.py skills release-check --json; make py-compile; python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/check_cli_contract.py --surface aggregate; npm --prefix packages/loom-installer run check:docs/check:payload/check:release; git diff --check; make loom-self-plugin-check; full python3 tools/loom_check.py; python3 .loom/bin/loom_flow.py review read --target . --item WI-1641-1630-1632; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1641-1630-1632; PR metadata preflight for #1650 passed with head 10aefc8a.
 - Recovery Boundary: PR2 only. Do not implement PR3 user-level plugin install/register, PR4 CLI command deletion, PR5 migration/gate convergence, or v0.17.0 release execution in this lane.
 - Current Lane: milestone-14-pr2-plugin-payload
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: `.loom/work-items/WI-1641-1630-1632.md`
-- Dynamic Truth: `.loom/progress/WI-1641-1630-1632.md`
+- Static Truth: .loom/work-items/WI-1641-1630-1632.md
+- Dynamic Truth: .loom/progress/WI-1641-1630-1632.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

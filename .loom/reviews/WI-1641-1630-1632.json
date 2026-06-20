@@ -3,11 +3,11 @@
   "item_id": "WI-1641-1630-1632",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Manual semantic review for PR2 found no blocking issues after refreshing demo bootstrap fixture drift. The branch consistently treats plugins/loom/skills as the tracked Codex user plugin payload, removes generated single-skill distribution artifacts from checked surfaces, keeps deprecated installer regression pointed at plugin payload, and updates loom_check so CI no longer enforces the old repo-local or single-skill payload contract.",
+  "summary": "Manual semantic review for PR2 found no blocking issues after demo bootstrap fixture refresh, Work Item scope/shadow carrier refresh, and merge checkpoint recovery synchronization. The branch consistently treats plugins/loom/skills as the tracked Codex user plugin payload, removes generated single-skill distribution artifacts from checked surfaces, keeps deprecated installer regression pointed at plugin payload, and updates loom_check so CI no longer enforces the old repo-local or single-skill payload contract.",
   "reviewer": "codex-manual-review",
-  "authored_at": "2026-06-20T06:21:03Z",
-  "reviewed_head": "6ddc816c0347653ba3d55421abc155255741e04f",
-  "reviewed_validation_summary": "2026-06-20 local PR2 validation passed: `python3 tools/skills_surface.py check`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/loom.py skills package --json`; `python3 tools/loom.py skills release-check --json`; `make py-compile`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 tools/check_cli_contract.py --surface aggregate`; `python3 tools/loom.py suite validate --target . --item WI-1641-1630-1632 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1641-1630-1632 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1641-1630-1632 --json`; `git diff --check`; `make loom-self-plugin-check`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; `python3 .loom/bin/loom_flow.py flow pre-review --target . --item WI-1641-1630-1632`; `python3 .loom/bin/loom_flow.py review read --target . --item WI-1641-1630-1632`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1641-1630-1632`.",
+  "authored_at": "2026-06-20T06:46:55Z",
+  "reviewed_head": "10aefc8a3fa1bd1610efc6d57b96c0cbedac4490",
+  "reviewed_validation_summary": "2026-06-20 local PR2 validation passed at 10aefc8a plus carrier refresh: make loom-demo-new-project-check; python3 tools/skills_surface.py check; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/check_release_surface.py; python3 tools/loom.py skills package --json; python3 tools/loom.py skills release-check --json; make py-compile; python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/check_cli_contract.py --surface aggregate; npm --prefix packages/loom-installer run check:docs/check:payload/check:release; git diff --check; make loom-self-plugin-check; full python3 tools/loom_check.py; python3 .loom/bin/loom_flow.py review read --target . --item WI-1641-1630-1632; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1641-1630-1632; PR metadata preflight for #1650 passed with head 10aefc8a.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
