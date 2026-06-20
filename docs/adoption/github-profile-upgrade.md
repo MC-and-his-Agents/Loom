@@ -115,7 +115,7 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 GitHub profile maturity detector 的稳定入口是：
 
 ```bash
-python3 tools/loom.py profile upgrade-plan --target <repo> --json
+loom profile upgrade-plan --target <repo> --json
 ```
 
 底层 runtime 入口仍是 `python3 tools/loom_flow.py governance-profile upgrade-plan --target <repo>`；CLI-first 用户面必须优先使用 `loom profile ...`，让命令语义、JSON 输出、fail-closed 和 fallback 由统一 CLI 控制。

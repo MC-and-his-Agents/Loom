@@ -417,9 +417,9 @@ Compatibility mode must stay diagnosable:
 ## CLI Semantics
 
 ```bash
-python3 tools/loom.py installed-state show --target <repo> --json
-python3 tools/loom.py installed-state validate --target <repo> --json
-python3 tools/loom.py installed-state export --target <repo> --json
+loom installed-state show --target <repo> --json
+loom installed-state validate --target <repo> --json
+loom installed-state export --target <repo> --json
 ```
 
 All three commands fail closed when metadata is missing, unreadable, or invalid. Missing metadata may include `legacy_surface_hints` such as `.loom/bin`, `.agents/skills`, `skills/registry.json`, plugin manifests, or old installer status files. Those hints are diagnostic input for `loom detect`, `loom doctor`, and `loom repair plan`; they are not treated as valid installed-state by themselves.

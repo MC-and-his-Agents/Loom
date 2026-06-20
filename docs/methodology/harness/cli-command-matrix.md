@@ -3,10 +3,27 @@
 The `loom` CLI is the primary control plane for the CLI-first operating layer. The current matrix is exposed mechanically through:
 
 ```bash
-python3 tools/loom.py help --json
+loom help --json
 ```
 
 The JSON output is the canonical machine-readable matrix for tests and downstream consumers. This document freezes the naming rules and command families for human review.
+Inside the Loom source checkout, maintainers may also run
+`python3 tools/loom.py help --json` as a local development entrypoint. Downstream
+operators should use the global `loom` CLI.
+
+## Output Contract
+
+Supported agent-facing commands default to context-safe stdout. `loom ... --json`
+emits direct JSON only when it fits the effective stdout budget; otherwise it
+emits a compact summary envelope with an artifact locator. Complete diagnostics
+belong behind the artifact locator and should not be pasted into handoff,
+review, or closeout text by default. Commands that support `--full-output` use
+it only for explicit debugging, audit, or blocker classification.
+
+The default stdout hard budget is 16 KiB and the summary target is 4 KiB. The
+effective values are configurable per process with
+`LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`,
+`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`, and `LOOM_OUTPUT_ARTIFACT_DIR`.
 
 Regression bucket / named surface / fast-vs-full validation semantics for long-running black-box checks are frozen in [regression-surface-contract.md](./regression-surface-contract.md). The command matrix may expose selectors or aggregate outputs for those surfaces, but it does not redefine that vocabulary here.
 
@@ -186,13 +203,14 @@ loom verify
 
 `install` writes `loom-installed-state/v2` only when `--apply` is present and
 the target artifact/scope is explicit. Metadata-only repository adoption,
-embedded repository payload, compatibility skills export, single-skill export,
-workstation registration, and runtime carrier changes are separate operations
+workstation registration, and legacy residue diagnosis are separate operations
 under the [installation taxonomy](../../adoption/installation-taxonomy.md).
-The runtime provider mode is also explicit: `global-cli` repositories expect the
-installed root `loom` command and do not require `.loom/bin`, while
-`repo-local-wrapper` repositories keep `.loom/bin` or equivalent wrappers only
-when installed-state declares that carrier role.
+Embedded repository payloads, compatibility skills export, single-skill export,
+and repo-local runtime carrier changes are legacy or diagnostic vocabulary, not
+the current downstream install target. The runtime provider mode is explicit:
+`global-cli` repositories expect the installed root `loom` command and do not
+require `.loom/bin`; `repo-local-wrapper` is retained for migration diagnostics
+only and must not be recommended as a supported runtime face after v0.17.0.
 `upgrade-plan` is non-mutating and emits ordered repair /
 legacy-classification / no-op actions. `verify` consumes `doctor` so
 installed-state, declared adoption mode, provider readiness, and legacy-surface

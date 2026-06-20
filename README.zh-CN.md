@@ -15,10 +15,10 @@ Loom 现在采用 CLI-first。`loom` 命令是执行控制面：它诊断 instal
 智能体仍可在需要路由帮助时从 `loom-init` 起步。进入执行后，CLI 是稳定的机器接口：
 
 ```bash
-python3 tools/loom.py doctor --target . --json
-python3 tools/loom.py upgrade-plan --target . --json
-python3 tools/loom.py verify --target . --json
-python3 tools/loom.py skills release-check --json
+loom doctor --target . --json
+loom upgrade-plan --target . --json
+loom verify --target . --json
+loom skills release-check --json
 ```
 
 基础执行流如下：
@@ -81,6 +81,24 @@ provider 注册。
 
 `loom-installer` 不属于 primary install journey。它只作为 legacy consumer 的 deprecated historical evidence 保留。
 
+## 输出模式
+
+Loom 命令默认使用上下文安全输出。命令只有在 JSON 能放进有效 stdout
+预算时才直接输出完整 JSON；更大的诊断会在 stdout 输出摘要和 artifact locator，
+让智能体和 handoff 引用 locator，而不是粘贴完整报告或长日志。
+
+三种输出模式的使用边界：
+
+- 默认 `--json`：用于正常 agent 工作流、review、gate、handoff 和 closeout；
+  只传播摘要和 artifact locator。
+- Artifact locator：用于诊断超过预算，或其他线程需要读取完整本地证据时；
+  artifact 是诊断文件，不是 authored truth carrier。
+- 显式 `--full-output`：只在调试、审计或阻断分类需要完整 stdout JSON 时使用。
+
+默认 stdout 硬上限是 16 KiB，summary 目标是 4 KiB。可通过
+`LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`、`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`
+和 `LOOM_OUTPUT_ARTIFACT_DIR` 对单个进程调整。
+
 ### Advanced / Compatibility
 
 历史 native skills-library clone 路径不是新用户的 primary install path：
@@ -100,7 +118,7 @@ Loom CLI 发布面是执行行为的唯一 active 发布线。它的权威来源
 ## 基本工作流
 
 1. 先运行 `loom doctor --target . --json` 或 `loom verify --target . --json`，判断仓库当前 Loom 层。
-2. 变更 installed runtime、skills、plugin 或 companion surface 前，先运行 `loom upgrade-plan --target . --json`。
+2. 变更 metadata-only adoption、全局 CLI provider、Codex 用户级 plugin 注册或 legacy residue repair 前，先运行 `loom upgrade-plan --target . --json`。
 3. 需要场景路由时，从 `loom-init` 开始，再使用 `loom-adopt`、`loom-resume`、`loom-build`、`loom-review`、`loom-merge-ready` 等 scenario skills。
 4. 用 `loom pr gate`、`loom merge check`、`loom merge run`、`loom gate closeout` 等 CLI-backed gate 消费 readiness evidence。
 5. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
