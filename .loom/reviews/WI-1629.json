@@ -1,39 +1,27 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1629",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "1d8904469518aaec08442b86e93a8832b6dd238f",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Manual semantic review for PR3 at head 8cc264525ccb8fc86edfb07ad7819dc71ea4144d. The change keeps target repositories out of Codex plugin install/register, defaults source resolution to the global Loom package payload, and confines writes to user-level Codex state. No blocking issues found.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T07:21:12Z",
+  "reviewed_head": "8cc264525ccb8fc86edfb07ad7819dc71ea4144d",
+  "reviewed_validation_summary": "2026-06-20 local PR3 validation passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; temporary HOME smoke tests for host install/register confirmed no target repo writes; python3 tools/check_cli_contract.py --surface adoption-host-metadata; git diff --check; python3 tools/host_adapter_check.py; python3 tools/check_npm_package.py; python3 tools/check_release_surface.py; node --test test/npm-package-smoke.test.mjs; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; full python3 tools/check_cli_contract.py.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1629.md",
+    "recovery_entry": ".loom/progress/WI-1629.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
