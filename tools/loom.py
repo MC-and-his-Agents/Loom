@@ -73,6 +73,9 @@ LOOM_BOOTSTRAP_BLOCK = f"""{LOOM_BOOTSTRAP_START}
 """
 
 OUTPUT_SCHEMA = "loom-cli-output/v1"
+OUTPUT_ENVELOPE_SCHEMA = "loom-agent-output-envelope/v1"
+OUTPUT_ARTIFACT_SCHEMA = "loom-output-artifact/v1"
+DEFAULT_OUTPUT_ARTIFACT_DIR = Path(".loom/tmp/output-artifacts")
 INSTALLED_STATE_SCHEMA = "loom-installed-state/v2"
 DETECT_SCHEMA = "loom-installed-surface-detect/v1"
 DOCTOR_SCHEMA = "loom-installed-surface-doctor/v1"
@@ -1065,6 +1068,104 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
         "generated_at": now_iso(),
         **fields,
     }
+
+
+def output_key_gaps(payload: dict[str, Any], *, limit: int = 10) -> list[Any]:
+    for field in ("key_gaps", "blocking_gaps", "gaps"):
+        value = payload.get(field)
+        if isinstance(value, list):
+            return value[:limit]
+    reason = payload.get("fail_closed_reason")
+    return [reason] if reason else []
+
+
+def output_envelope(
+    command: str,
+    result: str,
+    *,
+    summary: str,
+    key_gaps: list[Any] | None = None,
+    failed_layer: str | None = None,
+    fail_closed_reason: str | None = None,
+    artifact_locator: str | None = None,
+    full_output_available: bool = False,
+    full_output_truncated: bool = False,
+    sensitive: bool = False,
+    **fields: Any,
+) -> dict[str, Any]:
+    failure_classification = {
+        key: value
+        for key, value in {
+            "failed_layer": failed_layer,
+            "fail_closed_reason": fail_closed_reason,
+        }.items()
+        if value
+    }
+    return output(
+        command,
+        result,
+        envelope_schema=OUTPUT_ENVELOPE_SCHEMA,
+        summary=summary,
+        failure_classification=failure_classification,
+        key_gaps=key_gaps or [],
+        full_output={
+            "available": full_output_available,
+            "artifact_locator": artifact_locator,
+            "truncated": full_output_truncated,
+            "sensitive": sensitive,
+        },
+        **fields,
+    )
+
+
+def write_output_artifact(
+    payload: dict[str, Any],
+    *,
+    artifact_dir: Path | None = None,
+    sensitive: bool = False,
+) -> str:
+    root = artifact_dir or Path(os.environ.get("LOOM_OUTPUT_ARTIFACT_DIR", DEFAULT_OUTPUT_ARTIFACT_DIR))
+    root.mkdir(parents=True, exist_ok=True)
+    command = str(payload.get("command", "loom-output"))
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", command).strip("-") or "loom-output"
+    rendered = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+    digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:12]
+    path = root / f"{now_iso().replace(':', '').replace('+', 'Z')}-{slug}-{digest}.json"
+    artifact = {
+        "schema_version": OUTPUT_ARTIFACT_SCHEMA,
+        "generated_at": now_iso(),
+        "command": command,
+        "sensitive": sensitive,
+        "payload": payload,
+    }
+    path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return str(path)
+
+
+def agent_safe_payload(
+    payload: dict[str, Any],
+    *,
+    stdout_budget_bytes: int,
+    artifact_dir: Path | None = None,
+    sensitive: bool = False,
+) -> dict[str, Any]:
+    rendered = json.dumps(payload, indent=2, ensure_ascii=False)
+    if len(rendered.encode("utf-8")) <= stdout_budget_bytes:
+        return payload
+    locator = write_output_artifact(payload, artifact_dir=artifact_dir, sensitive=sensitive)
+    return output_envelope(
+        str(payload.get("command", "loom-output")),
+        str(payload.get("result", "block")),
+        summary=str(payload.get("summary") or "Full output exceeded the agent-safe stdout budget."),
+        key_gaps=output_key_gaps(payload),
+        failed_layer=payload.get("failed_layer"),
+        fail_closed_reason=payload.get("fail_closed_reason"),
+        artifact_locator=locator,
+        full_output_available=True,
+        full_output_truncated=True,
+        sensitive=sensitive,
+        stdout_budget_bytes=stdout_budget_bytes,
+    )
 
 
 def add_closeout_pr_role_args(flow_args: list[str], args: argparse.Namespace) -> None:
