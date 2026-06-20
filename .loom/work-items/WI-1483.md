@@ -6,7 +6,7 @@
 - Goal: 让事实链、状态检查与影子一致性命令默认输出 agent-safe summary，并保留显式完整输出路径。
 - Scope: 改造全局 loom CLI 的 fact-chain/status/shadow-parity 输出面；不改变判定逻辑，不改流程门禁命令。
 - Execution Path: issue #1483 -> branch work/1483-fact-shadow-summary-output -> PR #1662 -> hosted gate -> closeout
-- Workspace Entry: /Users/mc/dev/Loom-1483
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1483.md
 - Review Entry: .loom/reviews/WI-1483.json
 - Validation Entry: test/output_envelope_test.py; tools/check_cli_contract.py; real stdout budget probes
