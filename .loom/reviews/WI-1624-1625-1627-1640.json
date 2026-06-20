@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1624-1625-1627-1640",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Manual semantic review for PR #1649 at head e37d46d0a1fe63187c8b670d544174a756919b5f passed after fixing stale CLI help text and carrier checkpoint/shadow scope; no blocking findings remain.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-20T03:31:24Z",
+  "reviewed_head": "e37d46d0a1fe63187c8b670d544174a756919b5f",
+  "reviewed_validation_summary": "2026-06-20T03:12Z local validation passed: `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 tools/check_cli_contract.py --surface aggregate` passed in 341.37s; `make py-compile`; `python3 tools/host_adapter_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/loom.py suite carrier validate --target . --item WI-1624-1625-1627-1640 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1624-1625-1627-1640 --json`; `python3 tools/loom.py suite validate --target . --item WI-1624-1625-1627-1640 --json`; `git diff --check`. Smoke checks confirmed `loom install --help` no longer exposes `--mode`, dry-run planned writes are `.loom/installed-state.json` and `AGENTS.md`, `loom install --mode plugin` exits non-zero, and `.loom/bin` with current installed-state makes `doctor` block as legacy residue.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1624-1625-1627-1640.md",
+    "recovery_entry": ".loom/progress/WI-1624-1625-1627-1640.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
