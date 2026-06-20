@@ -9,13 +9,13 @@
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1487.md
 - Review Entry: .loom/reviews/WI-1487.json
-- Validation Entry: git diff --check; python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py
+- Validation Entry: git diff --check; python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py; python3 tools/loom.py suite validate --target . --item WI-1487 --json
 - Closing Condition: Issue #1487 closes after PR merge and closeout evidence confirms thread rotation rules are documented without adding a scheduler or repo-local runtime path.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Thread rotation and handoff package contract changes are validated locally on branch work/1487-thread-handoff-rules.
-- Next Step: Record implementation review, update PR metadata, open PR, and proceed through hosted PR gate.
+- Current Stop: Thread rotation and handoff package contract changes are validated locally on branch work/1487-thread-handoff-rules, with minimal suite carriers added for PR gate consumption.
+- Next Step: Refresh review binding, update PR metadata to the minimal suite path, rerun local PR gate, and proceed through hosted PR gate.
 - Blockers: None
-- Latest Validation Summary: 2026-06-20 WI-1487 docs-only validation passed: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`.
+- Latest Validation Summary: 2026-06-20 WI-1487 docs/contract validation passed after minimal suite carrier addition: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/loom.py suite validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1487 --json`.
 - Recovery Boundary: WI-1487 only. Do not implement a scheduler, update command examples owned by #1486, or restore repo-local plugin/runtime/skills paths.
 - Current Lane: milestone-11-thread-handoff-rules
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-20 WI-1487 thread handoff rules lane
 - Logs Entry: local command output retained in current Codex milestone/11 thread.
 - Diagnostics Entry: current branch updates docs/contract only; #1486 owns command example and skill text migration.
-- Verification Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`.
+- Verification Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/loom.py suite validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1487 --json`.
 - Lane Entry: milestone-11-thread-handoff-rules
 
 ## Sources
