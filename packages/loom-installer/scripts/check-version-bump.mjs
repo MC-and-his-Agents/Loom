@@ -14,9 +14,7 @@ const behaviorPrefixes = [
   'packages/loom-installer/src/',
 ];
 
-const behaviorPaths = [
-  'packages/loom-installer/scripts/build-payload.mjs',
-];
+const behaviorPaths = [];
 
 const packageBehaviorFields = [
   'version',

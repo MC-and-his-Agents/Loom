@@ -8,7 +8,7 @@
 
 当任务不是初始化，而是执行中的日常动作时，还必须结合：
 
-- [../../route-matrix.md](../.loom-runtime/route-matrix.md)
+- [../../route-matrix.md](../../route-matrix.md)
 
 root skill 只在两种情况下继续留在 `loom-init`：
 

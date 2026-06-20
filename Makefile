@@ -119,10 +119,11 @@ loom-demo-new-project-sync:
 
 loom-self-plugin-check:
 	test -f plugins/loom/.codex-plugin/plugin.json
+	test -f plugins/loom/skills/registry.json
+	test -f plugins/loom/skills/loom-init/SKILL.md
 	test -f src/skills/registry.json
 	test -f skills/registry.json
 	test -f skills/loom-init/SKILL.md
-	test -f skills/loom-init/loom-package.json
 	test ! -f .agents/plugins/marketplace.json
 
 repo-local-cli-fast:

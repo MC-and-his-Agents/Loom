@@ -53,7 +53,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 如果信号不足或同时命中多个场景，不要猜测。回退到 `loom-init`，并要求最小补充信号。
 
-完整场景路由规则见 [../route-matrix.md](.loom-runtime/route-matrix.md)。
+完整场景路由规则见 [../route-matrix.md](../route-matrix.md)。
 
 ## Planning Boundary
 
@@ -177,7 +177,7 @@ planning 只回答“应该怎么拆”和“应该落到哪些 host carrier”�
 
 ### 3.2 小型既有仓库
 
-当仓库满足 [../shared/references/adoption/lightweight-retrofit-default.md](.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md) 的默认条件时，判为 `小型既有仓库`。
+当仓库满足 [../shared/references/adoption/lightweight-retrofit-default.md](../shared/references/adoption/lightweight-retrofit-default.md) 的默认条件时，判为 `小型既有仓库`。
 
 默认动作：
 

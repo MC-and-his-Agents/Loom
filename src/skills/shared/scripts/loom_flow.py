@@ -1411,15 +1411,10 @@ def live_smoke_release_interpretation(status: str) -> str:
 
 def current_host_adapter_version() -> str | None:
     source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
-    candidates: list[tuple[Path, str]] = []
+    candidates: list[Path] = []
     if source_repo_root:
-        candidates.append((Path(source_repo_root).expanduser().resolve() / "plugins/loom/.codex-plugin/plugin.json", "plugin"))
-    installed_skills_root = os.environ.get("LOOM_INSTALLED_SKILLS_ROOT")
-    if installed_skills_root:
-        installed_root = Path(installed_skills_root).expanduser().resolve()
-        candidates.append((installed_root / "loom-init" / "loom-package.json", "package"))
-        candidates.append((installed_root / "loom-adopt" / "loom-package.json", "package"))
-    for path, source in candidates:
+        candidates.append(Path(source_repo_root).expanduser().resolve() / "plugins/loom/.codex-plugin/plugin.json")
+    for path in candidates:
         if not path.exists():
             continue
         try:
@@ -1428,11 +1423,8 @@ def current_host_adapter_version() -> str | None:
             continue
         if not isinstance(payload, dict):
             continue
-        if source == "plugin":
-            x_loom = payload.get("x-loom")
-            version = x_loom.get("host_adapter_version") if isinstance(x_loom, dict) else None
-        else:
-            version = payload.get("host_adapter_version")
+        x_loom = payload.get("x-loom")
+        version = x_loom.get("host_adapter_version") if isinstance(x_loom, dict) else None
         if isinstance(version, str) and version.strip():
             return version.strip()
     return None

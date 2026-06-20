@@ -74,9 +74,9 @@
     "mode": "active",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1624-1625-1627-1640",
-      "work_item": ".loom/work-items/WI-1624-1625-1627-1640.md",
-      "recovery_entry": ".loom/progress/WI-1624-1625-1627-1640.md",
+      "current_item_id": "WI-1641-1630-1632",
+      "work_item": ".loom/work-items/WI-1641-1630-1632.md",
+      "recovery_entry": ".loom/progress/WI-1641-1630-1632.md",
       "status_surface": ".loom/status/current.md"
     }
   },

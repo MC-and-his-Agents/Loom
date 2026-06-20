@@ -27,6 +27,6 @@
   - adoption 完成后是否需要继续执行当前事项
 - 当前任务是否仍属于初始化，而不是恢复/交接/review/merge-ready
 
-若缺少最后一项，必须先回到 [../../route-matrix.md](../.loom-runtime/route-matrix.md) 重新判断场景。
+若缺少最后一项，必须先回到 [../../route-matrix.md](../../route-matrix.md) 重新判断场景。
 
 若缺少 source locator、writeback target 或 verification command，`loom-adopt` 必须把它作为 decision prompt 缺口输出，不能直接宣称 adoption 完成。

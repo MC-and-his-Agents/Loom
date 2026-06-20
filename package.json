@@ -10,7 +10,7 @@
     "bin/loom.mjs",
     "tools",
     "skills",
-    "plugins/loom/.codex-plugin/plugin.json",
+    "plugins/loom",
     "src/skills",
     "docs/adoption/cli-only-install-contract.md",
     "docs/adoption/loom-cli-release-surface.md",

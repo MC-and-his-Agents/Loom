@@ -175,12 +175,12 @@ Loom exposes one root entry and ten scenario skills:
 
 The editable skills source lives under `src/skills/`. The Loom source
 repository's generated and checked-in payload surface lives under
-[skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained
-skill payload with `loom-package.json` and `.loom-runtime/`, managed by the root
-CLI. Downstream Codex plugin installs embed that payload under
-`plugins/loom/skills/`; downstream top-level `skills/` belongs to the target
-repository namespace unless an explicit future profile owns it. The canonical
-Codex plugin manifest lives under
+[skills/](./skills/) as a source mirror. The published skills payload is the
+Codex user plugin payload under `plugins/loom/skills/`; `skills/<skill-id>` is
+not a self-contained single-skill package and does not carry
+`loom-package.json` or `.loom-runtime/` as distribution artifacts. Downstream
+top-level `skills/` belongs to the target repository namespace unless an
+explicit future profile owns it. The canonical Codex plugin manifest lives under
 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/) and is installed
 or verified through `loom host ...`.
 

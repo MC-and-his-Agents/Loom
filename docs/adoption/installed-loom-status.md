@@ -4,22 +4,28 @@ Installed Loom surfaces must expose status as evidence, not as a second governan
 
 ## Installed Surface Status
 
-Installer-managed surfaces write `loom-installed-surface-status/v1` metadata into the installed layer:
+Managed surfaces expose `loom-installed-surface-status/v1` metadata as read-only
+diagnostic evidence:
 
-- `installed_layer`: `host-adapter-plugin` or `generated-single-skill`
+- `installed_layer`: `global-cli-provider`, `codex-user-plugin-provider`, or
+  `legacy-repository-payload`
 - `host_adapter`: the host adapter that owns discovery, currently `codex` or `claude`
-- `mode`: `plugin` or `skill`
-- `skill_id`: present for single-skill installs
-- `version_context`: repo, installer package, plugin surface, host adapter, skills registry, runtime core, and skill package context when applicable
+- `mode`: `metadata-only`, `user-plugin`, or `legacy`
+- `provider_scope`: `user`, `global`, or `repository`
+- `version_context`: repo, global CLI package, plugin manifest, host adapter,
+  plugin payload registry, and skill contract context when applicable
 - `runtime_state`: `ready`, `blocked`, or `unknown`
 - `upgrade_eligibility`: `current`, `upgrade-available`, `drift`, `incompatible`, or `unknown`
 - `failed_layer` and `fail_closed_reason`: required when the installed surface cannot be trusted
 
-The status distinguishes full host-adapter plugin installs from generated single-skill installs. Unknown, missing, or internally inconsistent version metadata must fail closed with `runtime_state=blocked` and `upgrade_eligibility=incompatible`.
+The status distinguishes repository adoption truth from workstation provider
+truth. Unknown, missing, or internally inconsistent version metadata must fail
+closed with `runtime_state=blocked` and `upgrade_eligibility=incompatible`.
 
 ## Upgrade Plan
 
-`loom-installer upgrade-plan plugin|skill <skill-id> --host <host> --target <repo> --json` is a read-only rehearsal command. It reports:
+`loom repair plan --target <repo> --json` is the current read-only rehearsal
+entry. It reports:
 
 - current installed version context
 - available payload version context
@@ -31,7 +37,9 @@ The status distinguishes full host-adapter plugin installs from generated single
 
 ## Verify Upgrade
 
-`loom-installer verify-upgrade plugin|skill <skill-id> --host <host> --target <repo> --json` is also read-only. It validates the installed layer after rehearsal or install and reports:
+`loom verify --target <repo> --json` and host-specific verify commands are also
+read-only. They validate the declared adoption/provider layers after rehearsal
+or install and report:
 
 - `verified` when installed metadata and payload files match the available payload
 - `blocked` when metadata is missing, inconsistent, or payload files drift from the recorded context

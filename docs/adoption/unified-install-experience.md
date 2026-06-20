@@ -31,8 +31,8 @@ Install path status:
   global Loom package.
 - Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence and compatibility records.
 - Unsupported: presenting repo-local plugin install, repo-local runtime install,
-  SKILLS install, single-skill install, or installer commands as an independent
-  primary Loom install surface.
+  root `skills/` install, single-skill install, or installer commands as an
+  independent primary Loom install surface.
 
 <!-- legacy-release-surface-anchor: use `loom host install` to install host plugin payloads -->
 
@@ -70,8 +70,8 @@ directory is unsupported legacy residue in the milestone #14 target.
 - `src/skills/` is the only editable source truth for Loom skills.
 - The user-level Codex Loom plugin payload is the current skills publishing
   shape.
-- `skills/` and single-skill package metadata are legacy/source compatibility
-  surfaces until the plugin-payload-only generation work removes them.
+- `skills/` is a checked-in mirror for source review and tests. It is not a
+  current install surface, and single-skill package metadata is not generated.
 - Downstream metadata-only adoption consumes the user-level Codex Loom plugin as
   its skills provider and does not write `plugins/loom/skills/`,
   `plugins/loom/.codex-plugin/plugin.json`, `.loom/bin`, `.agents/skills`, or
@@ -178,4 +178,4 @@ Across Codex, Claude Code, OpenCode, Gemini, and Cursor, the user-facing experie
 
 ## Version Context
 
-Loom does not use one global version line for every surface. User-facing install and upgrade docs must refer to `version-authority-map.md` when describing repository versions, GitHub releases, installer versions, plugin surface versions, host adapter versions, generated single-skill package versions, skills registry and contract versions, runtime/core versions, or external runtime schemas.
+Loom does not use one global version line for every surface. User-facing install and upgrade docs must refer to `version-authority-map.md` when describing repository versions, GitHub releases, installer versions, plugin surface versions, host adapter versions, plugin payload registry versions, skills registry and contract versions, or external runtime schemas.

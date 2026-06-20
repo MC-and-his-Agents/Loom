@@ -1023,14 +1023,13 @@ def repo_version() -> str:
 def version_context() -> dict[str, Any]:
     registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
     plugin = read_optional_json(PLUGIN_MANIFEST) or {}
-    package = read_optional_json(SKILLS_ROOT / "loom-init" / "loom-package.json") or {}
     return {
         "repo_version": repo_version(),
         "skills_registry_version": registry.get("registry_version", "unknown"),
         "plugin_surface_version": plugin.get("x-loom", {}).get("plugin_surface_version", plugin.get("version", "unknown")),
         "host_adapter_version": plugin.get("x-loom", {}).get("host_adapter_version", "unknown"),
-        "runtime_core_version": package.get("runtime_core_version", "unknown"),
-        "skill_package_version": package.get("skill_package_version", "unknown"),
+        "plugin_payload_root": "plugins/loom/skills",
+        "plugin_payload_version": registry.get("registry_version", "unknown"),
         "version_authority": "docs/adoption/version-authority-map.md",
     }
 
@@ -4354,11 +4353,51 @@ def handle_skills(argv: list[str]) -> int:
                 },
             }
         return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Skills surface checks passed." if result == "pass" else "Skills surface checks failed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), checks=results, release_authority=release_authority, failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else "one or more skills checks failed", fallback_to=None if result == "pass" else ["loom skills generate --apply --json"]))
-    package_records = []
+    payload_root = REPO_ROOT / "plugins" / "loom" / "skills"
+    missing_payload_inputs = []
+    if not (REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json").is_file():
+        missing_payload_inputs.append("plugins/loom/.codex-plugin/plugin.json")
+    if not (payload_root / "registry.json").is_file():
+        missing_payload_inputs.append("plugins/loom/skills/registry.json")
+    skill_records = []
     for entry in entries or []:
-        package_path = SKILLS_ROOT / entry["id"] / "loom-package.json"
-        package_records.append(read_optional_json(package_path) or {"package_id": entry["id"], "missing": str(package_path)})
-    return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Skill package metadata collected without packing artifacts.", mutates=False, registry_version=registry.get("registry_version"), packages=package_records, fallback_to=["npm run check:release --prefix packages/loom-installer"]))
+        skill_id = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(skill_id, str):
+            continue
+        skill_records.append(
+            {
+                "id": skill_id,
+                "role": entry.get("role"),
+                "contract_version": entry.get("contract_version"),
+                "skill": f"plugins/loom/skills/{skill_id}/SKILL.md",
+                "contract": f"plugins/loom/skills/{skill_id}/contract.json",
+                "executable": f"plugins/loom/skills/{entry.get('executable')}",
+            }
+        )
+    result = "pass" if not missing_payload_inputs else "block"
+    return emit(
+        output(
+            command,
+            result,
+            schema=SKILLS_SCHEMA,
+            summary="Codex plugin payload metadata collected without single-skill package artifacts."
+            if result == "pass"
+            else "Codex plugin payload is incomplete.",
+            mutates=False,
+            registry_version=registry.get("registry_version"),
+            root_entry=registry.get("root_entry"),
+            plugin_payload={
+                "manifest": "plugins/loom/.codex-plugin/plugin.json",
+                "skills_root": "plugins/loom/skills",
+                "single_skill_packages": False,
+                "skills": skill_records,
+            },
+            failed_layer=None if result == "pass" else "plugin-payload",
+            fail_closed_reason=None if result == "pass" else "missing plugin payload inputs",
+            missing_inputs=missing_payload_inputs,
+            fallback_to=None if result == "pass" else ["python3 tools/skills_surface.py generate", "python3 tools/skills_surface.py check"],
+        )
+    )
 
 
 def handle_init(argv: list[str]) -> int:

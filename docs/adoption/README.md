@@ -32,7 +32,6 @@
 - 纯全局 CLI 与 Codex 用户级 plugin 安装合同：[global-cli-user-plugin-contract.md](./global-cli-user-plugin-contract.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
 - 安装 taxonomy 与权威边界：[installation-taxonomy.md](./installation-taxonomy.md)
-- 单 skill 安装合同：[single-skill-contract.md](./single-skill-contract.md)
 - 已安装 Loom status 与升级演练：[installed-loom-status.md](./installed-loom-status.md)
 - CLI-first installed-state 合同：[loom-installed-state-v2.md](./loom-installed-state-v2.md)
 - 版本权威图：[version-authority-map.md](./version-authority-map.md)
@@ -44,8 +43,9 @@ Runtime provider target:
   `loom installed-state validate`, `loom doctor`, `loom verify`, and
   `loom repair plan` to diagnose repository metadata and external provider
   readiness without recording workstation state as repository truth.
-- `repo-local-wrapper`, repo-local plugin payload, and single-skill downstream
-  installs are legacy compatibility surfaces, not the milestone #14 target.
+- `repo-local-wrapper`, repo-local plugin payload in target repositories, and
+  single-skill downstream installs are legacy surfaces, not the milestone #14
+  target.
 
 边界约束：
 
