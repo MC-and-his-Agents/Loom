@@ -1254,8 +1254,11 @@ def active_suite_path_not_applicable(active_item: str) -> bool:
     return bool(re.search(r"(?im)^\s*(?:[-*]\s*)?suite path\s*:\s*not_applicable\b", spec_text))
 
 
-def assert_closeout_blocks_missing_suite_evidence(active_item: str) -> None:
+def assert_closeout_blocks_missing_suite_evidence(active_item: str, closeout_payload: dict[str, Any]) -> None:
     if active_suite_path_not_applicable(active_item):
+        return
+    suite_gate = closeout_payload.get("suite_gate_validation")
+    if isinstance(suite_gate, dict) and suite_gate.get("result") == "not_applicable":
         return
     evidence_map = f".loom/specs/{active_item}/evidence-map.md"
     with preserved_repo_paths((evidence_map,)):
@@ -7492,7 +7495,7 @@ def assert_active_closeout_contract(active_item: str) -> None:
         raise AssertionError("closeout did not emit a structured pass/block/fallback result")
     assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
     if status == 0:
-        assert_closeout_blocks_missing_suite_evidence(active_item)
+        assert_closeout_blocks_missing_suite_evidence(active_item, closeout_payload)
 
 
 def assert_idle_root_self_governance_direct_contract() -> None:

@@ -6,7 +6,7 @@
 - Goal: 完成 milestone #14 PR3：实现 Codex 用户级 plugin 纯全局安装与注册；loom host install/register --host codex --scope user 默认从全局 Loom 包读取 plugin payload，只写用户级 Codex 状态，不写目标仓库。
 - Scope: issue #1629；允许修改 root CLI host install/register 实现、CLI contract 测试、本 Work Item carrier 和必要的最小 issue/PR metadata；不实现 repo adoption、CLI command matrix 删除、package surface 收敛、migration 文档或 v0.17.0 发布。
 - Execution Path: issue #1629 -> branch work/1629-global-codex-plugin-install -> PR3 -> targeted CLI contract checks -> hosted gate -> merge -> issue closeout。
-- Workspace Entry: /Users/mc/dev/Loom-m14-pr3
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1629.md
 - Review Entry: .loom/reviews/WI-1629.json
 - Validation Entry: python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/check_cli_contract.py; python3 tools/host_adapter_check.py; python3 tools/check_npm_package.py; python3 tools/check_release_surface.py; node --test test/npm-package-smoke.test.mjs; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; git diff --check
@@ -15,7 +15,7 @@
 - Current Stop: PR3 implementation is complete locally: host install/register now defaults to the global Loom package Codex plugin payload and writes only user-level Codex state; contract tests were updated.
 - Next Step: Commit, push, open PR for #1629, update PR metadata, then run review/merge-ready/hosted gate before merge and issue closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-20 local PR3 validation passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; temporary HOME smoke tests for host install/register confirmed no target repo writes; python3 tools/check_cli_contract.py --surface adoption-host-metadata; git diff --check; python3 tools/host_adapter_check.py; python3 tools/check_npm_package.py; python3 tools/check_release_surface.py; node --test test/npm-package-smoke.test.mjs; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; full python3 tools/check_cli_contract.py.
+- Latest Validation Summary: 2026-06-20 local PR3 validation passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; temporary HOME smoke tests for host install/register confirmed no target repo writes; python3 tools/check_cli_contract.py --surface adoption-host-metadata; git diff --check; python3 tools/host_adapter_check.py; python3 tools/check_npm_package.py; python3 tools/check_release_surface.py; node --test test/npm-package-smoke.test.mjs; full python3 tools/check_cli_contract.py.
 - Recovery Boundary: PR3 only: issue #1629. Do not implement PR4 CLI command deletion, PR5 package/gate/migration convergence, or v0.17.0 release execution in this lane.
 - Current Lane: milestone-14-pr3-global-codex-plugin-install
 
