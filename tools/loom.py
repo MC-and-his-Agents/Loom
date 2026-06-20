@@ -109,6 +109,7 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "verify",
     "fact-chain",
     "status",
+    "shadow-parity",
     "story",
 ]
 
@@ -212,6 +213,13 @@ COMMANDS: list[dict[str, Any]] = [
     },
     {"command": "status", "domain": "harness", "status": "implemented", "json": True},
     {"command": "fact-chain", "domain": "harness", "status": "implemented", "json": True},
+    {
+        "command": "shadow-parity",
+        "domain": "harness",
+        "status": "implemented",
+        "json": True,
+        "summary": "Compare Loom and repo-native parity surfaces through the global CLI agent-safe output boundary.",
+    },
     {"command": "profile status", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade", "domain": "profile", "status": "implemented", "json": True},
@@ -1057,7 +1065,9 @@ def version_context() -> dict[str, Any]:
     }
 
 
-def emit(payload: dict[str, Any], *, stream=sys.stdout) -> int:
+def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+    if stream is None:
+        stream = sys.stdout
     stream.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
     return 0 if payload.get("result") == "pass" else 1
 
@@ -1073,12 +1083,59 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
 
 
 def output_key_gaps(payload: dict[str, Any], *, limit: int = 10) -> list[Any]:
-    for field in ("key_gaps", "blocking_gaps", "gaps"):
+    for field in ("key_gaps", "blocking_gaps", "gaps", "missing_inputs", "blocking_failures"):
         value = payload.get(field)
         if isinstance(value, list):
             return value[:limit]
     reason = payload.get("fail_closed_reason")
     return [reason] if reason else []
+
+
+def output_diagnostic_counts(payload: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for field in ("key_gaps", "blocking_gaps", "gaps", "missing_inputs", "blocking_failures"):
+        value = payload.get(field)
+        if isinstance(value, list):
+            counts[field] = len(value)
+    reports = payload.get("reports")
+    if isinstance(reports, list):
+        counts["reports"] = len(reports)
+        counts["non_passing_reports"] = sum(
+            1
+            for report in reports
+            if isinstance(report, dict) and report.get("result") not in {None, "pass", "match"}
+        )
+    return counts
+
+
+def output_key_locators(payload: dict[str, Any], *, limit: int = 10) -> list[str]:
+    locators: list[str] = []
+
+    def visit(value: Any) -> None:
+        if len(locators) >= limit:
+            return
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                lowered = str(key).lower()
+                if isinstance(nested, str) and (
+                    lowered.endswith("locator")
+                    or lowered.endswith("path")
+                    or lowered.endswith("entrypoint")
+                    or lowered in {"target", "read_entry", "current_runtime_entrypoint"}
+                ):
+                    if nested and nested not in locators:
+                        locators.append(nested)
+                        if len(locators) >= limit:
+                            return
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+                if len(locators) >= limit:
+                    return
+
+    visit(payload)
+    return locators
 
 
 def positive_int_env(name: str, default: int) -> int:
@@ -1204,6 +1261,8 @@ def agent_safe_payload(
         full_output_available=True,
         full_output_truncated=True,
         sensitive=sensitive,
+        diagnostic_counts=output_diagnostic_counts(payload),
+        key_locators=output_key_locators(payload),
         stdout_budget_bytes=stdout_budget_bytes,
         summary_target_bytes=summary_target_bytes,
     )
@@ -1309,6 +1368,17 @@ def strip_json_flag(argv: list[str]) -> list[str]:
     return [arg for arg in argv if arg != "--json"]
 
 
+def split_agent_output_args(argv: list[str]) -> tuple[list[str], bool]:
+    forwarded: list[str] = []
+    full_output = False
+    for arg in argv:
+        if arg == "--full-output":
+            full_output = True
+            continue
+        forwarded.append(arg)
+    return forwarded, full_output
+
+
 def target_from_args(argv: list[str]) -> Path:
     for index, arg in enumerate(argv):
         if arg == "--target" and index + 1 < len(argv):
@@ -1319,7 +1389,7 @@ def target_from_args(argv: list[str]) -> Path:
 
 
 def global_cli_command_entry(command: str, target: Path, argv: list[str]) -> str:
-    forwarded = strip_json_flag(argv)
+    forwarded = strip_json_flag(split_agent_output_args(argv)[0])
     if "--target" not in forwarded and not any(arg.startswith("--target=") for arg in forwarded):
         forwarded = [*forwarded, "--target", str(target)]
     return " ".join(["loom", command, *forwarded, "--json"])
@@ -1347,6 +1417,8 @@ def annotate_global_cli_runtime_entrypoint(payload: dict[str, Any], *, command: 
             fact_chain["read_entry"] = entry
     elif command == "status":
         payload["status_entrypoint"] = entry
+    elif command == "shadow-parity":
+        payload["shadow_parity_entrypoint"] = entry
     elif command == "story":
         payload["story_carrier_entrypoint"] = entry
 
@@ -4575,24 +4647,38 @@ def handle_route(argv: list[str]) -> int:
 
 def handle_status(argv: list[str]) -> int:
     target = target_from_args(argv)
-    payload = delegated_payload("status", "loom_status.py", strip_json_flag(argv), failed_layer="loom-status", fallback_to=["loom fact-chain --target <repo> --json", "loom checkpoint admission --target <repo> --json"])
+    forwarded, full_output = split_agent_output_args(argv)
+    payload = delegated_payload("status", "loom_status.py", strip_json_flag(forwarded), failed_layer="loom-status", fallback_to=["loom fact-chain --target <repo> --json", "loom checkpoint admission --target <repo> --json"])
     payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != "status":
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = "status"
     annotate_global_cli_runtime_entrypoint(payload, command="status", target=target, argv=argv)
-    return emit(payload)
+    return emit(agent_safe_payload(payload, full_output=full_output))
 
 
 def handle_fact_chain(argv: list[str]) -> int:
     target = target_from_args(argv)
-    payload = flow_payload("fact-chain", ["fact-chain", *strip_json_flag(argv)], fallback_to=["loom init verify --target <repo> --json", "loom status --target <repo> --json"])
+    forwarded, full_output = split_agent_output_args(argv)
+    payload = flow_payload("fact-chain", ["fact-chain", *strip_json_flag(forwarded)], fallback_to=["loom init verify --target <repo> --json", "loom status --target <repo> --json"])
     payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != "fact-chain":
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = "fact-chain"
     annotate_global_cli_runtime_entrypoint(payload, command="fact-chain", target=target, argv=argv)
-    return emit(payload)
+    return emit(agent_safe_payload(payload, full_output=full_output))
+
+
+def handle_shadow_parity(argv: list[str]) -> int:
+    target = target_from_args(argv)
+    forwarded, full_output = split_agent_output_args(argv)
+    payload = flow_payload("shadow-parity", ["shadow-parity", *strip_json_flag(forwarded)], fallback_to=["loom shadow-parity --target <repo> --surface all --blocking --json", "loom status --target <repo> --json"])
+    payload.setdefault("schema_version", OUTPUT_SCHEMA)
+    if payload.get("command") and payload.get("command") != "shadow-parity":
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = "shadow-parity"
+    annotate_global_cli_runtime_entrypoint(payload, command="shadow-parity", target=target, argv=argv)
+    return emit(agent_safe_payload(payload, full_output=full_output))
 
 
 def handle_profile(argv: list[str]) -> int:
@@ -7668,6 +7754,8 @@ def main(argv: list[str]) -> int:
         return handle_status(forwarded)
     if command == "fact-chain":
         return handle_fact_chain(forwarded)
+    if command == "shadow-parity":
+        return handle_shadow_parity(forwarded)
     if command == "profile" or command.startswith("profile "):
         profile_args = command.split()[1:] + forwarded if command.startswith("profile ") else forwarded
         return handle_profile(profile_args)

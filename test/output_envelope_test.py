@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -23,6 +25,7 @@ class OutputEnvelopeTest(unittest.TestCase):
     def tearDown(self) -> None:
         os.environ.pop("LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES", None)
         os.environ.pop("LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES", None)
+        os.environ.pop("LOOM_OUTPUT_ARTIFACT_DIR", None)
 
     def test_output_envelope_contains_agent_safe_fields(self) -> None:
         envelope = loom_cli.output_envelope(
@@ -125,6 +128,108 @@ class OutputEnvelopeTest(unittest.TestCase):
         )
 
         self.assertIs(loom_cli.agent_safe_payload(payload, full_output=True), payload)
+
+    def test_status_handler_defaults_to_agent_safe_stdout(self) -> None:
+        original = loom_cli.delegated_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+
+                def fake_payload(*_args, **_kwargs):
+                    return loom_cli.output(
+                        "status",
+                        "pass",
+                        summary="Status contains large diagnostics.",
+                        missing_inputs=["carrier drift"],
+                        target="/tmp/repo",
+                        diagnostic="x" * 4096,
+                    )
+
+                loom_cli.delegated_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.handle_status(["--target", ".", "--json"])
+
+                rendered = stream.getvalue()
+                payload = json.loads(rendered)
+                self.assertEqual(code, 0)
+                self.assertLessEqual(len(rendered.encode("utf-8")), 1024)
+                self.assertEqual(payload["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
+                self.assertEqual(payload["diagnostic_counts"]["missing_inputs"], 1)
+                self.assertEqual(payload["key_gaps"], ["carrier drift"])
+                self.assertTrue(Path(payload["full_output"]["artifact_locator"]).exists())
+                self.assertNotIn('"diagnostic":', rendered)
+        finally:
+            loom_cli.delegated_payload = original
+
+    def test_fact_chain_handler_supports_full_output_escape_hatch(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            def fake_payload(*_args, **_kwargs):
+                return loom_cli.output(
+                    "fact-chain",
+                    "pass",
+                    summary="Fact chain full output.",
+                    fact_chain={"read_entry": "loom fact-chain --target . --json"},
+                    diagnostic="x" * 4096,
+                )
+
+            loom_cli.flow_payload = fake_payload
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                code = loom_cli.handle_fact_chain(["--target", ".", "--json", "--full-output"])
+
+            payload = json.loads(stream.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["command"], "fact-chain")
+            self.assertIn("diagnostic", payload)
+            self.assertNotIn("envelope_schema", payload)
+        finally:
+            loom_cli.flow_payload = original
+
+    def test_shadow_parity_handler_defaults_to_agent_safe_stdout(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+
+                def fake_payload(*_args, **_kwargs):
+                    return {
+                        "command": "shadow-parity",
+                        "result": "block",
+                        "summary": "shadow parity blocking mode found mismatch or unreadable surfaces.",
+                        "reports": [
+                            {
+                                "surface": "review",
+                                "result": "mismatch",
+                                "summary": "review surface drifted",
+                                "loom_locator": ".loom/shadow/review.json",
+                                "repo_locator": ".github/review.json",
+                            }
+                        ],
+                        "blocking_failures": [{"kind": "parallel_truth_drift", "surface": "review"}],
+                        "diagnostic": "x" * 4096,
+                    }
+
+                loom_cli.flow_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.handle_shadow_parity(["--target", ".", "--surface", "all", "--blocking", "--json"])
+
+                rendered = stream.getvalue()
+                payload = json.loads(rendered)
+                self.assertEqual(code, 1)
+                self.assertLessEqual(len(rendered.encode("utf-8")), 1024)
+                self.assertEqual(payload["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
+                self.assertEqual(payload["diagnostic_counts"]["reports"], 1)
+                self.assertEqual(payload["diagnostic_counts"]["non_passing_reports"], 1)
+                self.assertIn(".loom/shadow/review.json", payload["key_locators"])
+                self.assertTrue(Path(payload["full_output"]["artifact_locator"]).exists())
+                self.assertNotIn('"diagnostic":', rendered)
+        finally:
+            loom_cli.flow_payload = original
 
 
 if __name__ == "__main__":
