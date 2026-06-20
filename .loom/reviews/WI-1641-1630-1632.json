@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1641-1630-1632",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Manual semantic review for PR2 found no blocking issues. The branch consistently treats plugins/loom/skills as the tracked Codex user plugin payload, removes generated single-skill distribution artifacts from the checked surfaces, keeps deprecated installer regression pointed at plugin payload, and updates loom_check so CI no longer enforces the old repo-local or single-skill payload contract.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T05:58:34Z",
+  "reviewed_head": "c9e05f73f685be62c2c510d6bfc64c0b822bb2bb",
+  "reviewed_validation_summary": "2026-06-20 local PR2 validation passed: `python3 tools/skills_surface.py check`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/loom.py skills package --json`; `python3 tools/loom.py skills release-check --json`; `make py-compile`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 tools/check_cli_contract.py --surface aggregate`; `python3 tools/loom.py suite validate --target . --item WI-1641-1630-1632 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1641-1630-1632 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1641-1630-1632 --json`; `git diff --check`; `make loom-self-plugin-check`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; full `python3 tools/loom_check.py` now reaches only expected pre-review carrier gaps for missing review artifact and stale shadow evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1641-1630-1632.md",
+    "recovery_entry": ".loom/progress/WI-1641-1630-1632.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
