@@ -3,10 +3,10 @@
   "item_id": "WI-1484",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allows WI-1484 at head 4d8e4892: global CLI flow/delegated/scenario/PR/merge/reconcile/carrier/closeout queue paths now default to agent-safe stdout when output exceeds budget, explicit --full-output remains available for full JSON diagnostics, help JSON exposes the output policy, and the refreshed minimal suite/checkpoint carriers are ready for PR gate consumption without expanding skills/docs/release scope.",
+  "summary": "Closeout carrier review allows WI-1484 at head 731ab198: PR #1665 already merged the global CLI agent-safe output implementation; this PR only terminalizes WI-1484/WI-1485/#1478 carriers, task carrier status, and shadow hashes for issue closeout without runtime, skills, docs, release, or downstream adoption changes.",
   "reviewer": "codex-manual-review",
-  "authored_at": "2026-06-20T17:34:41Z",
-  "reviewed_head": "4d8e48925b89db0660ec4109e1e2bad4cdb99d4a",
+  "authored_at": "2026-06-20T17:58:18Z",
+  "reviewed_head": "731ab198ba44708dc14a4783b033f79a3319ef7c",
   "reviewed_validation_summary": "2026-06-20 local validation passed on branch work/1484-1485-cli-agent-safe-output: python3 test/output_envelope_test.py; python3 -m py_compile tools/loom.py test/output_envelope_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface pr-metadata --surface controlled-merge --surface closeout-wrapper; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py build --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES=1024 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py merge-ready --target . --item WI-1484 --json returned loom-agent-output-envelope/v1 with artifact locator; git diff --check.",
   "fallback_to": null,
   "findings": [],
@@ -53,6 +53,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-        "reason": "Authored implementation review approved the current implementation, suite carrier, and merge checkpoint head for PR merge consumption."
+    "reason": "Authored closeout review approved terminal carrier-only drift after PR #1665 merged the implementation and local closeout gates consumed the retained implementation review evidence."
   }
 }
