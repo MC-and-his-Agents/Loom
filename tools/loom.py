@@ -76,6 +76,8 @@ OUTPUT_SCHEMA = "loom-cli-output/v1"
 OUTPUT_ENVELOPE_SCHEMA = "loom-agent-output-envelope/v1"
 OUTPUT_ARTIFACT_SCHEMA = "loom-output-artifact/v1"
 DEFAULT_OUTPUT_ARTIFACT_DIR = Path(".loom/tmp/output-artifacts")
+DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES = 16 * 1024
+DEFAULT_AGENT_SAFE_SUMMARY_TARGET_BYTES = 4 * 1024
 INSTALLED_STATE_SCHEMA = "loom-installed-state/v2"
 DETECT_SCHEMA = "loom-installed-surface-detect/v1"
 DOCTOR_SCHEMA = "loom-installed-surface-doctor/v1"
@@ -1079,6 +1081,28 @@ def output_key_gaps(payload: dict[str, Any], *, limit: int = 10) -> list[Any]:
     return [reason] if reason else []
 
 
+def positive_int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def truncate_utf8(text: str, budget_bytes: int) -> str:
+    encoded = text.encode("utf-8")
+    if len(encoded) <= budget_bytes:
+        return text
+    marker = "…"
+    marker_bytes = marker.encode("utf-8")
+    if budget_bytes <= len(marker_bytes):
+        return ""
+    return encoded[: budget_bytes - len(marker_bytes)].decode("utf-8", errors="ignore") + marker
+
+
 def output_envelope(
     command: str,
     result: str,
@@ -1145,18 +1169,34 @@ def write_output_artifact(
 def agent_safe_payload(
     payload: dict[str, Any],
     *,
-    stdout_budget_bytes: int,
+    stdout_budget_bytes: int | None = None,
+    summary_target_bytes: int | None = None,
     artifact_dir: Path | None = None,
     sensitive: bool = False,
+    full_output: bool = False,
 ) -> dict[str, Any]:
+    if full_output:
+        return payload
+    stdout_budget_bytes = stdout_budget_bytes or positive_int_env(
+        "LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES",
+        DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES,
+    )
+    summary_target_bytes = summary_target_bytes or positive_int_env(
+        "LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES",
+        DEFAULT_AGENT_SAFE_SUMMARY_TARGET_BYTES,
+    )
     rendered = json.dumps(payload, indent=2, ensure_ascii=False)
     if len(rendered.encode("utf-8")) <= stdout_budget_bytes:
         return payload
     locator = write_output_artifact(payload, artifact_dir=artifact_dir, sensitive=sensitive)
+    summary = truncate_utf8(
+        str(payload.get("summary") or "Full output exceeded the agent-safe stdout budget."),
+        summary_target_bytes,
+    )
     return output_envelope(
         str(payload.get("command", "loom-output")),
         str(payload.get("result", "block")),
-        summary=str(payload.get("summary") or "Full output exceeded the agent-safe stdout budget."),
+        summary=summary,
         key_gaps=output_key_gaps(payload),
         failed_layer=payload.get("failed_layer"),
         fail_closed_reason=payload.get("fail_closed_reason"),
@@ -1165,6 +1205,7 @@ def agent_safe_payload(
         full_output_truncated=True,
         sensitive=sensitive,
         stdout_budget_bytes=stdout_budget_bytes,
+        summary_target_bytes=summary_target_bytes,
     )
 
 

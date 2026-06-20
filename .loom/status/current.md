@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1481
-- Goal: 新增面向智能体的输出信封与 artifact writer，使全局 `loom` CLI 可以把高噪声完整输出转为短摘要和可定位工件。
-- Scope: 实现 issue #1481；允许修改 `tools/loom.py`、`test/output_envelope_test.py`、聚焦测试、最小 Loom carrier、suite artifact 和 `.loom/reviews/WI-1481*.json` review artifact。不接入全部高噪声命令，不改变 gate/review/fact-chain/closeout 判定。
-- Execution Path: issue #1481 -> branch work/1481-output-envelope-artifacts -> output envelope/artifact helpers -> focused tests -> PR gate -> merge -> issue closeout。
+- Item ID: WI-1482
+- Goal: 新增可配置的 agent-safe stdout 预算保护，确保默认路径不会把大诊断直接写入 stdout。
+- Scope: 实现 issue #1482；允许修改 `tools/loom.py`、`test/output_envelope_test.py`、最小 Loom carrier、suite artifact 和 review artifact。不接入全部高噪声命令，不改变失败分类或门禁语义，不恢复 repo-local runtime/plugin/skills 路径。
+- Execution Path: issue #1482 -> branch work/1482-context-budget-protection -> configurable budget helper -> large-payload regression tests -> PR gate -> merge -> issue closeout。
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1481.md
-- Review Entry: .loom/reviews/WI-1481.json
+- Recovery Entry: .loom/progress/WI-1482.md
+- Review Entry: .loom/reviews/WI-1482.json
 - Validation Entry: python3 test/output_envelope_test.py; python3 -m unittest discover -s test -p 'output_envelope_test.py'; python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py; git diff --check
-- Closing Condition: Issue #1481 closes after PR merge and closeout evidence confirms the reusable output envelope and artifact writer are available without restoring repo-local runtime/plugin/skills paths.
-- Current Checkpoint: merge checkpoint
-- Current Stop: PR #1659 is ready for merge: hosted loom-check, loom-pr-merge-gate, release-judgment, node-installer-pr, py-compile, demo-bootstrap, repo-local-cli, and root-self-governance passed at head 90392f4f7af55acf7035d1e06340754ba4f68f56.
-- Next Step: Merge PR #1659 only after explicit merge approval, then run WI-1481 closeout sync and close issue #1481.
+- Closing Condition: Issue #1482 closes after PR merge and closeout evidence confirms default agent-safe stdout budget, configurable overrides, and explicit full output mode without restoring repo-local runtime/plugin/skills paths.
+- Current Checkpoint: build checkpoint
+- Current Stop: Configurable agent-safe stdout budget helper and large-payload regression tests are implemented locally on branch work/1482-context-budget-protection.
+- Next Step: Run suite/carrier validation, record spec and implementation review, update PR metadata, and proceed through PR gate before merge.
 - Blockers: None
-- Latest Validation Summary: 2026-06-20 local validation passed for `python3 test/output_envelope_test.py`, `python3 -m unittest discover -s test -p 'output_envelope_test.py'`, `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`, `git diff --check`, `python3 tools/loom.py suite validate --target . --item WI-1481 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1481 --json`, and `python3 tools/check_cli_contract.py --surface aggregate` (422.95s).
-- Recovery Boundary: WI-1481 only. Do not connect all high-noise commands, implement configurable budgets, update skills/plugin payload, publish a release, or change closeout retained Work Item identity binding in this lane.
-- Current Lane: milestone-11-output-envelope-artifacts
+- Latest Validation Summary: 2026-06-20 local validation passed for , , py_compile_clean: OK (2 files), and .
+- Recovery Boundary: WI-1482 only. Do not wire every high-noise command, update plugin/skills payload, publish a release, or restore repo-local runtime/plugin/skills paths in this lane.
+- Current Lane: milestone-11-context-budget-protection
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1481.md
-- Dynamic Truth: .loom/progress/WI-1481.md
+- Static Truth: .loom/work-items/WI-1482.md
+- Dynamic Truth: .loom/progress/WI-1482.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
