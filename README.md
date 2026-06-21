@@ -28,6 +28,7 @@ With Loom, the agent resumes from repository facts:
 - what changed;
 - what has been validated;
 - what review decided;
+- how the work aligns with trunk truth;
 - what still blocks merge readiness;
 - what must be closed out after merge.
 
@@ -165,6 +166,7 @@ At the repository level, Loom lands as five stable parts:
 - Governance defines rules, review models, and closeout semantics.
 - Harness provides execution support, workspace isolation, recovery, and runtime visibility.
 - Templates carry structured artifacts.
+- Behavior evidence and test evidence keep validation separate from claims.
 - Skills assemble these capabilities into executable entry points.
 - Adoption records where capabilities came from and where they currently land.
 
