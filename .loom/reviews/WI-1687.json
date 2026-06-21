@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1687",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1687: PR metadata safe repair stays within existing render/update/readback/preflight surfaces, host/readback evidence is required for safe repair actions, human binding lines now normalize to 'Label: value', generated mirrors match source, and focused pr-metadata/governance-closeout contracts pass.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-06-21T20:26:29Z",
+  "reviewed_head": "d24a322840014bc435f2fd8727e97173e7de593d",
+  "reviewed_validation_summary": "2026-06-22 local validation refreshed on branch work/1687-pr-backlink-safe-repair after PR #1703 metadata spacing fix: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout; git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1687; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1687; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1687 --json; PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1687 --build-evidence .loom/progress/WI-1687-build-evidence.json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1687.md",
+    "recovery_entry": ".loom/progress/WI-1687.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1687/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-WI-1687 --item WI-1687 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1687/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-WI-1687 --item WI-1687 --json",
+    "suite_evidence_map": ".loom/specs/WI-1687/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1687/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
