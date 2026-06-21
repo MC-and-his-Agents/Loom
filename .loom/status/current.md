@@ -6,7 +6,7 @@
 - Goal: Add targeted abuse fixtures so high-risk governance intensity classes cannot pass as `light`.
 - Scope: Governance change-class vocabulary, high-risk classification, focused metadata and PR gate fixtures, generated skill/plugin runtime mirrors, and WI-1684 Loom carriers.
 - Execution Path: issue #1684 -> branch work/1684-intensity-upgrade-fixtures -> focused runtime and fixture update -> PR -> controlled merge -> issue closeout.
-- Workspace Entry: /Users/mc/dev/Loom-WI-1684
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1684.md
 - Review Entry: .loom/reviews/WI-1684.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate.
