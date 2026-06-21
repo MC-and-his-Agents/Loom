@@ -3684,6 +3684,7 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("--work-item")
     parser.add_argument("--surface", choices=("pre_review", "review", "merge_ready", "closeout"), default="merge_ready")
     parser.add_argument("--item")
+    parser.add_argument("--issue")
     parser.add_argument("--branch")
     parser.add_argument("--body-file")
     parser.add_argument("--output-file")
@@ -3724,6 +3725,8 @@ def handle_pr(argv: list[str]) -> int:
         flow_args = ["pr-metadata", "render", "--target", ".", "--surface", args.surface]
         if args.item:
             flow_args.extend(["--item", args.item])
+        if args.issue:
+            flow_args.extend(["--issue", args.issue])
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
         if args.branch:
@@ -3762,6 +3765,8 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--pr", args.pr])
         if args.item:
             flow_args.extend(["--item", args.item])
+        if args.issue:
+            flow_args.extend(["--issue", args.issue])
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
         if args.branch:
@@ -3782,6 +3787,8 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--pr", args.pr])
         if args.item:
             flow_args.extend(["--item", args.item])
+        if args.issue:
+            flow_args.extend(["--issue", args.issue])
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
         if args.branch:
@@ -3823,6 +3830,8 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--pr", args.pr])
         if args.item:
             flow_args.extend(["--item", args.item])
+        if args.issue:
+            flow_args.extend(["--issue", args.issue])
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
         if args.branch:

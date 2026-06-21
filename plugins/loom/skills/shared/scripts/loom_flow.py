@@ -831,6 +831,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     pr_metadata.add_argument("--item", help="Expected Loom Work Item id for render, update, or readback binding")
+    pr_metadata.add_argument("--issue", type=int, help="Expected GitHub Work Item issue number for safe PR body backlink repair")
     pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
     pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
     pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
@@ -16020,6 +16021,65 @@ def pr_metadata_replace_machine_block(body: str, *, marker: str, rendered_block:
     return updated if updated.endswith("\n") else updated + "\n"
 
 
+def pr_metadata_issue_reference(issue_number: int | None) -> str | None:
+    if issue_number is None:
+        return None
+    return f"#{issue_number}"
+
+
+def pr_metadata_body_mentions_issue(body: object, issue_number: int | None) -> bool:
+    if issue_number is None:
+        return True
+    return text_mentions_issue(body, issue_number)
+
+
+def pr_metadata_issue_backlink_repair_action(
+    *,
+    issue_number: int,
+    pr_number: int | None,
+    surface: str,
+    body_file: str | None,
+    compare_body_file: str | None,
+    contract_results: list[dict[str, Any]],
+    host_readback_available: bool,
+) -> dict[str, Any] | None:
+    machine_carrier_passed = bool(contract_results) and all(
+        contract_result.get("result") == "pass" for contract_result in contract_results
+    )
+    if not machine_carrier_passed or not host_readback_available:
+        return None
+    command_parts = [
+        "loom",
+        "pr",
+        "metadata-update",
+        str(pr_number or "<pr>"),
+        "--surface",
+        surface,
+        "--issue",
+        str(issue_number),
+        "--apply",
+        "--json",
+    ]
+    if body_file:
+        command_parts.extend(["--base-body-file", body_file])
+    return {
+        "kind": "missing_human_backlink",
+        "action": "update_pr_body_issue_backlink",
+        "target": "pr_body",
+        "issue": issue_number,
+        "pr": pr_number,
+        "body_line": f"- Issue: #{issue_number}",
+        "mode": "safe_repair",
+        "allowed_when": "cli --issue, PR metadata machine carrier, and host PR body readback agree on Work Item, branch, and head SHA.",
+        "required_readback": "update PR body, read back the host body, then rerun metadata preflight.",
+        "next_command": shlex.join(command_parts),
+        "body_artifacts": {
+            "rendered_body_file": body_file,
+            "readback_body_file": compare_body_file,
+        },
+    }
+
+
 def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
     if not isinstance(payload, dict):
         return None, ["PR payload fixture must be a JSON object"]
@@ -16897,6 +16957,7 @@ def pr_metadata_preflight_payload(
     expected_item: str | None = None,
     expected_head_sha: str | None = None,
     expected_branch: str | None = None,
+    issue_number: int | None = None,
 ) -> dict[str, Any]:
     governance_surface = governance_surface or build_governance_surface(target_root)
     fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
@@ -16918,7 +16979,14 @@ def pr_metadata_preflight_payload(
 
     pr_errors: list[str] = []
     inferences: list[dict[str, Any]] = []
-    if applicable_contracts and pr_payload is None and body_artifact is None and compare_body_artifact is None and not contract_errors:
+    needs_pr_payload_for_body = body_artifact is None and compare_body_artifact is None
+    needs_pr_payload_for_issue_repair = (
+        issue_number is not None
+        and (pr_number is not None or pr_payload_file is not None or head_sha is not None or branch_name is not None)
+    )
+    if applicable_contracts and pr_payload is None and not contract_errors and (
+        needs_pr_payload_for_body or needs_pr_payload_for_issue_repair
+    ):
         detected_owner, detected_repo = detect_github_repo(target_root)
         pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
             target_root=target_root,
@@ -16964,6 +17032,22 @@ def pr_metadata_preflight_payload(
             for message in contract_result.get("missing_inputs", []):
                 if message not in missing_inputs:
                     missing_inputs.append(str(message))
+
+    safe_repair_actions: list[dict[str, Any]] = []
+    if issue_number is not None and isinstance(body, str) and not pr_metadata_body_mentions_issue(body, issue_number):
+        issue_reference = pr_metadata_issue_reference(issue_number)
+        missing_inputs.append(f"PR body is missing Issue backlink: {issue_reference}")
+        repair_action = pr_metadata_issue_backlink_repair_action(
+            issue_number=issue_number,
+            pr_number=effective_pr or pr_number,
+            surface=surface,
+            body_file=body_file,
+            compare_body_file=compare_body_file,
+            contract_results=contract_results,
+            host_readback_available=isinstance(pr_payload, dict) or compare_body_artifact is not None,
+        )
+        if repair_action is not None:
+            safe_repair_actions.append(repair_action)
 
     result = "pass" if not missing_inputs else "block"
     if contract_errors:
@@ -17011,6 +17095,8 @@ def pr_metadata_preflight_payload(
         },
         "body_artifact": body_artifact_result,
         "inferences": inferences,
+        "safe_repair_actions": safe_repair_actions,
+        "repair_plan": safe_repair_actions,
     }
 
 
@@ -17029,6 +17115,7 @@ def render_governance_intensity_metadata_body(
     release_judgment: str,
     upgrade_triggers: list[str],
     suite_not_applicable: dict[str, str] | None,
+    issue_number: int | None,
 ) -> tuple[str, dict[str, Any], list[str]]:
     contract_id = str(field.get("id") or GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID)
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
@@ -17062,6 +17149,9 @@ def render_governance_intensity_metadata_body(
     }
     rendered_block = "<!-- " + marker + "\n" + json.dumps(envelope, indent=2, ensure_ascii=False) + "\n-->\n"
     updated = pr_metadata_replace_or_insert_binding_line(base_body, label="Loom Work Item", value=item_id)
+    issue_reference = pr_metadata_issue_reference(issue_number)
+    if issue_reference:
+        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Issue", value=issue_reference, insert_after="Loom Work Item")
     updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
     updated = pr_metadata_replace_or_insert_binding_line(updated, label="Head SHA", value=head_sha, insert_after="Branch")
     updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
@@ -17075,6 +17165,7 @@ def pr_metadata_render_payload(
     output_file: str,
     base_body_file: str,
     item_id: str | None,
+    issue_number: int | None,
     head_sha: str | None,
     branch_name: str | None,
     governance_intensity: str,
@@ -17161,6 +17252,7 @@ def pr_metadata_render_payload(
         release_judgment=release_judgment,
         upgrade_triggers=[entry for entry in upgrade_triggers if isinstance(entry, str) and entry.strip()],
         suite_not_applicable=suite_not_applicable,
+        issue_number=issue_number,
     )
     if render_errors:
         return {
@@ -17185,6 +17277,7 @@ def pr_metadata_render_payload(
         expected_head_sha=current_head,
         expected_branch=current_branch,
         governance_surface=governance_surface,
+        issue_number=issue_number,
     )
     result = "pass" if preflight.get("result") == "pass" else "block"
     return {
@@ -17262,6 +17355,7 @@ def pr_metadata_readback_payload(
     compare_body_file: str | None = None,
     readback_file: str | None = None,
     expected_item: str | None = None,
+    issue_number: int | None = None,
 ) -> dict[str, Any]:
     governance_surface = build_governance_surface(target_root)
     effective_body_file = body_file
@@ -17315,6 +17409,7 @@ def pr_metadata_readback_payload(
         expected_item=expected_item,
         expected_head_sha=head_sha,
         expected_branch=branch_name,
+        issue_number=issue_number,
     )
     body = source_body
     if effective_compare_file:
@@ -17368,6 +17463,7 @@ def pr_metadata_update_payload(
     readback_file: str,
     base_body_file: str,
     item_id: str | None,
+    issue_number: int | None,
     governance_intensity: str,
     change_class: str,
     suite_path: str,
@@ -17387,6 +17483,7 @@ def pr_metadata_update_payload(
         output_file=output_file,
         base_body_file=base_body_file,
         item_id=item_id,
+        issue_number=issue_number,
         head_sha=head_sha,
         branch_name=branch_name,
         governance_intensity=governance_intensity,
@@ -17553,6 +17650,7 @@ def pr_metadata_update_payload(
         compare_body_file=readback_relative,
         readback_file=readback_relative,
         expected_item=item_id,
+        issue_number=issue_number,
     )
     result = "pass" if readback_payload.get("result") == "pass" else "block"
     return {
@@ -20584,6 +20682,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 output_file=args.output_file,
                 base_body_file=args.base_body_file,
                 item_id=args.item,
+                issue_number=args.issue,
                 head_sha=args.head_sha,
                 branch_name=args.branch,
                 governance_intensity=args.governance_intensity,
@@ -20614,6 +20713,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 readback_file=args.readback_file,
                 base_body_file=args.base_body_file,
                 item_id=args.item,
+                issue_number=args.issue,
                 governance_intensity=args.governance_intensity,
                 change_class=args.change_class,
                 suite_path=args.suite_path,
@@ -20643,6 +20743,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 compare_body_file=args.compare_body_file,
                 readback_file=args.readback_file,
                 expected_item=args.item,
+                issue_number=args.issue,
             )
         )
     return emit(
@@ -20660,6 +20761,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
             expected_item=args.item,
             expected_head_sha=args.head_sha,
             expected_branch=args.branch,
+            issue_number=args.issue,
         )
     )
 
