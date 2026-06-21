@@ -7,7 +7,7 @@
   "reviewer": "codex-main-agent",
   "authored_at": "2026-06-21T08:00:00Z",
   "reviewed_head": "c13183d87bad39c57db379c0ee6806de5964a05d",
-  "reviewed_validation_summary": "2026-06-21T08:19Z local validation passed for WI-1675 at c13183d87bad39c57db379c0ee6806de5964a05d: git diff --check; doc-sync check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; suite evidence validate; suite carrier validate; suite validate; fact-chain; workspace check; shadow parity.",
+  "reviewed_validation_summary": "2026-06-21T08:18Z local validation passed for WI-1675: git diff --check; doc-sync check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; suite evidence validate; suite carrier validate; suite validate; fact-chain; shadow parity. Workspace and PR gate readback will be rerun after the implementation commit.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
