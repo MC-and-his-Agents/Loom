@@ -32,6 +32,24 @@ loom doctor --target . --json
 It does not write `plugins/loom`, `.agents/skills`, `.loom/bin`, `.loom/bootstrap`,
 or root `skills`.
 
+## Output Mode Migration
+
+Migrated repositories should use the global `loom` CLI output contract:
+
+- Default `--json` is the normal agent path. It emits direct JSON only when the
+  payload fits the effective stdout budget; otherwise stdout contains an
+  agent-safe summary plus an artifact locator.
+- Artifact locators are the default way to share complete diagnostics across
+  handoff, review, and closeout. Do not paste full command JSON, full status
+  tables, or long logs into thread bodies by default.
+- `--full-output` is explicit debugging/audit mode for commands that support it.
+  Use it only when complete stdout JSON is needed for blocker classification.
+
+The default stdout hard budget is 16 KiB and the summary target is 4 KiB. A
+single process may override them with
+`LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`,
+`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`, and `LOOM_OUTPUT_ARTIFACT_DIR`.
+
 ## Legacy Residue
 
 Current verification fails closed when the target repository still contains any
@@ -46,6 +64,9 @@ of these older Loom-owned repo-local surfaces:
 Do not treat these paths as current install proof. Remove or migrate them only
 after confirming they are Loom-owned and not target-owned repository content.
 Loom diagnostics report the residue; they do not automatically delete it.
+Repo-local plugin/runtime/skills payloads, single-skill packages, and old
+installer paths are migration diagnostics only. They are not compatible current
+install surfaces after v0.17.0.
 
 ## New Device Checkout
 

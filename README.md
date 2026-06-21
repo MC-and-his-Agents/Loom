@@ -17,10 +17,10 @@ Loom is now CLI-first. The `loom` command is the execution control plane: it dia
 Agents can still start from `loom-init` when they need routing help. Once inside the work, the CLI is the stable machine interface:
 
 ```bash
-python3 tools/loom.py doctor --target . --json
-python3 tools/loom.py upgrade-plan --target . --json
-python3 tools/loom.py verify --target . --json
-python3 tools/loom.py skills release-check --json
+loom doctor --target . --json
+loom upgrade-plan --target . --json
+loom verify --target . --json
+loom skills release-check --json
 ```
 
 The core execution model is:
@@ -41,13 +41,34 @@ Idle closeout recovery has three separate layers:
 On a second repository checkout or after a post-merge closeout, read the host truth first, then sync carriers:
 
 ```bash
-python3 tools/loom.py workspace retire --target . --item WI-1236 --json
-python3 .loom/bin/loom_flow.py carrier closeout-sync --target . --item WI-1236 --dry-run --terminal-state closed_out --issue 1236 --pr 1516 --merge-commit <merge-sha> --target-branch main --closed-at <closed-at> --evidence-locator <pr-url>
-python3 .loom/bin/loom_flow.py carrier closeout-sync --target . --item WI-1236 --apply --terminal-state closed_out --issue 1236 --pr 1516 --merge-commit <merge-sha> --target-branch main --closed-at <closed-at> --evidence-locator <pr-url>
-python3 tools/loom.py fact-chain --target . --json
+loom workspace retire --target . --item WI-1236 --json
+loom carrier closeout-sync --target . --item WI-1236 --dry-run --terminal-state closed_out --issue 1236 --pr 1516 --merge-commit <merge-sha> --target-branch main --closed-at <closed-at> --evidence-locator <pr-url>
+loom carrier closeout-sync --target . --item WI-1236 --apply --terminal-state closed_out --issue 1236 --pr 1516 --merge-commit <merge-sha> --target-branch main --closed-at <closed-at> --evidence-locator <pr-url>
+loom fact-chain --target . --json
 ```
 
 The expected final readback for a completed item is `fact_chain.mode = idle` and `current_item_id = no_active_item`, with terminal metadata retained in `.loom/progress/<item>.md`.
+
+## Output Modes
+
+Loom command output is context-safe by default. Commands emit direct JSON only
+when it fits the effective stdout budget. Larger diagnostics are summarized on
+stdout with an artifact locator, so agents and handoff notes can cite the
+locator instead of pasting full reports or long logs.
+
+Use the three output modes this way:
+
+- Default `--json`: use for normal agent workflows, reviews, gates, handoff, and
+  closeout. Share the summary and artifact locator.
+- Artifact locator: use when diagnostics exceed the budget or when another
+  thread needs the complete local evidence. Artifacts are diagnostic files, not
+  authored truth carriers.
+- Explicit `--full-output`: use only for debugging, audit, or blocker
+  classification when complete JSON is required on stdout.
+
+The default stdout hard budget is 16 KiB and the summary target is 4 KiB. They
+can be adjusted per process with `LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`,
+`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`, and `LOOM_OUTPUT_ARTIFACT_DIR`.
 
 ## Install
 
@@ -140,7 +161,7 @@ Do not use npm `@mc-and-his-agents/loom-installer` `latest` or `loom-installer-v
 ## Basic Workflow
 
 1. Run `loom doctor --target . --json` or `loom verify --target . --json` to understand the repository's current Loom layer.
-2. Run `loom upgrade-plan --target . --json` before changing installed runtime, skills, plugin, or companion surfaces.
+2. Run `loom upgrade-plan --target . --json` before changing metadata-only adoption, global CLI provider state, Codex user-level plugin registration, or legacy residue repair.
 3. Start from `loom-init` when you need scenario routing, then use scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`, `loom-review`, and `loom-merge-ready`.
 4. Use CLI-backed gates such as `loom pr gate`, `loom merge check`, `loom merge run`, and `loom gate closeout` to consume readiness evidence.
 5. Use `loom-handoff` or `loom-retire` to leave the worksite in a recoverable local state, then use host closeout readback and `loom carrier closeout-sync` for versioned terminal carrier sync when the issue/PR/project are already complete.

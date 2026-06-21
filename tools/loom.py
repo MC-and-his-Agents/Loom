@@ -1720,8 +1720,9 @@ def handle_help(argv: list[str]) -> int:
         command_count=len(COMMANDS),
         commands=command_matrix(),
         output_modes={
-            "default": "agent-safe stdout: JSON is emitted directly only when it fits the effective stdout budget; otherwise stdout contains a summary envelope and an artifact locator.",
-            "full_output": "Pass --full-output on supported command families to explicitly request full JSON diagnostics on stdout.",
+            "default": "Use `loom ... --json` for normal agent workflows; JSON is emitted directly only when it fits the effective stdout budget, otherwise stdout contains an agent-safe summary envelope and an artifact locator.",
+            "artifact_locator": "Share artifact locators for complete diagnostics instead of pasting full JSON, status tables, or long logs into threads, handoff, review, or closeout text.",
+            "full_output": "Pass --full-output on supported command families only for explicit debugging, audit, or blocker classification that requires full JSON diagnostics on stdout.",
             "stdout_budget_bytes_default": DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES,
             "summary_target_bytes_default": DEFAULT_AGENT_SAFE_SUMMARY_TARGET_BYTES,
             "configuration": {
@@ -1730,7 +1731,7 @@ def handle_help(argv: list[str]) -> int:
                 "artifact_dir_env": "LOOM_OUTPUT_ARTIFACT_DIR",
                 "artifact_dir_default": str(DEFAULT_OUTPUT_ARTIFACT_DIR),
             },
-            "artifact_lifecycle": "Artifacts are local diagnostic files under the configured artifact directory; callers should share locators by default and request full JSON only for explicit debugging.",
+            "artifact_lifecycle": "Artifacts are local diagnostic files under the configured artifact directory; they are diagnostic evidence locators, not authored truth carriers.",
         },
         fail_closed_on=[
             "unknown command",

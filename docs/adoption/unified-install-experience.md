@@ -47,8 +47,15 @@ The root CLI install supports one current repository runtime provider mode:
 - `global-cli`: the target repository records adoption metadata and depends on
   the installed root `loom` command as the runtime provider. No `.loom/bin`
   carrier is expected in this mode.
-- `repo-local-wrapper`: legacy residue for migration diagnostics only, not a
-  current downstream adoption target.
+- `repo-local-wrapper`: legacy residue for migration diagnostics only. It may be
+  classified by `loom detect`, `loom doctor`, or `loom repair plan`, but it is
+  not a supported downstream runtime face after v0.17.0.
+
+The CLI output boundary is also part of the install contract. Normal operator
+and agent commands use `loom ... --json`; stdout carries either budget-fitting
+JSON or an agent-safe summary with an artifact locator. Complete diagnostics
+stay behind the locator, and `--full-output` is reserved for explicit debugging,
+audit, or blocker classification.
 
 For `global-cli` repositories, validate the repository metadata and external
 provider boundary with:
