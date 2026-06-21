@@ -1,0 +1,31 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1658",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1658 release-prep head is approved for PR creation and merge-ready consumption: v0.17.1 is declared in VERSION/package.json, release readback classifies the target as unpublished, package validation proves the global loom CLI plus Codex user-level plugin payload, output-envelope tests cover budget/artifact/full-output behavior, and support-boundary evidence excludes repo-local runtime/plugin/skills, single-skill package, and old installer paths.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T03:14:29Z",
+  "reviewed_head": "0510370b3cf31850d05fdc6d6dc0c2950a2f0529",
+  "reviewed_validation_summary": "2026-06-21T03:14Z release-prep validation passed on branch work/1658-release at head 0510370b3cf31850d05fdc6d6dc0c2950a2f0529: `python3 tools/loom.py release readback --target . --version v0.17.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` passed and classified v0.17.1 as unpublished; `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `python3 test/output_envelope_test.py`; `python3 tools/loom.py suite validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1658 --json`; `python3 tools/loom.py fact-chain --target . --json`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1658.md",
+    "recovery_entry": ".loom/progress/WI-1658.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1658/spec.md",
+    "plan": ".loom/specs/WI-1658/plan.md",
+    "implementation_contract": ".loom/specs/WI-1658/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1658/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1658/task-carrier.md",
+    "release_readiness": "docs/evidence/v0.17.1-release-readiness.md",
+    "single_person_review_boundary": "No non-author GitHub reviewer approval is required for this single-person repository. This authored Loom review record is the approval truth consumed by PR gate; author oral judgment, GitHub comments, raw runtime evidence, and CI-only success do not satisfy approval without the current-head review binding."
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored release-prep review approved the reviewed head for WI-1658. Subsequent changes before PR gate must be limited to review/status/progress/metadata carriers or require review refresh."
+  }
+}
