@@ -78,6 +78,7 @@ OUTPUT_ARTIFACT_SCHEMA = "loom-output-artifact/v1"
 DEFAULT_OUTPUT_ARTIFACT_DIR = Path(".loom/tmp/output-artifacts")
 DEFAULT_AGENT_SAFE_STDOUT_BUDGET_BYTES = 16 * 1024
 DEFAULT_AGENT_SAFE_SUMMARY_TARGET_BYTES = 4 * 1024
+DEFAULT_ACTIONABLE_FINDINGS_LIMIT = 5
 INSTALLED_STATE_SCHEMA = "loom-installed-state/v2"
 DETECT_SCHEMA = "loom-installed-surface-detect/v1"
 DOCTOR_SCHEMA = "loom-installed-surface-doctor/v1"
@@ -1138,6 +1139,114 @@ def output_key_locators(payload: dict[str, Any], *, limit: int = 10) -> list[str
     return locators
 
 
+def compact_action_text(value: Any, *, budget: int = 240) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return truncate_utf8(text, budget) if text else None
+
+
+def actionable_finding(entry: Any, *, source: str) -> dict[str, Any] | None:
+    if isinstance(entry, str):
+        summary = compact_action_text(entry)
+        return {"source": source, "summary": summary} if summary else None
+    if not isinstance(entry, dict):
+        return None
+    finding: dict[str, Any] = {"source": source}
+    for key in ("kind", "failure_kind", "classifier", "subject"):
+        value = compact_action_text(entry.get(key))
+        if value:
+            finding[key] = value
+    for source_key, target_key in (
+        ("summary", "summary"),
+        ("recommended_action", "next_action"),
+        ("next_action", "next_action"),
+        ("next_command", "next_command"),
+        ("fallback_to", "fallback_to"),
+        ("action", "action"),
+        ("description", "summary"),
+    ):
+        value = entry.get(source_key)
+        if isinstance(value, list):
+            value = " | ".join(str(item) for item in value[:3])
+        compacted = compact_action_text(value)
+        if compacted and target_key not in finding:
+            finding[target_key] = compacted
+    if "summary" not in finding:
+        for key in ("subject", "kind", "failure_kind", "classifier"):
+            if key in finding:
+                finding["summary"] = finding[key]
+                break
+    return finding if any(key in finding for key in ("summary", "next_action", "next_command", "fallback_to")) else None
+
+
+def budget_actionable_finding(finding: dict[str, Any]) -> dict[str, Any]:
+    compacted: dict[str, Any] = {"source": finding["source"]}
+    for key in ("summary", "next_action", "next_command", "fallback_to"):
+        value = compact_action_text(finding.get(key), budget=160)
+        if value:
+            compacted[key] = value
+    if len(compacted) > 1:
+        return compacted
+    for key in ("kind", "failure_kind", "classifier", "subject"):
+        value = compact_action_text(finding.get(key), budget=160)
+        if value:
+            compacted["summary"] = value
+            return compacted
+    return compacted
+
+
+def output_actionable_findings(payload: dict[str, Any], *, limit: int = DEFAULT_ACTIONABLE_FINDINGS_LIMIT) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(entry: Any, *, source: str) -> None:
+        if len(findings) >= limit:
+            return
+        finding = actionable_finding(entry, source=source)
+        if not finding:
+            return
+        key = json.dumps(finding, sort_keys=True, ensure_ascii=False)
+        if key in seen:
+            return
+        seen.add(key)
+        findings.append(finding)
+
+    for field in ("findings", "blocking_inputs", "blocking_gaps", "gaps", "missing_inputs", "blocking_failures"):
+        value = payload.get(field)
+        if isinstance(value, list):
+            for entry in value:
+                add(entry, source=field)
+
+    repair_plan = payload.get("repair_plan")
+    if isinstance(repair_plan, dict) and isinstance(repair_plan.get("actions"), list):
+        for entry in repair_plan["actions"]:
+            add(entry, source="repair_plan.actions")
+
+    sync_plan = payload.get("sync_plan")
+    if isinstance(sync_plan, dict) and isinstance(sync_plan.get("actions"), list):
+        for entry in sync_plan["actions"]:
+            add(entry, source="sync_plan.actions")
+
+    for field in ("next_command", "next_action", "fallback_to"):
+        value = payload.get(field)
+        entries = value if isinstance(value, list) else [value]
+        for entry in entries:
+            if entry is None:
+                continue
+            if field == "fallback_to":
+                add({"fallback_to": entry, "summary": "Run the suggested fallback command."}, source=field)
+            else:
+                add({field: entry}, source=field)
+
+    return findings
+
+
+def should_use_actionable_envelope(payload: dict[str, Any], actionable_findings: list[dict[str, Any]]) -> bool:
+    result = str(payload.get("result") or "")
+    return result not in {"", "pass"} and bool(actionable_findings)
+
+
 def positive_int_env(name: str, default: int) -> int:
     raw = os.environ.get(name)
     if raw is None:
@@ -1242,13 +1351,20 @@ def agent_safe_payload(
         "LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES",
         DEFAULT_AGENT_SAFE_SUMMARY_TARGET_BYTES,
     )
+    actionable_findings = output_actionable_findings(payload)
     rendered = json.dumps(payload, indent=2, ensure_ascii=False)
-    if len(rendered.encode("utf-8")) <= stdout_budget_bytes:
+    over_budget = len(rendered.encode("utf-8")) > stdout_budget_bytes
+    if not over_budget and not should_use_actionable_envelope(payload, actionable_findings):
         return payload
     locator = write_output_artifact(payload, artifact_dir=artifact_dir, sensitive=sensitive)
     summary = truncate_utf8(
         str(payload.get("summary") or "Full output exceeded the agent-safe stdout budget."),
         summary_target_bytes,
+    )
+    envelope_actionable_findings = (
+        [budget_actionable_finding(finding) for finding in actionable_findings[:3]]
+        if over_budget
+        else actionable_findings
     )
     return output_envelope(
         str(payload.get("command", "loom-output")),
@@ -1261,6 +1377,7 @@ def agent_safe_payload(
         full_output_available=True,
         full_output_truncated=True,
         sensitive=sensitive,
+        actionable_findings=envelope_actionable_findings,
         diagnostic_counts=output_diagnostic_counts(payload),
         key_locators=output_key_locators(payload),
         stdout_budget_bytes=stdout_budget_bytes,

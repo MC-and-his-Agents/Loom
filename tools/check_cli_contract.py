@@ -7054,6 +7054,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
     status_code, payload = run_json(
         ["closeout", "queue", "status", "--target", str(target), "--queue-file", "closeout-queue-fixture.json", "--json"]
     )
+    payload = runtime_payload_from_agent_safe_output(payload)
     after = snapshot_tree(target)
     if before != after:
         raise AssertionError("closeout queue status mutated the fixture target")
@@ -7113,6 +7114,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
         ["closeout", "queue", "status", "--target", str(target), "--json"],
         expect=1,
     )
+    missing_input = runtime_payload_from_agent_safe_output(missing_input)
     if (
         status_code == 0
         or missing_input.get("mode") != "blocked"
@@ -7127,6 +7129,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
         ["closeout", "queue", "status", "--target", str(target), "--item", "WI-does-not-exist", "--json"],
         expect=1,
     )
+    missing_item = runtime_payload_from_agent_safe_output(missing_item)
     if status_code == 0 or missing_item.get("mode") != "blocked" or "item not found: WI-does-not-exist" not in missing_item.get("missing_inputs", []):
         raise AssertionError("closeout queue status must block explicit missing item filters")
 
@@ -7134,6 +7137,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
         ["closeout", "queue", "status", "--target", str(target), "--issue", "999999", "--json"],
         expect=1,
     )
+    missing_issue = runtime_payload_from_agent_safe_output(missing_issue)
     if status_code == 0 or missing_issue.get("mode") != "blocked" or "issue not found: 999999" not in missing_issue.get("missing_inputs", []):
         raise AssertionError("closeout queue status must block explicit missing issue filters")
 
@@ -9179,9 +9183,11 @@ def run_aggregate_cli_contract() -> None:
             if exported["installation_graph"]["layers"] != ["adoption-metadata", "user-skills-provider", "global-cli-provider"]:
                 raise AssertionError("installed-state export did not include graph")
             _, upgrade_plan = run_json(["upgrade-plan", "--target", str(valid_target), "--json"], expect=0)
+            upgrade_plan = runtime_payload_from_agent_safe_output(upgrade_plan)
             if upgrade_plan["schema"] != "loom-delivery-control/v1" or not upgrade_plan["actions"]:
                 raise AssertionError("upgrade-plan did not emit delivery control actions")
             _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
+            verify_payload = runtime_payload_from_agent_safe_output(verify_payload)
             if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
                 raise AssertionError("verify did not consume doctor success")
             if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
@@ -9390,6 +9396,7 @@ def run_aggregate_cli_contract() -> None:
         if status == 0 or rollback_payload["failed_layer"] != "rollback-ownership":
             raise AssertionError("rollback did not fail closed without rollback ownership")
         _, hosts = run_json(["host", "list", "--target", str(valid_target), "--json"], expect=0)
+        hosts = runtime_payload_from_agent_safe_output(hosts)
         if hosts["schema"] != "loom-host-orchestration/v1" or not any(host["id"] == "codex" for host in hosts["hosts"]):
             raise AssertionError("host list did not emit supported host adapter inventory")
         _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--target", str(valid_target), "--json"], expect=0)
@@ -9410,6 +9417,7 @@ def run_aggregate_cli_contract() -> None:
                 if (managed_target / unexpected).exists():
                     raise AssertionError(f"user-level host plugin install wrote unsupported repository payload: {unexpected}")
         _, skills_list = run_json(["skills", "list", "--json"], expect=0)
+        skills_list = runtime_payload_from_agent_safe_output(skills_list)
         if skills_list["schema"] != "loom-skills-surface/v1" or skills_list["root_entry"] != "loom-init":
             raise AssertionError("skills list did not expose generated skills registry")
         status, skills_generate = run_json(["skills", "generate", "--json"])
@@ -9489,6 +9497,7 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("story did not wrap the flow runtime")
         for command_name in ("spec", "plan"):
             status, scenario_payload = run_json([command_name, "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+            scenario_payload = runtime_payload_from_agent_safe_output(scenario_payload)
             if status == 0 or scenario_payload["schema"] != "loom-scenario-control/v1" or not scenario_payload.get("fallback_to"):
                 raise AssertionError(f"{command_name} did not fail closed with a structured locator payload")
         status, build_payload = run_json(["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
