@@ -3,11 +3,11 @@
   "item_id": "WI-1675",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1675 minimal suite is coherent and scoped to README documentation clarity only. The suite records product positioning, architecture/workflow explanation, quick start install wording, Chinese localization, and explicit non-goals for runtime, installer, release, migration, permission, and downstream adoption behavior.",
+  "summary": "WI-1675 minimal suite is coherent and scoped to README documentation clarity only. The suite records product positioning, architecture/workflow explanation, quick start install wording, Chinese localization, doc-sync/release-surface README needle alignment, evidence/task carriers, and explicit non-goals for runtime, installer, release, migration, permission, and downstream adoption behavior.",
   "reviewer": "codex-main-agent",
   "authored_at": "2026-06-21T08:00:00Z",
-  "reviewed_head": "d42ef1899ad8791e4c78f855fe2a0b6d864c1ecd",
-  "reviewed_validation_summary": "2026-06-21T08:08Z local validation passed for WI-1675: git diff --check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; fact-chain; workspace check; suite validate; PR metadata preflight; PR gate.",
+  "reviewed_head": "c13183d87bad39c57db379c0ee6806de5964a05d",
+  "reviewed_validation_summary": "2026-06-21T08:19Z local validation passed for WI-1675 at c13183d87bad39c57db379c0ee6806de5964a05d: git diff --check; doc-sync check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; suite evidence validate; suite carrier validate; suite validate; fact-chain; workspace check; shadow parity.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -18,6 +18,8 @@
     "status_surface": ".loom/status/current.md",
     "spec": ".loom/specs/WI-1675/spec.md",
     "plan": ".loom/specs/WI-1675/plan.md",
-    "implementation_contract": ".loom/specs/WI-1675/implementation-contract.md"
+    "implementation_contract": ".loom/specs/WI-1675/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1675/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1675/task-carrier.md"
   }
 }
