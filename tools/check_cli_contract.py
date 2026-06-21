@@ -5067,6 +5067,134 @@ def write_docs_governance_not_applicable_suite(target: Path, item: str) -> None:
     (suite_dir / "plan.md").write_text("# Plan\n\n" + not_applicable_text, encoding="utf-8")
 
 
+def write_governance_intensity_minimal_suite(target: Path, item: str) -> None:
+    suite_dir = target / ".loom" / "specs" / item
+    for extra_artifact in (
+        "suite-index.md",
+        "research.md",
+        "contracts.md",
+        "readiness-checklist.md",
+        "consistency-analysis.md",
+    ):
+        path = suite_dir / extra_artifact
+        if path.exists():
+            path.unlink()
+    (suite_dir / "spec.md").write_text(
+        "# Spec\n\n"
+        "- Suite path: minimal\n\n"
+        "## Scenarios\n\n"
+        "- Scenario S1: A low-risk fixture-only change uses minimal suite evidence.\n\n"
+        "## Acceptance Criteria\n\n"
+        "- AC-1: PR gate consumes light fixture metadata without requiring a not_applicable suite.\n"
+        "- AC-2: Suite validation keeps behavior, test, and carrier evidence present.\n\n"
+        "- Full suite artifacts not_applicable: rationale: fixture-only governance intensity gate regression; "
+        "consumer boundary: minimal suite, implementation review, merge-ready, PR gate, and closeout; "
+        "recheck condition: scope expands beyond fixture or contract-test coverage.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "plan.md").write_text(
+        "# Plan\n\n"
+        "- Suite path: minimal\n\n"
+        "## Validation\n\n"
+        "- S1 / AC-1 / AC-2 -> `python3 tools/check_cli_contract.py --surface pr-metadata`.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "evidence-map.md").write_text(
+        "# Evidence Map\n\n"
+        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| EV-001 | behavior_evidence | .loom/specs/{item}/spec.md | light fixture minimal suite behavior | {item} / governance-intensity-pr-gate | present | PR gate fixture | Re-run contract fixtures after metadata gate changes. |\n"
+        f"| EV-002 | test_evidence | tools/check_cli_contract.py | PR gate fixture coverage | {item} / governance-intensity-pr-gate | present | PR gate fixture | Re-run contract fixtures after metadata gate changes. |\n"
+        f"| EV-003 | fresh_verification_input | .loom/progress/{item}.md | EV-001 EV-002 | {item} / latest validation summary | present | review / merge-ready / closeout | Refresh progress summary after validation changes. |\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "task-carrier.md").write_text(
+        "# Task Carrier\n\n"
+        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| github_issue | https://github.com/owner/repo/issues/1287 | fixture-only PR gate regression | in_progress | primary | .loom/work-items/{item}.md | .loom/work-items/{item}.md#static-facts | .loom/specs/{item}/spec.md#scenario-s1 | .loom/specs/{item}/plan.md#validation | .loom/specs/{item}/plan.md#validation | governance intensity fixture | Recheck before PR gate consumption. |\n",
+        encoding="utf-8",
+    )
+
+
+def prepare_current_head_reviewed_fixture(target: Path, fixture: dict[str, str], commit_message: str) -> None:
+    subprocess.run(["git", "add", "-A"], cwd=target, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", commit_message],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    record_current_fixture_review(target, fixture)
+    update_fixture_pr_head(target, fixture)
+
+
+def assert_governance_intensity_pr_gate_positive_variants(tmp: Path) -> None:
+    docs_target = tmp / "governance-intensity-pr-gate-docs-only"
+    docs_target.mkdir()
+    docs_fixture = write_semantic_review_pr_gate_fixture(docs_target)
+    write_governance_metadata_contract_fixture(docs_target)
+    write_docs_governance_not_applicable_suite(docs_target, docs_fixture["item"])
+    prepare_current_head_reviewed_fixture(docs_target, docs_fixture, "fixture docs-only light metadata and suite")
+    append_governance_intensity_metadata_body(
+        docs_target,
+        docs_fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_only",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "docs-only fixture does not need formal suite artifacts",
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond documentation text and current carrier evidence",
+                "scope_proof": "diff is limited to documentation and current Loom carriers",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+    docs_suite_payload = run_suite_validate_fixture(docs_target, docs_fixture["item"], expect=1)
+    if docs_suite_payload.get("result") != "not_applicable":
+        raise AssertionError("light docs-only suite validate fixture did not return not_applicable")
+    docs_payload = semantic_pr_gate_fixture_payload(docs_target, docs_fixture)
+    docs_intensity_gate = docs_payload.get("governance_intensity_gate", {})
+    if (
+        docs_payload.get("result") != "pass"
+        or docs_intensity_gate.get("result") != "pass"
+        or docs_intensity_gate.get("metadata_fields", {}).get("change_class") != "docs_only"
+        or docs_intensity_gate.get("effective_suite_path") != "not_applicable"
+    ):
+        raise AssertionError(f"light docs-only pr-gate fixture blocked: {docs_payload.get('missing_inputs')}")
+
+    fixture_target = tmp / "governance-intensity-pr-gate-fixture"
+    fixture_target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(fixture_target)
+    write_governance_metadata_contract_fixture(fixture_target)
+    write_governance_intensity_minimal_suite(fixture_target, fixture["item"])
+    prepare_current_head_reviewed_fixture(fixture_target, fixture, "fixture light minimal metadata and suite")
+    append_governance_intensity_metadata_body(
+        fixture_target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "fixture",
+            "suite_path": "minimal",
+        },
+    )
+    fixture_suite_payload = run_suite_validate_fixture(fixture_target, fixture["item"])
+    if fixture_suite_payload.get("result") != "pass":
+        raise AssertionError("light fixture minimal suite validate fixture did not pass")
+    fixture_payload = semantic_pr_gate_fixture_payload(fixture_target, fixture)
+    fixture_intensity_gate = fixture_payload.get("governance_intensity_gate", {})
+    if (
+        fixture_payload.get("result") != "pass"
+        or fixture_intensity_gate.get("result") != "pass"
+        or fixture_intensity_gate.get("metadata_fields", {}).get("change_class") != "fixture"
+        or fixture_intensity_gate.get("effective_suite_path") != "minimal"
+    ):
+        raise AssertionError(f"light fixture minimal pr-gate fixture blocked: {fixture_payload.get('missing_inputs')}")
+
+
 def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
     target = tmp / "docs-governance-lite-pr-gate"
     target.mkdir()
@@ -5632,6 +5760,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     assert_hosted_freeze_admission_pr_gate_fixture(tmp)
     assert_closeout_freeze_profile_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
+    assert_governance_intensity_pr_gate_positive_variants(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
     assert_controlled_merge_ruleset_trigger_fixture(tmp)
     assert_cross_repo_review_gate_fixtures(tmp)
