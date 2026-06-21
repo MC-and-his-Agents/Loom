@@ -3,11 +3,11 @@
   "item_id": "WI-1682",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1682 implementation review is approved for PR #1697. The diff freezes governance intensity classification, binding priority/safe repair, and closeout policy contracts; updates repo-interface metadata and focused CLI contract assertions; and carries WI-1682 suite/review metadata. Validation passed for pr-metadata, closeout-wrapper, merge-wrapper, controlled-merge, suite validate/evidence/carrier, fact-chain, and PR metadata preflight. No runtime command behavior, hosted workflow behavior, release packaging, or v0.18.0 publication is changed by this PR.",
-  "reviewer": "codex-main-agent",
-  "authored_at": "2026-06-21T15:06:16Z",
-  "reviewed_head": "80ff3f7b92052b30bc73c8ac74b87deada9d05c7",
-  "reviewed_validation_summary": "2026-06-21T14:54Z local validation passed on branch work/1682-intensity-binding-closeout-contracts: git diff --check; python3 -m json.tool .loom/companion/repo-interface.json; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface merge-wrapper; python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/loom.py suite validate --target . --item WI-1682 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1682 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1682 --json.",
+  "summary": "Code review allows the documentation, metadata, fixture, skill-reference, review-evidence, and carrier-only changes on c98f71d7; no runtime ship implementation or controlled-merge behavior is changed in this PR.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-21T15:46:12Z",
+  "reviewed_head": "c98f71d71a7cda2c5dfe0c97307b071a6db8b2e3",
+  "reviewed_validation_summary": "2026-06-21T15:26Z local validation passed on branch work/1682-intensity-binding-closeout-contracts: python3 tools/skills_surface.py generate; python3 tools/skills_surface.py check; CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom.py pr metadata-preflight 1697 --item WI-1682 --branch work/1682-intensity-binding-closeout-contracts --head-sha b4e240bacf3b721cce927782d54f9888974b1074 --json; CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1682; python3 tools/check_cli_contract.py --surface governance-closeout. Full python3 tools/check_cli_contract.py passed surfaces 1-11 and reached aggregate, then timed out in pre-review because uncommitted generated payload changes and stale WI-1678 closeout residue still made state-check fall back to admission before this commit. WI-1678 terminal progress/task carrier sync has now been added to this branch so state-check classifies WI-1678 as terminal stale carrier, not an active Work Item.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
