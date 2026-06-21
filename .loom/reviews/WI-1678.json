@@ -3,10 +3,10 @@
   "item_id": "WI-1678",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1678 README product-positioning and install-prompt iteration is approved for PR #1679. The diff is documentation and Loom carrier metadata only; local diff check, doc sync, release-doc-contract, and fact-chain checks passed.",
+  "summary": "WI-1678 README product-positioning and install-prompt iteration is approved for PR #1679. The diff is documentation and Loom carrier metadata only; local diff check, doc sync, release-doc-contract, fact-chain, suite path decision, and merge-ready recovery state are aligned.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-06-21T12:12:00Z",
-  "reviewed_head": "ad69d16d51c0cc2983b67d7deaa841cac1234859",
+  "authored_at": "2026-06-21T12:15:00Z",
+  "reviewed_head": "ba2f66b1bb992f485b125a1f1ece4a07480fb4a7",
   "reviewed_validation_summary": "2026-06-21T12:10Z local validation passed for WI-1678 head caa88d7ba5c7010f992750335edacb9121225a1b: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; python3 tools/loom_flow.py fact-chain --target . --item WI-1678.",
   "fallback_to": null,
   "findings": [],
@@ -21,6 +21,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored review approved the current documentation-only head for PR gate consumption."
+    "reason": "Authored review approved the current documentation-only merge-ready head for PR gate consumption."
   }
 }
