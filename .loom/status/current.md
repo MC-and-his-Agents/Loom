@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1688
-- Goal: Compress metadata and gate diagnostics into minimal actionable root CLI output while preserving full machine-readable payloads.
-- Scope: `tools/loom.py` agent-safe output helpers, affected wrapper contract tests, output envelope regression tests, and minimal WI-1688 suite carriers. Ownership constraints are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `test/output_envelope_test.py`, `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/work-items/WI-1688.md`, `.loom/progress/WI-1688.md`, `.loom/progress/WI-1688-build-evidence.json`, `.loom/reviews/WI-1688.json`, `.loom/reviews/WI-1688.spec.json`, `.loom/shadow/merge-ready-loom.json`, `.loom/shadow/closeout-loom.json`, and `.loom/specs/WI-1688/`.
-- Execution Path: issue #1688 -> branch `work/1688-minimal-action-feedback` -> focused wrapper/test update -> PR -> controlled merge -> issue closeout.
-- Workspace Entry: ./WI-1688/..
-- Recovery Entry: `.loom/progress/WI-1688.md`
-- Review Entry: `.loom/reviews/WI-1688.json`
-- Validation Entry: `test/output_envelope_test.py`; `tools/check_cli_contract.py --surface pr-metadata`; `--surface governance-closeout`; `--surface controlled-merge`; `--surface closeout-wrapper`; `--surface merge-wrapper`.
-- Closing Condition: PR is merged into main, issue #1688 is closed, and closeout confirms compact diagnostics, full payload artifact retention, host state, and Loom carriers agree.
+- Item ID: WI-1690
+- Goal: 新增 `loom ship --item <id> --pr <n> --intensity auto` dry-run 编排入口。
+- Scope: 读取强度分类、binding precedence、metadata preflight、PR gate、controlled merge check 和 closeout policy；输出将执行的步骤、跳过理由、升级理由和 next action；不写 GitHub 或 repo carrier。Ownership constraints are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/work-items/WI-1690.md`, `.loom/progress/WI-1690.md`, `.loom/progress/WI-1690-build-evidence.json`, `.loom/reviews/WI-1690.json`, `.loom/reviews/WI-1690.spec.json`, `.loom/specs/WI-1690/`, and PR metadata for #1690.
+- Execution Path: issue #1690 -> branch `work/1690-ship-dry-run` -> focused CLI/test update -> PR -> controlled merge -> issue closeout.
+- Workspace Entry: ./WI-1690/..
+- Recovery Entry: .loom/progress/WI-1690.md
+- Review Entry: .loom/reviews/WI-1690.json
+- Validation Entry: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1690 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1690`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1690`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1690 --build-evidence .loom/progress/WI-1690-build-evidence.json`.
+- Closing Condition: PR is merged into main, issue #1690 is closed, and closeout confirms ship dry-run behavior, non-mutating policy, host state, and Loom carriers agree.
 - Current Checkpoint: merge
-- Current Stop: Implementation, validation, spec review, implementation review, and PR metadata are integrated; PR gate and merge-ready are in progress.
-- Next Step: Run PR gate, hosted check readback, merge-ready, controlled merge, and closeout for #1688.
+- Current Stop: Implementation, local validation, suite gates, fact-chain, state-check, build evidence, spec review, implementation review, PR creation, and PR metadata are integrated; hosted checks, merge-ready, controlled merge, and closeout remain.
+- Next Step: Wait for hosted checks, rerun PR gate / merge-ready, then proceed to controlled merge and closeout.
 - Blockers: None
-- Latest Validation Summary: 2026-06-22 local validation on branch `work/1688-minimal-action-feedback`: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface controlled-merge`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1688 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1688`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1688`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1688 --build-evidence .loom/progress/WI-1688-build-evidence.json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only`.
-- Recovery Boundary: WI-1688 owns compact actionable CLI diagnostics for existing wrapper outputs. It does not implement `loom ship`, closeout policy, release publishing, or host dependency write execution.
-- Current Lane: milestone-15-actionable-diagnostics
+- Latest Validation Summary: 2026-06-22 local validation on branch `work/1690-ship-dry-run`: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1690 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1690 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1690 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1690`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1690`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1690 --build-evidence .loom/progress/WI-1690-build-evidence.json`; spec review and implementation review recorded in `.loom/reviews/WI-1690.spec.json` and `.loom/reviews/WI-1690.json`.
+- Recovery Boundary: WI-1690 owns `loom ship` dry-run orchestration and focused wrapper tests only. It does not implement `loom ship --apply`, controlled merge closeout-run, closeout carrier batching, issue closeout, or release publishing.
+- Current Lane: milestone-15-ship-dry-run
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-22 WI-1688 milestone #15 compact actionable diagnostics in progress.
+- Run Entry: 2026-06-22 WI-1690 milestone #15 ship dry-run implementation in progress.
 - Logs Entry: local command output retained in current Codex milestone #15 thread.
-- Diagnostics Entry: Non-passing root CLI wrapper payloads now expose compact actionable findings while retaining full JSON artifacts.
-- Verification Entry: 2026-06-22 local validation for diff check, output tests, py compile, pr-metadata, governance-closeout, controlled-merge, closeout-wrapper, merge-wrapper, aggregate, suite validate, fact-chain, state-check, build flow, skills surface, and source contract-only loom_check.
-- Lane Entry: milestone-15-actionable-diagnostics
+- Diagnostics Entry: `loom ship` dry-run now summarizes PR metadata preflight, PR gate, controlled merge check, closeout policy, skipped post-merge closeout, and next action without mutating host or repo state.
+- Verification Entry: 2026-06-22 local validation for diff check, py compile, ship-wrapper, aggregate, suite validate, suite evidence, suite carrier, fact-chain, state-check, build flow, spec review, implementation review, PR creation, and PR metadata passed; hosted gates remain.
+- Lane Entry: milestone-15-ship-dry-run
 
 ## Sources
 
-- Static Truth: `.loom/work-items/WI-1688.md`
-- Dynamic Truth: `.loom/progress/WI-1688.md`
-- Locator Truth: `.loom/bootstrap/init-result.json`
-- Fact Chain CLI: `python3 .loom/bin/loom_init.py fact-chain --target .`
+- Static Truth: .loom/work-items/WI-1690.md
+- Dynamic Truth: .loom/progress/WI-1690.md
+- Locator Truth: .loom/bootstrap/init-result.json
+- Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

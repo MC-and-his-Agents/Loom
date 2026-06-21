@@ -129,6 +129,7 @@ REQUIRED_COMMANDS = {
     "pr gate",
     "merge check",
     "merge run",
+    "ship",
     "reconcile",
     "skills list",
     "skills generate",
@@ -411,6 +412,94 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
             raise AssertionError("merge wrapper accepted literal `pr` as a PR number")
     finally:
         module.emit_flow = original_emit_flow
+
+
+def assert_ship_dry_run_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "light",
+                            "change_class": "docs_governance",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok"}
+        raise AssertionError(f"ship dry-run delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_ship([
+            "--item",
+            "WI-1690",
+            "--issue",
+            "1690",
+            "--pr",
+            "1704",
+            "--branch",
+            "work/1690-ship-dry-run",
+            "--head-sha",
+            "a" * 40,
+            "--intensity",
+            "auto",
+            "--json",
+        ])
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("ship dry-run wrapper did not emit a passing dry-run plan")
+        if emitted.get("schema_version") != "loom-ship/v1" or emitted.get("mutates") is not False:
+            raise AssertionError("ship dry-run must emit loom-ship/v1 and remain non-mutating")
+        expected_prefixes = [
+            ["pr-metadata", "preflight"],
+            ["pr-gate", "check"],
+            ["controlled-merge", "check"],
+        ]
+        if [call[:2] for call in calls] != expected_prefixes:
+            raise AssertionError("ship dry-run did not preserve the expected read-only gate sequence")
+        flattened = [token for call in calls for token in call]
+        if "--execute" in flattened or "--apply" in flattened:
+            raise AssertionError("ship dry-run delegated a mutating runtime flag")
+        policy = emitted.get("closeout_policy", {})
+        if policy.get("policy") != "host_only" or policy.get("creates_closeout_pr_by_default") is not False:
+            raise AssertionError("ship dry-run did not consume light closeout policy")
+        if not any(step.get("name") == "post-merge-closeout" and step.get("result") == "skipped" for step in emitted.get("steps", [])):
+            raise AssertionError("ship dry-run must plan post-merge closeout without executing it")
+
+        calls.clear()
+        status = module.handle_ship(["--item", "WI-1690", "--pr", "1704", "--apply", "--json"])
+        if status == 0 or calls:
+            raise AssertionError("ship --apply must fail closed in the dry-run Work Item without delegated writes")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
 
 
 def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
@@ -8004,6 +8093,11 @@ def run_merge_wrapper_surface() -> None:
     print("merge wrapper surface checks passed")
 
 
+def run_ship_wrapper_surface() -> None:
+    assert_ship_dry_run_wrapper_contract()
+    print("ship wrapper surface checks passed")
+
+
 def run_closeout_wrapper_surface() -> None:
     assert_closeout_wrapper_argument_contract()
     print("closeout wrapper surface checks passed")
@@ -8112,6 +8206,7 @@ def run_aggregate_cli_contract() -> None:
         "project status",
         "pr gate",
         "merge check",
+        "ship",
         "reconcile",
         "host list",
         "host doctor",
@@ -10234,6 +10329,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="merge-wrapper",
             fixture_group="merge-wrapper",
             run=run_merge_wrapper_surface,
+        ),
+        SurfaceCheck(
+            name="ship-wrapper",
+            fixture_group="ship-wrapper",
+            run=run_ship_wrapper_surface,
         ),
         SurfaceCheck(
             name="closeout-wrapper",

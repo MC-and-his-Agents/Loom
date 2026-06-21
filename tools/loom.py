@@ -360,6 +360,13 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Execute host merge only with `--apply` after `merge check` passes for the same PR head and Work Item.",
     },
     {
+        "command": "ship",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Dry-run the intensity-aware delivery path across PR metadata, PR gate, controlled merge, and closeout policy.",
+    },
+    {
         "command": "reconcile",
         "domain": "host-control",
         "status": "implemented",
@@ -4029,6 +4036,174 @@ def handle_merge(argv: list[str]) -> int:
         flow_args.append("--execute")
     append_full_output_flag(flow_args, args)
     return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])
+
+
+def ship_step(name: str, payload: dict[str, Any], *, mutates: bool = False, skipped_reason: str | None = None) -> dict[str, Any]:
+    return {
+        "name": name,
+        "result": payload.get("result", "skipped" if skipped_reason else None),
+        "summary": payload.get("summary", skipped_reason),
+        "missing_inputs": payload.get("missing_inputs", []),
+        "fallback_to": payload.get("fallback_to"),
+        "mutates": mutates,
+        "skipped_reason": skipped_reason,
+        "payload": payload,
+    }
+
+
+def governance_metadata_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    carrier = payload.get("governance_intensity_carrier")
+    envelope = carrier.get("envelope") if isinstance(carrier, dict) else None
+    fields = envelope.get("fields") if isinstance(envelope, dict) else None
+    return fields if isinstance(fields, dict) else {}
+
+
+def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | None = None) -> dict[str, Any]:
+    intensity = intensity_override if intensity_override not in {None, "auto"} else fields.get("governance_intensity")
+    change_class = fields.get("change_class")
+    release_judgment = fields.get("release_judgment")
+    triggers = [str(value) for value in fields.get("upgrade_triggers", []) if str(value)]
+    lowered = " ".join([str(change_class or ""), *triggers]).lower()
+    upgrade_reasons: list[str] = []
+    if release_judgment == "release_required" or change_class == "release" or any(word in lowered for word in ("release", "version")):
+        policy = "full_closeout_pr"
+        upgrade_reasons.append("release_or_version_closeout")
+    elif intensity == "reinforced" or any(word in lowered for word in ("security", "permission", "conflict", "parent", "milestone", "multi")):
+        policy = "full_closeout_pr"
+        upgrade_reasons.append("reinforced_or_high_risk_closeout")
+    elif intensity == "light":
+        policy = "host_only"
+    elif any(word in lowered for word in ("carrier", "versioned")):
+        policy = "batched_carrier_pr"
+        upgrade_reasons.append("versioned_carrier_required")
+    else:
+        policy = "inline"
+    return {
+        "schema_version": "loom-closeout-policy-decision/v1",
+        "result": "pass",
+        "policy": policy,
+        "governance_intensity": intensity,
+        "change_class": change_class,
+        "release_judgment": release_judgment,
+        "upgrade_reasons": upgrade_reasons,
+        "creates_closeout_pr_by_default": policy == "full_closeout_pr",
+        "next_action": "run loom ship --apply after dry-run blockers are clear" if policy in {"inline", "host_only"} else "queue or run explicit closeout carrier path after merge",
+    }
+
+
+def first_ship_blocker(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for step in steps:
+        if step.get("result") not in {"pass", "skipped"}:
+            return step
+    return None
+
+
+def handle_ship(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom ship")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item", required=True)
+    parser.add_argument("--issue", type=int)
+    parser.add_argument("--pr", type=int, required=True)
+    parser.add_argument("--branch")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--intensity", choices=("auto", "light", "standard", "reinforced"), default="auto")
+    parser.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="squash")
+    parser.add_argument("--pr-payload-file")
+    parser.add_argument("--status-checks-file")
+    parser.add_argument("--branch-protection-file")
+    parser.add_argument("--ruleset-file")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    args = parser.parse_args(argv)
+    command = "ship"
+    target = resolve_target(args.target)
+    if args.apply:
+        return emit(
+            output(
+                command,
+                "block",
+                schema_version="loom-ship/v1",
+                summary="ship --apply is reserved for the apply Work Item; this command only performs dry-run planning.",
+                mutates=False,
+                dry_run=True,
+                missing_inputs=["ship --apply is not implemented in this Work Item"],
+                fallback_to=["loom ship --item <id> --pr <n> --intensity auto --json", "issue #1691"],
+            )
+        )
+
+    common = ["--target", str(target)]
+    metadata_args = ["pr-metadata", "preflight", *common, "--surface", "merge_ready", "--pr", str(args.pr), "--item", args.item]
+    if args.issue is not None:
+        metadata_args.extend(["--issue", str(args.issue)])
+    if args.branch:
+        metadata_args.extend(["--branch", args.branch])
+    if args.head_sha:
+        metadata_args.extend(["--head-sha", args.head_sha])
+    if args.pr_payload_file:
+        metadata_args.extend(["--pr-payload-file", args.pr_payload_file])
+    metadata = flow_payload(command, metadata_args, fallback_to=["loom pr metadata-update <pr> --item <id> --head-sha <sha> --apply --json"])
+
+    pr_gate_args = ["pr-gate", "check", *common, "--pr", str(args.pr), "--item", args.item]
+    if args.head_sha:
+        pr_gate_args.extend(["--head-sha", args.head_sha])
+    if args.pr_payload_file:
+        pr_gate_args.extend(["--pr-payload-file", args.pr_payload_file])
+    pr_gate = flow_payload(command, pr_gate_args, fallback_to=["loom pr gate <pr> --work-item <id> --json"])
+
+    merge_args = ["controlled-merge", "check", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method]
+    if args.head_sha:
+        merge_args.extend(["--head-sha", args.head_sha])
+    for flag, value in (
+        ("--pr-payload-file", args.pr_payload_file),
+        ("--status-checks-file", args.status_checks_file),
+        ("--branch-protection-file", args.branch_protection_file),
+        ("--ruleset-file", args.ruleset_file),
+    ):
+        if value:
+            merge_args.extend([flag, value])
+    merge_check = flow_payload(command, merge_args, fallback_to=["loom merge check <pr> --work-item <id> --json"])
+
+    fields = governance_metadata_fields(metadata)
+    closeout_policy = ship_closeout_policy(fields, intensity_override=args.intensity)
+    steps = [
+        ship_step("pr-metadata-preflight", metadata),
+        ship_step("pr-gate", pr_gate),
+        ship_step("controlled-merge-check", merge_check),
+        ship_step("closeout-policy", closeout_policy),
+        ship_step(
+            "post-merge-closeout",
+            {"result": "skipped", "summary": "dry-run does not mutate host or repo state."},
+            skipped_reason="planned after merge/apply; no closeout PR is created by dry-run",
+        ),
+    ]
+    blocker = first_ship_blocker(steps)
+    result = "pass" if blocker is None else "block"
+    next_action = closeout_policy["next_action"] if blocker is None else (blocker.get("fallback_to") or f"resolve `{blocker.get('name')}`")
+    payload = output(
+        command,
+        result,
+        schema_version="loom-ship/v1",
+        summary="ship dry-run produced the intensity-aware delivery plan." if result == "pass" else "ship dry-run stopped at the first blocking delivery step.",
+        mutates=False,
+        dry_run=True,
+        target=str(target),
+        item={"id": args.item},
+        issue={"number": args.issue},
+        pr={"number": args.pr},
+        intensity=args.intensity,
+        effective_intensity=closeout_policy.get("governance_intensity"),
+        merge_method=args.merge_method,
+        closeout_policy=closeout_policy,
+        steps=steps,
+        skipped_steps=[step for step in steps if step.get("result") == "skipped"],
+        upgrade_reasons=closeout_policy.get("upgrade_reasons", []),
+        first_blocker=blocker,
+        missing_inputs=blocker.get("missing_inputs", []) if blocker else [],
+        fallback_to=next_action if blocker else None,
+        next_action=next_action,
+    )
+    return emit(agent_safe_payload(payload, full_output=args.full_output))
 
 
 def handle_reconcile(argv: list[str]) -> int:
@@ -7950,6 +8125,8 @@ def main(argv: list[str]) -> int:
     if command == "merge" or command.startswith("merge "):
         merge_args = command.split()[1:] + forwarded if command.startswith("merge ") else forwarded
         return handle_merge(merge_args)
+    if command == "ship":
+        return handle_ship(forwarded)
     if command == "reconcile":
         return handle_reconcile(forwarded)
     if command == "carrier" or command.startswith("carrier "):
