@@ -14,6 +14,7 @@
 | --- | --- | --- | --- | --- |
 | Work Item | .loom/work-items/WI-1683.md | required | authored Loom truth | Recheck after issue, branch, PR, or closeout state changes. |
 | suite path decision | .loom/specs/WI-1683/spec.md | minimal | authored Loom truth | Recheck if scope expands into host mutation, release, workflow, or public CLI design. |
+| implementation contract | .loom/specs/WI-1683/implementation-contract.md | required | authored Loom truth | Recheck after runtime contract or output payload changes. |
 | task carrier | .loom/specs/WI-1683/task-carrier.md | required | authored Loom truth | Recheck before PR gate, controlled merge, and closeout. |
 | governance intensity runtime | src/skills/shared/scripts/loom_flow.py | required | source runtime | Re-run pr-metadata surface and regenerate mirrors after edits. |
 | CLI contract fixtures | tools/check_cli_contract.py | required | behavior evidence | Re-run pr-metadata surface after fixture edits. |
@@ -26,7 +27,7 @@
 | EV-002 | behavior_evidence | skills/shared/scripts/loom_flow.py | generated mirror from source runtime | branch=work/1683-governance-intensity-gate | present | hosted checks / packaged plugin behavior | Run `python3 tools/skills_surface.py generate` and `check`. |
 | EV-003 | test_evidence | tools/check_cli_contract.py | metadata validation and PR gate fixtures | branch=work/1683-governance-intensity-gate | present | review / merge-ready / PR gate / closeout | Re-run after runtime or fixture changes. |
 | EV-004 | release_judgment | .loom/progress/WI-1683.md | no standalone release for this PR; v0.18.0 release remains owned by #1696 | issue=#1683 | present | closeout / milestone release planning | Recheck if this PR starts publishing release artifacts. |
-| EV-005 | fresh_verification_input | .loom/progress/WI-1683.md | EV-001 EV-002 EV-003 | branch=work/1683-governance-intensity-gate; head=5e9c9d1494766f7221c846e8835e07e7cc9e47f4 | present | merge-ready / PR gate / closeout | Refresh after implementation, generated mirrors, PR metadata, or review input changes. |
+| EV-005 | fresh_verification_input | .loom/progress/WI-1683.md | EV-001 EV-002 EV-003 | branch=work/1683-governance-intensity-gate; head=current PR head at review time | present | merge-ready / PR gate / closeout | Refresh after implementation, generated mirrors, PR metadata, or review input changes. |
 
 ## Suite Applicability
 
