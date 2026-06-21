@@ -7,11 +7,13 @@
 3. Replace the install section with a short copyable agent prompt and step-by-step supported commands.
 4. Remove new-user legacy compatibility wording from README install flow.
 5. Align English and Chinese section/link structure, and keep Chinese prose mostly Chinese.
-6. Record minimal WI-1675 Loom carriers for fact-chain, workspace, PR, and closeout consumption.
+6. Align the release-surface README needle check with the new README entry strategy.
+7. Record minimal WI-1675 Loom carriers for fact-chain, workspace, PR, and closeout consumption.
 
 ## Validation
 
 - `git diff --check`
+- `python3 tools/check_release_surface.py --surface release-doc-contract`
 - README badge/body link scan: `rg -n "zread\\.ai|deepwiki\\.com" README.md README.zh-CN.md`
 - Chinese README token scan: `rg -n "[A-Za-z][A-Za-z0-9_-]*" README.zh-CN.md`
 - English/Chinese heading and maintainer-link readback: `rg -n "^## |^# |^- " README.md README.zh-CN.md`
@@ -27,4 +29,4 @@
 
 ## Scope Guard
 
-- Do not touch runtime behavior, installer implementation, package release surfaces, legacy migration contracts, host mutation behavior, permissions, external-visible execution, or downstream repository adoption.
+- Do not touch runtime behavior, installer implementation, package release behavior, legacy migration contracts, host mutation behavior, permissions, external-visible execution, or downstream repository adoption.

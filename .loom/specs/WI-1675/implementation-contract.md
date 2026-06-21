@@ -3,7 +3,7 @@
 ## Contract
 
 - Change class: docs_only
-- Owned files: `README.md`, `README.zh-CN.md`, WI-1675 Loom carriers.
+- Owned files: `README.md`, `README.zh-CN.md`, `tools/check_release_surface.py`, WI-1675 Loom carriers.
 - Runtime behavior: unchanged.
 - Install behavior: unchanged.
 - Release behavior: unchanged.
@@ -16,6 +16,7 @@
 ## Validation Contract
 
 - `git diff --check`
+- `python3 tools/check_release_surface.py --surface release-doc-contract`
 - README badge/body link scan.
 - Chinese README token scan.
 - English/Chinese heading and maintainer-link readback.

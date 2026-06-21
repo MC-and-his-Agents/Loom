@@ -322,12 +322,12 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         README,
         (
-            "Loom CLI release surface",
-            "loom-installer deprecated legacy line",
-            "users do not install them as a separate surface",
-            "HotCP-style stale carriers",
-            "loom carrier closeout-sync",
-            "fact_chain.mode = idle",
+            "Loom is CLI-first",
+            "global `loom` command",
+            "metadata-only repository adoption",
+            "Codex user-level plugin",
+            "Work Item",
+            "gate chain",
         ),
         errors,
         surface_label=surface_label,
@@ -336,9 +336,11 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         README_ZH,
         (
-            "Loom CLI 发布面",
-            "loom-installer deprecated legacy line",
-            "用户不再把它们作为独立安装面安装",
+            "命令行优先设计",
+            "Codex 用户级插件",
+            "仅元数据的仓库采用",
+            "工作项",
+            "固定门控链",
         ),
         errors,
         surface_label=surface_label,
