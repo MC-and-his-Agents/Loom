@@ -6,7 +6,7 @@
   "summary": "WI-1675 README documentation update is approved for PR gate consumption. The diff improves product positioning, architecture/workflow explanation, badges, quick start install wording, Chinese localization, and minimal Loom carriers. It does not change runtime behavior, installer implementation, package release surfaces, legacy migration contracts, host mutation behavior, permissions, or downstream repository adoption.",
   "reviewer": "codex-main-agent",
   "authored_at": "2026-06-21T08:00:00Z",
-  "reviewed_head": "257191bab5bea8d8c310341529e877cb0a8f76ba",
+  "reviewed_head": "d42ef1899ad8791e4c78f855fe2a0b6d864c1ecd",
   "reviewed_validation_summary": "2026-06-21T08:08Z local validation passed for WI-1675: git diff --check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; fact-chain; workspace check; suite validate; PR metadata preflight; PR gate.",
   "fallback_to": null,
   "findings": [],
