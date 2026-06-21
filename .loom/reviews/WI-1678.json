@@ -1,39 +1,27 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1678",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "8e142e18ef8657ed966ffa07c6bf5582f3eeea9b",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1678 README product-positioning and install-prompt iteration is approved for PR #1679. The diff is documentation and Loom carrier metadata only; local diff check, doc sync, release-doc-contract, and fact-chain checks passed for head d38cfa59fc8297f067aea2dd8b6965995f485ed8.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T12:05:00Z",
+  "reviewed_head": "d38cfa59fc8297f067aea2dd8b6965995f485ed8",
+  "reviewed_validation_summary": "2026-06-21T12:00Z local validation passed for WI-1678 head f05546560d7335fc9b6147f5d40566152510c41c, then carrier validation was committed at d38cfa59fc8297f067aea2dd8b6965995f485ed8: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; python3 tools/loom_flow.py fact-chain --target . --item WI-1678.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1678.md",
+    "recovery_entry": ".loom/progress/WI-1678.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "manual_docs_only_carrier_review",
+    "suite_evidence_validation": "not_applicable_docs_only_readme_iteration",
+    "suite_carrier_validation": "not_applicable_docs_only_readme_iteration"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored review approved the current documentation-only head for PR gate consumption."
+  }
 }
