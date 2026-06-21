@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1683",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Review allows WI-1683 at current head: governance intensity gate generalizes docs-governance lite into reusable classification, preserves legacy docs-governance lite payloads, blocks unsafe light runtime/release/contract declarations, and adds PR gate positive coverage for docs_only/not_applicable and fixture/minimal paths.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-21T17:25:06Z",
+  "reviewed_head": "32487be27ef35873fe1b5685abadcd00b67a22fd",
+  "reviewed_validation_summary": "2026-06-21T17:18Z local validation passed on branch work/1683-governance-intensity-gate at head 3a8bb6c72a903a4a6f67b28f95b8e79067538a6d: git diff --check; python3 tools/skills_surface.py generate; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py --surface pr-metadata, including docs_only/not_applicable and fixture/minimal PR gate positive coverage; python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/loom_flow.py fact-chain --target . --item WI-1683; python3 tools/loom_flow.py state-check --target . --item WI-1683; python3 tools/loom.py suite validate --target . --item WI-1683 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1683 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1683 --json.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1683.md",
+    "recovery_entry": ".loom/progress/WI-1683.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1683/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-WI-1683 --item WI-1683 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1683/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-WI-1683 --item WI-1683 --json",
+    "suite_evidence_map": ".loom/specs/WI-1683/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1683/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
