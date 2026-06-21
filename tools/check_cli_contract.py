@@ -3952,6 +3952,32 @@ def record_current_fixture_review(target: Path, fixture: dict[str, str]) -> dict
     return record_payload
 
 
+def record_current_fixture_spec_review(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
+    _, record_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--review-file",
+            f".loom/reviews/{fixture['item']}.spec.json",
+            "--decision",
+            "allow",
+            "--kind",
+            "spec_review",
+            "--summary",
+            "Fixture spec review approves the current suite path decision.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    if record_payload.get("result") != "pass":
+        raise AssertionError(f"spec review record fixture failed: {record_payload.get('missing_inputs')}")
+    return record_payload
+
+
 def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
     target = tmp / "gate-freeze-review-binding"
     target.mkdir()
@@ -5054,14 +5080,12 @@ def write_docs_governance_not_applicable_suite(target: Path, item: str) -> None:
             path.unlink()
     not_applicable_text = (
         "- Suite path: not_applicable\n\n"
-        "- Formal-suite not_applicable: rationale: docs-governance lite fixture only clarifies governance docs "
-        "and current carrier evidence; consumer boundary: suite validate, spec review, implementation review, "
-        "merge-ready, PR gate, hosted CI, and closeout consume this only as the formal suite decision while "
-        "fact-chain, current-head review, PR metadata, no-release judgment, controlled merge, and closeout remain required; "
-        "recheck condition: require a full or minimal suite if scope expands into runtime code, tools, fixtures, "
-        "metadata schema, generated payloads, release mechanics, AGENTS root rules, or external-visible behavior; "
-        "scope proof: fixture diff is limited to governance docs and current Loom carriers; "
-        "review requirement: current_head_review_required.\n"
+        "- Formal-suite not_applicable:\n"
+        "  - rationale: docs-governance lite fixture only clarifies governance docs and current carrier evidence.\n"
+        "  - consumer boundary: suite validate, spec review, implementation review, merge-ready, PR gate, hosted CI, and closeout consume this only as the formal suite decision while fact-chain, current-head review, PR metadata, no-release judgment, controlled merge, and closeout remain required.\n"
+        "  - recheck condition: require a full or minimal suite if scope expands into runtime code, tools, fixtures, metadata schema, generated payloads, release mechanics, AGENTS root rules, or external-visible behavior.\n"
+        "  - scope proof: fixture diff is limited to governance docs and current Loom carriers.\n"
+        "  - review requirement: current_head_review_required.\n"
     )
     (suite_dir / "spec.md").write_text("# Spec\n\n" + not_applicable_text, encoding="utf-8")
     (suite_dir / "plan.md").write_text("# Plan\n\n" + not_applicable_text, encoding="utf-8")
@@ -5085,18 +5109,20 @@ def write_governance_intensity_minimal_suite(target: Path, item: str) -> None:
         "## Scenarios\n\n"
         "- Scenario S1: A low-risk fixture-only change uses minimal suite evidence.\n\n"
         "## Acceptance Criteria\n\n"
-        "- AC-1: PR gate consumes light fixture metadata without requiring a not_applicable suite.\n"
+        "- AC-1: PR gate consumes light fixture metadata without requiring whole-suite bypass.\n"
         "- AC-2: Suite validation keeps behavior, test, and carrier evidence present.\n\n"
-        "- Full suite artifacts not_applicable: rationale: fixture-only governance intensity gate regression; "
-        "consumer boundary: minimal suite, implementation review, merge-ready, PR gate, and closeout; "
-        "recheck condition: scope expands beyond fixture or contract-test coverage.\n",
+        "- full-path-artifacts not_applicable rationale: fixture-only governance intensity gate regression uses the minimal suite path instead of full optional artifacts; "
+        "consumer boundary: suite validate consumes this only as full-artifact non-applicability while minimal suite evidence, implementation review, merge-ready, PR gate, and closeout remain required; "
+        "recheck condition: require full suite artifacts if scope expands beyond fixture or contract-test coverage.\n",
         encoding="utf-8",
     )
     (suite_dir / "plan.md").write_text(
         "# Plan\n\n"
         "- Suite path: minimal\n\n"
         "## Validation\n\n"
-        "- S1 / AC-1 / AC-2 -> `python3 tools/check_cli_contract.py --surface pr-metadata`.\n",
+        "- S1 -> test evidence: `python3 tools/check_cli_contract.py --surface pr-metadata`.\n"
+        "- AC-1 -> test evidence: `python3 tools/check_cli_contract.py --surface pr-metadata`.\n"
+        "- AC-2 -> test evidence: `python3 tools/check_cli_contract.py --surface pr-metadata`.\n",
         encoding="utf-8",
     )
     (suite_dir / "evidence-map.md").write_text(
@@ -5104,7 +5130,7 @@ def write_governance_intensity_minimal_suite(target: Path, item: str) -> None:
         "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |\n"
         "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
         f"| EV-001 | behavior_evidence | .loom/specs/{item}/spec.md | light fixture minimal suite behavior | {item} / governance-intensity-pr-gate | present | PR gate fixture | Re-run contract fixtures after metadata gate changes. |\n"
-        f"| EV-002 | test_evidence | tools/check_cli_contract.py | PR gate fixture coverage | {item} / governance-intensity-pr-gate | present | PR gate fixture | Re-run contract fixtures after metadata gate changes. |\n"
+        f"| EV-002 | test_evidence | .loom/specs/{item}/plan.md | PR gate fixture coverage | {item} / governance-intensity-pr-gate | present | PR gate fixture | Re-run contract fixtures after metadata gate changes. |\n"
         f"| EV-003 | fresh_verification_input | .loom/progress/{item}.md | EV-001 EV-002 | {item} / latest validation summary | present | review / merge-ready / closeout | Refresh progress summary after validation changes. |\n",
         encoding="utf-8",
     )
@@ -5126,6 +5152,8 @@ def prepare_current_head_reviewed_fixture(target: Path, fixture: dict[str, str],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    record_current_fixture_spec_review(target, fixture)
+    commit_fixture_file(target, f".loom/reviews/{fixture['item']}.spec.json", "fixture spec review refresh")
     record_current_fixture_review(target, fixture)
     update_fixture_pr_head(target, fixture)
 
@@ -5209,6 +5237,8 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    record_current_fixture_spec_review(target, fixture)
+    commit_fixture_file(target, f".loom/reviews/{fixture['item']}.spec.json", "fixture spec review refresh")
     _, review_record_payload = run_flow_json(
         [
             "review",
