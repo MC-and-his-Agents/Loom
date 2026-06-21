@@ -31,7 +31,7 @@ carrier 冲突，都必须 fail closed。
 | `branch` | 当前 PR head branch | 所有 Loom-governed PR | 绑定 PR metadata carrier 与正式执行分支 / worktree |
 | `head_sha` | 当前 PR head SHA | 所有 Loom-governed PR | 绑定 PR metadata carrier、review artifact 与 PR head |
 | `governance_intensity` | `light` / `standard` / `reinforced` | 所有 Loom-governed PR | 决定最低证据、升级触发和 gate profile 期望 |
-| `change_class` | `docs_only` / `docs_governance` / `contract` / `runtime` / `fixture` / `release` / `external_action` / `mixed` | 所有 Loom-governed PR | 解释为什么当前强度成立；高风险 class 不得降级 |
+| `change_class` | `docs_only` / `docs_governance` / `contract` / `runtime` / `fixture` / `release` / `workflow` / `metadata_schema` / `host_write` / `permissions` / `external_action` / `mixed` | 所有 Loom-governed PR | 解释为什么当前强度成立；高风险 class 不得降级 |
 | `suite_path` | `full` / `minimal` / `not_applicable` | 所有 Work Item | 决定 full suite artifacts 是否必须可读 |
 | `suite_not_applicable` | structured rationale object | `suite_path == not_applicable` | 证明 formal suite artifacts 仅对当前 scope 不适用 |
 | `review_requirement` | `current_head_review_required` / `specialized_review_required` | 所有 Work Item | 保护 review 不被轻量路径跳过 |
@@ -168,7 +168,7 @@ Gate 至少要区分以下阻断原因：
 
 Gate 发现以下信号时必须要求升级或返回前序修复：
 
-- `change_class` 是 `runtime`、`fixture`、`release`、`external_action` 或 `mixed`，但强度声明为 `light`
+- `change_class` 是 `runtime`、`release`、`workflow`、`metadata_schema`、`host_write`、`permissions`、`external_action` 或 `mixed`，但强度声明为 `light`
 - docs-only 声明与 diff scope 不符
 - PR body machine carrier 与 Work Item / recovery / status / review locator 冲突
 - 当前 PR head 与 reviewed head 不一致，且漂移不是 gate 明确允许的 carrier-only drift

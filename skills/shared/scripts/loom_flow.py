@@ -247,6 +247,10 @@ GOVERNANCE_CHANGE_CLASS_VALUES = {
     "runtime",
     "fixture",
     "release",
+    "workflow",
+    "metadata_schema",
+    "host_write",
+    "permissions",
     "external_action",
     "mixed",
 }
@@ -269,7 +273,16 @@ PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES = {
     "fields.release_judgment": sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES),
     "fields.suite_not_applicable.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
 }
-GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "release", "external_action", "mixed"}
+GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {
+    "runtime",
+    "release",
+    "workflow",
+    "metadata_schema",
+    "host_write",
+    "permissions",
+    "external_action",
+    "mixed",
+}
 GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES = {"docs_only", "docs_governance", "fixture"}
 GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES = {"docs_only", "docs_governance"}
 GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES = {"fixture"}
