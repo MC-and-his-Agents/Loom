@@ -80,7 +80,7 @@
     {
       "id": "WI-1683-local-validation",
       "status": "integrated",
-      "summary": "2026-06-21T17:18Z local validation passed for git diff --check, skills surface generate/check, pr-metadata, controlled-merge, fact-chain, state-check, suite validate, suite evidence validate, and suite carrier validate.",
+      "summary": "2026-06-21T18:23Z local validation passed at head 23fd0811cd0171c3b1d4bef90e82a5eb1ee6e1fa for git diff --check, pr-metadata contract fixtures, aggregate CLI contract fixtures, WI-1287 suite decision parser stability, and prior WI-1683 merge-readiness checks.",
       "locators": [
         ".loom/progress/WI-1683.md",
         ".loom/status/current.md"

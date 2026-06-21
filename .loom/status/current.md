@@ -15,7 +15,7 @@
 - Current Stop: Current-head spec and implementation review artifacts are recorded for the governance intensity gate branch.
 - Next Step: Update PR #1700 metadata, run PR gate and hosted checks on the rebased head, then perform controlled merge.
 - Blockers: None
-- Latest Validation Summary: 2026-06-21T17:18Z local validation passed on branch work/1683-governance-intensity-gate at head 3a8bb6c72a903a4a6f67b28f95b8e79067538a6d: git diff --check; python3 tools/skills_surface.py generate; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py --surface pr-metadata, including docs_only/not_applicable and fixture/minimal PR gate positive coverage; python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/loom_flow.py fact-chain --target . --item WI-1683; python3 tools/loom_flow.py state-check --target . --item WI-1683; python3 tools/loom.py suite validate --target . --item WI-1683 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1683 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1683 --json.
+- Latest Validation Summary: 2026-06-21T18:23Z local validation passed on branch work/1683-governance-intensity-gate at head 23fd0811cd0171c3b1d4bef90e82a5eb1ee6e1fa: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate. Earlier WI-1683 merge-readiness checks passed for skills surface generate/check, controlled-merge, fact-chain, state-check, suite validate, suite evidence validate, suite carrier validate, and demo/adoption parity.
 - Recovery Boundary: WI-1683 owns governance intensity gate runtime and fixture behavior. It does not implement `loom ship`, PR backlink safe repair, concise gate output, controlled-merge closeout chaining, or release packaging.
 - Current Lane: milestone-15-governance-intensity-gate
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-21 WI-1683 milestone #15 governance intensity gate implementation in progress.
 - Logs Entry: local command output retained in current Codex milestone #15 thread.
 - Diagnostics Entry: generalized governance intensity gate implemented; historical carrier blocker cleared by PR #1701.
-- Verification Entry: 2026-06-21T17:18Z focused local validation passed for git diff --check, skills surface generate/check, pr-metadata with docs_only and fixture/minimal positive PR gate coverage, controlled-merge, fact-chain, state-check, suite validate, suite evidence validate, and suite carrier validate.
+- Verification Entry: 2026-06-21T18:23Z focused local validation passed for git diff --check, pr-metadata fixtures, aggregate CLI contract fixtures, WI-1287 suite decision parser stability, and prior WI-1683 merge-readiness checks.
 - Lane Entry: milestone-15-governance-intensity-gate
 
 ## Sources
