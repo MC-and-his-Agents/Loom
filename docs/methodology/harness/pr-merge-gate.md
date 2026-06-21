@@ -40,6 +40,13 @@ Loom Work Item: WI-123
 
 If the PR body and CLI argument disagree about the Work Item, the gate fails closed.
 
+When machine carrier, explicit CLI input, and host readback already agree on the
+same Work Item / issue / PR / branch / head binding, missing human-readable PR
+fields such as `Issue: #123` are repairable metadata drift. The gate may block
+until the repair is applied when that backlink is required by the current
+surface, but it must classify the problem as repairable missing display
+metadata, not as a semantic Work Item conflict.
+
 ## 3. Approval Truth
 
 Only the authored Loom review record referenced by `review_entry` can satisfy semantic approval.

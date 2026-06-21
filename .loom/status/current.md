@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1678
-- Goal: Make the README immediately communicate Loom's product value and supported install path for coding-agent users.
-- Scope: README.md and README.zh-CN.md product positioning, badge presentation, quick-start install prompt, and Loom carrier metadata for PR #1679 only. No runtime behavior, installer implementation, package release surface, or legacy migration contract changes.
-- Execution Path: issue #1678 -> branch work/1678-agent-install-prompt -> README update -> PR #1679 -> controlled merge -> issue #1678 closeout
+- Item ID: WI-1682
+- Goal: Freeze the first hard dependency contracts for milestone #15: governance intensity classification, Work Item/PR binding priority, and closeout policy decisions.
+- Scope: Contract documentation, Loom repo metadata contract, and CLI contract fixtures for issues #1682, #1686, and #1695. No runtime behavior, `loom ship` implementation, controlled-merge chaining, release packaging, or hosted workflow changes.
+- Execution Path: issues #1682/#1686/#1695 -> branch work/1682-intensity-binding-closeout-contracts -> contract and fixture update -> PR -> controlled merge -> issue closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1678.md
-- Review Entry: .loom/reviews/WI-1678.json
-- Validation Entry: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; PR gate; hosted checks
-- Closing Condition: PR #1679 is merged into main, README changes are on main, and issue #1678 is closed with validation evidence.
-- Current Checkpoint: merge checkpoint
-- Current Stop: README product positioning, install prompt, suite path decision, evidence map, task carrier, Loom carrier updates, PR metadata readback, local validation, and authored review evidence are ready for merge gate consumption at the current PR #1679 head.
-- Next Step: Run PR gate, hosted checks, controlled merge, and issue closeout.
+- Recovery Entry: .loom/progress/WI-1682.md
+- Review Entry: .loom/reviews/WI-1682.json
+- Validation Entry: git diff --check; python3 -m json.tool .loom/companion/repo-interface.json; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface merge-wrapper; python3 tools/check_cli_contract.py --surface controlled-merge.
+- Closing Condition: PR is merged into main, #1682/#1686/#1695 are closed, and closeout confirms main, PR metadata, issue state, and Loom carriers agree.
+- Current Checkpoint: build validation
+- Current Stop: Governance intensity classification, binding priority, safe repair, and closeout policy contracts are implemented in docs, repo-interface metadata, skill references, and CLI contract fixtures.
+- Next Step: Create PR, refresh review evidence, run PR metadata/gate checks, merge, and close out #1682/#1686/#1695.
 - Blockers: None
-- Latest Validation Summary: 2026-06-21T13:25Z local validation passed for WI-1678 evidence/carrier refresh before authored review refresh: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; python3 tools/loom.py suite evidence validate --target . --item WI-1678 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1678 --json; python3 tools/loom.py suite validate --target . --item WI-1678 --json returned result=not_applicable with no blocking gaps; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom_flow.py fact-chain --target . --item WI-1678.
-- Recovery Boundary: WI-1678 owns README.md, README.zh-CN.md, PR #1679 metadata, and Loom carrier metadata for this documentation-only iteration. It does not modify runtime behavior, installer implementation, package release surfaces, install command behavior, or legacy migration contracts.
-- Current Lane: readme-product-positioning
+- Latest Validation Summary: 2026-06-21T14:54Z local validation passed on branch work/1682-intensity-binding-closeout-contracts: git diff --check; python3 -m json.tool .loom/companion/repo-interface.json; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface merge-wrapper; python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/loom.py suite validate --target . --item WI-1682 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1682 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1682 --json.
+- Recovery Boundary: WI-1682 owns the first hard dependency contract batch for #1682/#1686/#1695. It does not implement `loom ship`, change controlled merge runtime behavior, create release artifacts, or close milestone #15.
+- Current Lane: milestone-15-contract-foundation
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-21 WI-1678 README product positioning and install prompt iteration in progress.
-- Logs Entry: local command output retained in current Codex README thread.
-- Diagnostics Entry: README product narrative, badge, install prompt, release-surface, doc-sync, and loom_check README needle alignment; no runtime, install, package, or release behavior scope.
-- Verification Entry: `git diff --check`; `npm --prefix packages/loom-installer run check:docs`; `python3 tools/check_release_surface.py --surface release-doc-contract`; `python3 tools/loom_flow.py fact-chain --target . --item WI-1678`; PR gate and hosted checks pending.
-- Lane Entry: readme-product-positioning
+- Run Entry: 2026-06-21 WI-1682 milestone #15 contract foundation in progress.
+- Logs Entry: local command output retained in current Codex milestone #15 thread.
+- Diagnostics Entry: governance intensity classification, binding priority/safe repair, closeout policy, repo-interface metadata, and contract fixture alignment.
+- Verification Entry: `git diff --check`; `python3 -m json.tool .loom/companion/repo-interface.json`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/check_cli_contract.py --surface closeout-wrapper`; `python3 tools/check_cli_contract.py --surface merge-wrapper`; `python3 tools/check_cli_contract.py --surface controlled-merge`; `python3 tools/loom.py suite validate --target . --item WI-1682 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1682 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1682 --json`.
+- Lane Entry: milestone-15-contract-foundation
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1678.md
-- Dynamic Truth: .loom/progress/WI-1678.md
+- Static Truth: .loom/work-items/WI-1682.md
+- Dynamic Truth: .loom/progress/WI-1682.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
