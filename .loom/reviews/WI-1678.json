@@ -3,11 +3,11 @@
   "item_id": "WI-1678",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1678 README product-positioning and install-prompt iteration is approved for PR #1679. The diff is documentation and Loom carrier metadata only; local diff check, doc sync, release-doc-contract, and fact-chain checks passed for head d38cfa59fc8297f067aea2dd8b6965995f485ed8.",
+  "summary": "WI-1678 README product-positioning and install-prompt iteration is approved for PR #1679. The diff is documentation and Loom carrier metadata only; local diff check, doc sync, release-doc-contract, and fact-chain checks passed.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-06-21T12:05:00Z",
-  "reviewed_head": "d38cfa59fc8297f067aea2dd8b6965995f485ed8",
-  "reviewed_validation_summary": "2026-06-21T12:00Z local validation passed for WI-1678 head f05546560d7335fc9b6147f5d40566152510c41c, then carrier validation was committed at d38cfa59fc8297f067aea2dd8b6965995f485ed8: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; python3 tools/loom_flow.py fact-chain --target . --item WI-1678.",
+  "authored_at": "2026-06-21T12:12:00Z",
+  "reviewed_head": "ad69d16d51c0cc2983b67d7deaa841cac1234859",
+  "reviewed_validation_summary": "2026-06-21T12:10Z local validation passed for WI-1678 head caa88d7ba5c7010f992750335edacb9121225a1b: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; python3 tools/loom_flow.py fact-chain --target . --item WI-1678.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,9 +16,8 @@
     "work_item": ".loom/work-items/WI-1678.md",
     "recovery_entry": ".loom/progress/WI-1678.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "manual_docs_only_carrier_review",
-    "suite_evidence_validation": "not_applicable_docs_only_readme_iteration",
-    "suite_carrier_validation": "not_applicable_docs_only_readme_iteration"
+    "suite_path_decision": ".loom/specs/WI-1678/spec.md",
+    "build_checkpoint": "docs_only_not_applicable_suite_path"
   },
   "semantic_review_disposition": {
     "status": "passed",
