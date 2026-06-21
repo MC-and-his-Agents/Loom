@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1675",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1675 README documentation update is approved for PR gate consumption. The diff improves product positioning, architecture/workflow explanation, badges, quick start install wording, Chinese localization, and minimal Loom carriers. It does not change runtime behavior, installer implementation, package release surfaces, legacy migration contracts, host mutation behavior, permissions, or downstream repository adoption.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T08:00:00Z",
+  "reviewed_head": "c5123760004fa0cee5ce36d05d224319b6ff8b4e",
+  "reviewed_validation_summary": "Local validation passed before review: git diff --check; README body wiki-link scan found only top badges; English/Chinese heading and maintainer-link readback aligned; Chinese README token scan left only necessary product names, commands, paths, badges, and platform names; fact-chain passed for WI-1675; workspace check passed for WI-1675; suite validate passed for WI-1675.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1675.md",
+    "recovery_entry": ".loom/progress/WI-1675.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1675/spec.md",
+    "plan": ".loom/specs/WI-1675/plan.md",
+    "implementation_contract": ".loom/specs/WI-1675/implementation-contract.md",
+    "readme_en": "README.md",
+    "readme_zh": "README.zh-CN.md",
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1676",
+    "single_person_review_boundary": "No non-author GitHub reviewer approval is required for this single-person repository. This authored Loom review record is the approval truth consumed by PR gate for the reviewed README implementation head; PR metadata and carrier-only follow-up drift must remain bounded to review/metadata carriers."
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Docs-only README clarity update with minimal Loom carrier synchronization.",
+    "change_class": "docs_only",
+    "substitute_validation": "README readback, Chinese token scan, badge-link scan, git diff check, fact-chain, workspace check, suite validate, PR metadata preflight",
+    "authority": "codex-main-agent",
+    "risk_acceptance": "Bounded to documentation and carrier metadata; no runtime, package, installer, release, legacy migration, permission, or external-visible behavior scope is introduced.",
+    "one_shot": true
+  }
+}

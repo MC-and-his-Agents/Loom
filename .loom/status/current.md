@@ -8,7 +8,7 @@
 - Execution Path: issue #1675 -> branch work/1675-readme-install-clarity -> README update -> PR -> controlled merge -> issue #1675 closeout.
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1675.md
-- Review Entry: not_applicable; docs-only README copy update, reviewed by local consistency checks and PR readback.
+- Review Entry: .loom/reviews/WI-1675.json
 - Validation Entry: `git diff --check`; README section alignment readback; Chinese README English-token scan; badge-link scan.
 - Closing Condition: PR for #1675 is merged, README changes are on `main`, and issue #1675 is closed with validation evidence.
 - Current Checkpoint: build
