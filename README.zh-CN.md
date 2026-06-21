@@ -1,157 +1,124 @@
 # Loom
 
-语言：中文 | [English version](./README.md)
+[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=for-the-badge&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/MC-and-his-Agents/Loom) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/MC-and-his-Agents/Loom)
 
-Loom 是一个 agent-first project operating layer。
+语言：中文 | [英文版本](./README.md)
 
-它给编码智能体提供一条 behavior-first 的执行路径：从 adopt、resume、spec、plan、build checkpoint、review、merge-ready，到 handoff 和 closeout。它的目标不是更快地产生业务代码，而是避免智能体工作停在“代码已经改了”，并把目标、行为证据、测试证据、review 状态、主干真相和宿主控制面收敛一致。
+Loom 是一个智能体优先的项目运营层：一个面向编码智能体的结构化执行框架。它提供
+一条行为优先的路径，贯穿从仓库采纳、合并就绪到收尾的全过程。
 
-## 工作方式
+Loom 不刻意追求代码生成速度本身。它确保工作最终收敛到更强的完成状态：目标、
+文档、审查状态、验证证据、主干事实和宿主控制面保持一致。它采用命令行优先
+设计，在仓库边界只保留元数据，并围绕五个协同平面构建：治理事实、支撑编排、
+行为与测试证据、规范约束和可执行技能。
 
-Loom 现在采用 CLI-first。`loom` 命令是执行控制面：它诊断 installed state、读取 fact chain、执行验证、输出 upgrade / repair plan，并用结构化 fail-closed 输出包装场景执行。
+## Loom 解决的问题
 
-`SKILLS` 仍然是 agent-facing 入口，但用户不再把它们作为独立安装面安装。根 `loom` CLI 负责验证 metadata-only 仓库采用，并从全局包安装/注册 Codex 用户级 Loom plugin。发布的 skills payload 在 Codex 用户级 plugin 中，不进入每个目标仓库。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` package 是 deprecated legacy artifact；它不是当前 CLI、发布线或推荐安装路径。
+当人和智能体都能快速生成代码时，真正的瓶颈会从代码生成转移到持续、有序的
+执行。Loom 解决这个问题的方式不是复用业务代码，而是复用项目如何被组织、如何
+进入执行、如何跨轮推进、如何达到合并就绪，以及如何收尾的运行结构。
 
-智能体仍可在需要路由帮助时从 `loom-init` 起步。进入执行后，CLI 是稳定的机器接口：
+新项目不再需要从“空仓库 + 临时约定 + 零散上下文”开始，而是可以从一套可持续、
+可验证、可由智能体操作的运行时结构开始。
 
-```bash
-loom doctor --target . --json
-loom upgrade-plan --target . --json
-loom verify --target . --json
-loom skills release-check --json
+Loom 不决定构建什么产品、如何设计产品架构、如何对业务领域建模，也不要求所有
+项目采用相同目录结构。它关注项目运营，而不是业务实质。
+
+## 架构概览
+
+从愿景视角看，Loom 是一个三层系统；在仓库实现层面，它落为五个稳定部分：
+
+- 治理定义规则、审查模型和收尾语义。
+- 支撑提供执行支持、工作区隔离、恢复机制和运行时可见性。
+- 模板承载结构化工件。
+- 技能将这些能力组装成可执行入口。
+- 采纳记录能力的提取来源及当前落地位置。
+
+依赖流严格单向：治理定义规则，模板承载结构，支撑在治理约束下运行，技能读取
+所有内容并组装入口，采纳提供证据与演化。技能不能重新定义治理规则，模板不能
+成为唯一事实来源，状态展示也不能成为第二个
+条目事实来源。
+
+## 工作理念
+
+Loom 采用命令行优先设计。全局 `loom` 命令负责安装 Codex 用户级插件、记录
+仅元数据的仓库采用、读取事实链并执行验证。智能体从 `loom-init`
+进入路由，再使用 `loom-adopt`、`loom-resume`、`loom-build`、`loom-review` 和
+`loom-merge-ready` 等场景技能推进工作。
+
+Loom 围绕工作项组织执行；工作项是正式执行入口。工作会沿着固定门控链推进：
+规格门控、构建门控、审查门控和合并门控。每个门控都消费证据，并产出通过、阻塞
+或回退裁决。
+
+Loom 还分离事实来源。治理规则、执行事实、审查记录和 GitHub 拉取请求、CI、
+议题等宿主状态各自占据独立通道。命令行工具读取并汇总这些来源，但不创建第二份
+事实副本。当某个门控通过时，相关层面已经围绕同一项工作完成校验。
+
+## 快速开始
+
+把这段提示词复制给编码智能体：
+
+```text
+请在当前仓库安装 Loom，使用当前全局命令行模型。采用仅元数据的仓库采用方式；
+不要创建仓库内 Loom 运行时、插件内容、`.loom/bin`、`.agents/skills` 或
+Loom 管理的根 `skills`。按下面步骤执行。
+如果命令失败，停止并汇报失败命令以及 `loom repair plan --target . --json`。
 ```
 
-基础执行流如下：
+前置要求：Node `>=20`，Python `>=3.11`。
 
-1. `loom doctor` 和 `loom verify` 回答仓库当前是否正在消费有效 Loom 层。
-2. `loom upgrade-plan` 和 `loom repair plan` 为 current、legacy 或 mixed install 输出下一步非变更动作。
-3. Scenario skills 把人和智能体意图路由到 story、spec、build、review、merge-ready、closeout 等 CLI-backed flow。
-4. Work Item、spec、plan、build checkpoint、review、merge-ready 和 closeout 共同消费双重证据循环：行为证据描述外部可观察契约，测试证据证明内部实现循环。
-5. Runtime evidence、review record、merge checkpoint 和 closeout check 共同让仓库状态与宿主控制面对齐。
-
-## 安装
-
-### Root CLI
-
-安装根 Loom CLI：
+1. 安装根命令行工具：
 
 ```bash
 npm install -g @mc-and-his-agents/loom
 ```
 
-使用纯全局安装模型：
-
-- 工作站安装全局 `loom` CLI；
-- Codex 从这个全局包安装并注册用户级 Loom plugin；
-- 每个采用 Loom 的仓库只记录 metadata-only adoption，不保存 repo-local
-  Loom runtime、plugin payload 或生成 skills payload。
-
-详细接入合同与验证命令见
-[docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)、
-[docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md)
-和 [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)。
-
-安装 Codex 用户级 plugin，并让目标仓库采用 Loom：
+2. 安装并注册 Codex 用户级插件：
 
 ```bash
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
+```
+
+3. 让当前仓库采用 Loom：
+
+```bash
 loom install --target . --apply --json
+```
+
+4. 验证安装：
+
+```bash
+loom installed-state validate --target . --json
 loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
 ```
 
-`loom host install` 和 `loom host register` 只写 Codex 用户级工作站状态。
-`loom install` 只写仓库 adoption metadata 和 Loom bootstrap 指令；
-`loom host verify` 同时验证 metadata-only 仓库边界和 Codex 用户级 plugin
-provider 注册。
+5. 在新的 Codex 会话中从 `loom-init` 开始工作；如果 Codex Desktop 已经加载过
+   插件列表，重启 Codex Desktop。
 
-如果仓库里还存在 `.loom/bin`、`.loom/bootstrap`、`plugins/loom`、
-`.agents/skills` 或 Loom-owned 根 `skills`，当前验证会阻断，直到显式完成
-迁移或删除。迁移路径见
-[docs/adoption/legacy-install-migration.md](./docs/adoption/legacy-install-migration.md)。
-
-`npx @mc-and-his-agents/loom ...` 只能作为临时运行同一个根 `loom` CLI 的方式。
-
-要求：
-
-- Node `>=20`
-- Python `>=3.11`
-
-`loom-installer` 不属于 primary install journey。它只作为 legacy consumer 的 deprecated historical evidence 保留。
-
-## 输出模式
-
-Loom 命令默认使用上下文安全输出。命令只有在 JSON 能放进有效 stdout
-预算时才直接输出完整 JSON；更大的诊断会在 stdout 输出摘要和 artifact locator，
-让智能体和 handoff 引用 locator，而不是粘贴完整报告或长日志。
-
-三种输出模式的使用边界：
-
-- 默认 `--json`：用于正常 agent 工作流、review、gate、handoff 和 closeout；
-  只传播摘要和 artifact locator。
-- Artifact locator：用于诊断超过预算，或其他线程需要读取完整本地证据时；
-  artifact 是诊断文件，不是 authored truth carrier。
-- 显式 `--full-output`：只在调试、审计或阻断分类需要完整 stdout JSON 时使用。
-
-默认 stdout 硬上限是 16 KiB，summary 目标是 4 KiB。可通过
-`LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`、`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`
-和 `LOOM_OUTPUT_ARTIFACT_DIR` 对单个进程调整。
-
-### Advanced / Compatibility
-
-历史 native skills-library clone 路径不是新用户的 primary install path：
+在第二台开发机器上打开已采用 Loom 的仓库时，安装全局命令行工具、注册 Codex
+用户级插件，然后验证仓库：
 
 ```bash
-git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
+npm install -g @mc-and-his-agents/loom
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --scope user --apply --json
+loom installed-state validate --target . --json
+loom host verify --host codex --target . --json
+loom skills check --target . --json
+loom doctor --target . --json
 ```
-
-请改用根 `loom` CLI。已有 skills-library clone 只应视为 CLI 可以验证、修复或替换的 compatibility source；用户不应把 SKILLS 或 plugins 当作独立安装面安装。
-
-## 发布面
-
-Loom CLI 发布面是执行行为的唯一 active 发布线。它的权威来源是根 `VERSION` 加 GitHub `v*` tag 和 Release 状态。`loom-installer deprecated legacy line` 只作为历史 npm/tag 证据保留，不得作为常规发布路径继续前进。
-
-不要用 npm `@mc-and-his-agents/loom-installer` `latest` 或 `loom-installer-v*` tag 作为 `loom` CLI 已发布的证据。最终 legacy baseline 是 `loom-installer-v0.1.119` / npm `0.1.119`，除非后续 deprecation action 只改变 npm metadata。参见 [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) 和 [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)。
-
-## 基本工作流
-
-1. 先运行 `loom doctor --target . --json` 或 `loom verify --target . --json`，判断仓库当前 Loom 层。
-2. 变更 metadata-only adoption、全局 CLI provider、Codex 用户级 plugin 注册或 legacy residue repair 前，先运行 `loom upgrade-plan --target . --json`。
-3. 需要场景路由时，从 `loom-init` 开始，再使用 `loom-adopt`、`loom-resume`、`loom-build`、`loom-review`、`loom-merge-ready` 等 scenario skills。
-4. 用 `loom pr gate`、`loom merge check`、`loom merge run`、`loom gate closeout` 等 CLI-backed gate 消费 readiness evidence。
-5. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
-
-标准受控合并链路是先运行 `loom pr gate <pr> --head-sha <sha> --work-item <WI> --json`，再运行 `loom merge check <pr> --head-sha <sha> --work-item <WI> --json`，最后运行 `loom merge run <pr> --head-sha <sha> --work-item <WI> --apply --json`。required CI、非 required triggered checks 与宿主 branch protection 都会被这条链路消费，但它们不能替代绑定同一 PR head 的 authored Loom semantic review record。
-
-智能体不能把“已经有改动文件”当作完成。对 Loom 来说，只有目标、文档、review 状态、验证证据、主干真相和宿主控制面全部对齐，才算真正完成。
-
-## Skills 库
-
-Loom 当前暴露一个 root entry 和十个 scenario skills：
-
-| Skill | 作用 |
-| --- | --- |
-| `loom-init` | Root entry；负责初始化或路由到正确场景。 |
-| `loom-adopt` | 为仓库建立最小 Loom 接入面。 |
-| `loom-resume` | 恢复上下文并继续当前 `Work Item`。 |
-| `loom-build` | 在 review 前执行 bounded implementation/build 轮。 |
-| `loom-story` | 将产品上下文收束为 User Story、Story Readiness 与业务语义确认点。 |
-| `loom-pre-review` | 在正式 review 前检查 readiness。 |
-| `loom-spec-review` | 审查 formal spec 路径并产出 `spec-approved` gate。 |
-| `loom-review` | 执行正式 review 并记录结果。 |
-| `loom-handoff` | 写出可恢复的交接点。 |
-| `loom-merge-ready` | 验证 merge readiness。 |
-| `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
-
-可编辑 skills 源码真相位于 `src/skills/`。Loom 源仓库生成且提交的 [skills/](./skills/) 是源码镜像。真正发布给 Codex 的 skills payload 位于 `plugins/loom/skills/`；`skills/<skill-id>` 不是自包含 single-skill package，也不再携带 `loom-package.json` 或 `.loom-runtime/` 作为分发产物。下游顶层 `skills/` 不再是默认 Loom plugin 安装面。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host install --host codex --scope user --apply` 安装到用户级 Codex plugin。
 
 ## 维护者文档
 
 - 愿景与边界：[VISION.md](./VISION.md)
 - 仓库宪法：[AGENTS.md](./AGENTS.md)
-- Skills 面：[skills/README.md](./skills/README.md)
+- 变更治理强度：[docs/methodology/governance/change-governance-intensity.md](./docs/methodology/governance/change-governance-intensity.md)
+- Loom 治理强度映射：[docs/methodology/governance/loom-governance-intensity-mapping.md](./docs/methodology/governance/loom-governance-intensity-mapping.md)
+- 治理强度收尾证据：[docs/evidence/governance-intensity-final-closeout.md](./docs/evidence/governance-intensity-final-closeout.md)
+- 技能入口：[skills/README.md](./skills/README.md)
 - 方法论文档：[docs/methodology/](./docs/methodology/)
 - 架构说明：[docs/architecture/](./docs/architecture/)
 - 接入合同：[docs/adoption/](./docs/adoption/)
@@ -163,6 +130,8 @@ Loom 当前暴露一个 root entry 和十个 scenario skills：
 
 ## 设计哲学
 
-Loom 以 merge-readiness 为中心，并采用 behavior-first 的执行口径。Review、validation、host state、行为证据、测试证据和 closeout 是彼此独立但必须收敛一致的表面，任何一个面没有收口，都不应视为工作完成。
+Loom 以合并就绪为中心，并采用行为优先的执行口径。审查、验证、宿主状态、行为证据、
+测试证据和收尾是彼此独立但必须收敛一致的表面，任何一个面没有收口，都不应视为工作完成。
 
-Loom 不是业务模板、代码生成器，也不是 GitHub、CI、review engine 或 `git worktree` 的替代品。它是 project operating layer 与可执行 skills 层，用来让智能体以一致方式消费这些宿主能力。
+Loom 不是业务模板、代码生成器、仅限规格驱动开发的工具，也不是 GitHub、CI、审查引擎或
+`git worktree` 的替代品。它是项目运营层与可执行技能层，用来让智能体以一致方式消费这些宿主能力。

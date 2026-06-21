@@ -1,203 +1,128 @@
 # Loom
 
+[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=for-the-badge&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/MC-and-his-Agents/Loom) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/MC-and-his-Agents/Loom)
+
 Language: English | [中文版本](./README.zh-CN.md)
 
-Loom is an agent-first project operating layer.
+Loom is an agent-first project operating layer: a structured execution framework
+for coding agents. It gives agents a behavior-first path from adoption and
+merge readiness through closeout.
 
-It gives coding agents a behavior-first execution path across adopt, resume, spec, plan, build checkpoints, review, merge-ready, handoff, and closeout. The goal is not to produce business code faster at any cost, but to keep work from stopping at "files changed" and to converge on a state where goals, behavior evidence, test evidence, review state, trunk truth, and host control plane all agree.
+Loom does not optimize for code generation speed by itself. It makes work
+converge on a stronger final state: goals, documents, review state, validation
+evidence, trunk truth, and the host control plane all agree. It is CLI-first,
+keeps only metadata at repository boundaries, and is built around five
+cooperating planes: governance truth, harness orchestration, behavior and test
+evidence, spec discipline, and executable skills.
 
-Spec-driven development is an execution discipline inside Loom, not a narrower replacement for Loom. For formal spec, new feature, high-risk, or cross-module work, Loom can internalize SDD patterns such as staged artifacts, template-constrained specs, implementation plans, task or breakdown carriers, and cross-artifact consistency analysis. Those patterns must still feed Loom's wider operating layer: Work Item admission, recovery, review, merge-ready, controlled merge, closeout, host binding, and evidence consumption.
+## What Loom Solves
 
-## How It Works
+When humans and agents can both generate code quickly, the bottleneck moves from
+code generation to continuous, orderly execution. Loom does not reuse business
+code. It reuses the operating structure for organizing a project, entering
+execution, progressing across multiple rounds, reaching merge readiness, and
+closing work out.
 
-Loom is now CLI-first. The `loom` command is the execution control plane: it diagnoses installed state, reads fact chains, runs verification, exposes upgrade and repair plans, and wraps scenario execution with structured fail-closed output.
+New projects no longer need to begin as an empty repository plus temporary
+conventions and scattered context. They can begin with a sustainable,
+verifiable, agent-operable runtime structure.
 
-`SKILLS` remain the agent-facing entrances, but users do not install them as a separate surface. The root `loom` CLI installs and verifies metadata-only repository adoption, and it installs/registers the Codex user-level Loom plugin from the global package. The published skills payload lives in the Codex user plugin, not in each target repository. `.loom/` remains the repository execution fact surface. The npm `loom-installer` package is a deprecated legacy artifact. It is not the current CLI, release line, or recommended installation path.
+Loom does not decide what product to build, how to design product architecture,
+how to model a business domain, or whether every project must use the same file
+layout. It focuses on project operation, not business substance.
 
-Agents can still start from `loom-init` when they need routing help. Once inside the work, the CLI is the stable machine interface:
+## Architecture
 
-```bash
-loom doctor --target . --json
-loom upgrade-plan --target . --json
-loom verify --target . --json
-loom skills release-check --json
+At the vision level, Loom is a three-layer system. At the repository level, it
+lands as five stable parts:
+
+- Governance defines rules, review models, and closeout semantics.
+- Harness provides execution support, workspace isolation, recovery, and runtime visibility.
+- Templates carry structured artifacts.
+- Skills assemble these capabilities into executable entry points.
+- Adoption records where capabilities came from and where they currently land.
+
+The dependency flow is one-way: governance defines rules, templates carry
+structure, harness runs within governance constraints, skills read all of them
+and assemble entry points, and adoption provides evidence and evolution. Skills
+do not redefine governance rules, templates do not become the only truth source,
+and status surfaces do not become a second item truth source.
+
+## Workflow Model
+
+Loom is CLI-first. The global `loom` command installs the Codex user-level plugin,
+records metadata-only repository adoption, reads the fact chain, and runs
+verification. Agents start from `loom-init`, then move through scenario skills
+such as `loom-adopt`, `loom-resume`, `loom-build`, `loom-review`, and
+`loom-merge-ready`.
+
+Everything is organized around a Work Item, the formal execution entry. Work
+moves through a gate chain: spec gate, build gate, review gate, and merge gate.
+Each gate consumes evidence and returns a pass, block, or fallback verdict.
+
+Loom keeps truth sources separate. Governance rules, execution facts, review
+records, and host state such as GitHub PRs, CI, and issues stay in their own
+channels. The CLI reads and summarizes them; it does not create a second copy of
+truth. When a gate passes, the relevant layers have been checked against the
+same work.
+
+## Quick Start
+
+Copy this prompt to your coding agent:
+
+```text
+Install Loom in this repository with the current global CLI model. Use
+metadata-only repository adoption; do not create repo-local Loom runtime,
+plugin payload, `.loom/bin`, `.agents/skills`, or Loom-owned root `skills`.
+Follow the steps below. If a command fails, stop and report the failing command
+plus `loom repair plan --target . --json`.
 ```
 
-The core execution model is:
+Prerequisites: Node `>=20` and Python `>=3.11`.
 
-1. `loom doctor` and `loom verify` answer whether the repository is consuming a valid Loom layer.
-2. `loom upgrade-plan` and `loom repair plan` describe the next non-mutating action for current, legacy, or mixed installs.
-3. Scenario skills route human and agent intent into CLI-backed flows such as story, spec, build, review, merge-ready, and closeout.
-4. Work Item, spec, plan, build checkpoint, review, merge-ready, and closeout consume a dual evidence loop: behavior evidence describes the observable contract, and test evidence proves the implementation loop.
-5. Formal spec paths can use SDD-style staged artifacts and consistency analysis, while light paths and non-implementation work can mark non-applicable pieces explicitly.
-6. Runtime evidence, review records, merge checkpoints, and closeout checks keep repository state aligned with host control.
-
-Idle closeout recovery has three separate layers:
-
-1. `loom workspace retire` is local-only worksite cleanup evidence. It does not close GitHub issues, merge PRs, update Projects, or write versioned terminal carriers.
-2. Host closeout sync belongs to GitHub/git host control, such as PR merge readback, issue/project reconciliation, and target-branch verification.
-3. `loom carrier closeout-sync` is the repo carrier repair path for HotCP-style stale carriers: when the host says a Work Item is complete but `.loom/progress/**`, `.loom/status/current.md`, or `.loom/bootstrap/init-result.json` still point at an active item, the carrier sync writes terminal metadata and lets the fact-chain return `idle` / `no_active_item`.
-
-On a second repository checkout or after a post-merge closeout, read the host truth first, then sync carriers:
-
-```bash
-loom workspace retire --target . --item WI-1236 --json
-loom carrier closeout-sync --target . --item WI-1236 --dry-run --terminal-state closed_out --issue 1236 --pr 1516 --merge-commit <merge-sha> --target-branch main --closed-at <closed-at> --evidence-locator <pr-url>
-loom carrier closeout-sync --target . --item WI-1236 --apply --terminal-state closed_out --issue 1236 --pr 1516 --merge-commit <merge-sha> --target-branch main --closed-at <closed-at> --evidence-locator <pr-url>
-loom fact-chain --target . --json
-```
-
-The expected final readback for a completed item is `fact_chain.mode = idle` and `current_item_id = no_active_item`, with terminal metadata retained in `.loom/progress/<item>.md`.
-
-## Output Modes
-
-Loom command output is context-safe by default. Commands emit direct JSON only
-when it fits the effective stdout budget. Larger diagnostics are summarized on
-stdout with an artifact locator, so agents and handoff notes can cite the
-locator instead of pasting full reports or long logs.
-
-Use the three output modes this way:
-
-- Default `--json`: use for normal agent workflows, reviews, gates, handoff, and
-  closeout. Share the summary and artifact locator.
-- Artifact locator: use when diagnostics exceed the budget or when another
-  thread needs the complete local evidence. Artifacts are diagnostic files, not
-  authored truth carriers.
-- Explicit `--full-output`: use only for debugging, audit, or blocker
-  classification when complete JSON is required on stdout.
-
-The default stdout hard budget is 16 KiB and the summary target is 4 KiB. They
-can be adjusted per process with `LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`,
-`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`, and `LOOM_OUTPUT_ARTIFACT_DIR`.
-
-## Install
-
-### Root CLI
-
-Install the root Loom CLI:
+1. Install the root CLI:
 
 ```bash
 npm install -g @mc-and-his-agents/loom
 ```
 
-Use the pure global install model:
-
-- the workstation has the global `loom` CLI;
-- Codex has a user-level Loom plugin installed and registered from that global
-  package;
-- each adopted repository records metadata-only Loom adoption and keeps no
-  repo-local Loom runtime, plugin payload, or generated skills payload.
-
-See [docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md),
-[docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md),
-and [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)
-for the detailed adoption contracts and validation commands.
-
-Install the Codex user-level plugin and adopt a target repository:
+2. Install and register the Codex user-level plugin:
 
 ```bash
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
+```
+
+3. Adopt the current repository:
+
+```bash
 loom install --target . --apply --json
+```
+
+4. Verify the install:
+
+```bash
+loom installed-state validate --target . --json
 loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
 ```
 
-`loom host install` and `loom host register` mutate only Codex user workstation
-state. `loom install` writes repository adoption metadata and the Loom bootstrap
-block. `loom host verify` verifies both the metadata-only repository boundary
-and the Codex user-level plugin provider registration.
+5. Start working from `loom-init` in a new Codex session. Restart Codex Desktop
+   if it had already loaded the plugin list.
 
-When a repository still carries repo-local wrappers or vendored runtime residue
-such as `.loom/bin`, `.loom/bootstrap`, `plugins/loom`, `.agents/skills`, or
-Loom-owned root `skills`, current verification blocks until that legacy residue
-is explicitly migrated or removed.
-
-On a second development machine for an already adopted repository, install and
-register the Codex user-level plugin from the global Loom package:
+On a second development machine for an already adopted repository, install the
+global CLI and register the Codex user-level plugin, then verify the repository:
 
 ```bash
-loom host verify --host codex --target . --json
+npm install -g @mc-and-his-agents/loom
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
+loom installed-state validate --target . --json
+loom host verify --host codex --target . --json
+loom skills check --target . --json
 loom doctor --target . --json
 ```
-
-The registration command writes user workstation state such as the personal
-Codex marketplace entry, user plugin cache payload, and Codex config enablement.
-It does not write target repository truth. Start a new Codex session, or restart
-Codex Desktop if the plugin list was already loaded; Loom does not claim that an
-existing session hot-loads newly registered plugins.
-
-See [docs/adoption/legacy-install-migration.md](./docs/adoption/legacy-install-migration.md)
-for the explicit migration path from older repo-local installs.
-
-Use `npx @mc-and-his-agents/loom ...` only as an ephemeral way to run the same root `loom` CLI.
-
-Requirements:
-
-- Node `>=20`
-- Python `>=3.11`
-
-`loom-installer` is not part of the primary install journey. It is retained only as deprecated historical evidence for legacy consumers.
-
-### Advanced / Compatibility
-
-The historical native skills-library clone path is not the primary install path for new users:
-
-```bash
-git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
-```
-
-Use the root `loom` CLI instead. Any existing skills-library clone should be treated as a compatibility source that the CLI can verify, repair, or replace; users should not install SKILLS or plugins as independent surfaces.
-
-## Release Surfaces
-
-The Loom CLI release surface is the only active release line for execution behavior. Its authority is root `VERSION` plus the GitHub `v*` tag and Release state. The `loom-installer deprecated legacy line` remains separate only as historical npm/tag evidence and must not advance as a normal release path.
-
-Do not use npm `@mc-and-his-agents/loom-installer` `latest` or `loom-installer-v*` tags as evidence that the `loom` CLI was published. The final legacy baseline is `loom-installer-v0.1.119` / npm `0.1.119` unless a later deprecation action changes only npm metadata. See [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) and [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md).
-
-## Basic Workflow
-
-1. Run `loom doctor --target . --json` or `loom verify --target . --json` to understand the repository's current Loom layer.
-2. Run `loom upgrade-plan --target . --json` before changing metadata-only adoption, global CLI provider state, Codex user-level plugin registration, or legacy residue repair.
-3. Start from `loom-init` when you need scenario routing, then use scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`, `loom-review`, and `loom-merge-ready`.
-4. Use CLI-backed gates such as `loom pr gate`, `loom merge check`, `loom merge run`, and `loom gate closeout` to consume readiness evidence.
-5. Use `loom-handoff` or `loom-retire` to leave the worksite in a recoverable local state, then use host closeout readback and `loom carrier closeout-sync` for versioned terminal carrier sync when the issue/PR/project are already complete.
-
-The standard controlled merge path is `loom pr gate <pr> --head-sha <sha> --work-item <WI> --json`, then `loom merge check <pr> --head-sha <sha> --work-item <WI> --json`, then `loom merge run <pr> --head-sha <sha> --work-item <WI> --apply --json`. Required CI, optional triggered checks, and host branch protection are consumed by this path, but they do not replace the authored Loom semantic review record bound to the same PR head.
-
-Agents should not treat "there are changed files" as completion. In Loom, work is only done when goals, documents, review state, validation evidence, trunk truth, and host control plane all agree.
-
-## Skills Library
-
-Loom exposes one root entry and ten scenario skills:
-
-| Skill | Role |
-| --- | --- |
-| `loom-init` | Root entry; initializes or routes to the correct scene. |
-| `loom-adopt` | Creates the minimum Loom adoption surface for a repository. |
-| `loom-resume` | Restores context and continues the current `Work Item`. |
-| `loom-build` | Runs a bounded implementation/build round before review. |
-| `loom-story` | Turns product context into a User Story, Story Readiness, and business semantic confirmation point. |
-| `loom-pre-review` | Checks readiness before formal review. |
-| `loom-spec-review` | Reviews the formal spec path and produces the `spec-approved` gate. |
-| `loom-review` | Runs formal review and records the result. |
-| `loom-handoff` | Writes a recoverable handoff point. |
-| `loom-merge-ready` | Validates merge readiness. |
-| `loom-retire` | Cleans up and exits without discarding user changes. |
-
-The editable skills source lives under `src/skills/`. The Loom source
-repository's generated and checked-in payload surface lives under
-[skills/](./skills/) as a source mirror. The published skills payload is the
-Codex user plugin payload under `plugins/loom/skills/`; `skills/<skill-id>` is
-not a self-contained single-skill package and does not carry
-`loom-package.json` or `.loom-runtime/` as distribution artifacts. Downstream
-top-level `skills/` belongs to the target repository namespace unless an
-explicit future profile owns it. The canonical Codex plugin manifest lives under
-[plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/) and is installed
-or verified through `loom host ...`.
 
 ## Maintainer Docs
 
