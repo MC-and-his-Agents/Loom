@@ -3,11 +3,11 @@
   "item_id": "WI-1489",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1489 final milestone/11 closeout evidence is approved for PR gate consumption. The diff is evidence/carrier-only: it adds the final regression Work Item, minimal suite, task carrier, evidence map, current status binding, shadow hash refresh, and milestone final closeout evidence. It does not add runtime behavior, republish v0.17.1, restore repo-local plugin/runtime/skills paths, revive single-skill package distribution, update old installer compatibility, or perform downstream migration.",
+  "summary": "WI-1489 terminal closeout carrier sync is approved for PR gate consumption. The diff is evidence/carrier-only: it records PR #1673 merge, issue tree closure, milestone/11 closure, stale dependency edge cleanup, and shadow hash refresh. It does not add runtime behavior, republish v0.17.1, restore repo-local plugin/runtime/skills paths, revive single-skill package distribution, update old installer compatibility, or perform downstream migration.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-06-21T04:46:44Z",
-  "reviewed_head": "d84a0e3b7de5e7d519e3804ca2c8ab24bfa5496e",
-  "reviewed_validation_summary": "2026-06-21T04:32-04:44Z local regression passed for output envelope tests, CLI help, skills surface, release surface, npm package payload after removing validation-generated Python cache, suite validate, suite evidence validate, suite carrier validate, shadow parity, fact-chain, v0.17.1 release readback, git diff check, and aggregate CLI contract (`python3 tools/check_cli_contract.py`, 12/12 surfaces, 614.86s). PR #1673 metadata update/readback passed for head b6865407c6e6fbe1f83dba72fff3d3a765f8fc36; local PR gate consumed authored implementation review truth and spec review truth but required recovery checkpoint promotion from build to merge before final rerun.",
+  "authored_at": "2026-06-21T05:06:34Z",
+  "reviewed_head": "5d67d2fea439e5a4e8593e1ee32063eed5a668c0",
+  "reviewed_validation_summary": "2026-06-21T05:03Z terminal closeout readback: PR #1673 merged at 2026-06-21T05:01:41Z with merge commit 7a342862deea004e81e1f7a804b135527c243c29; PR gate passed for head f14408b9c900baf28db8b3a858a85ce10c82b251 after consuming authored Loom review truth, with no non-author GitHub reviewer approval required; hosted checks demo-bootstrap, loom-check, loom-pr-merge-gate, node-installer-pr, py-compile, repo-local-cli, and root-self-governance passed; #1489 closed at 2026-06-21T05:02:45Z, #1480 closed at 2026-06-21T05:03:19Z, #1476 closed at 2026-06-21T05:03:31Z; milestone/11 closed at 2026-06-21T05:03:54Z with open_issues=0 and closed_issues=19; #1489 blockedBy readback totalCount=0 after removeBlockedBy cleared stale closed blockers #1658/#1488/#1487/#1486/#1485/#1484/#1483/#1482.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -27,11 +27,11 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Evidence-only milestone/11 final closeout for already implemented and released context-safe runtime work.",
+    "reason": "Evidence-only terminal carrier sync for already merged and released milestone/11 closeout work.",
     "change_class": "docs_governance",
     "substitute_validation": "output envelope tests, CLI help, skills surface, release/package surface, npm package payload, suite validate/evidence/carrier, fact-chain, shadow parity, release readback, git diff check, and aggregate CLI contract",
     "authority": "codex-main-agent",
-    "risk_acceptance": "Bounded to final closeout evidence and carrier convergence; no runtime behavior, package payload, release artifact, or downstream migration scope is introduced.",
+    "risk_acceptance": "Bounded to terminal closeout evidence and carrier convergence; no runtime behavior, package payload, release artifact, or downstream migration scope is introduced.",
     "one_shot": true
   }
 }
