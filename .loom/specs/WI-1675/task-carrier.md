@@ -1,0 +1,5 @@
+# Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1675 | Issue OPEN / PR #1676 OPEN / branch work/1675-readme-install-clarity / head pending current PR head / closeout pending merge | in_progress | primary | .loom/work-items/WI-1675.md | .loom/specs/WI-1675/spec.md#suite-path | .loom/specs/WI-1675/spec.md#acceptance-scenarios | .loom/specs/WI-1675/plan.md#implementation-steps | .loom/specs/WI-1675/evidence-map.md | main Codex thread; branch work/1675-readme-install-clarity; issue #1675; PR #1676 | Recheck issue state, PR head SHA, PR body metadata, review records, hosted checks, local PR gate, controlled merge result, and issue closeout before marking done. |
