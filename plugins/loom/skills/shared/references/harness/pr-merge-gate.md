@@ -18,6 +18,11 @@ Raw review output, shadow evidence, runtime evidence, CI logs, GitHub review com
 
 PR metadata machine blocks are separate from PR summaries: malformed HTML comment JSON, missing required repo-specific fields, or required-but-absent machine blocks must return parser diagnostics instead of generic missing-field collapse.
 
+When machine carrier, explicit CLI input, and host readback agree on the same
+Work Item / issue / PR / branch / head binding, missing human-readable PR
+fields such as `Issue: #123` are repairable metadata drift, not semantic Work
+Item conflict.
+
 Host enforcement is proven only by live branch protection or active ruleset readback requiring the stable check name `loom-pr-merge-gate`; workflow presence alone is not enough.
 
 The `loom-pr-merge-gate/v1` output may be retained as a pr-gate result locator. A consumer may reuse it only when the current PR still has the same Work Item, PR number, head SHA, authored review approval, reviewed validation summary, and passing merge checkpoint. Missing, unreadable, stale, or non-pass retained results must block or fall back to `pr-gate` / `review`.

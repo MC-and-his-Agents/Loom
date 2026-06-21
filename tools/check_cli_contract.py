@@ -4428,6 +4428,32 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                     "expected_format": True,
                                     "suggested_fix": True,
                                 },
+                                "binding_priority": [
+                                    "cli_explicit_input",
+                                    "pr_body_machine_carrier",
+                                    "host_readback",
+                                    "repo_carrier",
+                                    "human_pr_body_field",
+                                    "issue_title_or_body",
+                                ],
+                                "safe_repair": {
+                                    "allowed_when": "cli_explicit_input, pr_body_machine_carrier, and host_readback agree",
+                                    "allowed_targets": [
+                                        "missing_human_backlink",
+                                        "display_field_format",
+                                        "deterministic_machine_carrier_rerender",
+                                    ],
+                                    "forbidden_when": [
+                                        "work_item_conflict",
+                                        "issue_conflict",
+                                        "pr_conflict",
+                                        "branch_conflict",
+                                        "head_sha_conflict",
+                                        "release_judgment_conflict",
+                                        "closeout_policy_conflict",
+                                    ],
+                                    "required_readback": "render, update PR body, read back, then rerun metadata preflight before gate consumption",
+                                },
                                 "migration_mode": "required",
                             },
                         }
@@ -4703,6 +4729,14 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     target = tmp / "governance-intensity-metadata"
     target.mkdir()
     write_governance_metadata_contract_fixture(target)
+    repo_interface = json.loads((target / ".loom/companion/repo-interface.json").read_text(encoding="utf-8"))
+    machine_carrier = repo_interface["metadata_contract"]["fields"][0]["machine_carrier"]
+    if machine_carrier.get("binding_priority", [])[:3] != [
+        "cli_explicit_input",
+        "pr_body_machine_carrier",
+        "host_readback",
+    ] or "missing_human_backlink" not in machine_carrier.get("safe_repair", {}).get("allowed_targets", []):
+        raise AssertionError("governance intensity metadata contract must expose binding priority and safe repair")
     positive = target / "positive.md"
     positive.write_text(governance_metadata_body(), encoding="utf-8")
     positive_payload = governance_metadata_preflight_payload(target, "positive.md")
@@ -6812,6 +6846,11 @@ def assert_closeout_mode_docs_skill_protocol_contract() -> None:
         "`light_carrier_sync`",
         "`batched_closeout`",
         "`full_closeout`",
+        "### 2.1.1 Closeout Policy Decision",
+        "`host_only`",
+        "`batched_carrier_pr`",
+        "`full_closeout_pr`",
+        "`requires_closeout_pr`",
         "`loom-closeout-specific-gate/v1`",
         "`closeout_pr_allowed`",
         "`full_review_required`",

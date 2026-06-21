@@ -43,6 +43,53 @@ carrier 冲突，都必须 fail closed。
 
 字段缺失时，gate 不能用默认值猜测通过。
 
+## 2.1 分类输入与输出
+
+治理强度分类是 gate 的读模型，不是新的完成真相源。
+
+分类器至少消费：
+
+- diff scope：当前 PR 实际触碰的路径和变更类型
+- Work Item scope：issue / Work Item 声明的目标、非目标和依赖
+- PR metadata：machine carrier 中的强度、class、suite、review、release 与 closeout 字段
+- repo profile：仓库治理成熟度、required checks、release surface 和 host policy
+- release/no-release evidence：本轮是否改变 CLI、skills、package、workflow、release validation、runtime provider 或其他用户可见行为
+
+分类器至少输出：
+
+- `result`: `pass` / `block`
+- `effective_governance_intensity`: `light` / `standard` / `reinforced`
+- `effective_suite_path`: `full` / `minimal` / `not_applicable`
+- `upgrade_reasons`: 已触发或必须检查的升档原因
+- `consumed_locators`: diff、Work Item、PR metadata、repo profile、release/no-release evidence 的 locator
+- `non_skippable_gates`: review、fact-chain、PR gate、hosted checks、controlled merge、closeout 中仍必须执行的 gate
+
+`governance_intensity` 是声明值，`effective_governance_intensity` 是 gate 消费后的结果。两者不一致时必须记录 `upgrade_reasons`；若证据不足以解释差异，结果必须 `block`。
+
+分类结果不得替代 review、PR gate、hosted checks、controlled merge 或 closeout。它只能决定这些 gate 的最低证据面和下一个动作。
+
+## 2.2 绑定事实优先级
+
+Work Item / issue / PR / branch / head 绑定按以下顺序消费：
+
+1. CLI 显式输入，例如 `--item`、`--issue`、`--pr`、`--branch`、`--head-sha`
+2. PR body machine carrier 中的结构化字段
+3. host readback，例如 GitHub PR number、head ref、head SHA、base branch、merge commit、issue state
+4. repo carrier，例如 Work Item、progress、status、review、shadow evidence
+5. 人类 PR body 字段，例如 `Issue: #123`、`Loom Work Item: WI-123`
+6. issue title / body 中的弱文本引用
+
+强来源与强来源冲突必须 `block`。弱来源缺失不能覆盖强来源；当 CLI 输入、machine carrier 和 host readback 一致时，人类 PR body backlink 缺失应分类为 `repairable_missing_human_backlink` 或 advisory repair，而不是 `work_item_binding_conflict`。
+
+最小分类：
+
+- `missing`: 必需强来源不存在
+- `conflict`: 两个强来源声明不同事实
+- `stale`: locator 可读但不绑定当前 PR head 或当前 host state
+- `repairable`: 强来源一致，弱字段缺失、格式不完整或可机械补齐
+
+自动修复只允许写入或修正弱展示字段、缺失 backlink、非语义摘要和 machine carrier 的确定性重渲染。发现 Work Item、issue、PR number、branch、head SHA、release judgment 或 closeout policy 的强来源冲突时必须 fail closed，不得自动选择一方。
+
 ## 3. `suite_path: not_applicable`
 
 `suite_path: not_applicable` 只表示 formal suite artifacts 对当前 scope 不适用。
