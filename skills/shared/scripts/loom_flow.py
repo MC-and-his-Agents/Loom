@@ -15981,7 +15981,7 @@ def load_optional_text_fixture(target_root: Path, fixture: str | None, *, label:
 def pr_metadata_replace_or_insert_binding_line(body: str, *, label: str, value: str, insert_after: str | None = None) -> str:
     pattern = re.compile(rf"(?im)^([ \t]*[-*]?[ \t]*{re.escape(label)}[ \t]*:[ \t]*)(`?[^`\n]*`?)[ \t]*$")
     if pattern.search(body):
-        return pattern.sub(lambda match: f"{match.group(1)}{value}", body, count=1)
+        return pattern.sub(lambda match: f"{match.group(1).rstrip()} {value}", body, count=1)
 
     lines = body.splitlines()
     insert_at: int | None = None
@@ -16980,13 +16980,7 @@ def pr_metadata_preflight_payload(
     pr_errors: list[str] = []
     inferences: list[dict[str, Any]] = []
     needs_pr_payload_for_body = body_artifact is None and compare_body_artifact is None
-    needs_pr_payload_for_issue_repair = (
-        issue_number is not None
-        and (pr_number is not None or pr_payload_file is not None or head_sha is not None or branch_name is not None)
-    )
-    if applicable_contracts and pr_payload is None and not contract_errors and (
-        needs_pr_payload_for_body or needs_pr_payload_for_issue_repair
-    ):
+    if applicable_contracts and pr_payload is None and not contract_errors and (needs_pr_payload_for_body or pr_payload_file is not None):
         detected_owner, detected_repo = detect_github_repo(target_root)
         pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
             target_root=target_root,

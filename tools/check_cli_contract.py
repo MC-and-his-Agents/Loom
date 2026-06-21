@@ -4686,6 +4686,8 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
             "closeout",
             "--item",
             "WI-1541",
+            "--issue",
+            "1541",
             "--head-sha",
             head_sha,
             "--branch",
@@ -4701,6 +4703,9 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     rendered = target / ".loom" / "runtime" / "pr" / "rendered.md"
     if not rendered.exists():
         raise AssertionError("render did not write the repo-relative body artifact")
+    rendered_body = rendered.read_text(encoding="utf-8")
+    if "- Issue: #1541" not in rendered_body or "- Loom Work Item: WI-1541" not in rendered_body:
+        raise AssertionError("render did not normalize human PR binding line spacing")
 
     _, readback_payload = run_flow_json(
         [
@@ -4712,6 +4717,8 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
             "closeout",
             "--item",
             "WI-1541",
+            "--issue",
+            "1541",
             "--head-sha",
             head_sha,
             "--branch",
@@ -4736,6 +4743,8 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
             "closeout",
             "--item",
             "WI-1541",
+            "--issue",
+            "1541",
             "--head-sha",
             head_sha,
             "--branch",

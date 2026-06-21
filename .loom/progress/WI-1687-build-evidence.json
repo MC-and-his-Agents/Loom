@@ -91,7 +91,7 @@
     {
       "id": "WI-1687-local-validation",
       "status": "integrated",
-      "summary": "2026-06-22 local validation passed on branch work/1687-pr-backlink-safe-repair: py_compile_clean for touched Python surfaces; tools/check_cli_contract.py --surface pr-metadata; tools/check_cli_contract.py --surface governance-closeout; git diff --check; tools/skills_surface.py check; fact-chain; state-check; suite validate; flow build; tools/loom_check.py --profile source --source-surface contract-only; tools/check_release_surface.py; tools/version_surface_check.py; tools/check_npm_package.py.",
+      "summary": "2026-06-22 local validation refreshed on branch work/1687-pr-backlink-safe-repair after PR #1703 metadata spacing fix: py_compile_clean for touched Python surfaces; tools/check_cli_contract.py --surface pr-metadata; tools/check_cli_contract.py --surface governance-closeout; git diff --check; tools/skills_surface.py check; fact-chain; state-check; suite validate; flow build; tools/loom_check.py --profile source --source-surface contract-only; tools/check_release_surface.py; tools/version_surface_check.py; tools/check_npm_package.py.",
       "locators": [
         ".loom/progress/WI-1687.md",
         ".loom/specs/WI-1687/evidence-map.md",
