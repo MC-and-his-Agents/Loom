@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1488
-- Goal: Update user documentation, command-help descriptions, and migration guidance so downstream operators use context-safe Loom output and the v0.17.0 global CLI plus Codex user-level plugin support boundary.
-- Scope: Issue #1488 documentation/help/migration only. Update README and adoption / CLI command documentation to describe agent-safe summary output, artifact locators, explicit `--full-output`, configurable output budgets, metadata-only host repository adoption, global `loom` CLI, and Codex user-level plugin usage. Do not publish a release, change runtime behavior, alter skill payload implementation, migrate downstream repositories, restore repo-local plugin/runtime/skills installs, single-skill package distribution, or old installer compatibility paths.
-- Execution Path: issue #1488 -> branch work/1488-docs-migration -> PR #1669 -> merge -> issue closeout
+- Item ID: WI-1658
+- Goal: Publish the post-v0.17.0 context-safe runtime release so downstream operators can adopt the global `loom` CLI and Codex user-level plugin output boundary.
+- Scope: Issue #1658 release preparation, version bump to `v0.17.1`, release readiness evidence, package/plugin payload validation, and release closeout evidence after the publish workflow runs on `main`. Do not restore repo-local plugin/runtime/skills install paths, single-skill package distribution, old installer compatibility, or downstream repository migration.
+- Execution Path: issue #1658 -> branch work/1658-release -> release PR -> controlled merge -> `loom-cli-release` main-push workflow -> tag/npm/GitHub Release readback -> issue closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1488.md
-- Review Entry: .loom/reviews/WI-1488.json
-- Validation Entry: python3 tools/loom.py help --json; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1488 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1488 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1488 --json; python3 tools/skills_surface.py check --surface docs-reference-sync; npm --prefix packages/loom-installer run check:docs; python3 tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface contract-only; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PR metadata render/preflight/readback compare for #1669; targeted rg for unsupported repo-local install recommendations; git diff --check
-- Closing Condition: PR merged after docs/help/migration guidance consistently points to metadata-only repository adoption, global `loom` CLI, Codex user-level plugin, agent-safe summary/artifact locator output by default, and explicit full diagnostics only for debugging/audit.
+- Recovery Entry: .loom/progress/WI-1658.md
+- Review Entry: .loom/reviews/WI-1658.json
+- Validation Entry: `python3 tools/loom.py release readback --target . --version v0.17.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `python3 test/output_envelope_test.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1658 --json`; `python3 tools/loom.py fact-chain --target . --json`; `git diff --check`
+- Closing Condition: v0.17.1 release evidence points to the actual tag, main merge commit, GitHub Release, npm package readback, workflow run, installed/global CLI smoke, and #1658 issue closeout.
 - Current Checkpoint: merge
-- Current Stop: WI-1488 docs/help/migration update is implemented on branch work/1488-docs-migration and PR #1669; build validation, pre-review, spec review, implementation review, flow review, and PR metadata readback passed. Local PR gate fallback was classified as checkpoint carrier drift and this entry is the minimal checkpoint sync for merge-ready consumption.
-- Next Step: Rerun PR gate and merge-ready after this checkpoint sync, then consume hosted check readback.
+- Current Stop: WI-1658 release PR #1671 is open on branch work/1658-release. Release-prep validation, spec review, implementation review, PR metadata readback, and review-readiness checks have passed locally; PR gate and hosted checks are the next merge-ready inputs.
+- Next Step: Rerun PR gate for PR #1671 at the current head, consume hosted check readback, then controlled merge to trigger the v0.17.1 publish workflow.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-21 WI-1488 documentation/help/migration validation passed on branch work/1488-docs-migration / PR #1669 head b39702b09691fc58e9a4857218bfde8447071e6a: `python3 tools/loom.py help --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 tools/loom.py suite validate --target . --item WI-1488 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1488 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1488 --json`; `python3 tools/skills_surface.py check --surface docs-reference-sync`; `npm --prefix packages/loom-installer run check:docs`; `python3 tools/check_cli_contract.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 .loom/bin/loom_flow.py flow pre-review --target . --item WI-1488 --pr 1669 --branch work/1488-docs-migration`; `python3 .loom/bin/loom_flow.py flow spec-review --target . --item WI-1488 --pr 1669 --branch work/1488-docs-migration`; `python3 .loom/bin/loom_flow.py flow review --target . --item WI-1488 --pr 1669 --branch work/1488-docs-migration`; PR metadata render/preflight/readback compare for #1669; targeted legacy recommendation `rg`; `git diff --check`.
-- Recovery Boundary: WI-1488 owns docs/help/migration guidance only. It does not publish #1658, run final #1489 closeout, implement downstream migration, or change runtime/plugin behavior.
-- Current Lane: docs-migration
+- Latest Validation Summary: 2026-06-21T03:20Z release-prep validation passed on branch work/1658-release / PR #1671: `python3 tools/loom.py release readback --target . --version v0.17.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` passed and classified `v0.17.1` as unpublished with missing tag, GitHub Release, npm version, and target workflow run; `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `python3 test/output_envelope_test.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1658 --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; PR metadata update/readback for #1671.
+- Recovery Boundary: WI-1658 owns release preparation, publish evidence, and #1658 closeout. It does not implement new runtime behavior, restore repo-local install surfaces, perform downstream migration, or complete final milestone regression closeout (#1489).
+- Current Lane: release
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-21 WI-1488 docs/help/migration update in progress.
-- Logs Entry: local command output retained in current Codex milestone/11 thread; full CLI contract check completed in 564.72s.
-- Diagnostics Entry: Documentation and help-facing contracts now prefer global `loom` CLI, metadata-only repository adoption, Codex user-level plugin, agent-safe summary/artifact locator output, and explicit `--full-output` only for debugging/audit.
-- Verification Entry: `python3 tools/loom.py help --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 tools/loom.py suite validate --target . --item WI-1488 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1488 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1488 --json`; `python3 tools/skills_surface.py check --surface docs-reference-sync`; `npm --prefix packages/loom-installer run check:docs`; `python3 tools/check_cli_contract.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 .loom/bin/loom_flow.py flow pre-review --target . --item WI-1488 --pr 1669 --branch work/1488-docs-migration`; `python3 .loom/bin/loom_flow.py flow spec-review --target . --item WI-1488 --pr 1669 --branch work/1488-docs-migration`; `python3 .loom/bin/loom_flow.py flow review --target . --item WI-1488 --pr 1669 --branch work/1488-docs-migration`; PR metadata render/preflight/readback compare for #1669; targeted legacy recommendation `rg`; `git diff --check`.
-- Lane Entry: milestone-11-docs-migration
+- Run Entry: 2026-06-21 WI-1658 release preparation in progress.
+- Logs Entry: local command output retained in current Codex milestone/11 thread.
+- Diagnostics Entry: `v0.17.1` release slot is unoccupied before merge; support boundary is global CLI plus Codex user-level plugin plus metadata-only host repositories.
+- Verification Entry: release readback, version surface, release surface, npm package, npm package smoke, npm pack dry-run, output envelope tests, help JSON, suite validate/evidence/carrier, fact-chain, and diff check.
+- Lane Entry: milestone-11-release
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1488.md
-- Dynamic Truth: .loom/progress/WI-1488.md
+- Static Truth: .loom/work-items/WI-1658.md
+- Dynamic Truth: .loom/progress/WI-1658.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
