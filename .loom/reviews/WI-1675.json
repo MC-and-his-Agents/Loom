@@ -3,10 +3,10 @@
   "item_id": "WI-1675",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1675 README documentation update and README checker-contract alignment are approved for PR gate consumption. The diff improves product positioning, architecture/workflow explanation, badges, quick start install wording, Chinese localization, doc-sync/release-surface/loom_check README needles, generated skills surface parity, demo/root bootstrap hash carriers, and minimal Loom carriers. It does not change runtime behavior, installer implementation, package release surfaces, legacy migration contracts, host mutation behavior, permissions, or downstream repository adoption.",
+  "summary": "WI-1675 closeout carrier sync is approved for PR #1677. The diff only appends Terminal Closeout Metadata to .loom/progress/WI-1675.md after PR #1676 was merged and issue #1675 was closed; it does not change README content, runtime behavior, installer behavior, package release surfaces, permissions, or user-visible product behavior.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-06-21T09:36:00Z",
-  "reviewed_head": "b30e124d50a19a6e451ce1e2c0636f1c35952f41",
+  "authored_at": "2026-06-21T09:58:57Z",
+  "reviewed_head": "be2e6b82276e47fd2ce4580c6f3dafb2a11aabc2",
   "reviewed_validation_summary": "2026-06-21T09:34Z local validation passed for WI-1675: git diff --check; doc-sync check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; skills surface check; `loom skills check`; py_compile for loom_check mirrors; loom_check contract-only; installer regression including npm test and npm pack dry-run; demo bootstrap fixture sync followed by `make loom-demo-new-project-check`; root bootstrap hash sync followed by `.loom/bin/loom_init.py verify`, runtime parity, and adopt verify; suite evidence validate; suite carrier validate; suite validate; fact-chain; shadow parity; local PR gate passed for head d3d833067f929431ef247dfce9f362ca7258517a before fixture sync. Full local `python3 tools/loom_check.py` was run after the demo fixture sync and failed only on root-self-adoption because root bootstrap hash carriers were stale; targeted root self-governance checks now pass after hash sync. PR metadata, PR gate, hosted checks, and merge check will be rerun after the fixture implementation commit and review refresh.",
   "fallback_to": null,
   "findings": [],
@@ -16,31 +16,43 @@
     "work_item": ".loom/work-items/WI-1675.md",
     "recovery_entry": ".loom/progress/WI-1675.md",
     "status_surface": ".loom/status/current.md",
-    "spec": ".loom/specs/WI-1675/spec.md",
-    "plan": ".loom/specs/WI-1675/plan.md",
-    "implementation_contract": ".loom/specs/WI-1675/implementation-contract.md",
-    "evidence_map": ".loom/specs/WI-1675/evidence-map.md",
-    "task_carrier": ".loom/specs/WI-1675/task-carrier.md",
-    "doc_sync_check": "packages/loom-installer/scripts/check-doc-sync.mjs",
-    "release_surface_check": "tools/check_release_surface.py",
-    "loom_check_contract": "src/skills/shared/scripts/loom_check.py",
-    "generated_skills_surface": "plugins/loom/skills/shared/scripts/loom_check.py",
-    "root_bootstrap_manifest": ".loom/bootstrap/manifest.json",
-    "root_bootstrap_init_result": ".loom/bootstrap/init-result.json",
-    "demo_bootstrap_manifest": "examples/new-project/.loom/bootstrap/manifest.json",
-    "demo_bootstrap_init_result": "examples/new-project/.loom/bootstrap/init-result.json",
-    "readme_en": "README.md",
-    "readme_zh": "README.zh-CN.md",
-    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1676",
-    "single_person_review_boundary": "No non-author GitHub reviewer approval is required for this single-person repository. This authored Loom review record is the approval truth consumed by PR gate for the reviewed README implementation head; PR metadata and carrier-only follow-up drift must remain bounded to review/metadata carriers."
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": EOF; github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 2
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1675 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1675 --json",
+    "suite_evidence_map": ".loom/specs/WI-1675/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1675/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Docs-only README clarity update with minimal Loom carrier and doc-sync/release-surface/loom_check synchronization.",
-    "change_class": "docs_only",
-    "substitute_validation": "README readback, Chinese token scan, badge-link scan, doc-sync check, release-doc-contract check, loom_check contract-only, skills surface check, loom skills check, installer regression, git diff check, demo bootstrap fixture check, root self-governance checks, fact-chain, workspace check, suite evidence validate, suite carrier validate, suite validate, shadow parity",
-    "authority": "codex-main-agent",
-    "risk_acceptance": "Bounded to documentation, README check needles, and carrier metadata; no runtime, package, installer, release, legacy migration, permission, or external-visible behavior scope is introduced.",
-    "one_shot": true
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
