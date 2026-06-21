@@ -1,5 +1,7 @@
 # Loom
 
+[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=for-the-badge&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/MC-and-his-Agents/Loom) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/MC-and-his-Agents/Loom)
+
 语言：中文 | [English version](./README.md)
 
 Loom 是一个 agent-first project operating layer。
@@ -31,32 +33,25 @@ loom skills release-check --json
 
 ## 安装
 
-### Root CLI
+要求：
 
-安装根 Loom CLI：
+- Node `>=20`
+- Python `>=3.11`
+
+当前 Loom 安装模型有三个分开的目标：
+
+1. 工作站状态：全局 `loom` CLI。
+2. Codex 用户状态：从全局包安装并注册的 Codex 用户级 Loom plugin。
+3. 仓库状态：每个目标仓库只记录 metadata-only Loom adoption。
+
+在新工作站和目标仓库上运行：
 
 ```bash
 npm install -g @mc-and-his-agents/loom
-```
-
-使用纯全局安装模型：
-
-- 工作站安装全局 `loom` CLI；
-- Codex 从这个全局包安装并注册用户级 Loom plugin；
-- 每个采用 Loom 的仓库只记录 metadata-only adoption，不保存 repo-local
-  Loom runtime、plugin payload 或生成 skills payload。
-
-详细接入合同与验证命令见
-[docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)、
-[docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md)
-和 [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)。
-
-安装 Codex 用户级 plugin，并让目标仓库采用 Loom：
-
-```bash
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
 loom install --target . --apply --json
+loom installed-state validate --target . --json
 loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
@@ -67,19 +62,46 @@ loom doctor --target . --json
 `loom host verify` 同时验证 metadata-only 仓库边界和 Codex 用户级 plugin
 provider 注册。
 
+注册 plugin 后，启动新的 Codex session；如果 Codex Desktop 已经加载过
+plugin 列表，则重启 Codex Desktop。Loom 不声称当前 session 会热加载新注册的
+plugin。
+
 如果仓库里还存在 `.loom/bin`、`.loom/bootstrap`、`plugins/loom`、
 `.agents/skills` 或 Loom-owned 根 `skills`，当前验证会阻断，直到显式完成
 迁移或删除。迁移路径见
 [docs/adoption/legacy-install-migration.md](./docs/adoption/legacy-install-migration.md)。
 
+在第二台开发机器上打开已采用 Loom 的仓库时，安装全局 CLI、注册 Codex 用户级
+plugin，然后验证仓库：
+
+```bash
+npm install -g @mc-and-his-agents/loom
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --scope user --apply --json
+loom installed-state validate --target . --json
+loom host verify --host codex --target . --json
+loom skills check --target . --json
+loom doctor --target . --json
+```
+
+详细接入合同与验证命令见
+[docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)、
+[docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md)
+和 [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)。
+
 `npx @mc-and-his-agents/loom ...` 只能作为临时运行同一个根 `loom` CLI 的方式。
 
-要求：
-
-- Node `>=20`
-- Python `>=3.11`
-
 `loom-installer` 不属于 primary install journey。它只作为 legacy consumer 的 deprecated historical evidence 保留。
+
+### Advanced / Compatibility
+
+历史 native skills-library clone 路径不是新用户的 primary install path：
+
+```bash
+git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
+```
+
+请改用根 `loom` CLI。已有 skills-library clone 只应视为 CLI 可以验证、修复或替换的 compatibility source；用户不应把 SKILLS 或 plugins 当作独立安装面安装。
 
 ## 输出模式
 
@@ -98,16 +120,6 @@ Loom 命令默认使用上下文安全输出。命令只有在 JSON 能放进有
 默认 stdout 硬上限是 16 KiB，summary 目标是 4 KiB。可通过
 `LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`、`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`
 和 `LOOM_OUTPUT_ARTIFACT_DIR` 对单个进程调整。
-
-### Advanced / Compatibility
-
-历史 native skills-library clone 路径不是新用户的 primary install path：
-
-```bash
-git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
-```
-
-请改用根 `loom` CLI。已有 skills-library clone 只应视为 CLI 可以验证、修复或替换的 compatibility source；用户不应把 SKILLS 或 plugins 当作独立安装面安装。
 
 ## 发布面
 

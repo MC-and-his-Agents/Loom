@@ -1,5 +1,7 @@
 # Loom
 
+[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=for-the-badge&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/MC-and-his-Agents/Loom) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/MC-and-his-Agents/Loom)
+
 Language: English | [中文版本](./README.zh-CN.md)
 
 Loom is an agent-first project operating layer.
@@ -72,33 +74,26 @@ can be adjusted per process with `LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`,
 
 ## Install
 
-### Root CLI
+Requirements:
 
-Install the root Loom CLI:
+- Node `>=20`
+- Python `>=3.11`
+
+Loom's current install model has three separate targets:
+
+1. Workstation state: the global `loom` CLI.
+2. Codex user state: the Codex user-level Loom plugin installed and registered
+   from the global package.
+3. Repository state: metadata-only Loom adoption in each target repository.
+
+For a new workstation and target repository, run:
 
 ```bash
 npm install -g @mc-and-his-agents/loom
-```
-
-Use the pure global install model:
-
-- the workstation has the global `loom` CLI;
-- Codex has a user-level Loom plugin installed and registered from that global
-  package;
-- each adopted repository records metadata-only Loom adoption and keeps no
-  repo-local Loom runtime, plugin payload, or generated skills payload.
-
-See [docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md),
-[docs/adoption/installation-taxonomy.md](./docs/adoption/installation-taxonomy.md),
-and [docs/adoption/loom-installed-state-v2.md](./docs/adoption/loom-installed-state-v2.md)
-for the detailed adoption contracts and validation commands.
-
-Install the Codex user-level plugin and adopt a target repository:
-
-```bash
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
 loom install --target . --apply --json
+loom installed-state validate --target . --json
 loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
@@ -109,36 +104,32 @@ state. `loom install` writes repository adoption metadata and the Loom bootstrap
 block. `loom host verify` verifies both the metadata-only repository boundary
 and the Codex user-level plugin provider registration.
 
+After plugin registration, start a new Codex session, or restart Codex Desktop
+if the plugin list was already loaded. Loom does not claim that an existing
+session hot-loads newly registered plugins.
+
 When a repository still carries repo-local wrappers or vendored runtime residue
 such as `.loom/bin`, `.loom/bootstrap`, `plugins/loom`, `.agents/skills`, or
 Loom-owned root `skills`, current verification blocks until that legacy residue
 is explicitly migrated or removed.
 
-On a second development machine for an already adopted repository, install and
-register the Codex user-level plugin from the global Loom package:
+On a second development machine for an already adopted repository, install the
+global CLI and register the Codex user-level plugin, then verify the repository:
 
 ```bash
-loom host verify --host codex --target . --json
+npm install -g @mc-and-his-agents/loom
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
+loom installed-state validate --target . --json
+loom host verify --host codex --target . --json
+loom skills check --target . --json
 loom doctor --target . --json
 ```
-
-The registration command writes user workstation state such as the personal
-Codex marketplace entry, user plugin cache payload, and Codex config enablement.
-It does not write target repository truth. Start a new Codex session, or restart
-Codex Desktop if the plugin list was already loaded; Loom does not claim that an
-existing session hot-loads newly registered plugins.
 
 See [docs/adoption/legacy-install-migration.md](./docs/adoption/legacy-install-migration.md)
 for the explicit migration path from older repo-local installs.
 
 Use `npx @mc-and-his-agents/loom ...` only as an ephemeral way to run the same root `loom` CLI.
-
-Requirements:
-
-- Node `>=20`
-- Python `>=3.11`
 
 `loom-installer` is not part of the primary install journey. It is retained only as deprecated historical evidence for legacy consumers.
 
