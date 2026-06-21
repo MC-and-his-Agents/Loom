@@ -31,6 +31,7 @@
 | EV-003 | test_evidence | `tools/check_cli_contract.py` | A5 contract consumers unwrap agent-safe artifacts | WI-1688 / closeout queue contract | present | review / merge-ready / closeout | Re-run governance-closeout contract surface. |
 | EV-004 | fresh_verification_input | `.loom/progress/WI-1688.md` | EV-001 EV-002 EV-003 | current branch / current head before PR | present | merge-ready / closeout | Refresh after any implementation or contract-test changes. |
 | EV-005 | build_evidence | `.loom/progress/WI-1688-build-evidence.json` | integrated implementation, test, contract consumer, ownership, and validation evidence | WI-1688 / build checkpoint | present | build / review / merge-ready | Refresh after implementation, validation, review findings, or ownership changes. |
+| EV-006 | behavior_evidence | `.loom/specs/WI-1688/implementation-contract.md` | runtime, extraction, and boundary contracts | WI-1688 / implementation review | present | review / merge-ready | Refresh if wrapper output behavior or consumer boundary changes. |
 
 ## Excluded / Deferred
 
