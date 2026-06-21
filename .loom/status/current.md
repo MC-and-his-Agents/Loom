@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1658
-- Goal: Publish the post-v0.17.0 context-safe runtime release so downstream operators can adopt the global `loom` CLI and Codex user-level plugin output boundary.
-- Scope: Issue #1658 release preparation, version bump to `v0.17.1`, release readiness evidence, package/plugin payload validation, and release closeout evidence after the publish workflow runs on `main`. Do not restore repo-local plugin/runtime/skills install paths, single-skill package distribution, old installer compatibility, or downstream repository migration.
-- Execution Path: issue #1658 -> branch work/1658-release -> release PR -> controlled merge -> `loom-cli-release` main-push workflow -> tag/npm/GitHub Release readback -> issue closeout
+- Item ID: WI-1489
+- Goal: Complete the milestone/11 final regression matrix and closeout verification after the v0.17.1 release evidence exists.
+- Scope: Issue #1489 final verification only: consume closed child issue evidence, verify context-safe output behavior, docs/help migration wording, skill payload boundary, #1493 closeout resolver hardening, and #1658 release evidence. Do not add runtime behavior, republish, restore repo-local install surfaces, or perform downstream migration.
+- Execution Path: issue #1489 -> branch work/1489-final-regression-closeout -> final regression evidence -> PR -> controlled merge -> issue #1489 closeout -> parent #1480/#1476 closeout if all child evidence is consumed.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1658.md
-- Review Entry: .loom/reviews/WI-1658.json
-- Validation Entry: `python3 tools/loom.py release readback --target . --version v0.17.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `python3 test/output_envelope_test.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1658 --json`; `python3 tools/loom.py fact-chain --target . --json`; `git diff --check`
-- Closing Condition: v0.17.1 release evidence points to the actual tag, main merge commit, GitHub Release, npm package readback, workflow run, installed/global CLI smoke, and #1658 issue closeout.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1658 closed out by closeout run: PR #1671 merged at 3e17dd73fb4ccb260ede68e5518b83aa904fb682, issue #1658 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1658 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1489.md
+- Review Entry: .loom/reviews/WI-1489.json
+- Validation Entry: `python3 test/output_envelope_test.py`; `python3 tools/loom.py help --json`; `python3 tools/skills_surface.py check`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom.py release readback --target . --version v0.17.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit 3e17dd73fb4ccb260ede68e5518b83aa904fb682 --release-judgment release_required --json`; `python3 tools/loom.py suite validate --target . --item WI-1489 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1489 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1489 --json`; `python3 tools/loom.py fact-chain --target . --json`; `git diff --check`
+- Closing Condition: #1489 has a versioned regression/closeout evidence record proving the context-safe runtime line, documentation/skill migration, closeout resolver hardening, and v0.17.1 release evidence have all been consumed; parent #1480 and phase #1476 can then close without adding new scope.
+- Current Checkpoint: merge
+- Current Stop: WI-1489 final regression and closeout evidence is on PR #1673 with local PR metadata readback and authored Loom review truth available for gate consumption. Hosted checks, controlled merge, and GitHub issue closeout remain pending.
+- Next Step: Rerun PR gate for PR #1673 at the current head, wait for hosted checks, then run controlled merge.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-21T03:20Z release-prep validation passed on branch work/1658-release / PR #1671: `python3 tools/loom.py release readback --target . --version v0.17.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` passed and classified `v0.17.1` as unpublished with missing tag, GitHub Release, npm version, and target workflow run; `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `python3 test/output_envelope_test.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1658 --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; PR metadata update/readback for #1671.
-- Recovery Boundary: WI-1658 owns release preparation, publish evidence, and #1658 closeout. It does not implement new runtime behavior, restore repo-local install surfaces, perform downstream migration, or complete final milestone regression closeout (#1489).
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-06-21T04:32-04:44Z local regression passed for output envelope tests, CLI help, skills surface, release surface, npm package payload after removing validation-generated Python cache, suite validate, suite evidence validate, suite carrier validate, shadow parity, fact-chain, v0.17.1 release readback, git diff check, and aggregate CLI contract (`python3 tools/check_cli_contract.py`, 12/12 surfaces, 614.86s). PR #1673 metadata update/readback passed for head b6865407c6e6fbe1f83dba72fff3d3a765f8fc36; local PR gate consumed authored implementation review truth and spec review truth but required recovery checkpoint promotion from build to merge before final rerun.
+- Recovery Boundary: WI-1489 owns final milestone regression and closeout consumption only. It does not add runtime behavior, republish v0.17.1, restore repo-local plugin/runtime/skills paths, revive single-skill package distribution, update old installer compatibility, or perform downstream repository migration.
+- Current Lane: final-regression-closeout
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-21 WI-1658 post-merge release closeout completed.
+- Run Entry: 2026-06-21 WI-1489 final regression closeout in progress.
 - Logs Entry: local command output retained in current Codex milestone/11 thread.
-- Diagnostics Entry: `v0.17.1` is published and read back from git tag, GitHub Release, npm, and workflow run; support boundary is global CLI plus Codex user-level plugin plus metadata-only host repositories.
-- Verification Entry: release readback, closeout run apply, final closeout check, carrier refresh, and GitHub dependency readback.
-- Lane Entry: milestone-11-release-closeout
+- Diagnostics Entry: milestone/11 final closeout now consumes v0.17.1 release evidence and closed dependency issues; no new runtime or release scope is allowed.
+- Verification Entry: final regression matrix, release readback, suite evidence/carrier, fact-chain, shadow parity, and GitHub issue dependency readback.
+- Lane Entry: milestone-11-final-closeout
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1658.md
-- Dynamic Truth: .loom/progress/WI-1658.md
+- Static Truth: .loom/work-items/WI-1489.md
+- Dynamic Truth: .loom/progress/WI-1489.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
