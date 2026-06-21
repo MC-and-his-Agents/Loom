@@ -6,7 +6,7 @@
 - Goal: Compress metadata and gate diagnostics into minimal actionable root CLI output while preserving full machine-readable payloads.
 - Scope: `tools/loom.py` agent-safe output helpers, affected wrapper contract tests, output envelope regression tests, and minimal WI-1688 suite carriers. Ownership constraints are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `test/output_envelope_test.py`, `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/work-items/WI-1688.md`, `.loom/progress/WI-1688.md`, `.loom/progress/WI-1688-build-evidence.json`, `.loom/reviews/WI-1688.json`, `.loom/reviews/WI-1688.spec.json`, `.loom/shadow/merge-ready-loom.json`, `.loom/shadow/closeout-loom.json`, and `.loom/specs/WI-1688/`.
 - Execution Path: issue #1688 -> branch `work/1688-minimal-action-feedback` -> focused wrapper/test update -> PR -> controlled merge -> issue closeout.
-- Workspace Entry: `/Users/mc/dev/Loom-WI-1688`
+- Workspace Entry: ./WI-1688/..
 - Recovery Entry: `.loom/progress/WI-1688.md`
 - Review Entry: `.loom/reviews/WI-1688.json`
 - Validation Entry: `test/output_envelope_test.py`; `tools/check_cli_contract.py --surface pr-metadata`; `--surface governance-closeout`; `--surface controlled-merge`; `--surface closeout-wrapper`; `--surface merge-wrapper`.
