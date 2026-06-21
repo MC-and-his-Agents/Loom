@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1481
-- Goal: 新增面向智能体的输出信封与 artifact writer，使全局 `loom` CLI 可以把高噪声完整输出转为短摘要和可定位工件。
-- Scope: Historical carrier closeout for issue #1481 and related issue #1488 only in branch work/1481-1488-carrier-closeout. This closeout sync may update `.loom/progress/WI-1481.md`, `.loom/progress/WI-1488.md`, `.loom/status/current.md`, and `.loom/bootstrap/init-result.json`; it does not change runtime behavior, docs, tests, release artifacts, or product implementation.
-- Execution Path: issue #1481 -> branch work/1481-output-envelope-artifacts -> output envelope/artifact helpers -> focused tests -> PR gate -> merge -> issue closeout。
+- Item ID: WI-1683
+- Goal: Generalize the docs-governance lite special case into a reusable governance intensity gate.
+- Scope: Runtime gate classification, metadata validation, focused CLI contract fixtures, and generated skill/plugin runtime mirrors for issue #1683. Preserve the existing docs-governance lite positive and negative coverage while allowing additional low-risk light classes.
+- Execution Path: issue #1683 -> branch work/1683-governance-intensity-gate -> focused runtime and fixture update -> PR -> controlled merge -> issue closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1481.md
-- Review Entry: .loom/reviews/WI-1481.json
-- Validation Entry: python3 test/output_envelope_test.py; python3 -m unittest discover -s test -p 'output_envelope_test.py'; python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py; git diff --check
-- Closing Condition: Issue #1481 closes after PR merge and closeout evidence confirms the reusable output envelope and artifact writer are available without restoring repo-local runtime/plugin/skills paths.
-- Current Checkpoint: closed_out
-- Current Stop: PR #1659 was merged into main, issue #1481 is closed, and terminal closeout metadata is recorded for WI-1481.
-- Next Step: None; terminal carrier retained as historical closeout evidence.
-- Blockers: None
-- Latest Validation Summary: 2026-06-21 local validation passed for `git diff --check`; GitHub readback confirmed issue #1481 closed and PR #1659 merged at d1145fbca2fdaae29c325adddf148f7c7fc543cc; issue #1488 closed and PR #1669 merged at 09e8379bcd21c801579e94ad67b18f622090201f; PR #1701 metadata preflight passed at head 06fa4abc88deb4d512c32ba389ce1477d53caf67.
-- Recovery Boundary: Historical carrier closeout for WI-1481 and WI-1488 only. Do not change runtime behavior, documentation, tests, release artifacts, or product implementation in this lane.
-- Current Lane: milestone-11-output-envelope-artifacts
+- Recovery Entry: .loom/progress/WI-1683.md
+- Review Entry: .loom/reviews/WI-1683.json
+- Validation Entry: git diff --check; python3 tools/skills_surface.py generate; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py --surface pr-metadata.
+- Closing Condition: PR is merged into main, issue #1683 is closed, and closeout confirms main, PR metadata, issue state, and Loom carriers agree.
+- Current Checkpoint: build
+- Current Stop: Generalized governance intensity gate implementation and focused fixtures are in place.
+- Next Step: Commit the WI-1683 implementation, open PR, and run PR metadata / gate readback on the PR head.
+- Blockers: state-check is blocked by historical WI-1481 carrier drift in this repository workspace, not by WI-1683 scope. `governance-closeout` surface currently reports closeout suite consumed-locator drift and needs separate classification if it becomes a required gate for this PR.
+- Latest Validation Summary: 2026-06-21T16:33Z local validation passed on branch work/1683-governance-intensity-gate at base head 5e9c9d1494766f7221c846e8835e07e7cc9e47f4: git diff --check; python3 tools/skills_surface.py generate; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/loom.py suite validate --target . --item WI-1683 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1683 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1683 --json. `python3 tools/loom_flow.py state-check --target . --item WI-1683` blocked on stale active WI-1481 workspace binding. `python3 tools/check_cli_contract.py --surface governance-closeout` blocked on closeout suite consumed-locator drift.
+- Recovery Boundary: WI-1683 owns governance intensity gate runtime and fixture behavior. It does not implement `loom ship`, PR backlink safe repair, concise gate output, controlled-merge closeout chaining, or release packaging.
+- Current Lane: milestone-15-governance-intensity-gate
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-21 WI-1481/WI-1488 historical carrier closeout sync.
+- Run Entry: 2026-06-21 WI-1683 milestone #15 governance intensity gate implementation in progress.
 - Logs Entry: local command output retained in current Codex milestone #15 thread.
-- Diagnostics Entry: state-check and review record for WI-1683 were blocked by WI-1481/WI-1488 host-complete carrier drift.
-- Verification Entry: GitHub host readback for #1481/#1659 and #1488/#1669; PR #1701 metadata preflight.
-- Lane Entry: historical-carrier-closeout
+- Diagnostics Entry: generalized governance intensity gate implemented; residual repo carrier drift is recorded in WI-1683 progress.
+- Verification Entry: 2026-06-21T16:33Z focused local validation passed for git diff --check, skills surface generate/check, pr-metadata, controlled-merge, suite validate, suite evidence validate, and suite carrier validate.
+- Lane Entry: milestone-15-governance-intensity-gate
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1481.md
-- Dynamic Truth: .loom/progress/WI-1481.md
+- Static Truth: .loom/work-items/WI-1683.md
+- Dynamic Truth: .loom/progress/WI-1683.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -4743,13 +4743,49 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     if positive_payload.get("result") != "pass" or not positive_payload.get("governance_intensity_carrier"):
         raise AssertionError("governance intensity metadata positive fixture did not pass")
 
+    light_docs_only = target / "light-docs-only.md"
+    light_docs_only.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "light",
+                "change_class": "docs_only",
+                "suite_path": "not_applicable",
+                "suite_not_applicable": {
+                    "rationale": "non-executable documentation clarification does not need formal suite artifacts",
+                    "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                    "recheck_condition": "scope expands beyond documentation text and current carrier evidence",
+                    "scope_proof": "diff is limited to documentation and current Loom carriers",
+                    "review_requirement": "current_head_review_required",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    light_docs_only_payload = governance_metadata_preflight_payload(target, "light-docs-only.md")
+    if light_docs_only_payload.get("result") != "pass":
+        raise AssertionError(f"light docs-only metadata fixture did not pass: {light_docs_only_payload.get('missing_inputs')}")
+
+    light_fixture = target / "light-fixture.md"
+    light_fixture.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "light",
+                "change_class": "fixture",
+                "suite_path": "minimal",
+            }
+        ),
+        encoding="utf-8",
+    )
+    light_fixture_payload = governance_metadata_preflight_payload(target, "light-fixture.md")
+    if light_fixture_payload.get("result") != "pass":
+        raise AssertionError(f"light fixture metadata fixture did not pass: {light_fixture_payload.get('missing_inputs')}")
+
     negative_cases: dict[str, dict[str, Any]] = {
         "missing-intensity.md": {"governance_intensity": "__DELETE__"},
         "unknown-intensity.md": {"governance_intensity": "casual"},
         "light-runtime.md": {"governance_intensity": "light", "change_class": "runtime"},
-        "light-fixture.md": {"governance_intensity": "light", "change_class": "fixture"},
         "light-release-impacting-docs.md": {"governance_intensity": "light", "change_class": "release"},
-        "light-docs-only.md": {"governance_intensity": "light", "change_class": "docs_only", "suite_path": "not_applicable"},
+        "light-contract.md": {"governance_intensity": "light", "change_class": "contract"},
         "light-docs-governance-minimal.md": {
             "governance_intensity": "light",
             "change_class": "docs_governance",
@@ -5090,6 +5126,15 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
     pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
     if pass_payload.get("result") != "pass":
         raise AssertionError(f"docs-governance lite pr-gate fixture blocked: {pass_payload.get('missing_inputs')}")
+    intensity_gate = pass_payload.get("governance_intensity_gate", {})
+    if (
+        intensity_gate.get("result") != "pass"
+        or intensity_gate.get("effective_governance_intensity") != "light"
+        or intensity_gate.get("effective_suite_path") != "not_applicable"
+        or intensity_gate.get("upgrade_reasons") != []
+        or "fact_chain" not in intensity_gate.get("authority_boundary", {}).get("does_not_replace", [])
+    ):
+        raise AssertionError("governance intensity gate did not expose the generalized pass payload")
     lite_gate = pass_payload.get("docs_governance_lite_gate", {})
     if lite_gate.get("result") != "pass":
         raise AssertionError("docs-governance lite pr-gate did not consume the positive gate payload")
