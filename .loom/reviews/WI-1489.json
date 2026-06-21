@@ -1,0 +1,37 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1489",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1489 final milestone/11 closeout evidence is approved for PR gate consumption. The diff is evidence/carrier-only: it adds the final regression Work Item, minimal suite, task carrier, evidence map, current status binding, shadow hash refresh, and milestone final closeout evidence. It does not add runtime behavior, republish v0.17.1, restore repo-local plugin/runtime/skills paths, revive single-skill package distribution, update old installer compatibility, or perform downstream migration.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T04:46:44Z",
+  "reviewed_head": "0e0c0ef94434558b47ab27470fd18021e6df01d7",
+  "reviewed_validation_summary": "2026-06-21T04:32-04:44Z local regression passed for output envelope tests, CLI help, skills surface, release surface, npm package payload after removing validation-generated Python cache, suite validate, suite evidence validate, suite carrier validate, shadow parity, fact-chain, v0.17.1 release readback, git diff check, and aggregate CLI contract (`python3 tools/check_cli_contract.py`, 12/12 surfaces, 614.86s).",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1489.md",
+    "recovery_entry": ".loom/progress/WI-1489.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1489/spec.md",
+    "plan": ".loom/specs/WI-1489/plan.md",
+    "implementation_contract": ".loom/specs/WI-1489/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1489/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1489/task-carrier.md",
+    "final_closeout_evidence": "docs/evidence/milestone-11-final-closeout.md",
+    "release_readiness": "docs/evidence/v0.17.1-release-readiness.md",
+    "single_person_review_boundary": "No non-author GitHub reviewer approval is required for this single-person repository. This authored Loom review record is the approval truth consumed by PR gate for the current PR/head; author oral judgment, GitHub comments, raw runtime evidence, and CI-only success do not satisfy approval without the current-head review binding."
+  },
+  "semantic_review_disposition": {
+    "status": "approved",
+    "reason": "Evidence-only milestone/11 final closeout for already implemented and released context-safe runtime work.",
+    "change_class": "docs_governance",
+    "substitute_validation": "output envelope tests, CLI help, skills surface, release/package surface, npm package payload, suite validate/evidence/carrier, fact-chain, shadow parity, release readback, git diff check, and aggregate CLI contract",
+    "authority": "codex-main-agent",
+    "risk_acceptance": "Bounded to final closeout evidence and carrier convergence; no runtime behavior, package payload, release artifact, or downstream migration scope is introduced.",
+    "one_shot": true
+  }
+}
