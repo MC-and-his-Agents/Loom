@@ -45,6 +45,34 @@ canonical modes are:
 `blocked`. Those values are queue diagnostics; they map to the canonical modes
 above and must not replace the closeout gate mode vocabulary.
 
+### 2.1.1 Closeout Policy Decision
+
+`closeout policy` is the product-facing decision consumed by `loom ship` and
+`controlled-merge --closeout-run`. It chooses the shortest legal closeout path
+after merge; it does not weaken the closeout facts that `closeout check` reads.
+
+Canonical policy decisions:
+
+| policy | Use when | Default action |
+| --- | --- | --- |
+| `inline` | The implementation PR can carry closeout intent and no versioned terminal carrier write is required after merge. | Merge, read back PR / merge commit / target branch / issue / release judgment, then complete closeout in the same ship run. |
+| `host_only` | Host state is the retained evidence boundary for a single light or standard Work Item, and repo carrier terminalization is not required by the repo profile. | Close or confirm the issue, add closeout/readback comment when configured, and retain host evidence without opening a closeout PR. |
+| `batched_carrier_pr` | Versioned terminal carrier or shadow metadata must be written, but the update is low-risk and homogeneous with other completed items. | Queue the carrier update for a grouped carrier-only PR. |
+| `full_closeout_pr` | Release/version, parent/FR/milestone closeout, multi-Work-Item delivery, host/repo conflict, strong profile, security/permission impact, or stale review basis is present. | Create or require an explicit closeout/release PR with full closeout evidence. |
+
+Default mapping by governance intensity:
+
+| intensity | default closeout policy | Upgrade when |
+| --- | --- | --- |
+| `light` | `inline` or `host_only` | terminal carrier write is required, host/repo facts conflict, or a parent/release closeout is in scope |
+| `standard` | `inline` | versioned carrier terminalization is required, multiple terminal updates can be batched, or repo profile requires retained carrier evidence |
+| `reinforced` | `full_closeout_pr` | never downgrade without an explicit repo profile contract and current closeout evidence proving release/host/carrier boundaries do not apply |
+
+The policy output must include `policy`, `reason`, `consumed_locators`,
+`next_action`, and `requires_closeout_pr`. A `requires_closeout_pr=false`
+decision still requires PR merged readback, target branch containment, issue
+state, release/no-release judgment, and closeout evidence consistency.
+
 Closeout-specific PR gate and freeze payloads expose
 `loom-closeout-specific-gate/v1`. Consumers must preserve these fields:
 `verdict`, `closeout_pr_allowed`, `full_review_required`,
