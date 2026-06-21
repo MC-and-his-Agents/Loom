@@ -5610,11 +5610,13 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
 
     if "agent-first project operating layer" not in readme:
         failures.append(Failure(category, "`README.md` must present Loom as an agent-first project operating layer"))
+    if "global `loom` command" not in readme or "Codex user-level plugin" not in readme:
+        failures.append(Failure(category, "`README.md` must describe the global CLI plus Codex user-level plugin install model"))
     if "global `loom` CLI" not in skills_readme or "Codex user plugin" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must describe the global CLI plus Codex user plugin install model"))
-    if "[中文版本](./README.zh-CN.md)" not in readme or "[English version](./README.md)" not in readme_zh:
+    if "[中文版本](./README.zh-CN.md)" not in readme or "[英文版本](./README.md)" not in readme_zh:
         failures.append(Failure(category, "root README language switch links must stay in sync"))
-    if "agent-first project operating layer" not in readme_zh:
+    if "智能体优先的项目运营层" not in readme_zh:
         failures.append(Failure(category, "`README.zh-CN.md` must preserve the Chinese operating-layer positioning"))
     if "unique root entry" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must keep `loom-init` as the unique root entry"))
@@ -5665,10 +5667,17 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
         failures.append(Failure(category, "`skills/README.md` must document downstream plugin embedded skills payload"))
     if plugin_embedded_payload not in skills_readme_zh:
         failures.append(Failure(category, "`skills/README.zh-CN.md` must document downstream plugin embedded skills payload"))
-    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme:
-        failures.append(Failure(category, "`README.md` must document native skills-library installation"))
-    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme_zh:
-        failures.append(Failure(category, "`README.zh-CN.md` must document native skills-library installation"))
+    root_install_commands = (
+        "npm install -g @mc-and-his-agents/loom",
+        "loom host install --host codex --scope user --apply --json",
+        "loom host register --host codex --scope user --apply --json",
+        "loom install --target . --apply --json",
+    )
+    for command in root_install_commands:
+        if command not in readme:
+            failures.append(Failure(category, f"`README.md` must document `{command}`"))
+        if command not in readme_zh:
+            failures.append(Failure(category, f"`README.zh-CN.md` must document `{command}`"))
 
     return failures
 
@@ -18209,10 +18218,10 @@ def check_operating_layer_contract(root: Path) -> list[Failure]:
             "trunk truth",
         ],
         "README.zh-CN.md": [
-            "agent-first project operating layer",
+            "智能体优先的项目运营层",
             "行为证据",
             "测试证据",
-            "主干真相",
+            "主干事实",
         ],
         "VISION.md": [
             "agent-first project operating layer",
