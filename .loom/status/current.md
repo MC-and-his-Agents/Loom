@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1682
-- Goal: Freeze the first hard dependency contracts for milestone #15: governance intensity classification, Work Item/PR binding priority, and closeout policy decisions.
-- Scope: Contract documentation, Loom repo metadata contract, and CLI contract fixtures for issues #1682, #1686, and #1695. No runtime behavior, `loom ship` implementation, controlled-merge chaining, release packaging, or hosted workflow changes.
-- Execution Path: issues #1682/#1686/#1695 -> branch work/1682-intensity-binding-closeout-contracts -> contract and fixture update -> PR -> controlled merge -> issue closeout.
+- Item ID: WI-1481
+- Goal: Close out historical active carriers for WI-1481 and WI-1488 after their host PRs and issues were completed.
+- Scope: Carrier-only terminal closeout sync for `.loom/progress/WI-1481.md` and `.loom/progress/WI-1488.md`. No runtime, documentation, workflow, release, or product behavior changes.
+- Execution Path: historical host readback -> branch work/1481-1488-carrier-closeout -> carrier-only PR -> merge -> active-state unblock for current milestone lanes.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1682.md
-- Review Entry: .loom/reviews/WI-1682.json
-- Validation Entry: git diff --check; python3 -m json.tool .loom/companion/repo-interface.json; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface merge-wrapper; python3 tools/check_cli_contract.py --surface controlled-merge.
-- Closing Condition: PR is merged into main, #1682/#1686/#1695 are closed, and closeout confirms main, PR metadata, issue state, and Loom carriers agree.
+- Recovery Entry: .loom/progress/WI-1481.md
+- Review Entry: not_applicable
+- Validation Entry: git diff --check; GitHub readback for issues #1481/#1488 and PRs #1659/#1669.
+- Closing Condition: PR #1701 is merged into main and WI-1481/WI-1488 no longer appear as active workspace blockers.
 - Current Checkpoint: closed_out
-- Current Stop: PR #1697 was merged into main, issues #1682/#1686/#1695 are closed, and terminal closeout metadata is recorded for WI-1682.
-- Next Step: Merge this closeout-only carrier sync.
+- Current Stop: Historical closeout carriers for WI-1481 and WI-1488 are terminalized in this carrier-only branch.
+- Next Step: Merge PR #1701 after closeout carrier gate and hosted checks pass.
 - Blockers: None
-- Latest Validation Summary: 2026-06-21T15:46Z local validation passed on branch work/1682-intensity-binding-closeout-contracts at head feee1e93cde4faaa6134cfa3a16e82584e4aaf1e: git diff --check; python3 tools/skills_surface.py generate; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/loom.py suite evidence validate --target . --item WI-1682 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1682 --json; CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom_flow.py state-check --target . --item WI-1682; CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1682; CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom.py pr metadata-preflight 1697 --item WI-1682 --branch work/1682-intensity-binding-closeout-contracts --head-sha feee1e93cde4faaa6134cfa3a16e82584e4aaf1e --json. Historical host-complete carriers WI-1482, WI-1487, WI-1633, and WI-1678 are now terminal stale carriers rather than active Work Items.
-- Recovery Boundary: WI-1682 owns the first hard dependency contract batch for #1682/#1686/#1695. It does not implement `loom ship`, change controlled merge runtime behavior, create release artifacts, or close milestone #15.
-- Current Lane: milestone-15-contract-foundation
+- Latest Validation Summary: 2026-06-21 local validation passed: git diff --check; GitHub readback confirmed issue #1481 closed, PR #1659 merged at d1145fbca2fdaae29c325adddf148f7c7fc543cc; issue #1488 closed, PR #1669 merged at 09e8379bcd21c801579e94ad67b18f622090201f; PR metadata preflight for #1701 passed at head 2347915cb00b1def2634829cfa783730bb855af6.
+- Recovery Boundary: This branch only terminalizes historical carriers. It does not change WI-1683 implementation or milestone #15 product behavior.
+- Current Lane: historical-carrier-closeout
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-21 WI-1682 milestone #15 contract foundation in progress.
+- Run Entry: 2026-06-21 WI-1481/WI-1488 historical carrier closeout sync.
 - Logs Entry: local command output retained in current Codex milestone #15 thread.
-- Diagnostics Entry: governance intensity classification, binding priority/safe repair, closeout policy, repo-interface metadata, and contract fixture alignment.
-- Verification Entry: post-merge readback for PR #1697, issues #1682/#1686/#1695, merge commit 72c95fdc658c781a31dea3813750d5187d926813, and `python3 tools/loom_flow.py carrier closeout-sync --target . --item WI-1682 --apply --terminal-state closed_out --issue 1682,1686,1695 --pr 1697 --merge-commit 72c95fdc658c781a31dea3813750d5187d926813 --target-branch main --closed-at 2026-06-21T16:02:49Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/pull/1697`.
-- Lane Entry: milestone-15-contract-foundation
+- Diagnostics Entry: state-check and review record for WI-1683 were blocked by WI-1481/WI-1488 host-complete carrier drift.
+- Verification Entry: GitHub host readback for #1481/#1659 and #1488/#1669; PR #1701 metadata preflight.
+- Lane Entry: historical-carrier-closeout
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1682.md
-- Dynamic Truth: .loom/progress/WI-1682.md
+- Static Truth: .loom/work-items/WI-1481.md
+- Dynamic Truth: .loom/progress/WI-1481.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
