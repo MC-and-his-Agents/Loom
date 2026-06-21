@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1684.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate.
 - Closing Condition: PR is merged into main, issue #1684 is closed, and closeout confirms main, PR metadata, issue state, and Loom carriers agree.
-- Current Checkpoint: build
-- Current Stop: Focused implementation and local validation are complete; PR/review/gate remain pending.
-- Next Step: Commit, push, open PR, record current-head review, run PR gate and hosted checks.
+- Current Checkpoint: merge
+- Current Stop: Implementation, spec review, and code review carriers are recorded; PR creation and PR gate remain pending.
+- Next Step: Push branch, open PR, render PR metadata, run PR gate and hosted checks.
 - Blockers: None
 - Latest Validation Summary: 2026-06-22 local validation passed on branch work/1684-intensity-upgrade-fixtures: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate.
 - Recovery Boundary: WI-1684 owns high-risk change-class vocabulary and targeted abuse fixtures. It does not implement `loom ship`, PR backlink repair, closeout policy, host writes, or release packaging.
