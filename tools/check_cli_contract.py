@@ -4585,6 +4585,8 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
                 "closeout",
                 "--item",
                 "WI-1541",
+                "--issue",
+                "1687",
                 "--head-sha",
                 "1" * 40,
                 "--branch",
@@ -4619,6 +4621,7 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
         expected_pairs = {
             "--surface": "closeout",
             "--item": "WI-1541",
+            "--issue": "1687",
             "--head-sha": "1" * 40,
             "--branch": "work/1541-pr-metadata-update-v2",
             "--output-file": ".loom/runtime/pr/rendered.md",
@@ -4683,6 +4686,8 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
             "closeout",
             "--item",
             "WI-1541",
+            "--issue",
+            "1541",
             "--head-sha",
             head_sha,
             "--branch",
@@ -4698,6 +4703,9 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     rendered = target / ".loom" / "runtime" / "pr" / "rendered.md"
     if not rendered.exists():
         raise AssertionError("render did not write the repo-relative body artifact")
+    rendered_body = rendered.read_text(encoding="utf-8")
+    if "- Issue: #1541" not in rendered_body or "- Loom Work Item: WI-1541" not in rendered_body:
+        raise AssertionError("render did not normalize human PR binding line spacing")
 
     _, readback_payload = run_flow_json(
         [
@@ -4709,6 +4717,8 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
             "closeout",
             "--item",
             "WI-1541",
+            "--issue",
+            "1541",
             "--head-sha",
             head_sha,
             "--branch",
@@ -4733,6 +4743,8 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
             "closeout",
             "--item",
             "WI-1541",
+            "--issue",
+            "1541",
             "--head-sha",
             head_sha,
             "--branch",
@@ -4768,6 +4780,61 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     positive_payload = governance_metadata_preflight_payload(target, "positive.md")
     if positive_payload.get("result") != "pass" or not positive_payload.get("governance_intensity_carrier"):
         raise AssertionError("governance intensity metadata positive fixture did not pass")
+
+    missing_issue_backlink = target / "missing-issue-backlink.md"
+    missing_issue_backlink.write_text(governance_metadata_body(), encoding="utf-8")
+    pr_payload = target / "missing-issue-pr.json"
+    pr_payload.write_text(
+        json.dumps(
+            {
+                "number": 2001,
+                "state": "OPEN",
+                "title": "Fixture PR",
+                "body": missing_issue_backlink.read_text(encoding="utf-8"),
+                "isDraft": False,
+                "headRefName": "work/1321-governance-intensity-metadata-carrier",
+                "headRefOid": "1111111111111111111111111111111111111111",
+                "baseRefName": "main",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, missing_issue_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            "missing-issue-backlink.md",
+            "--pr-payload-file",
+            "missing-issue-pr.json",
+            "--issue",
+            "1687",
+        ],
+        expect=1,
+    )
+    repair_action = next(
+        (
+            action
+            for action in missing_issue_payload.get("safe_repair_actions", [])
+            if isinstance(action, dict) and action.get("kind") == "missing_human_backlink"
+        ),
+        None,
+    )
+    if (
+        missing_issue_payload.get("result") != "block"
+        or "PR body is missing Issue backlink: #1687" not in missing_issue_payload.get("missing_inputs", [])
+        or not isinstance(repair_action, dict)
+        or repair_action.get("action") != "update_pr_body_issue_backlink"
+        or repair_action.get("body_line") != "- Issue: #1687"
+        or "--issue 1687" not in str(repair_action.get("next_command"))
+    ):
+        raise AssertionError("missing Issue backlink did not expose a safe PR body repair action")
 
     light_docs_only = target / "light-docs-only.md"
     light_docs_only.write_text(
