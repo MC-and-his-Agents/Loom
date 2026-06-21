@@ -974,7 +974,7 @@ def release_readback_payload(
         schema=RELEASE_READBACK_SCHEMA,
         summary=summary,
         target=str(target),
-        mutates=False,
+        mutates=any(bool(step.get("mutates")) for step in steps),
         host_mutations=False,
         carrier_mutations=False,
         release_judgment=release_judgment,
@@ -4098,6 +4098,110 @@ def first_ship_blocker(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
+def payload_pr_string(payload: dict[str, Any], field: str) -> str | None:
+    pr = payload.get("pr")
+    if isinstance(pr, dict) and pr.get(field) is not None:
+        return str(pr[field])
+    return None
+
+
+def ship_closeout_target_branch(args: argparse.Namespace, merge_payload: dict[str, Any]) -> str | None:
+    return payload_pr_string(merge_payload, "baseRefName") or args.target_branch
+
+
+def ship_apply_admission_block(
+    *,
+    command: str,
+    target: Path,
+    args: argparse.Namespace,
+    steps: list[dict[str, Any]],
+    closeout_policy: dict[str, Any],
+    summary: str,
+    missing_inputs: list[str],
+    fallback_to: list[str],
+) -> int:
+    payload = output(
+        command,
+        "block",
+        schema_version="loom-ship/v1",
+        summary=summary,
+        mutates=False,
+        dry_run=False,
+        apply=True,
+        target=str(target),
+        item={"id": args.item},
+        issue={"number": args.issue},
+        pr={"number": args.pr},
+        intensity=args.intensity,
+        effective_intensity=closeout_policy.get("governance_intensity"),
+        merge_method=args.merge_method,
+        closeout_policy=closeout_policy,
+        steps=steps,
+        first_blocker=steps[-1] if steps else None,
+        missing_inputs=missing_inputs,
+        fallback_to=fallback_to,
+        next_action=fallback_to[0] if fallback_to else "resolve ship apply admission blocker",
+    )
+    return emit(agent_safe_payload(payload, full_output=args.full_output))
+
+
+def ship_metadata_update_args(args: argparse.Namespace, target: Path) -> list[str] | None:
+    if args.issue is None or not args.branch or not args.head_sha:
+        return None
+    flow_args = [
+        "pr-metadata",
+        "update",
+        "--target",
+        str(target),
+        "--surface",
+        "merge_ready",
+        "--pr",
+        str(args.pr),
+        "--item",
+        args.item,
+        "--issue",
+        str(args.issue),
+        "--branch",
+        args.branch,
+        "--head-sha",
+        args.head_sha,
+        "--apply",
+    ]
+    if args.intensity != "auto":
+        flow_args.extend(["--governance-intensity", args.intensity])
+    return flow_args
+
+
+def ship_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argparse.Namespace:
+    return argparse.Namespace(
+        item=args.item,
+        issue=args.issue,
+        pr=str(args.pr),
+        pr_role=args.pr_role,
+        implementation_pr=args.implementation_pr,
+        release_pr=args.release_pr,
+        carrier_sync_pr=args.carrier_sync_pr,
+        final_closeout_pr=args.final_closeout_pr,
+        project=args.project,
+        phase=args.phase,
+        fr=args.fr,
+        branch=branch,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        comment=args.comment,
+        comment_file=args.comment_file,
+        goal_completion=args.goal_completion,
+        gate_profile=args.gate_profile,
+        issue_payload_file=args.issue_payload_file,
+        pr_payload_file=args.pr_payload_file,
+        project_payload_file=args.project_payload_file,
+        status_checks_file=args.status_checks_file,
+        branch_protection_file=args.branch_protection_file,
+        ruleset_file=args.ruleset_file,
+        skip_gate=args.skip_gate,
+    )
+
+
 def handle_ship(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom ship")
     parser.add_argument("--target", default=".")
@@ -4105,34 +4209,66 @@ def handle_ship(argv: list[str]) -> int:
     parser.add_argument("--issue", type=int)
     parser.add_argument("--pr", type=int, required=True)
     parser.add_argument("--branch")
+    parser.add_argument("--target-branch")
     parser.add_argument("--head-sha")
     parser.add_argument("--intensity", choices=("auto", "light", "standard", "reinforced"), default="auto")
     parser.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="squash")
+    parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, default="implementation_pr")
+    parser.add_argument("--implementation-pr", type=int)
+    parser.add_argument("--release-pr", type=int)
+    parser.add_argument("--carrier-sync-pr", type=int)
+    parser.add_argument("--final-closeout-pr", type=int)
+    parser.add_argument("--project")
+    parser.add_argument("--phase")
+    parser.add_argument("--fr")
+    parser.add_argument("--owner")
+    parser.add_argument("--repo", dest="repo_name")
+    parser.add_argument("--comment")
+    parser.add_argument("--comment-file")
+    parser.add_argument("--goal-completion")
+    parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"))
+    parser.add_argument("--issue-payload-file")
+    parser.add_argument("--project-payload-file")
     parser.add_argument("--pr-payload-file")
     parser.add_argument("--status-checks-file")
     parser.add_argument("--branch-protection-file")
     parser.add_argument("--ruleset-file")
+    parser.add_argument("--skip-gate", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     command = "ship"
     target = resolve_target(args.target)
-    if args.apply:
-        return emit(
-            output(
-                command,
-                "block",
-                schema_version="loom-ship/v1",
-                summary="ship --apply is reserved for the apply Work Item; this command only performs dry-run planning.",
-                mutates=False,
-                dry_run=True,
-                missing_inputs=["ship --apply is not implemented in this Work Item"],
-                fallback_to=["loom ship --item <id> --pr <n> --intensity auto --json", "issue #1691"],
-            )
-        )
 
     common = ["--target", str(target)]
+    steps: list[dict[str, Any]] = []
+    if args.apply:
+        repair_args = ship_metadata_update_args(args, target)
+        if repair_args is None:
+            steps.append(
+                ship_step(
+                    "safe-metadata-repair",
+                    {"result": "skipped", "summary": "safe metadata repair requires explicit --issue, --branch, and --head-sha."},
+                    skipped_reason="not enough explicit binding inputs for safe PR metadata repair",
+                )
+            )
+        else:
+            repair = flow_payload(command, repair_args, fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --head-sha <sha> --apply --json"])
+            steps.append(ship_step("safe-metadata-repair", repair, mutates=True))
+            if repair.get("result") != "pass":
+                closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
+                return ship_apply_admission_block(
+                    command=command,
+                    target=target,
+                    args=args,
+                    steps=steps,
+                    closeout_policy=closeout_policy,
+                    summary="ship --apply stopped before merge because safe PR metadata repair did not pass.",
+                    missing_inputs=[str(value) for value in repair.get("missing_inputs", [])],
+                    fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --head-sha <sha> --apply --json"],
+                )
+
     metadata_args = ["pr-metadata", "preflight", *common, "--surface", "merge_ready", "--pr", str(args.pr), "--item", args.item]
     if args.issue is not None:
         metadata_args.extend(["--issue", str(args.issue)])
@@ -4166,20 +4302,180 @@ def handle_ship(argv: list[str]) -> int:
 
     fields = governance_metadata_fields(metadata)
     closeout_policy = ship_closeout_policy(fields, intensity_override=args.intensity)
-    steps = [
+    steps.extend([
         ship_step("pr-metadata-preflight", metadata),
         ship_step("pr-gate", pr_gate),
         ship_step("controlled-merge-check", merge_check),
         ship_step("closeout-policy", closeout_policy),
-        ship_step(
-            "post-merge-closeout",
-            {"result": "skipped", "summary": "dry-run does not mutate host or repo state."},
-            skipped_reason="planned after merge/apply; no closeout PR is created by dry-run",
-        ),
-    ]
+    ])
+    if not args.apply:
+        steps.append(
+            ship_step(
+                "post-merge-closeout",
+                {"result": "skipped", "summary": "dry-run does not mutate host or repo state."},
+                skipped_reason="planned after merge/apply; no closeout PR is created by dry-run",
+            )
+        )
     blocker = first_ship_blocker(steps)
     result = "pass" if blocker is None else "block"
     next_action = closeout_policy["next_action"] if blocker is None else (blocker.get("fallback_to") or f"resolve `{blocker.get('name')}`")
+    if args.apply and blocker is not None:
+        return emit(
+            agent_safe_payload(
+                output(
+                    command,
+                    "block",
+                    schema_version="loom-ship/v1",
+                    summary="ship --apply stopped before merge at the first blocking delivery step.",
+                    mutates=any(bool(step.get("mutates")) for step in steps),
+                    dry_run=False,
+                    apply=True,
+                    target=str(target),
+                    item={"id": args.item},
+                    issue={"number": args.issue},
+                    pr={"number": args.pr},
+                    intensity=args.intensity,
+                    effective_intensity=closeout_policy.get("governance_intensity"),
+                    merge_method=args.merge_method,
+                    closeout_policy=closeout_policy,
+                    steps=steps,
+                    first_blocker=blocker,
+                    missing_inputs=blocker.get("missing_inputs", []),
+                    fallback_to=next_action,
+                    next_action=next_action,
+                ),
+                full_output=args.full_output,
+            )
+        )
+    if args.apply and args.issue is None:
+        steps.append(ship_step("ship-apply-admission", {"result": "block", "summary": "ship --apply requires --issue for host closeout."}))
+        return ship_apply_admission_block(
+            command=command,
+            target=target,
+            args=args,
+            steps=steps,
+            closeout_policy=closeout_policy,
+            summary="ship --apply stopped before merge because issue closeout cannot be addressed.",
+            missing_inputs=["--issue is required for ship --apply"],
+            fallback_to=["loom ship --item <id> --issue <n> --pr <n> --apply --json"],
+        )
+    if args.apply and closeout_policy.get("policy") not in {"inline", "host_only"}:
+        policy = str(closeout_policy.get("policy"))
+        steps.append(ship_step("ship-apply-admission", {"result": "block", "summary": f"closeout policy `{policy}` requires an explicit closeout path before ship --apply can merge."}))
+        return ship_apply_admission_block(
+            command=command,
+            target=target,
+            args=args,
+            steps=steps,
+            closeout_policy=closeout_policy,
+            summary="ship --apply stopped before merge because this item requires a non-default closeout path.",
+            missing_inputs=[f"closeout policy `{policy}` is not eligible for default host-only closeout"],
+            fallback_to=["loom closeout queue status --item <id> --issue <n> --pr <n> --json", "use explicit full closeout PR path when policy requires it"],
+        )
+    closeout_branch = ship_closeout_target_branch(args, merge_check)
+    if args.apply and not closeout_branch:
+        steps.append(ship_step("ship-apply-admission", {"result": "block", "summary": "ship --apply could not infer target branch for closeout readback."}))
+        return ship_apply_admission_block(
+            command=command,
+            target=target,
+            args=args,
+            steps=steps,
+            closeout_policy=closeout_policy,
+            summary="ship --apply stopped before merge because target branch is unknown.",
+            missing_inputs=["target branch is required for post-merge closeout"],
+            fallback_to=["rerun with --target-branch <base-branch>"],
+        )
+    if args.apply:
+        merge_apply_args = ["controlled-merge", "merge", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method, "--execute"]
+        if args.head_sha:
+            merge_apply_args.extend(["--head-sha", args.head_sha])
+        for flag, value in (
+            ("--pr-payload-file", args.pr_payload_file),
+            ("--status-checks-file", args.status_checks_file),
+            ("--branch-protection-file", args.branch_protection_file),
+            ("--ruleset-file", args.ruleset_file),
+        ):
+            if value:
+                merge_apply_args.extend([flag, value])
+        merge_apply = flow_payload(command, merge_apply_args, fallback_to=["loom merge check <pr> --work-item <id> --json"])
+        steps.append(ship_step("controlled-merge-apply", merge_apply, mutates=True))
+        if merge_apply.get("result") != "pass":
+            blocker = steps[-1]
+            return emit(
+                agent_safe_payload(
+                    output(
+                        command,
+                        "block",
+                        schema_version="loom-ship/v1",
+                        summary="ship --apply stopped because controlled merge did not pass.",
+                        mutates=True,
+                        dry_run=False,
+                        apply=True,
+                        target=str(target),
+                        item={"id": args.item},
+                        issue={"number": args.issue},
+                        pr={"number": args.pr},
+                        intensity=args.intensity,
+                        effective_intensity=closeout_policy.get("governance_intensity"),
+                        merge_method=args.merge_method,
+                        closeout_policy=closeout_policy,
+                        steps=steps,
+                        first_blocker=blocker,
+                        missing_inputs=blocker.get("missing_inputs", []),
+                        fallback_to=blocker.get("fallback_to"),
+                        next_action=blocker.get("fallback_to") or "resolve controlled merge blocker",
+                    ),
+                    full_output=args.full_output,
+                )
+            )
+
+        closeout_branch = ship_closeout_target_branch(args, merge_apply) or closeout_branch
+        closeout_args = ship_closeout_namespace(args, branch=closeout_branch)
+        reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
+        add_closeout_host_args(reconciliation_args, closeout_args, include_comment=True)
+        reconciliation_args.append("--apply")
+        reconciliation = flow_payload(command, reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout --target <repo> --json"])
+        steps.append(ship_step("host-reconciliation-sync", reconciliation, mutates=True))
+        if reconciliation.get("result") == "pass":
+            final_closeout_args = ["closeout", "check", "--target", str(target)]
+            add_closeout_check_args(final_closeout_args, closeout_args)
+            final_closeout = flow_payload(command, final_closeout_args, fallback_to=["loom closeout --target <repo> --json", "manual-reconciliation"])
+            steps.append(ship_step("host-closeout-check", final_closeout, mutates=False))
+
+        blocker = first_ship_blocker(steps)
+        ship_result = "pass" if blocker is None else "block"
+        ship_summary = "ship --apply completed controlled merge and host closeout without creating a closeout PR." if ship_result == "pass" else "ship --apply merged only if controlled merge passed, then stopped at the first closeout blocker."
+        return emit(
+            agent_safe_payload(
+                output(
+                    command,
+                    ship_result,
+                    schema_version="loom-ship/v1",
+                    summary=ship_summary,
+                    mutates=True,
+                    dry_run=False,
+                    apply=True,
+                    target=str(target),
+                    item={"id": args.item},
+                    issue={"number": args.issue},
+                    pr={"number": args.pr},
+                    intensity=args.intensity,
+                    effective_intensity=closeout_policy.get("governance_intensity"),
+                    merge_method=args.merge_method,
+                    closeout_policy=closeout_policy,
+                    closeout_mode="host_only",
+                    creates_closeout_pr=False,
+                    target_branch=closeout_branch,
+                    steps=steps,
+                    first_blocker=blocker,
+                    missing_inputs=blocker.get("missing_inputs", []) if blocker else [],
+                    fallback_to=(blocker.get("fallback_to") if blocker else None),
+                    next_action=(blocker.get("fallback_to") if blocker else "ship --apply completed; read back PR, issue, and target branch state."),
+                ),
+                full_output=args.full_output,
+            )
+        )
+
     payload = output(
         command,
         result,

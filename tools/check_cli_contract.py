@@ -493,10 +493,178 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         if not any(step.get("name") == "post-merge-closeout" and step.get("result") == "skipped" for step in emitted.get("steps", [])):
             raise AssertionError("ship dry-run must plan post-merge closeout without executing it")
 
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+
+
+def assert_ship_apply_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship apply wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def passing_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] == ["pr-metadata", "update"]:
+            if "--apply" not in flow_args:
+                raise AssertionError("ship --apply safe metadata repair must apply PR metadata update")
+            return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "light",
+                            "change_class": "docs_governance",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+        if flow_args[:2] == ["controlled-merge", "merge"]:
+            if "--execute" not in flow_args:
+                raise AssertionError("ship --apply must execute controlled merge with --execute")
+            if "--apply" in flow_args:
+                raise AssertionError("ship --apply must not pass --apply to controlled merge runtime")
+            return {
+                "command": "controlled-merge",
+                "result": "pass",
+                "summary": "merged",
+                "pr": {
+                    "number": 1706,
+                    "state": "MERGED",
+                    "baseRefName": "main",
+                    "mergeCommit": {"oid": "fixture-merge-sha"},
+                },
+            }
+        if flow_args[:2] == ["reconciliation", "sync"]:
+            if "--apply" not in flow_args:
+                raise AssertionError("ship --apply must apply host reconciliation after merge")
+            return {"command": "reconciliation", "result": "pass", "summary": "issue closed"}
+        if flow_args[:2] == ["closeout", "check"]:
+            return {
+                "command": "closeout",
+                "result": "pass",
+                "summary": "closeout pass",
+                "issue": {"number": 1691, "state": "CLOSED"},
+                "pr": {"number": 1706, "state": "MERGED", "baseRefName": "main", "mergeCommit": {"oid": "fixture-merge-sha"}},
+            }
+        raise AssertionError(f"ship apply delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    module.flow_payload = passing_flow_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1691",
+                "--issue",
+                "1691",
+                "--pr",
+                "1706",
+                "--branch",
+                "work/1691-ship-apply",
+                "--head-sha",
+                "b" * 40,
+                "--merge-method",
+                "squash",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("ship --apply wrapper did not emit a passing apply result")
+        if emitted.get("schema_version") != "loom-ship/v1" or emitted.get("mutates") is not True or emitted.get("dry_run") is not False:
+            raise AssertionError("ship --apply must emit mutating loom-ship/v1 apply payload")
+        if emitted.get("creates_closeout_pr") is not False or emitted.get("closeout_mode") != "host_only":
+            raise AssertionError("ship --apply must default to host-only closeout without creating a closeout PR")
+        expected_prefixes = [
+            ["pr-metadata", "update"],
+            ["pr-metadata", "preflight"],
+            ["pr-gate", "check"],
+            ["controlled-merge", "check"],
+            ["controlled-merge", "merge"],
+            ["reconciliation", "sync"],
+            ["closeout", "check"],
+        ]
+        if [call[:2] for call in calls] != expected_prefixes:
+            raise AssertionError(f"ship --apply delegated unexpected sequence: {[call[:2] for call in calls]}")
+        merge_call = calls[4]
+        if "--merge-method" not in merge_call or merge_call[merge_call.index("--merge-method") + 1] != "squash":
+            raise AssertionError("ship --apply did not preserve merge method")
+        reconciliation_call = calls[5]
+        for flag, expected in {"--item": "WI-1691", "--issue": "1691", "--pr": "1706", "--branch": "main"}.items():
+            if flag not in reconciliation_call or reconciliation_call[reconciliation_call.index(flag) + 1] != expected:
+                raise AssertionError(f"ship --apply did not preserve {flag} for host closeout")
+
+        def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "governance_intensity_carrier": {
+                        "envelope": {
+                            "fields": {
+                                "governance_intensity": "light",
+                                "change_class": "docs_governance",
+                                "release_judgment": "no_release",
+                                "upgrade_triggers": [],
+                            }
+                        }
+                    },
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "block", "summary": "review missing", "missing_inputs": ["review record missing"]}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            raise AssertionError(f"ship --apply should stop before mutating merge or closeout after PR gate block: {flow_args}")
+
+        module.flow_payload = blocking_flow_payload
         calls.clear()
-        status = module.handle_ship(["--item", "WI-1690", "--pr", "1704", "--apply", "--json"])
-        if status == 0 or calls:
-            raise AssertionError("ship --apply must fail closed in the dry-run Work Item without delegated writes")
+        emitted.clear()
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1691",
+                "--issue",
+                "1691",
+                "--pr",
+                "1706",
+                "--branch",
+                "work/1691-ship-apply",
+                "--head-sha",
+                "b" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("ship --apply gate blocker must emit block")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("ship --apply must not merge after a gate blocker")
     finally:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
@@ -8095,6 +8263,7 @@ def run_merge_wrapper_surface() -> None:
 
 def run_ship_wrapper_surface() -> None:
     assert_ship_dry_run_wrapper_contract()
+    assert_ship_apply_wrapper_contract()
     print("ship wrapper surface checks passed")
 
 
