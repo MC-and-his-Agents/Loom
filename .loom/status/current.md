@@ -11,10 +11,10 @@
 - Review Entry: .loom/reviews/WI-1678.json
 - Validation Entry: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; PR gate; hosted checks
 - Closing Condition: PR #1679 is merged into main, README changes are on main, and issue #1678 is closed with validation evidence.
-- Current Checkpoint: review
-- Current Stop: README product positioning, install prompt, suite path decision, and Loom carrier updates are committed at caa88d7ba5c7010f992750335edacb9121225a1b after local validation.
-- Next Step: Record authored review for current head, update PR body head SHA, rerun PR gate and hosted checks, then controlled merge.
-- Blockers: Awaiting authored review, PR body head refresh, PR gate, hosted checks, and controlled merge readback.
+- Current Checkpoint: merge_ready
+- Current Stop: README product positioning, install prompt, suite path decision, and Loom carrier updates have local validation and authored review evidence; PR #1679 is ready for PR gate and hosted checks.
+- Next Step: Run PR gate and hosted checks, then controlled merge and closeout.
+- Blockers: Awaiting PR gate, hosted checks, controlled merge readback, and issue closeout.
 - Latest Validation Summary: 2026-06-21T12:10Z local validation passed for WI-1678 head caa88d7ba5c7010f992750335edacb9121225a1b: git diff --check; npm --prefix packages/loom-installer run check:docs; python3 tools/check_release_surface.py --surface release-doc-contract; python3 tools/loom_flow.py fact-chain --target . --item WI-1678.
 - Recovery Boundary: WI-1678 owns README.md, README.zh-CN.md, PR #1679 metadata, and Loom carrier metadata for this documentation-only iteration. It does not modify runtime behavior, installer implementation, package release surfaces, install command behavior, or legacy migration contracts.
 - Current Lane: readme-product-positioning
