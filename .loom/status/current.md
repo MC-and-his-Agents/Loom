@@ -15,7 +15,7 @@
 - Current Stop: Historical closeout carriers for WI-1481 and WI-1488 are terminalized in this carrier-only branch.
 - Next Step: Merge PR #1701 after closeout carrier gate and hosted checks pass.
 - Blockers: None
-- Latest Validation Summary: 2026-06-21 local validation passed: git diff --check; GitHub readback confirmed issue #1481 closed, PR #1659 merged at d1145fbca2fdaae29c325adddf148f7c7fc543cc; issue #1488 closed, PR #1669 merged at 09e8379bcd21c801579e94ad67b18f622090201f; PR metadata preflight for #1701 passed at head 2347915cb00b1def2634829cfa783730bb855af6.
+- Latest Validation Summary: 2026-06-21 local validation passed for `git diff --check`; GitHub readback confirmed issue #1481 closed and PR #1659 merged at d1145fbca2fdaae29c325adddf148f7c7fc543cc; issue #1488 closed and PR #1669 merged at 09e8379bcd21c801579e94ad67b18f622090201f; PR #1701 metadata preflight passed at head 06fa4abc88deb4d512c32ba389ce1477d53caf67.
 - Recovery Boundary: This branch only terminalizes historical carriers. It does not change WI-1683 implementation or milestone #15 product behavior.
 - Current Lane: historical-carrier-closeout
 
