@@ -1,0 +1,27 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1489",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1489 minimal suite is coherent and scoped to milestone/11 final regression and closeout evidence only. The spec, plan, implementation contract, evidence map, and task carrier preserve the v0.17.0+ support boundary: global loom CLI plus Codex user-level plugin, metadata-only host repository adoption/work fact carriers, no repo-local runtime/plugin/skills install path, no single-skill package distribution, no old installer compatibility path, and no downstream repository migration.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T04:58:00Z",
+  "reviewed_head": "aabb7bdc1c22c7626d565414bdaf0212cd42d915",
+  "reviewed_validation_summary": "2026-06-21T04:32-04:44Z local regression passed for output envelope tests, CLI help, skills surface, release surface, npm package payload after removing validation-generated Python cache, suite validate, suite evidence validate, suite carrier validate, shadow parity, fact-chain, v0.17.1 release readback, git diff check, and aggregate CLI contract (`python3 tools/check_cli_contract.py`, 12/12 surfaces, 614.86s). PR metadata, hosted checks, current-head review record consumption, and PR gate remain pending before merge.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1489.md",
+    "recovery_entry": ".loom/progress/WI-1489.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1489/spec.md",
+    "plan": ".loom/specs/WI-1489/plan.md",
+    "implementation_contract": ".loom/specs/WI-1489/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1489/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1489/task-carrier.md",
+    "final_closeout_evidence": "docs/evidence/milestone-11-final-closeout.md",
+    "release_readiness": "docs/evidence/v0.17.1-release-readiness.md"
+  }
+}
