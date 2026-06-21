@@ -269,10 +269,23 @@ PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES = {
     "fields.release_judgment": sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES),
     "fields.suite_not_applicable.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
 }
-GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "fixture", "release", "external_action", "mixed"}
-GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS = "docs_governance"
+GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "release", "external_action", "mixed"}
+GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES = {"docs_only", "docs_governance", "fixture"}
+GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES = {"docs_only", "docs_governance"}
+GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES = {"fixture"}
+GOVERNANCE_DOCS_LITE_CHANGE_CLASS = "docs_governance"
 GOVERNANCE_LITE_ALLOWED_SUITE_PATH = "not_applicable"
 GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT = "no_release"
+GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES = [
+    "fact_chain",
+    "current_head_review",
+    "pr_metadata_readback",
+    "hosted_checks",
+    "pr_gate",
+    "release_judgment",
+    "controlled_merge",
+    "post_merge_closeout",
+]
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -7371,74 +7384,141 @@ def governance_metadata_fields_from_preflight(pr_metadata_preflight: dict[str, A
     return fields if isinstance(fields, dict) else {}
 
 
-def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+def governance_intensity_authority_boundary() -> dict[str, Any]:
+    return {
+        "role": "classification_and_formal_suite_boundary",
+        "does_not_replace": list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES),
+    }
+
+
+def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
     fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
     missing_inputs: list[str] = []
+    upgrade_reasons: list[str] = []
     marker_present, suite_values = suite_path_decision_presence(context)
+    authority_boundary = governance_intensity_authority_boundary()
 
     if not fields:
         return {
-            "schema_version": "loom-docs-governance-lite-gate/v1",
+            "schema_version": "loom-governance-intensity-gate/v1",
             "result": "not_applicable",
-            "summary": "docs-governance lite gate is not applicable because no governance intensity metadata carrier was declared for this PR.",
+            "summary": "governance intensity gate is not applicable because no governance intensity metadata carrier was declared for this PR.",
             "missing_inputs": [],
             "fallback_to": None,
             "metadata_fields": {},
+            "declared_governance_intensity": None,
+            "effective_governance_intensity": None,
+            "effective_suite_path": None,
+            "upgrade_reasons": [],
+            "non_skippable_gates": list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES),
+            "consumed_locators": {
+                "metadata_carrier": False,
+                "suite_path_decision": marker_present,
+            },
             "suite_path_decision": {
                 "marker_present": marker_present,
                 "values": sorted(suite_values),
             },
-            "authority_boundary": {
-                "role": "formal_suite_bypass_only",
-                "does_not_replace": [
-                    "fact_chain",
-                    "current_head_review",
-                    "pr_metadata_readback",
-                    "hosted_checks",
-                    "pr_gate",
-                    "release_judgment",
-                    "controlled_merge",
-                    "post_merge_closeout",
-                ],
-            },
+            "authority_boundary": authority_boundary,
         }
+
+    declared_intensity = fields.get("governance_intensity")
+    change_class = fields.get("change_class")
+    suite_path = fields.get("suite_path")
+
     if fields.get("governance_intensity") == "light":
-        if fields.get("change_class") != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
-            missing_inputs.append("docs-governance lite requires change_class docs_governance")
-        if fields.get("suite_path") != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
-            missing_inputs.append("docs-governance lite requires suite_path not_applicable")
+        if change_class in GOVERNANCE_HIGH_RISK_CHANGE_CLASSES:
+            upgrade_reasons.append(f"change_class_requires_upgrade:{change_class}")
+            missing_inputs.append(f"light governance requires standard or reinforced intensity for change_class {change_class}")
+        elif change_class not in GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES:
+            upgrade_reasons.append(f"change_class_not_light_eligible:{change_class}")
+            missing_inputs.append(f"light governance does not support change_class {change_class}")
+
+        if change_class in GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES:
+            if suite_path != "not_applicable":
+                missing_inputs.append(f"light governance requires suite_path not_applicable for change_class {change_class}")
+        elif change_class in GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES:
+            if suite_path != "minimal":
+                missing_inputs.append(f"light governance requires suite_path minimal for change_class {change_class}")
+
         if fields.get("review_requirement") != "current_head_review_required":
-            missing_inputs.append("docs-governance lite requires current-head review")
+            missing_inputs.append("light governance requires current-head review")
         if fields.get("release_judgment") != GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT:
-            missing_inputs.append("docs-governance lite requires no_release judgment")
+            missing_inputs.append("light governance requires no_release judgment")
         for required_bool in ("fact_chain_required", "pr_gate_required", "closeout_required"):
             if fields.get(required_bool) is not True:
-                missing_inputs.append(f"docs-governance lite requires {required_bool}")
+                missing_inputs.append(f"light governance requires {required_bool}")
     if fields.get("suite_path") == "not_applicable":
         if not marker_present:
             missing_inputs.append("repo suite path decision is missing")
         elif suite_values != {"not_applicable"}:
             missing_inputs.append("repo suite path decision does not match metadata suite_path not_applicable")
-    if (
-        fields.get("governance_intensity") == "light"
-        and fields.get("change_class") == GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS
-        and fields.get("suite_path") == GOVERNANCE_LITE_ALLOWED_SUITE_PATH
-        and marker_present
-        and suite_values == {"not_applicable"}
-    ):
-        result = "pass" if not missing_inputs else "block"
+
+    if missing_inputs:
+        result = "block"
+        summary = "governance intensity metadata or suite decision is incomplete, mismatched, or requires an intensity upgrade."
+    elif declared_intensity in GOVERNANCE_INTENSITY_VALUES:
+        result = "pass"
         summary = (
-            "docs-governance lite metadata and suite not_applicable decision are aligned; non-suite gates remain required."
-            if result == "pass"
-            else "docs-governance lite metadata or suite decision is incomplete or mismatched."
+            "governance intensity metadata and suite decision are aligned; non-skippable gates remain required."
         )
     else:
-        result = "not_applicable" if not missing_inputs else "block"
-        summary = (
-            "docs-governance lite gate is not applicable for this governance metadata."
-            if result == "not_applicable"
-            else "governance metadata and suite decision are incomplete or mismatched."
-        )
+        result = "not_applicable"
+        summary = "governance intensity gate is not applicable for this governance metadata."
+
+    effective_intensity = declared_intensity
+    if declared_intensity == "light" and upgrade_reasons:
+        effective_intensity = "standard"
+
+    return {
+        "schema_version": "loom-governance-intensity-gate/v1",
+        "result": result,
+        "summary": summary,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": None if result in {"pass", "not_applicable"} else "update_pr_body",
+        "metadata_fields": fields,
+        "declared_governance_intensity": declared_intensity,
+        "effective_governance_intensity": effective_intensity,
+        "effective_suite_path": suite_path if suite_path in GOVERNANCE_SUITE_PATH_VALUES else None,
+        "upgrade_reasons": dedupe_strings(upgrade_reasons),
+        "non_skippable_gates": list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES),
+        "consumed_locators": {
+            "metadata_carrier": True,
+            "suite_path_decision": marker_present,
+        },
+        "suite_path_decision": {
+            "marker_present": marker_present,
+            "values": sorted(suite_values),
+        },
+        "authority_boundary": authority_boundary,
+    }
+
+
+def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+    fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+    marker_present, suite_values = suite_path_decision_presence(context)
+    if not fields or fields.get("governance_intensity") != "light" or fields.get("change_class") != GOVERNANCE_DOCS_LITE_CHANGE_CLASS:
+        return {
+            "schema_version": "loom-docs-governance-lite-gate/v1",
+            "result": "not_applicable",
+            "summary": "docs-governance lite gate is not applicable for this governance metadata.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "metadata_fields": fields,
+            "suite_path_decision": {
+                "marker_present": marker_present,
+                "values": sorted(suite_values),
+            },
+            "authority_boundary": governance_intensity_authority_boundary(),
+        }
+
+    general_gate = governance_intensity_gate_payload(context, pr_metadata_preflight)
+    result = general_gate.get("result")
+    missing_inputs = [str(message).replace("light governance", "docs-governance lite") for message in general_gate.get("missing_inputs", [])]
+    if result == "pass":
+        summary = "docs-governance lite metadata and suite not_applicable decision are aligned; non-suite gates remain required."
+    else:
+        summary = "docs-governance lite metadata or suite decision is incomplete or mismatched."
     return {
         "schema_version": "loom-docs-governance-lite-gate/v1",
         "result": result,
@@ -7446,23 +7526,8 @@ def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_prefl
         "missing_inputs": dedupe_strings(missing_inputs),
         "fallback_to": None if result in {"pass", "not_applicable"} else "update_pr_body",
         "metadata_fields": fields,
-        "suite_path_decision": {
-            "marker_present": marker_present,
-            "values": sorted(suite_values),
-        },
-        "authority_boundary": {
-            "role": "formal_suite_bypass_only",
-            "does_not_replace": [
-                "fact_chain",
-                "current_head_review",
-                "pr_metadata_readback",
-                "hosted_checks",
-                "pr_gate",
-                "release_judgment",
-                "controlled_merge",
-                "post_merge_closeout",
-            ],
-        },
+        "suite_path_decision": general_gate.get("suite_path_decision"),
+        "authority_boundary": general_gate.get("authority_boundary"),
     }
 
 
@@ -16457,9 +16522,11 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
         missing_fields.append("fields.change_class")
         missing_fields.append("fields.governance_intensity")
     if governance_intensity == "light":
-        if change_class != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
+        if change_class not in GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES:
             missing_fields.append("fields.change_class")
-        if suite_path != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+        if change_class in GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES and suite_path != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+            missing_fields.append("fields.suite_path")
+        if change_class in GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES and suite_path != "minimal":
             missing_fields.append("fields.suite_path")
         if review_requirement != "current_head_review_required":
             missing_fields.append("fields.review_requirement")
@@ -20242,6 +20309,23 @@ def pr_gate_payload(
             "pr_metadata_preflight": pr_metadata_preflight,
         }
     )
+    governance_intensity_gate = governance_intensity_gate_payload(context, pr_metadata_preflight) if context else None
+    if isinstance(governance_intensity_gate, dict):
+        if governance_intensity_gate.get("result") == "block":
+            missing_inputs.extend(
+                f"governance-intensity: {message}"
+                for message in governance_intensity_gate.get("missing_inputs", [])
+            )
+        steps.append(
+            {
+                "name": "governance-intensity-gate",
+                "result": governance_intensity_gate["result"],
+                "summary": governance_intensity_gate["summary"],
+                "missing_inputs": governance_intensity_gate["missing_inputs"],
+                "fallback_to": governance_intensity_gate["fallback_to"],
+                "governance_intensity_gate": governance_intensity_gate,
+            }
+        )
     docs_governance_lite_gate = docs_governance_lite_gate_payload(context, pr_metadata_preflight) if context else None
     if isinstance(docs_governance_lite_gate, dict):
         if docs_governance_lite_gate.get("result") == "block":
@@ -20437,6 +20521,7 @@ def pr_gate_payload(
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
         "pr_metadata_preflight": pr_metadata_preflight,
+        "governance_intensity_gate": governance_intensity_gate,
         "docs_governance_lite_gate": docs_governance_lite_gate,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
         "terminal_closeout_consumption": terminal_closeout_consumption,
