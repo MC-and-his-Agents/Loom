@@ -7054,6 +7054,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
     status_code, payload = run_json(
         ["closeout", "queue", "status", "--target", str(target), "--queue-file", "closeout-queue-fixture.json", "--json"]
     )
+    payload = runtime_payload_from_agent_safe_output(payload)
     after = snapshot_tree(target)
     if before != after:
         raise AssertionError("closeout queue status mutated the fixture target")
@@ -7113,6 +7114,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
         ["closeout", "queue", "status", "--target", str(target), "--json"],
         expect=1,
     )
+    missing_input = runtime_payload_from_agent_safe_output(missing_input)
     if (
         status_code == 0
         or missing_input.get("mode") != "blocked"
@@ -7127,6 +7129,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
         ["closeout", "queue", "status", "--target", str(target), "--item", "WI-does-not-exist", "--json"],
         expect=1,
     )
+    missing_item = runtime_payload_from_agent_safe_output(missing_item)
     if status_code == 0 or missing_item.get("mode") != "blocked" or "item not found: WI-does-not-exist" not in missing_item.get("missing_inputs", []):
         raise AssertionError("closeout queue status must block explicit missing item filters")
 
@@ -7134,6 +7137,7 @@ def assert_closeout_queue_status_contract(tmp: Path) -> None:
         ["closeout", "queue", "status", "--target", str(target), "--issue", "999999", "--json"],
         expect=1,
     )
+    missing_issue = runtime_payload_from_agent_safe_output(missing_issue)
     if status_code == 0 or missing_issue.get("mode") != "blocked" or "issue not found: 999999" not in missing_issue.get("missing_inputs", []):
         raise AssertionError("closeout queue status must block explicit missing issue filters")
 

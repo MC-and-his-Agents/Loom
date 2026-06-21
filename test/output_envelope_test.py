@@ -129,6 +129,62 @@ class OutputEnvelopeTest(unittest.TestCase):
 
         self.assertIs(loom_cli.agent_safe_payload(payload, full_output=True), payload)
 
+    def test_actionable_block_payload_is_compacted_before_budget_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            payload = loom_cli.output(
+                "pr metadata-preflight",
+                "block",
+                summary="PR metadata preflight found repairable drift.",
+                findings=[
+                    {
+                        "kind": "missing_human_backlink",
+                        "severity": "fix-needed",
+                        "subject": "Issue backlink",
+                        "recommended_action": "Update the PR body Issue line.",
+                        "next_command": "loom pr metadata-update 1703 --issue 1687 --apply --json",
+                    }
+                ],
+                repair_plan={
+                    "actions": [
+                        {
+                            "action": "update_pr_body_issue_backlink",
+                            "description": "Insert `- Issue: #1687`.",
+                            "next_command": "loom pr metadata-update 1703 --issue 1687 --apply --json",
+                        }
+                    ]
+                },
+            )
+
+            safe = loom_cli.agent_safe_payload(payload, artifact_dir=Path(tempdir))
+
+            self.assertEqual(safe["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
+            self.assertEqual(safe["summary"], "PR metadata preflight found repairable drift.")
+            self.assertEqual(safe["actionable_findings"][0]["kind"], "missing_human_backlink")
+            self.assertIn("loom pr metadata-update", safe["actionable_findings"][0]["next_command"])
+            self.assertTrue(Path(safe["full_output"]["artifact_locator"]).exists())
+            self.assertNotIn("findings", safe)
+
+    def test_actionable_findings_are_limited_to_five(self) -> None:
+        payload = loom_cli.output(
+            "closeout",
+            "block",
+            summary="Closeout has several blockers.",
+            findings=[
+                {"kind": f"finding-{index}", "recommended_action": f"fix-{index}"}
+                for index in range(8)
+            ],
+        )
+
+        safe = loom_cli.agent_safe_payload(payload)
+
+        self.assertEqual(len(safe["actionable_findings"]), 5)
+        self.assertEqual([entry["kind"] for entry in safe["actionable_findings"]], [f"finding-{index}" for index in range(5)])
+
+    def test_pass_payload_under_budget_is_not_compacted(self) -> None:
+        payload = loom_cli.output("fixture", "pass", summary="ok", findings=[{"kind": "advisory", "recommended_action": "none"}])
+
+        self.assertIs(loom_cli.agent_safe_payload(payload), payload)
+
     def test_status_handler_defaults_to_agent_safe_stdout(self) -> None:
         original = loom_cli.delegated_payload
         try:
@@ -162,6 +218,41 @@ class OutputEnvelopeTest(unittest.TestCase):
                 self.assertNotIn('"diagnostic":', rendered)
         finally:
             loom_cli.delegated_payload = original
+
+    def test_pr_gate_handler_defaults_to_actionable_stdout(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
+
+                def fake_payload(*_args, **_kwargs):
+                    return loom_cli.output(
+                        "pr gate",
+                        "block",
+                        summary="PR gate found metadata drift.",
+                        findings=[
+                            {
+                                "classifier": "pr_metadata_drift",
+                                "next_action": "Regenerate or update the PR body machine carrier.",
+                                "next_command": "loom pr metadata-update 1703 --apply --json",
+                            }
+                        ],
+                    )
+
+                loom_cli.flow_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.handle_pr(["gate", "1703", "--json"])
+
+                payload = json.loads(stream.getvalue())
+                self.assertEqual(code, 1)
+                self.assertEqual(payload["command"], "pr gate")
+                self.assertEqual(payload["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
+                self.assertEqual(payload["actionable_findings"][0]["classifier"], "pr_metadata_drift")
+                self.assertIn("loom pr metadata-update", payload["actionable_findings"][0]["next_command"])
+                self.assertTrue(Path(payload["full_output"]["artifact_locator"]).exists())
+        finally:
+            loom_cli.flow_payload = original
 
     def test_fact_chain_handler_supports_full_output_escape_hatch(self) -> None:
         original = loom_cli.flow_payload
