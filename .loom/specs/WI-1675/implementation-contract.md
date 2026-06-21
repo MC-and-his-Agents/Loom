@@ -3,7 +3,7 @@
 ## Contract
 
 - Change class: docs_only
-- Owned files: `README.md`, `README.zh-CN.md`, `tools/check_release_surface.py`, `packages/loom-installer/scripts/check-doc-sync.mjs`, WI-1675 Loom carriers and shadow hash refresh.
+- Owned files: `README.md`, `README.zh-CN.md`, `tools/check_release_surface.py`, `packages/loom-installer/scripts/check-doc-sync.mjs`, `src/skills/shared/scripts/loom_check.py`, `skills/shared/scripts/loom_check.py`, `plugins/loom/skills/shared/scripts/loom_check.py`, `.loom/bin/loom_check.py`, WI-1675 Loom carriers and shadow hash refresh.
 - Runtime behavior: unchanged.
 - Install behavior: unchanged.
 - Release behavior: unchanged.
@@ -18,6 +18,8 @@
 - `git diff --check`
 - `python3 tools/check_release_surface.py --surface release-doc-contract`
 - `npm --prefix packages/loom-installer run check:docs`
+- `python3 tools/loom_check.py --profile source --source-surface contract-only .`
+- `python3 tools/loom_check.py`
 - README badge/body link scan.
 - Chinese README token scan.
 - English/Chinese heading and maintainer-link readback.
