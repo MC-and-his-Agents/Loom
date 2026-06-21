@@ -974,7 +974,7 @@ def release_readback_payload(
         schema=RELEASE_READBACK_SCHEMA,
         summary=summary,
         target=str(target),
-        mutates=any(bool(step.get("mutates")) for step in steps),
+        mutates=False,
         host_mutations=False,
         carrier_mutations=False,
         release_judgment=release_judgment,
