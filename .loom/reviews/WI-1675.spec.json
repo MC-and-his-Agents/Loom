@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1675",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1675 minimal suite is coherent and scoped to README documentation clarity only. The suite records product positioning, architecture/workflow explanation, quick start install wording, Chinese localization, and explicit non-goals for runtime, installer, release, migration, permission, and downstream adoption behavior.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T08:00:00Z",
+  "reviewed_head": "0d41935bef432d3fe841946a05197fe9b35c8ae3",
+  "reviewed_validation_summary": "2026-06-21T08:00Z local validation passed for WI-1675: git diff --check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; fact-chain; workspace check; suite validate; PR metadata preflight.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1675.md",
+    "recovery_entry": ".loom/progress/WI-1675.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1675/spec.md",
+    "plan": ".loom/specs/WI-1675/plan.md",
+    "implementation_contract": ".loom/specs/WI-1675/implementation-contract.md"
+  }
+}

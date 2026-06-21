@@ -15,7 +15,7 @@
 - Current Stop: README copy and install quick start have been updated locally; issue #1675 is open; branch `work/1675-readme-install-clarity` is active.
 - Next Step: Commit, push, open PR, run PR metadata/readback checks, merge after required checks pass, then close issue #1675.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-21T07:45Z local checks passed: `git diff --check`; README body wiki-link scan found only top badges; heading and maintainer-doc readback shows English and Chinese versions carry the same structure and links; Chinese token scan leaves only necessary product names, commands, paths, badges, and platform names.
+- Latest Validation Summary: 2026-06-21T08:00Z local validation passed for WI-1675: git diff --check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; fact-chain; workspace check; suite validate; PR metadata preflight.
 - Recovery Boundary: WI-1675 owns README documentation and Loom carrier metadata for this documentation change only. It does not modify runtime behavior, release packaging, install command behavior, legacy migration contracts, or downstream repository adoption.
 - Current Lane: readme-install-clarity
 
