@@ -1,115 +1,135 @@
 # Loom
 
-[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=for-the-badge&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/MC-and-his-Agents/Loom) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/MC-and-his-Agents/Loom)
+<a href="https://zread.ai/MC-and-his-Agents/Loom"><img height="28" alt="Ask Zread" src="https://img.shields.io/badge/Ask_Zread-_.svg?style=for-the-badge&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff"></a>
+<a href="https://deepwiki.com/MC-and-his-Agents/Loom"><img height="28" alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"></a>
 
 Language: English | [中文版本](./README.zh-CN.md)
 
-Loom is an agent-first project operating layer: a structured execution framework
-for coding agents. It gives agents a behavior-first path from adoption and
-merge readiness through closeout.
+Loom helps coding agents turn issues into merge-ready pull requests.
 
-Loom does not optimize for code generation speed by itself. It makes work
-converge on a stronger final state: goals, documents, review state, validation
-evidence, trunk truth, and the host control plane all agree. It is CLI-first,
-keeps only metadata at repository boundaries, and is built around five
-cooperating planes: governance truth, harness orchestration, behavior and test
-evidence, spec discipline, and executable skills.
+Coding agents can already write code. The hard part is everything around the
+code: knowing what work is active, where it is running, which branch and PR own
+it, what was verified, what review decided, whether CI agrees, and whether the
+work is actually ready to merge.
 
-## What Loom Solves
+Loom is CLI-first. It is an agent-first project operating layer for that
+execution state. It turns a loose request into a tracked Work Item, binds that
+work to a branch and PR, carries validation and review evidence forward, and
+gives agents a clear path to resume, review, merge readiness, and closeout.
 
-When humans and agents can both generate code quickly, the bottleneck moves from
-code generation to continuous, orderly execution. Loom does not reuse business
-code. It reuses the operating structure for organizing a project, entering
-execution, progressing across multiple rounds, reaching merge readiness, and
-closing work out.
+Without Loom, an agent often resumes from chat history and reconstructs the
+state by guessing.
 
-New projects no longer need to begin as an empty repository plus temporary
-conventions and scattered context. They can begin with a sustainable,
-verifiable, agent-operable runtime structure.
+With Loom, the agent resumes from repository facts:
 
-Loom does not decide what product to build, how to design product architecture,
-how to model a business domain, or whether every project must use the same file
-layout. It focuses on project operation, not business substance.
+- what the Work Item is;
+- where the workspace is;
+- which branch and PR own the work;
+- what changed;
+- what has been validated;
+- what review decided;
+- what still blocks merge readiness;
+- what must be closed out after merge.
 
-## Architecture
+## When To Use Loom
 
-At the vision level, Loom is a three-layer system. At the repository level, it
-lands as five stable parts:
+Use Loom when agent work is bigger than a single prompt.
 
-- Governance defines rules, review models, and closeout semantics.
-- Harness provides execution support, workspace isolation, recovery, and runtime visibility.
-- Templates carry structured artifacts.
-- Skills assemble these capabilities into executable entry points.
-- Adoption records where capabilities came from and where they currently land.
+Loom is useful when:
 
-The dependency flow is one-way: governance defines rules, templates carry
-structure, harness runs within governance constraints, skills read all of them
-and assemble entry points, and adoption provides evidence and evolution. Skills
-do not redefine governance rules, templates do not become the only truth source,
-and status surfaces do not become a second item truth source.
+- an issue may take more than one session;
+- multiple agents or humans may touch the same work;
+- a PR needs review evidence, CI evidence, and merge-readiness checks;
+- the agent must resume after interruption without rereading the whole chat;
+- the project needs a reliable record of what happened before and after merge;
+- closing the PR is not enough, because docs, status, or project state also need
+  to agree.
 
-## Workflow Model
+## What Loom Adds To A Repository
 
-Loom is CLI-first. The global `loom` command installs the Codex user-level plugin,
-records metadata-only repository adoption, reads the fact chain, and runs
-verification. Agents start from `loom-init`, then move through scenario skills
-such as `loom-adopt`, `loom-resume`, `loom-build`, `loom-review`, and
-`loom-merge-ready`.
+After adoption, Loom gives the repository an agent-operable execution path:
 
-Everything is organized around a Work Item, the formal execution entry. Work
-moves through a gate chain: spec gate, build gate, review gate, and merge gate.
-Each gate consumes evidence and returns a pass, block, or fallback verdict.
+- Work Items: every implementation starts from a named unit of work.
+- Workspace binding: the work is tied to a branch, workspace, and PR.
+- Resume path: a new agent can recover the current state without guessing.
+- Review path: review decisions become part of the work record.
+- Validation evidence: checks and evidence are carried forward instead of lost
+  in chat.
+- Merge readiness: the PR is checked against the Work Item, branch, review, and
+  evidence.
+- Closeout: after merge, Loom helps retire the work cleanly instead of leaving
+  stale state.
 
-Loom keeps truth sources separate. Governance rules, execution facts, review
-records, and host state such as GitHub PRs, CI, and issues stay in their own
-channels. The CLI reads and summarizes them; it does not create a second copy of
-truth. When a gate passes, the relevant layers have been checked against the
-same work.
+## How A Loom-Driven Task Feels
 
-## Quick Start
+A typical Loom task looks like this:
 
-Copy this prompt to your coding agent:
+1. Start from an issue or request.
+2. Loom creates or resumes a Work Item.
+3. The agent works in a bound branch and workspace.
+4. The agent records what changed and what was validated.
+5. Review checks the current head, not an outdated memory of the work.
+6. Merge readiness checks that the Work Item, branch, PR, review, and evidence
+   agree.
+7. After merge, closeout records the completed state and retires the workspace.
+
+Under the hood, work moves through a gate chain: spec gate, build gate, review
+gate, and merge gate.
+
+The goal is not to make the agent type faster. The goal is to make the work
+harder to lose, misread, or merge prematurely.
+
+## Try It In A Repository
+
+The quickest way to understand Loom is to enable it in a real repository and ask
+an agent to start from `loom-init`.
+
+The install flow has three parts:
+
+1. Install the global Loom CLI.
+2. Install and register the Codex plugin.
+3. Adopt the target repository with metadata-only Loom state.
+
+Copy this self-contained prompt to your coding agent:
 
 ```text
-Install Loom in this repository with the current global CLI model. Use
-metadata-only repository adoption; do not create repo-local Loom runtime,
-plugin payload, `.loom/bin`, `.agents/skills`, or Loom-owned root `skills`.
-Follow the steps below. If a command fails, stop and report the failing command
-plus `loom repair plan --target . --json`.
-```
+Enable Loom in this target repository. Do not assume this repository already
+knows Loom.
 
-Prerequisites: Node `>=20` and Python `>=3.11`.
+Loom has three layers:
+1. Loom CLI: the global `loom` command on this machine.
+2. Codex plugin: the user-level Codex interaction surface installed by the CLI.
+3. Repository adoption: metadata written into the target repository so Loom can
+   manage work items there.
 
-1. Install the root CLI:
-
-```bash
+First install the CLI:
+node --version
+npm --version
 npm install -g @mc-and-his-agents/loom
-```
+loom version --json
 
-2. Install and register the Codex user-level plugin:
-
-```bash
+Then install and register the Codex plugin:
 loom host install --host codex --scope user --apply --json
 loom host register --host codex --scope user --apply --json
-```
 
-3. Adopt the current repository:
-
-```bash
+Then go to the target repository root and enable Loom:
+cd /path/to/target-repository
 loom install --target . --apply --json
-```
 
-4. Verify the install:
-
-```bash
+Validate the result:
 loom installed-state validate --target . --json
 loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
+
+Use metadata-only repository adoption. Do not clone the Loom repository into
+this project. Do not manually create `.loom/bin`, `.agents/skills`, or root
+`skills`. If any command fails, stop, report the failing command, then run:
+loom repair plan --target . --json
 ```
 
-5. Start working from `loom-init` in a new Codex session. Restart Codex Desktop
-   if it had already loaded the plugin list.
+Start working from `loom-init` in a new Codex session. Restart Codex Desktop if
+it had already loaded the plugin list.
 
 On a second development machine for an already adopted repository, install the
 global CLI and register the Codex user-level plugin, then verify the repository:
@@ -123,6 +143,47 @@ loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
 ```
+
+## Why Loom Works
+
+Loom separates the parts of agent execution that often get mixed together:
+governance rules, execution harness, evidence, structured artifacts, and
+executable skills.
+
+That separation matters because a PR can look done while the Work Item, review
+record, validation evidence, or closeout state is still stale. Loom keeps those
+channels separate, then uses the CLI to check whether they agree.
+
+At the repository boundary, Loom keeps only metadata. The global `loom` command
+installs the Codex user-level plugin, records repository adoption, reads the
+fact chain, and runs verification. Agents start from `loom-init`, then move
+through scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`,
+`loom-review`, and `loom-merge-ready`.
+
+At the repository level, Loom lands as five stable parts:
+
+- Governance defines rules, review models, and closeout semantics.
+- Harness provides execution support, workspace isolation, recovery, and runtime visibility.
+- Templates carry structured artifacts.
+- Skills assemble these capabilities into executable entry points.
+- Adoption records where capabilities came from and where they currently land.
+
+The dependency flow is one-way: governance defines rules, templates carry
+structure, harness runs within governance constraints, skills read all of them
+and assemble entry points, and adoption provides evidence and evolution. Skills
+do not redefine governance rules, templates do not become the only truth source,
+and status surfaces do not become a second item truth source.
+
+## What Loom Is Not
+
+Loom does not decide what product to build, how to design product architecture,
+how to model a business domain, or whether every project must use the same file
+layout. It focuses on project operation, not business substance.
+
+Loom is not a business template, a code generator, an SDD-only tool, or a
+replacement for GitHub, CI, review engines, or `git worktree`. It is a project
+operating layer with executable skills so agents can consume those host
+capabilities consistently.
 
 ## Maintainer Docs
 
@@ -143,6 +204,7 @@ loom doctor --target . --json
 
 ## Philosophy
 
-Loom is merge-readiness-centered and behavior-first. Review, validation, host state, behavior evidence, test evidence, and closeout are separate surfaces, but they must converge. If any one of them is still open, the work should not be treated as finished.
-
-Loom is not a business template, a code generator, an SDD-only tool, or a replacement for GitHub, CI, review engines, or `git worktree`. It is a project operating layer with executable skills so agents can consume those host capabilities consistently.
+Loom is merge-readiness-centered and behavior-first. Review, validation, host
+state, behavior evidence, test evidence, and closeout are separate surfaces, but
+they must converge. If any one of them is still open, the work should not be
+treated as finished.
