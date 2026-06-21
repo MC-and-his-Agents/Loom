@@ -3,11 +3,11 @@
   "item_id": "WI-1682",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1682 spec suite is approved for the contract-foundation scope at head ee113f10a679e485fc4f3db30ebb92939151b9f9. The minimal suite includes spec, plan, implementation contract, evidence map, and task carrier; full-suite artifacts are explicitly not applicable for this bounded contract/fixture PR. The suite does not authorize runtime command behavior, host mutation behavior, release packaging, or v0.18.0 publication.",
-  "reviewer": "codex-main-agent",
-  "authored_at": "2026-06-21T15:05:47Z",
-  "reviewed_head": "ee113f10a679e485fc4f3db30ebb92939151b9f9",
-  "reviewed_validation_summary": "2026-06-21T14:54Z local validation passed on branch work/1682-intensity-binding-closeout-contracts: git diff --check; python3 -m json.tool .loom/companion/repo-interface.json; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/check_cli_contract.py --surface merge-wrapper; python3 tools/check_cli_contract.py --surface controlled-merge; python3 tools/loom.py suite validate --target . --item WI-1682 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1682 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1682 --json.",
+  "summary": "Spec review allows the milestone #15 contract foundation after build checkpoint purity passed on e638c42dda7488fcca1a49a42f3d1cfd25a3d5d3; scope remains #1682/#1686/#1695 contracts plus minimal terminal carrier cleanup for gate-consumed historical closeout drift.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-21T15:45:11Z",
+  "reviewed_head": "e638c42dda7488fcca1a49a42f3d1cfd25a3d5d3",
+  "reviewed_validation_summary": "2026-06-21T15:26Z local validation passed on branch work/1682-intensity-binding-closeout-contracts: python3 tools/skills_surface.py generate; python3 tools/skills_surface.py check; CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom.py pr metadata-preflight 1697 --item WI-1682 --branch work/1682-intensity-binding-closeout-contracts --head-sha b4e240bacf3b721cce927782d54f9888974b1074 --json; CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1682; python3 tools/check_cli_contract.py --surface governance-closeout. Full python3 tools/check_cli_contract.py passed surfaces 1-11 and reached aggregate, then timed out in pre-review because uncommitted generated payload changes and stale WI-1678 closeout residue still made state-check fall back to admission before this commit. WI-1678 terminal progress/task carrier sync has now been added to this branch so state-check classifies WI-1678 as terminal stale carrier, not an active Work Item.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
