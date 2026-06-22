@@ -2575,7 +2575,7 @@ def render_makefile() -> str:
 
 
 def render_progress(result: dict[str, object]) -> str:
-    checkpoint = "admission checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
+    checkpoint = "admission" if result["run"]["scenario_key"] != "complex-existing" else "build"
     return (
         f"# {WORK_ITEM_ID} Progress\n\n"
         "## Dynamic Facts\n\n"
@@ -2675,7 +2675,7 @@ def default_runtime_evidence(result: dict[str, object]) -> dict[str, str]:
 def render_status(result: dict[str, object]) -> str:
     item = result["initial_work_items"][0]
     fact_chain = result["fact_chain"]
-    checkpoint = "admission checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
+    checkpoint = "admission" if result["run"]["scenario_key"] != "complex-existing" else "build"
     runtime_evidence = default_runtime_evidence(result)
     return (
         "# Current Status\n\n"

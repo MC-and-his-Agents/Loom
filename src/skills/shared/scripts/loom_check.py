@@ -9594,7 +9594,7 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
             failures.append(Failure(category, "`workspace locate` must not treat local-only retire evidence as versioned checkpoint truth"))
         progress_after_retire = progress_path.read_text(encoding="utf-8")
         for stable_line in (
-            "- Current Checkpoint: admission checkpoint",
+            "- Current Checkpoint: admission",
             "- Current Stop:",
             "- Next Step:",
             "- Blockers:",
@@ -9646,7 +9646,7 @@ raise SystemExit(1)
         stale_recovery.write_text(
             source_recovery.read_text(encoding="utf-8")
             .replace("INIT-0001", "STALE-0002")
-            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
+            .replace("- Current Checkpoint: admission", "- Current Checkpoint: retired"),
             encoding="utf-8",
         )
         closeout_item.write_text(
@@ -9659,7 +9659,7 @@ raise SystemExit(1)
         closeout_recovery.write_text(
             source_recovery.read_text(encoding="utf-8")
             .replace("INIT-0001", "CLOSEOUT-0004")
-            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: build"),
+            .replace("- Current Checkpoint: admission", "- Current Checkpoint: build"),
             encoding="utf-8",
         )
         payload, error = load_command_json(

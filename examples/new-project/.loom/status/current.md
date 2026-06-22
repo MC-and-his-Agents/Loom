@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/INIT-0001.json
 - Validation Entry: python3 .loom/bin/loom_init.py verify --target .
 - Closing Condition: The generated entry, work item, recovery entry, and templates are readable and verified
-- Current Checkpoint: admission checkpoint
+- Current Checkpoint: admission
 - Current Stop: Bootstrap artifacts have been generated and are awaiting downstream review.
 - Next Step: Accept the generated Loom entry and promote the first real repository work item.
 - Blockers: None recorded.
