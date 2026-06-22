@@ -5,6 +5,7 @@
 - Suite path consumed: minimal
 - Consumes:
   - Spec locator: .loom/specs/WI-1715/spec.md
+  - Implementation contract locator: .loom/specs/WI-1715/implementation-contract.md
   - Scenario ids / locators: S1-S3
   - Acceptance ids / locators: A1-A5
   - Story Readiness consumed state: not required
