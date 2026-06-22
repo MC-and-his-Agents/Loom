@@ -235,6 +235,9 @@ jobs:
             echo "NPM_TOKEN secret is required to publish ${{ steps.state.outputs.npm_package }}@${{ steps.state.outputs.npm_version }}" >&2
             exit 1
           fi
+          python3 tools/stamp_plugin_payload_metadata.py --source-git-sha "${{ github.sha }}" --write --json
+          python3 tools/check_npm_package.py
+          npm pack --dry-run --json --ignore-scripts
           npm whoami
           npm publish --access public --provenance
 

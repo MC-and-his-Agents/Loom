@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1718",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review passed: WI-1718 release candidate is limited to v0.19.0 release authority, plugin payload release metadata/hash, publish-time source_git_sha stamping, release readiness evidence, and WI-1718 carriers; local release/package/suite validation passed and npm deprecate remains out of scope pending separate confirmation.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-06-22T22:57:34Z",
+  "reviewed_head": "31c0a52b601f08847c076a1c3e3d774c887fc1c7",
+  "reviewed_validation_summary": "2026-06-22T22:49Z local release/package validation passed at pre-commit branch head: release readback classified v0.19.0 as unpublished/unoccupied; `stamp_plugin_payload_metadata.py --source-git-sha unreleased --json`, `version_surface_check.py`, `check_release_surface.py`, `check_npm_package.py`, `npm run test:package`, `npm pack --dry-run --json --ignore-scripts`, suite validate/evidence/carrier, fact-chain, state-check, and `git diff --check` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1718.md",
+    "recovery_entry": ".loom/progress/WI-1718.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1718-release-closeout/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-WI-1718-release-closeout --item WI-1718 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1718-release-closeout/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-WI-1718-release-closeout --item WI-1718 --json",
+    "suite_evidence_map": ".loom/specs/WI-1718/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1718/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

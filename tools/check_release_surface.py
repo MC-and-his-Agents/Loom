@@ -408,6 +408,7 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
             "npm publish --access public --provenance",
             "npm view \"${NPM_PACKAGE_NAME}@${NPM_VERSION}\" version",
             "npm pack --dry-run --json --ignore-scripts",
+            "python3 tools/stamp_plugin_payload_metadata.py --source-git-sha \"${{ github.sha }}\" --write --json",
             "python3 tools/check_npm_package.py",
             "no-cli-behavior-change",
             "gh release create",
