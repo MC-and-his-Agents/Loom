@@ -21,11 +21,11 @@
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-22 WI-1713 build started in issue-scoped worktree `work/1713-plugin-release-metadata`.
-- Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1713.md`.
-- Diagnostics Entry: `x-loom.plugin_payload_hash` is normalized during digest computation; other plugin manifest metadata remains part of the payload evidence.
-- Verification Entry: Targeted checks, suite validation, build flow, version readback, package checks, CLI contract aggregate checks, review records, shadow parity, adopt verify, and governance profile status passed before PR creation.
-- Lane Entry: plugin-release-metadata
+- Run Entry: 2026-06-23 WI-1735 ship contract lane continued in issue-scoped worktree `work/1735-ship-contract`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1735.md`.
+- Diagnostics Entry: `loom ship` contract freezes short diagnostics, full-output boundary, dry-run/apply order, auto-repair boundary, validation profile expectation, and closeout escalation.
+- Verification Entry: Targeted ship-wrapper contract check, not_applicable suite decision, review record, shadow parity, adopt verify, and hosted checks passed before merge.
+- Lane Entry: ship-contract
 
 ## Sources
 

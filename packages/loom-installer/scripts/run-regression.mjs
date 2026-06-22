@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(scriptDir, '..');
@@ -109,7 +109,7 @@ function releaseLock(runId) {
 }
 
 function runStep(label, command, args, env) {
-  console.log(`installer regression: ${label}`);
+  console.log(`installer tombstone regression: ${label}`);
   const result = spawnSync(command, args, {
     cwd: packageRoot,
     env,
@@ -152,6 +152,6 @@ function main() {
 try {
   main();
 } catch (error) {
-  console.error(`installer regression failed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`installer tombstone regression failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
