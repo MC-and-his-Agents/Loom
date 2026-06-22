@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1716
-- Goal: Expose actionable stale Codex plugin payload refresh guidance from Loom freshness diagnostics.
-- Scope: Issue #1716 only. Update `tools/loom.py`, focused CLI contract checks, the Codex user plugin adoption contract, WI-1716 carriers, and WI-1716 spec/code review artifacts. Non-goals: no npm release, no legacy installer behavior, no single SKILL install, no direct writes to Codex-owned runtime cache.
-- Execution Path: issue #1716 -> branch `work/1716-plugin-refresh-guidance` -> worktree `.loom/..` -> targeted validation -> PR -> controlled merge -> closeout.
+- Item ID: WI-1717
+- Goal: 补齐 CLI/plugin freshness 最小回归覆盖。
+- Scope: tools/check_cli_contract.py freshness fixtures and WI-1717 carriers only; no release closeout. Ownership constraints: main executor owns `tools/check_cli_contract.py`, WI-1717 `.loom/**` carriers, and `.loom/progress/WI-1717-build-evidence.json`; no release files, legacy installer behavior, payload hash algorithm changes, host mutation semantics, or broad fixture framework are in scope.
+- Execution Path: issue #1717 -> branch work/1717-freshness-fixtures -> worktree `.loom/..` -> targeted tests -> PR -> closeout. Local workspace path is recorded in the issue workspace comment.
 - Workspace Entry: .loom/..
-- Recovery Entry: .loom/progress/WI-1716.md
-- Review Entry: .loom/reviews/WI-1716.json
-- Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`.
-- Closing Condition: PR for `work/1716-plugin-refresh-guidance` is merged into `main`, issue #1716 is closed, and closeout consumes PR, issue, hosted checks, target branch, and repo carrier readback.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1716 closed out by closeout run: PR #1753 merged at 01e55b66cf300084b1e537e6b1776b01c44d8a24, issue #1716 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1716 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1717.md
+- Review Entry: .loom/reviews/WI-1717.json
+- Validation Entry: python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 test/plugin_payload_hash_test.py; git diff --check
+- Closing Condition: PR for work/1717-freshness-fixtures is merged, issue #1717 is closed, and closeout consumes PR, issue, target branch, and repo carrier readback.
+- Current Checkpoint: merge
+- Current Stop: Implementation, spec review, implementation review, PR metadata, and hosted validation inputs are ready for merge gate consumption.
+- Next Step: Wait for hosted checks, run merge-ready/controlled merge, then closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local checks passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface adoption-host-metadata; git diff --check; python3 tools/loom.py suite validate --target . --item WI-1716 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1716 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1716 --json; python3 tools/loom.py fact-chain --target . --item WI-1716 --json; LOOM_TEST_NPM_LATEST_VERSION=$(cat VERSION) python3 tools/loom.py upgrade-plan --target . --host codex --json | jq '.actions[] | select(.id == "cli-plugin-freshness")'.
-- Recovery Boundary: WI-1716 owns refresh guidance fields, docs, scoped carriers, and scoped review artifacts for stale Codex plugin payload diagnostics. It does not implement broad fixtures (#1717), v0.19.0 release closeout (#1718), legacy installer tombstone behavior (#1732), or v0.20.0 ship friction work (#1735-#1737).
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-06-23 local checks passed: `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 test/plugin_payload_hash_test.py`; `git diff --check`; `python3 tools/loom.py suite validate --target . --item WI-1717 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1717 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1717 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1717 --json`; `python3 tools/loom.py build --target . --item WI-1717 --build-evidence .loom/progress/WI-1717-build-evidence.json --json`; `python3 tools/loom_flow.py runtime-parity validate --target .`.
+- Recovery Boundary: WI-1717 owns `tools/check_cli_contract.py` freshness fixture assertions and WI-1717 carriers only. It does not publish v0.19.0 or change release closeout behavior.
+- Current Lane: freshness-fixtures
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-23 WI-1716 build started in issue-scoped worktree `work/1716-plugin-refresh-guidance`.
-- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1716.md`.
-- Diagnostics Entry: `loom version --json` and `loom upgrade-plan --target . --host codex --json` expose plugin payload refresh guidance.
-- Verification Entry: Targeted CLI contract, py_compile, suite validation, fact-chain, diff checks, and upgrade-plan action readback passed before PR.
-- Lane Entry: plugin-refresh-guidance
+- Run Entry: 2026-06-23 WI-1717 build started in issue-scoped worktree `work/1717-freshness-fixtures`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1717.md`.
+- Diagnostics Entry: `loom version` and `loom version --json` expose freshness action, surface compatibility, and plugin refresh guidance.
+- Verification Entry: Targeted CLI contract, payload hash tests, diff checks, suite validation, fact-chain, and build evidence consumption passed before PR.
+- Lane Entry: freshness-fixtures
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1716.md
-- Dynamic Truth: .loom/progress/WI-1716.md
+- Static Truth: .loom/work-items/WI-1717.md
+- Dynamic Truth: .loom/progress/WI-1717.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
