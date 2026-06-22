@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1732.json
 - Validation Entry: `npm --prefix packages/loom-installer run check:release`; `node packages/loom-installer/scripts/run-regression.mjs`; `python3 tools/check_loom_check_runtime_regressions.py --surface installer-regression-lock-output`; `python3 tools/check_release_surface.py --surface installer-sunset-guard`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/py_compile_clean.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py`; `git diff --check`; `python3 tools/loom.py suite validate --target . --item WI-1732 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1732 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1732 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1732 --json`.
 - Closing Condition: PR for `work/1732-retire-loom-installer-package` is merged into `main`, issue #1732 is closed, and closeout consumes PR, issue, hosted checks, target branch, and repo carrier readback.
-- Current Checkpoint: implementation checkpoint
+- Current Checkpoint: build
 - Current Stop: Tombstone package implementation and local validation are complete; PR creation is next.
 - Next Step: Commit, push, open PR, then enter review / merge-ready.
 - Blockers: None recorded.
