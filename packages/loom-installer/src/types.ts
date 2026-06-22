@@ -16,7 +16,6 @@ export interface PayloadSkillRecord {
   id: string;
   display_name: string;
   contract_version: string;
-  skill_package_version: string;
   runtime_core_version: string;
   package_metadata: string;
   runtime_root: string;
@@ -34,6 +33,7 @@ export interface VersionContext {
   source_repository?: string;
   source_commit?: string;
   source_ref?: string;
+  /** Legacy installed metadata only. It is ignored for freshness decisions. */
   skill_package_version?: string;
   skill_contract_version?: string;
   skill_package_id?: string;
