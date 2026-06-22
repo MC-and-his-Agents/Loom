@@ -82,6 +82,8 @@ The primary install model is the global `loom` CLI plus the Codex user plugin:
 
 ```bash
 npm install -g @mc-and-his-agents/loom
+loom host doctor --host codex --scope user --json
+loom host install --host codex --scope user --apply --json
 loom host register --host codex --source <global-loom-package>/plugins/loom --scope user --apply --json
 loom install --target . --apply --json
 loom skills check --target . --json
@@ -90,6 +92,9 @@ loom skills check --target . --json
 Target repositories use metadata-only adoption. They must not receive
 `plugins/loom/skills/`, `.agents/skills/`, root `skills/`, `loom-package.json`,
 or package-internal `.loom-runtime/` as Loom install artifacts.
+`loom install` and `loom upgrade` manage that target repository state only; the
+Codex workstation plugin provider is inspected and refreshed through
+`loom host doctor|install|register --host codex --scope user`.
 
 ## Internal Contracts
 

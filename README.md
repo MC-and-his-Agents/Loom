@@ -155,6 +155,10 @@ this project. Do not manually create `.loom/bin`, `.agents/skills`, or root
 loom repair plan --target . --json
 ```
 
+`loom install` and `loom upgrade` manage only the target repository's
+metadata-only adoption state. To inspect or refresh the local Codex plugin
+provider, use `loom host doctor|install|register --host codex --scope user`.
+
 Start working from `loom-init` in a new Codex session. Restart Codex Desktop if
 it had already loaded the plugin list.
 
@@ -174,6 +178,12 @@ loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
 ```
+
+Target repository upgrade commands do not refresh the Codex plugin cache. Use
+`loom host doctor --host codex --scope user --json` first, then
+`loom host install --host codex --scope user --apply --json` and
+`loom host register --host codex --scope user --apply --json` when the local
+workstation plugin provider needs repair or refresh.
 
 ## Why Loom Works
 

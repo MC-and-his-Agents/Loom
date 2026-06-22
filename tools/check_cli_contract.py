@@ -2613,10 +2613,20 @@ def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
 def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     target = tmp / "metadata-only-adoption"
     target.mkdir()
+    status, install_plan = run_json(["install", "--target", str(target), "--host", "codex", "--json"])
+    if (
+        status == 0
+        or install_plan.get("failed_layer") != "install-apply"
+        or install_plan.get("host_plugin_refresh", {}).get("id") != "host-plugin-refresh-boundary"
+        or "loom host install --host codex --scope user --apply --json" not in install_plan.get("host_plugin_refresh", {}).get("apply_commands", [])
+    ):
+        raise AssertionError("target install did not expose Codex host plugin refresh boundary")
     _, installed = run_json(
         ["install", "--target", str(target), "--apply", "--json"],
         expect=0,
     )
+    if installed.get("host_plugin_refresh", {}).get("id") != "host-plugin-refresh-boundary":
+        raise AssertionError("metadata-only install did not preserve separate host plugin refresh guidance")
     managed_writes = set(installed.get("managed_writes", []))
     if managed_writes != {".loom/installed-state.json", "AGENTS.md"}:
         raise AssertionError(f"metadata-only install wrote unexpected artifacts: {sorted(managed_writes)}")
@@ -2642,6 +2652,24 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     _, validate = run_json(["installed-state", "validate", "--target", str(target), "--json"], expect=0)
     if validate.get("runtime_state") != "ready":
         raise AssertionError("metadata-only installed-state validate did not pass")
+
+    _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0)
+    refresh_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "host-plugin-refresh-boundary"), None)
+    if (
+        not refresh_action
+        or refresh_action.get("command") != "loom host doctor --host codex --scope user --json"
+        or refresh_action.get("status") != "separate-command"
+        or "does not refresh the Codex workstation plugin cache" not in str(refresh_action.get("reason"))
+    ):
+        raise AssertionError("upgrade-plan did not redirect Codex plugin refresh intent to host commands")
+
+    status, upgrade_payload = run_json(["upgrade", "--target", str(target), "--host", "codex", "--json"])
+    if (
+        status == 0
+        or upgrade_payload.get("failed_layer") != "upgrade-apply"
+        or upgrade_payload.get("host_plugin_refresh", {}).get("id") != "host-plugin-refresh-boundary"
+    ):
+        raise AssertionError("target upgrade did not expose separate Codex host plugin refresh guidance")
 
     host_home = tmp / "metadata-only-codex-home"
     host_home.mkdir()
@@ -2738,6 +2766,31 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     help_text = help_result.stdout + help_result.stderr
     if help_result.returncode != 0 or "repo-local-wrapper repos keep declared .loom/bin carriers as valid wrappers" in help_text:
         raise AssertionError("loom --help still advertises repo-local-wrapper .loom/bin as current")
+
+
+def assert_install_upgrade_host_boundary_docs() -> None:
+    required = {
+        "README.md": [
+            "`loom install` and `loom upgrade` manage only the target repository's",
+            "`loom host doctor|install|register --host codex --scope user`",
+            "Target repository upgrade commands do not refresh the Codex plugin cache.",
+        ],
+        "README.zh-CN.md": [
+            "`loom install` 和 `loom upgrade` 只管理目标仓库的仅元数据启用状态。",
+            "`loom host doctor|install|register --host codex --scope user`",
+            "目标仓库的 upgrade 命令不会刷新 Codex 插件缓存。",
+        ],
+        "src/skills/README.md": [
+            "loom host doctor --host codex --scope user --json",
+            "loom host install --host codex --scope user --apply --json",
+            "`loom install` and `loom upgrade` manage that target repository state only",
+        ],
+    }
+    for relative, snippets in required.items():
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        missing = [snippet for snippet in snippets if snippet not in text]
+        if missing:
+            raise AssertionError(f"{relative} missing install/upgrade host boundary snippets: {missing}")
 
 
 def valid_state(target: Path) -> dict[str, Any]:
@@ -8527,6 +8580,7 @@ def run_governance_closeout_contract() -> None:
 def run_adoption_host_metadata_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-adoption-host-metadata-") as raw_tmp:
         assert_metadata_only_adoption_contract(Path(raw_tmp))
+    assert_install_upgrade_host_boundary_docs()
 
     print("adoption host metadata surface checks passed")
 
