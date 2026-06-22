@@ -414,6 +414,227 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
         module.emit_flow = original_emit_flow
 
 
+def assert_merge_closeout_run_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for merge closeout-run regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    closeout_calls: list[argparse.Namespace] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def passing_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] != ["controlled-merge", "merge"]:
+            raise AssertionError(f"merge --closeout-run delegated unexpected flow args: {flow_args}")
+        if "--execute" not in flow_args:
+            raise AssertionError("merge --closeout-run must execute controlled merge")
+        return {
+            "command": "controlled-merge",
+            "result": "pass",
+            "summary": "merged",
+            "pr": {
+                "number": 1707,
+                "state": "MERGED",
+                "baseRefName": "main",
+                "mergeCommit": {"oid": "fixture-merge-sha"},
+            },
+        }
+
+    def fake_closeout_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+        closeout_calls.append(args)
+        if args.item != "WI-1692" or args.issue != "1692" or args.pr != "1707":
+            raise AssertionError("merge --closeout-run did not preserve Work Item, issue, and PR bindings")
+        if args.branch != "main":
+            raise AssertionError("merge --closeout-run did not pass the closeout target branch")
+        if args.apply is not True:
+            raise AssertionError("merge --closeout-run must apply the closeout run after merge")
+        return {
+            "command": "closeout run",
+            "schema_version": "loom-closeout-run/v1",
+            "result": "pass",
+            "summary": "closeout complete",
+            "issue": {"number": "1692", "state": "CLOSED"},
+            "pr": {"number": "1707", "state": "MERGED"},
+            "terminal_metadata": {
+                "terminal_state": "closed_out",
+                "issue": "1692",
+                "pr": "1707",
+                "merge_commit": "fixture-merge-sha",
+                "target_branch": "main",
+                "closed_at": "fixture-closed-at",
+                "evidence_locator": "host-readback",
+            },
+            "evidence_locators": ["host-readback"],
+        }
+
+    original_flow_payload = module.flow_payload
+    original_closeout_payload = module.run_closeout_payload
+    original_emit = module.emit
+    module.flow_payload = passing_flow_payload
+    module.run_closeout_payload = fake_closeout_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--head-sha",
+                "fixture-head",
+                "--merge-method",
+                "squash",
+                "--apply",
+                "--closeout-run",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("merge --closeout-run did not emit a passing payload")
+        if [call[:2] for call in calls] != [["controlled-merge", "merge"]]:
+            raise AssertionError("merge --closeout-run should only call controlled merge before closeout")
+        if len(closeout_calls) != 1:
+            raise AssertionError("merge --closeout-run did not run closeout exactly once after merge pass")
+        if emitted.get("schema_version") != "loom-merge-run/v1":
+            raise AssertionError("merge --closeout-run must expose the merge-run schema")
+        if emitted.get("closeout_run") is not True or emitted.get("creates_closeout_pr") is not False:
+            raise AssertionError("merge --closeout-run must be explicit and must not create a closeout PR")
+        if emitted.get("closeout_mode") != "inline":
+            raise AssertionError("merge --closeout-run must report inline closeout mode")
+        if [step.get("name") for step in emitted.get("steps", [])] != ["controlled-merge-apply", "closeout-run"]:
+            raise AssertionError("merge --closeout-run emitted an unexpected step sequence")
+
+        def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                return {
+                    "command": "controlled-merge",
+                    "result": "pass",
+                    "summary": "merged",
+                    "pr": {"number": 1707, "state": "MERGED", "baseRefName": "main"},
+                }
+            if flow_args[:2] == ["reconciliation", "sync"]:
+                if "--apply" not in flow_args:
+                    raise AssertionError("host-only closeout must apply reconciliation after merge")
+                return {"command": "reconciliation", "result": "pass", "summary": "issue closed"}
+            if flow_args[:2] == ["closeout", "check"]:
+                return {
+                    "command": "closeout",
+                    "result": "pass",
+                    "summary": "host closeout pass",
+                    "issue": {"number": "1692", "state": "CLOSED"},
+                    "pr": {"number": "1707", "state": "MERGED"},
+                }
+            raise AssertionError(f"host-only merge closeout delegated unexpected flow args: {flow_args}")
+
+        def fail_if_closeout_run(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+            raise AssertionError("host-only closeout mode must not run carrier closeout-run")
+
+        module.flow_payload = host_only_flow_payload
+        module.run_closeout_payload = fail_if_closeout_run
+        calls.clear()
+        closeout_calls.clear()
+        emitted.clear()
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--apply",
+                "--closeout-run",
+                "--closeout-mode",
+                "host_only",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("merge --closeout-run host_only did not pass")
+        if [call[:2] for call in calls] != [["controlled-merge", "merge"], ["reconciliation", "sync"], ["closeout", "check"]]:
+            raise AssertionError("merge --closeout-run host_only did not preserve host-only closeout sequence")
+        if emitted.get("closeout_mode") != "host_only" or emitted.get("creates_closeout_pr") is not False:
+            raise AssertionError("merge --closeout-run host_only must not create a closeout PR")
+
+        module.flow_payload = passing_flow_payload
+        module.run_closeout_payload = fake_closeout_payload
+        calls.clear()
+        closeout_calls.clear()
+        emitted.clear()
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--apply",
+                "--closeout-run",
+                "--closeout-mode",
+                "full_closeout_pr",
+                "--json",
+                "--full-output",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("merge --closeout-run must block full_closeout_pr before merge")
+        if calls or closeout_calls:
+            raise AssertionError("merge --closeout-run full_closeout_pr must not merge or run closeout")
+        if emitted.get("closeout_mode") != "full_closeout_pr" or emitted.get("creates_closeout_pr") is not False:
+            raise AssertionError("merge --closeout-run full_closeout_pr must fail closed without creating a PR")
+
+        def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            return {"command": "controlled-merge", "result": "block", "summary": "merge blocked", "missing_inputs": ["required check pending"]}
+
+        module.flow_payload = blocking_flow_payload
+        module.run_closeout_payload = fake_closeout_payload
+        calls.clear()
+        closeout_calls.clear()
+        emitted.clear()
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--apply",
+                "--closeout-run",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("merge --closeout-run must block when controlled merge blocks")
+        if closeout_calls:
+            raise AssertionError("merge --closeout-run must not run closeout after controlled merge block")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.run_closeout_payload = original_closeout_payload
+        module.emit = original_emit
+
+
 def assert_ship_dry_run_wrapper_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -8256,6 +8477,7 @@ def run_adoption_host_metadata_surface() -> None:
 
 def run_merge_wrapper_surface() -> None:
     assert_merge_wrapper_pr_argument_contract()
+    assert_merge_closeout_run_wrapper_contract()
     with tempfile.TemporaryDirectory(prefix="loom-merge-wrapper-") as raw_tmp:
         assert_controlled_merge_triggered_check_rollup_contract(Path(raw_tmp))
     print("merge wrapper surface checks passed")
