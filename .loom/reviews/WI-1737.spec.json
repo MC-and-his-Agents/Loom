@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1737",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review passed for WI-1737 minimal suite: checkpoint writes persist canonical enum values, read compatibility remains in scope, and release/ship/closeout policy changes are out of scope.",
+  "reviewer": "Codex main controller",
+  "authored_at": "2026-06-22T18:19:17Z",
+  "reviewed_head": "1f138a69414ae07795b70f589074a7ea546d5d01",
+  "reviewed_validation_summary": "2026-06-23 local validation passed at head 4ee510f976211b751e772c4a1ccc6d436a5d61a6: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/checkpoint_canonicalization_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1737 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1737 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1737 --json.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1737.md",
+    "recovery_entry": ".loom/progress/WI-1737.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom-WI-1737-canonical-checkpoint/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1737/spec.md",
+    "suite_plan": ".loom/specs/WI-1737/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1737/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1737/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
