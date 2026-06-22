@@ -37,7 +37,8 @@ Deliver the smallest installer change that makes single SKILL version contract-o
 
 - High-cost guardian: not required for this bounded installer slice unless hosted gates or review request it.
 - PR metadata carrier: required for PR #1725 and already rendered/read back before review.
-- Release version bump / npm publish: not required and forbidden by #1719 ownership.
+- Root release version bump, npm publish, installer tag, or installer GitHub Release: forbidden by #1719 ownership.
+- Installer package metadata patch bump: allowed only to satisfy the existing `node-installer-pr` behavior-change admission gate; it does not authorize npm publish, installer tag creation, or installer GitHub Release.
 
 ## Phases
 
@@ -62,7 +63,7 @@ Deliver the smallest installer change that makes single SKILL version contract-o
 ## Constraints
 
 - Write ownership is limited to `packages/loom-installer/**`, directly related installer tests/docs, and WI-1719 Loom carriers.
-- Forbidden surfaces: `tools/check_npm_package.py`, `test/plugin_payload_hash_test.py`, host command boundary README/skills docs, release version files, npm publish/release files, and other worktrees.
+- Forbidden surfaces: `tools/check_npm_package.py`, `test/plugin_payload_hash_test.py`, host command boundary README/skills docs, root release version files, npm publish/release files, installer tag/release creation, and other worktrees.
 - Do not restore or recommend single SKILL install as a current install path.
 - Do not recommend legacy installer or full-repo clone.
 
@@ -71,6 +72,7 @@ Deliver the smallest installer change that makes single SKILL version contract-o
 - Automated checks:
   - `npm --prefix packages/loom-installer test`
   - `npm --prefix packages/loom-installer run check:docs`
+  - `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main`
   - `git diff --check`
   - `python3 tools/loom.py fact-chain --target . --item WI-1719 --json`
   - `python3 tools/loom.py suite validate --target . --item WI-1719 --json`
@@ -90,6 +92,7 @@ Deliver the smallest installer change that makes single SKILL version contract-o
 
 - Regression coverage added in `packages/loom-installer/test/installer.test.ts`.
 - Existing installer test command rebuilds payload and compiles TypeScript before running tests.
+- Installer package metadata version bumps from `0.1.148` to `0.1.149` only because `node-installer-pr` requires a package version change when `packages/loom-installer/src/**` behavior changes; this is not release authorization.
 - No separate browser, host profile, or live runtime test is needed because this change does not perform external host writes.
 - Acceptance mapping:
   - A1 -> test evidence: single-skill install assertion.
