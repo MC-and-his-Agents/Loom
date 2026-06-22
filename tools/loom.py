@@ -1115,7 +1115,7 @@ def npm_latest_version(package_name: str = "@mc-and-his-agents/loom") -> dict[st
     return {"status": "readable", "version": version, "source": "npm"}
 
 
-def version_freshness() -> dict[str, Any]:
+def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any] | None = None) -> dict[str, Any]:
     versions = version_context()
     installed_cli = versions["repo_version"]
     latest = npm_latest_version()
@@ -1124,6 +1124,9 @@ def version_freshness() -> dict[str, Any]:
     if latest["status"] != "readable" or latest_tuple is None:
         cli_freshness = "npm_unreadable"
         cli_action = "check_cli_latest"
+    elif installed_tuple is None:
+        cli_freshness = "installed_version_unknown"
+        cli_action = "upgrade_cli"
     elif installed_tuple is not None and installed_tuple < latest_tuple:
         cli_freshness = "stale"
         cli_action = "upgrade_cli"
@@ -1132,7 +1135,7 @@ def version_freshness() -> dict[str, Any]:
         cli_action = "already_current"
 
     try:
-        plugin_readback = codex_plugin_payload_readback(global_codex_plugin_source(), codex_workstation_paths())
+        plugin_readback = plugin_readback or codex_plugin_payload_readback(source or global_codex_plugin_source(), codex_workstation_paths())
     except Exception as exc:  # pragma: no cover - defensive host boundary guard.
         plugin_readback = {
             "schema": "loom-codex-plugin-payload-readback/v1",
@@ -5578,7 +5581,7 @@ def handle_host(argv: list[str]) -> int:
         registration = codex_workstation_registration_status(source) if host == "codex" else None
         install_status = codex_workstation_plugin_install_status(source) if host == "codex" else None
         payload_readback = install_status.get("plugin_payload_readback") if isinstance(install_status, dict) else None
-        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, scope=args.scope, provider="codex-user-plugin" if host == "codex" else "unsupported-for-install", hosts=hosts, source_kind=source_kind, workstation_install=install_status, workstation_registration=registration, plugin_payload_readback=payload_readback, version_freshness=version_freshness() if host == "codex" else None, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, scope=args.scope, provider="codex-user-plugin" if host == "codex" else "unsupported-for-install", hosts=hosts, source_kind=source_kind, workstation_install=install_status, workstation_registration=registration, plugin_payload_readback=payload_readback, version_freshness=version_freshness(source, payload_readback) if host == "codex" else None, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
     if args.action == "install" and host == "codex":
         source, source_kind = resolve_codex_plugin_source(args.source)
         paths = codex_workstation_paths()

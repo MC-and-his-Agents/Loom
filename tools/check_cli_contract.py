@@ -2654,6 +2654,8 @@ def assert_codex_payload_readback_contract(tmp: Path) -> None:
         )
         if invalid_source.get("plugin_payload_readback", {}).get("freshness") != "source_metadata_missing" or not source_layer.get("error"):
             raise AssertionError("host doctor did not fail closed on malformed Codex source payload metadata")
+        if invalid_source.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "source_metadata_missing":
+            raise AssertionError("host doctor version freshness did not reuse explicit Codex source payload readback")
 
         remove_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json")
         _, missing_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
