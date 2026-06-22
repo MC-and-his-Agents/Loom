@@ -8,12 +8,12 @@
 - Execution Path: issue #1720 -> branch `work/1720-host-command-boundary-v2` -> worktree `.loom/..` -> targeted validation -> PR -> controlled merge -> closeout.
 - Workspace Entry: `.loom/..`
 - Recovery Entry: `.loom/progress/WI-1720.md`
-- Review Entry: not_created
+- Review Entry: `.loom/reviews/WI-1720.json`
 - Validation Entry: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; `npm --prefix packages/loom-installer run check:distribution`; `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1720 --build-evidence .loom/progress/WI-1720-build-evidence.json`.
 - Closing Condition: PR for `work/1720-host-command-boundary-v2` is merged into `main`, issue #1720 is closed, and closeout consumes PR, issue, branch, target branch, hosted checks, and repo carrier readback.
 - Current Checkpoint: build checkpoint
-- Current Stop: PR #1727 suite and generated payload remediation passed local validation; review artifact binding remains to be recorded.
-- Next Step: Commit the stable implementation head, record spec and implementation review artifacts against that head, update PR metadata, and rerun PR gate.
+- Current Stop: Spec review artifact is recorded and the implementation review locator is prepared; implementation review still needs to be recorded for the current head.
+- Next Step: Commit the review locator carrier update, record implementation review for the resulting head, then refresh PR metadata and rerun PR gate.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-22T12:23Z local validation passed after adding `.loom/specs/WI-1720/implementation-contract.md` and regenerating skills payload README copies: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; `npm --prefix packages/loom-installer run check:distribution`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1720 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1720 --build-evidence .loom/progress/WI-1720-build-evidence.json`.
 - Recovery Boundary: WI-1720 owns only target install/upgrade wording and host guidance payload, targeted CLI contract checks, minimal docs sync, and WI-1720 carriers. It does not implement freshness reports, payload hash comparison, release/version changes, package publishing, `packages/loom-installer/**`, or host plugin source/cache readback.
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-22 WI-1720 build started in the issue-scoped worktree for branch `work/1720-host-command-boundary-v2`.
 - Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1720.md`.
 - Diagnostics Entry: `loom install/upgrade --target <repo>` is target repository installed-state/adoption metadata only; `loom host doctor|install|register --host codex --scope user` owns Codex workstation plugin provider inspection, installation, registration, and refresh guidance.
-- Verification Entry: 2026-06-22T12:23Z suite and generated payload remediation passed local validation for WI-1720 on `work/1720-host-command-boundary-v2`; review artifact binding remains before PR gate pass.
+- Verification Entry: 2026-06-22T12:29Z spec review artifact was recorded for WI-1720 on `work/1720-host-command-boundary-v2`; implementation review locator is prepared before recording the implementation review artifact.
 - Lane Entry: host-command-boundary
 
 ## Sources
