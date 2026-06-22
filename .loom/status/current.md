@@ -9,13 +9,13 @@
 - Workspace Entry: /Users/mc/dev/Loom-WI-1715-freshness-reporting
 - Recovery Entry: .loom/progress/WI-1715.md
 - Review Entry: .loom/reviews/WI-1715.json
-- Validation Entry: `python3 -m py_compile tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`.
+- Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`.
 - Closing Condition: PR for `work/1715-freshness-reporting` is merged into `main`, issue #1715 is closed, and closeout consumes PR, issue, hosted checks, target branch, and repo carrier readback.
 - Current Checkpoint: build
 - Current Stop: Local implementation is in progress on branch `work/1715-freshness-reporting`.
 - Next Step: Validate suite carriers, commit, push, open PR, then run review and merge-ready gates.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local checks passed: `python3 -m py_compile tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`; `python3 tools/loom.py suite validate --target . --item WI-1715 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1715 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1715 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1715 --json`; targeted `loom version` and `loom upgrade-plan` assertions for stale CLI, npm unreadable, and freshness action output.
+- Latest Validation Summary: 2026-06-23 local checks passed: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`; `python3 tools/loom.py suite validate --target . --item WI-1715 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1715 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1715 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1715 --json`; targeted `loom version` and `loom upgrade-plan` assertions for stale CLI, npm unreadable, and freshness action output.
 - Recovery Boundary: WI-1715 owns freshness reporting in `version`, `doctor`, `host doctor`, and `upgrade-plan`. It does not implement plugin refresh UX (#1716), broad fixtures (#1717), or v0.19.0 release closeout (#1718).
 - Current Lane: freshness-reporting
 

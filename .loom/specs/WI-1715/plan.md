@@ -56,7 +56,7 @@ Add one shared freshness diagnostic and wire it into the existing CLI outputs.
 ## Validation
 
 - Automated checks:
-  - `python3 -m py_compile tools/loom.py tools/check_cli_contract.py`
+  - `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`
   - `python3 tools/check_cli_contract.py --surface adoption-host-metadata`
   - `git diff --check`
 - Manual checks:
