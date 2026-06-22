@@ -139,6 +139,9 @@ loom doctor --target . --json
 loom repair plan --target . --json
 ```
 
+`loom install` 和 `loom upgrade` 只管理目标仓库的仅元数据启用状态。检查或刷新本机
+Codex 插件入口时，使用 `loom host doctor|install|register --host codex --scope user`。
+
 在新的 Codex 会话中从 `loom-init` 开始工作；如果 Codex Desktop 已经加载过
 插件列表，重启 Codex Desktop。
 
@@ -157,6 +160,11 @@ loom host verify --host codex --target . --json
 loom skills check --target . --json
 loom doctor --target . --json
 ```
+
+目标仓库的 upgrade 命令不会刷新 Codex 插件缓存。先运行
+`loom host doctor --host codex --scope user --json`，需要修复或刷新本机插件入口时再运行
+`loom host install --host codex --scope user --apply --json` 和
+`loom host register --host codex --scope user --apply --json`。
 
 ## 为什么 Loom 能保持可靠
 

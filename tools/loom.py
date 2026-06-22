@@ -3232,6 +3232,25 @@ def workstation_registration_action(target: Path, source: Path | None = None) ->
     return None
 
 
+def host_plugin_refresh_boundary_action(host: str = "codex") -> dict[str, Any] | None:
+    if host != "codex":
+        return None
+    return {
+        "id": "host-plugin-refresh-boundary",
+        "kind": "host-provider-guidance",
+        "status": "separate-command",
+        "reason": (
+            "target install/upgrade manages repository installed-state and adoption metadata only; "
+            "it does not refresh the Codex workstation plugin cache"
+        ),
+        "command": "loom host doctor --host codex --scope user --json",
+        "apply_commands": [
+            "loom host install --host codex --scope user --apply --json",
+            "loom host register --host codex --scope user --apply --json",
+        ],
+    }
+
+
 def handle_delivery(command: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=f"loom {command}")
     parser.add_argument("--target", default=".")
@@ -3264,15 +3283,16 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     command,
                     "block",
                     schema=DELIVERY_SCHEMA,
-                    summary="Install is mutating and requires --apply before writing installed-state metadata.",
+                    summary="Target repository install writes adoption metadata only and requires --apply before mutation.",
                     target=str(target),
                     host=args.host,
                     mode=mode,
                     mutates=True,
                     planned_writes=[relative_to_target(state_path, target), "AGENTS.md"],
+                    host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                     detection=detection,
                     failed_layer="install-apply",
-                    fail_closed_reason="explicit --apply is required before install writes installed-state",
+                    fail_closed_reason="explicit --apply is required before install writes target repository installed-state metadata",
                     fallback_to=["loom install --target <repo> --apply --json", "loom repair plan --target <repo> --json"],
                 )
             )
@@ -3298,7 +3318,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 command,
                 "pass",
                 schema=DELIVERY_SCHEMA,
-                summary="Metadata-only adoption metadata and Loom bootstrap instructions were written.",
+                summary="Target repository metadata-only adoption state and Loom bootstrap instructions were written.",
                 target=str(target),
                 host=args.host,
                 mode=mode,
@@ -3307,6 +3327,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 installed_state_path=str(state_path),
                 installed_state=planned_state,
                 detection=detection,
+                host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                 fallback_to=None,
             )
         )
@@ -3357,13 +3378,17 @@ def handle_delivery(command: str, argv: list[str]) -> int:
         registration_action = workstation_registration_action(target)
         if registration_action:
             actions.append(registration_action)
+        refresh_boundary_action = host_plugin_refresh_boundary_action(args.host)
+        if refresh_boundary_action:
+            actions.append(refresh_boundary_action)
         return emit(
             output(
                 command,
                 "pass",
                 schema=DELIVERY_SCHEMA,
-                summary="Upgrade plan generated without mutating target state.",
+                summary="Target repository upgrade plan generated without mutating installed-state; host plugin refresh uses loom host commands.",
                 target=str(target),
+                host=args.host,
                 mutates=False,
                 installed_state_path=str(path) if path else None,
                 detection=detection,
@@ -3411,12 +3436,14 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     command,
                     "block",
                     schema=DELIVERY_SCHEMA,
-                    summary="Upgrade is mutating and requires --apply.",
+                    summary="Target repository upgrade refreshes installed-state metadata and requires --apply.",
                     target=str(target),
+                    host=args.host,
                     mutates=True,
                     plan=handle_delivery_payload_for_upgrade_plan(target),
+                    host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                     failed_layer="upgrade-apply",
-                    fail_closed_reason="explicit --apply is required before upgrade mutates installed-state or adapter surfaces",
+                    fail_closed_reason="explicit --apply is required before upgrade mutates target repository installed-state metadata",
                     fallback_to=["loom upgrade-plan --target <repo> --json", "loom verify --target <repo> --json"],
                 )
             )
@@ -3444,11 +3471,13 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 command,
                 "pass",
                 schema=DELIVERY_SCHEMA,
-                summary="Installed-state metadata was refreshed for the current Loom version surface.",
+                summary="Target repository installed-state metadata was refreshed for the current Loom version surface.",
                 target=str(target),
+                host=args.host,
                 mutates=True,
                 installed_state_path=str(path),
                 installed_state=state,
+                host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                 fallback_to=None,
             )
         )
@@ -3494,12 +3523,16 @@ def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
     registration_action = workstation_registration_action(target)
     if registration_action:
         actions.append(registration_action)
+    refresh_boundary_action = host_plugin_refresh_boundary_action("codex")
+    if refresh_boundary_action:
+        actions.append(refresh_boundary_action)
     return output(
         "upgrade-plan",
         "pass",
         schema=DELIVERY_SCHEMA,
-        summary="Upgrade plan generated without mutating target state.",
+        summary="Target repository upgrade plan generated without mutating installed-state; host plugin refresh uses loom host commands.",
         target=str(target),
+        host="codex",
         mutates=False,
         installed_state_path=str(path) if path else None,
         detection=detection,

@@ -1,0 +1,117 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [],
+  "integration_evidence": [
+    {
+      "id": "WI-1720-cli-boundary",
+      "status": "integrated",
+      "summary": "Target install, upgrade-plan, and upgrade outputs now describe repository installed-state/adoption metadata as the mutation boundary and expose a short Codex host plugin refresh guidance action.",
+      "locators": [
+        "tools/loom.py"
+      ]
+    },
+    {
+      "id": "WI-1720-contract-guard",
+      "status": "integrated",
+      "summary": "The adoption-host-metadata CLI contract surface now checks install dry-run, upgrade-plan, upgrade dry-run, and README/source skill snippets for the command boundary.",
+      "locators": [
+        "tools/check_cli_contract.py"
+      ]
+    },
+    {
+      "id": "WI-1720-doc-sync",
+      "status": "integrated",
+      "summary": "README, README.zh-CN, and src/skills/README.md now state that target install/upgrade does not refresh the Codex plugin cache and that host doctor/install/register owns workstation plugin provider refresh.",
+      "locators": [
+        "README.md",
+        "README.zh-CN.md",
+        "src/skills/README.md"
+      ]
+    },
+    {
+      "id": "WI-1720-carriers",
+      "status": "integrated",
+      "summary": "WI-1720 work item, progress, minimal suite, task carrier, evidence map, status, bootstrap, and build evidence bind scope, non-goals, validation, worktree, and branch.",
+      "locators": [
+        ".loom/work-items/WI-1720.md",
+        ".loom/progress/WI-1720.md",
+        ".loom/progress/WI-1720-build-evidence.json",
+        ".loom/specs/WI-1720/",
+        ".loom/status/current.md",
+        ".loom/bootstrap/init-result.json"
+      ]
+    }
+  ],
+  "ownership_contract": {
+    "write_ownership": [
+      "tools/loom.py target install/upgrade/upgrade-plan wording and host guidance payload",
+      "tools/check_cli_contract.py adoption-host-metadata fixtures/checks",
+      "README.md, README.zh-CN.md, src/skills/README.md minimal docs sync",
+      "WI-1720 Loom carriers"
+    ],
+    "non_goals": [
+      "No packages/loom-installer changes",
+      "No payload hash implementation or #1714 hash semantics",
+      "No #1715 freshness report",
+      "No release version, npm publish, GitHub release, or release files",
+      "No new loom plugin command surface"
+    ],
+    "forbidden_scope_touched": false
+  },
+  "validation": {
+    "status": "pass",
+    "commands": [
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py",
+        "result": "pass",
+        "summary": "py_compile_clean passed for tools/loom.py and tools/check_cli_contract.py."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface adoption-host-metadata",
+        "result": "pass",
+        "summary": "Target install, upgrade-plan, upgrade, host provider, and docs boundary fixture checks passed."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface reference-integrity",
+        "result": "pass",
+        "summary": "Source/generated/plugin skills reference integrity passed."
+      },
+      {
+        "command": "git diff --check",
+        "result": "pass",
+        "summary": "No whitespace errors."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --item WI-1720 --json",
+        "result": "pass",
+        "summary": "Fact chain passed for WI-1720."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1720 --json",
+        "result": "pass",
+        "summary": "Minimal suite path and spec/plan mappings passed."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1720 --json",
+        "result": "pass",
+        "summary": "Behavior, test, and fresh verification evidence passed."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1720 --json",
+        "result": "pass",
+        "summary": "Task carrier validation passed."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1720 --build-evidence .loom/progress/WI-1720-build-evidence.json",
+        "result": "pass",
+        "summary": "Build flow found integrated execution evidence and can proceed toward review."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate",
+        "result": "block",
+        "summary": "Non-blocking for WI-1720: failed in unrelated merge-wrapper fixture with `loom merge ... pr-number: invalid int value: 'pr'`; the required WI-1720 adoption-host-metadata surface passed."
+      }
+    ]
+  },
+  "result": "pass"
+}
