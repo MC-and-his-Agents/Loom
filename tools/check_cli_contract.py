@@ -255,6 +255,7 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
     if env_overrides:
         env.update(env_overrides)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.setdefault("LOOM_SKIP_NPM_LATEST", "1")
     try:
         completed = subprocess.run(
             [sys.executable, str(LOOM), *args],
@@ -2713,6 +2714,53 @@ def assert_codex_payload_readback_contract(tmp: Path) -> None:
         )
         if invalid_runtime.get("plugin_payload_readback", {}).get("freshness") != "runtime_cache_metadata_missing" or not runtime_layer.get("error"):
             raise AssertionError("host doctor did not fail closed on malformed Codex runtime cache metadata")
+
+
+def assert_version_freshness_contract(tmp: Path) -> None:
+    target = tmp / "version-freshness"
+    home = tmp / "version-freshness-home"
+    target.mkdir()
+    home.mkdir()
+    installed_version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    with isolated_codex_workstation(home):
+        run_json(["install", "--target", str(target), "--apply", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        register_fixture_codex_plugin()
+        runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.4.0"
+        shutil.copytree(home / "plugins" / "loom", runtime)
+
+        _, current = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        freshness = current.get("version_freshness", {})
+        if freshness.get("action") != "already_current" or freshness.get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("version did not report current CLI and plugin payload freshness")
+
+        _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if host_doctor.get("version_freshness", {}).get("action") != "already_current":
+            raise AssertionError("host doctor did not expose version freshness action")
+
+        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        freshness_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "cli-plugin-freshness"), None)
+        if not freshness_action or freshness_action.get("status") != "current":
+            raise AssertionError("upgrade-plan did not expose current CLI/plugin freshness action")
+
+        _, stale_cli = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": "99.0.0"})
+        if stale_cli.get("version_freshness", {}).get("action") != "upgrade_cli":
+            raise AssertionError("version did not identify stale CLI")
+
+        write_payload_hash(runtime / ".codex-plugin" / "plugin.json", "stale-runtime")
+        _, stale_plugin = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if stale_plugin.get("version_freshness", {}).get("action") != "refresh_plugin":
+            raise AssertionError("version did not identify stale plugin payload")
+
+        remove_payload_hash(runtime / ".codex-plugin" / "plugin.json")
+        _, missing_metadata = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if missing_metadata.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "runtime_cache_metadata_missing":
+            raise AssertionError("version did not expose missing plugin payload metadata")
+
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        _, unreadable = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": "__unreadable__"})
+        if unreadable.get("version_freshness", {}).get("cli", {}).get("freshness") != "npm_unreadable":
+            raise AssertionError("version did not expose npm latest read failure")
 
 
 def assert_metadata_only_adoption_contract(tmp: Path) -> None:
@@ -8686,6 +8734,7 @@ def run_adoption_host_metadata_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-adoption-host-metadata-") as raw_tmp:
         tmp = Path(raw_tmp)
         assert_codex_payload_readback_contract(tmp)
+        assert_version_freshness_contract(tmp)
         assert_metadata_only_adoption_contract(tmp)
     assert_install_upgrade_host_boundary_docs()
 
