@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1719",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1719: the minimal suite is scoped to contract-only single SKILL version semantics, legacy metadata diagnostic tolerance, payload manifest behavior, and targeted installer validation; release and host command boundary work remain explicitly out of scope.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-06-22T09:44:00Z",
+  "reviewed_head": "4b5f0fa0263180dd2b0d49b73ee02eecda73a7c3",
+  "reviewed_validation_summary": "2026-06-22 local validation passed in `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only`: `npm --prefix packages/loom-installer ci`; `npm --prefix packages/loom-installer test` passed 22 installer tests after rebuilding payload and compiling TypeScript; `npm --prefix packages/loom-installer run check:docs` passed; `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1719 --json` passed; PR #1725 metadata preflight/readback passed for head `4b5f0fa0263180dd2b0d49b73ee02eecda73a7c3`; `python3 tools/loom.py review record --target . --item WI-1719 --kind spec_review --decision allow --review-file .loom/reviews/WI-1719.spec.json --json` passed; `python3 tools/loom.py review record --target . --item WI-1719 --kind code_review --decision allow --review-file .loom/reviews/WI-1719.json --json` passed; `python3 skills/shared/scripts/loom_flow.py flow spec-review --target . --item WI-1719` passed; `python3 skills/shared/scripts/loom_flow.py flow review --target . --item WI-1719 --pr 1725 --branch work/1719-skill-contract-version-only` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1719.md",
+    "recovery_entry": ".loom/progress/WI-1719.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom-WI-1719-skill-contract-version-only/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1719/spec.md",
+    "suite_plan": ".loom/specs/WI-1719/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1719/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1719/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

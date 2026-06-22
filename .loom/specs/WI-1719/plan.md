@@ -35,8 +35,8 @@ Deliver the smallest installer change that makes single SKILL version contract-o
 
 ## Skipped Items
 
-- High-cost guardian / hosted merge gate: not required for this local build slice; recheck if a PR is opened or merge-ready is requested.
-- PR metadata carrier: not required until the main thread requests PR creation.
+- High-cost guardian: not required for this bounded installer slice unless hosted gates or review request it.
+- PR metadata carrier: required for PR #1725 and already rendered/read back before review.
 - Release version bump / npm publish: not required and forbidden by #1719 ownership.
 
 ## Phases
@@ -55,9 +55,9 @@ Deliver the smallest installer change that makes single SKILL version contract-o
 
 ### Phase 3
 
-- Objective: Validate and publish branch state.
-- Deliverable: targeted checks, commit, and push.
-- Exit condition: branch `work/1719-skill-contract-version-only` is pushed with no forbidden file changes.
+- Objective: Validate, publish, and review PR state.
+- Deliverable: targeted checks, commit, push, PR metadata readback, review records, and merge-ready evidence.
+- Exit condition: PR #1725 is merged and issue #1719 closeout passes.
 
 ## Constraints
 
@@ -103,7 +103,7 @@ Deliver the smallest installer change that makes single SKILL version contract-o
 - Owned outputs: none; main executor handled implementation and carrier updates serially.
 - Integration owner: main executor.
 - Required evidence from each subagent: not required.
-- Review or reconciliation needed before merge-ready: current-head review only if PR / merge-ready is later requested.
+- Review or reconciliation needed before merge-ready: current-head spec and implementation review records are required for PR #1725.
 - Handoff notes locator: `.loom/progress/WI-1719.md`
 
 ## Dependencies
