@@ -3,11 +3,11 @@
   "item_id": "WI-1692",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allow: the wrapper preserves default merge delegation, makes closeout-run explicit, gates inline and host_only modes correctly, refuses upgraded closeout PR policies before merge, does not create closeout PRs, and focused tests cover default, inline, host_only, upgraded fail-closed, and merge-block behavior.",
+  "summary": "Implementation review allow: committed head preserves default merge delegation, makes closeout-run explicit, gates inline and host_only modes correctly, refuses upgraded closeout PR policies before merge, does not create closeout PRs, and focused tests cover default, inline, host_only, upgraded fail-closed, and merge-block behavior.",
   "reviewer": "codex-main",
-  "authored_at": "2026-06-22T01:22:00Z",
-  "reviewed_head": "f60c6b9ae58c0290fb18c0c1f71f66aa7be5c618",
-  "reviewed_validation_summary": "Local validation before review carrier refresh: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group merge-wrapper; closeout-wrapper; ship-wrapper; controlled-merge. Suite validate, suite evidence validate, suite carrier validate, fact-chain, state-check, and build execution evidence are pass. Full aggregate printed 12/13 passing surfaces and was interrupted while duplicating governance-closeout inside aggregate.",
+  "authored_at": "2026-06-22T01:25:08Z",
+  "reviewed_head": "0fb00a21d9159afc87768efd218e3e8bb8381907",
+  "reviewed_validation_summary": "2026-06-22 pre-carrier-commit validation passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group merge-wrapper; closeout-wrapper; ship-wrapper; controlled-merge; suite validate; suite evidence validate; suite carrier validate; fact-chain; state-check; flow review. Full aggregate remains intentionally not rerun after prior duplicated governance-closeout hang classification.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": EOF; github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 2
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
