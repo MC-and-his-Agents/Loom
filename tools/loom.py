@@ -1115,6 +1115,64 @@ def npm_latest_version(package_name: str = "@mc-and-his-agents/loom") -> dict[st
     return {"status": "readable", "version": version, "source": "npm"}
 
 
+def plugin_payload_refresh_guidance(plugin_readback: dict[str, Any]) -> dict[str, Any]:
+    action = plugin_readback.get("action")
+    freshness = plugin_readback.get("freshness")
+    readback_command = "loom host doctor --host codex --scope user --json"
+    install_command = "loom host install --host codex --scope user --apply --json"
+    register_command = "loom host register --host codex --scope user --apply --json"
+    reload_note = "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded."
+
+    apply_commands: list[str] = []
+    next_steps: list[str]
+    reload_required = False
+    status = "required"
+    summary = "Codex plugin payload refresh is required."
+
+    if action == "install_cli":
+        apply_commands = [
+            "npm install -g @mc-and-his-agents/loom@latest",
+            install_command,
+            register_command,
+        ]
+        next_steps = [*apply_commands, readback_command]
+        summary = "Install the current root Loom CLI, then refresh and register the Codex user plugin payload."
+    elif action == "install_plugin":
+        apply_commands = [install_command, register_command]
+        next_steps = [*apply_commands, readback_command]
+        summary = "Refresh the Codex user plugin source from the root Loom CLI, then register it."
+    elif action == "reload_host":
+        reload_required = True
+        next_steps = [reload_note, readback_command]
+        summary = "The Codex-owned runtime cache is stale; reload Codex, then read back host doctor."
+    elif action == "already_current" or freshness == "already_current":
+        status = "current"
+        next_steps = [readback_command]
+        summary = "Codex plugin payload is already current."
+    else:
+        command = plugin_readback.get("command") if isinstance(plugin_readback.get("command"), str) else readback_command
+        next_steps = [command, readback_command] if command != readback_command else [readback_command]
+
+    return {
+        "schema": "loom-plugin-payload-refresh-guidance/v1",
+        "status": status,
+        "freshness": freshness,
+        "action": action,
+        "summary": summary,
+        "apply_commands": apply_commands,
+        "readback_command": readback_command,
+        "reload_required": reload_required,
+        "reload_note": reload_note if reload_required else None,
+        "next_steps": next_steps,
+        "authority_boundary": {
+            "provider": "codex-user-plugin",
+            "managed_by": "loom host doctor|install|register --host codex --scope user",
+            "target_install_upgrade_scope": "repository installed-state only",
+            "legacy_installer": "not_primary_path",
+        },
+    }
+
+
 def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any] | None = None) -> dict[str, Any]:
     versions = version_context()
     installed_cli = versions["repo_version"]
@@ -1150,6 +1208,7 @@ def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any
     plugin_action = "already_current" if plugin_freshness == "already_current" else "refresh_plugin"
     if plugin_readback.get("action") == "install_cli":
         plugin_action = "upgrade_cli"
+    refresh_guidance = plugin_payload_refresh_guidance(plugin_readback)
     source_surface = next((layer.get("plugin_surface_version") for layer in plugin_readback.get("layers", []) if layer.get("layer") == "source-payload"), None)
     surface_versions = {
         layer.get("layer"): layer.get("plugin_surface_version")
@@ -1192,6 +1251,7 @@ def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any
             "installed": next((layer for layer in plugin_readback.get("layers", []) if layer.get("layer") == "runtime-cache"), None),
             "latest": next((layer for layer in plugin_readback.get("layers", []) if layer.get("layer") == "source-payload"), None),
             "readback": plugin_readback,
+            "refresh_guidance": refresh_guidance,
         },
         "surface_compatibility": {
             "status": "incompatible" if incompatible_surfaces else "compatible",
@@ -1204,12 +1264,18 @@ def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any
 
 def version_freshness_action(freshness: dict[str, Any]) -> dict[str, Any]:
     action = freshness.get("action")
+    guidance = freshness.get("plugin_payload", {}).get("refresh_guidance", {})
     return {
         "id": "cli-plugin-freshness",
         "kind": "version-freshness",
         "status": "current" if action == "already_current" else "required",
         "action": action,
         "command": freshness.get("command") or "loom version --json",
+        "apply_commands": guidance.get("apply_commands", []),
+        "readback_command": guidance.get("readback_command"),
+        "reload_required": guidance.get("reload_required", False),
+        "reload_note": guidance.get("reload_note"),
+        "next_steps": guidance.get("next_steps", []),
     }
 
 
