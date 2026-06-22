@@ -70,15 +70,41 @@ A typical Loom task looks like this:
 3. The agent works in a bound branch and workspace.
 4. The agent records what changed and what was validated.
 5. Review checks the current head, not an outdated memory of the work.
-6. Merge readiness checks that the Work Item, branch, PR, review, and evidence
-   agree.
-7. After merge, closeout records the completed state and retires the workspace.
+6. `loom ship` checks that the Work Item, branch, PR, review, and evidence
+   agree before merge.
+7. After merge, the same ship run reads back the host state and completes the
+   shortest legal closeout path.
 
 Under the hood, work moves through a gate chain: spec gate, build gate, review
 gate, and merge gate.
 
 The goal is not to make the agent type faster. The goal is to make the work
 harder to lose, misread, or merge prematurely.
+
+## Daily Delivery Path
+
+After Loom is installed and a Work Item has a PR, the default delivery command is
+`loom ship`. It is the product path for ordinary work: check PR metadata, confirm
+the gate inputs, merge through the host control plane when `--apply` is present,
+then complete inline or host-only closeout without opening a second closeout PR.
+
+```bash
+loom ship \
+  --target . \
+  --item WI-123 \
+  --issue 123 \
+  --pr 456 \
+  --branch work/123-example \
+  --head-sha "$(git rev-parse HEAD)" \
+  --apply \
+  --json
+```
+
+Light and standard changes should normally finish in that one command. Loom only
+upgrades to a batched carrier PR or an explicit full closeout PR when the work is
+a release, parent or milestone closeout, multi-Work-Item delivery, host/repo
+conflict, reinforced-governance change, or another case that needs versioned
+terminal evidence.
 
 ## Try It In A Repository
 
@@ -132,6 +158,10 @@ loom repair plan --target . --json
 Start working from `loom-init` in a new Codex session. Restart Codex Desktop if
 it had already loaded the plugin list.
 
+For day-to-day delivery after a PR exists, ask the agent to use `loom ship`
+instead of manually chaining merge-ready, reconciliation, carrier closeout, and
+closeout checks.
+
 On a second development machine for an already adopted repository, install the
 global CLI and register the Codex user-level plugin, then verify the repository:
 
@@ -158,8 +188,9 @@ channels separate, then uses the CLI to check whether they agree.
 At the repository boundary, Loom keeps only metadata. The global `loom` command
 installs the Codex user-level plugin, records repository adoption, reads the
 fact chain, and runs verification. Agents start from `loom-init`, then move
-through scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`,
-`loom-review`, and `loom-merge-ready`.
+through scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`, and
+`loom-review`. When a PR is ready to deliver, `loom ship` is the primary CLI
+path for merge plus closeout.
 
 At the repository level, Loom lands as five stable parts:
 

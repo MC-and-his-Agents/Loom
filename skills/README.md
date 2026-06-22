@@ -11,10 +11,15 @@ organization and compatibility mirror, not a self-contained single-skill
 package. Methodology and architecture documents stay behind this layer; users
 should enter through skills instead of internal governance docs.
 
-By default, start from `loom-init`. It is the unique root entry for Loom and is responsible for two things:
+By default, start from `loom-init` for adoption, routing, and work recovery. It is the unique root entry for Loom and is responsible for two things:
 
 - initialize Loom or retrofit Loom into an existing repository
 - route the operator to the correct scenario skill when no explicit skill was named
+
+For ordinary delivery after a Work Item has a PR, use `loom ship` as the primary
+CLI path. It consumes PR metadata, the PR gate, controlled merge, and the
+closeout policy so light and standard changes can merge and close out without a
+follow-up closeout PR.
 
 The `skills/` layer consumes the current strong-governance control plane with these fixed constraints:
 
@@ -24,7 +29,10 @@ The `skills/` layer consumes the current strong-governance control plane with th
 - the release chain converges on `spec gate -> build gate -> review gate -> merge gate`
 - `status control plane` only reads and summarizes fact-chain and host control-plane truth, and does not author a second source of truth
 - profile maturity upgrades through `light -> standard -> strong`, while item maturity still advances through the governance state machine
-- merge is controlled by GitHub or an equivalent host control plane; Loom only consumes and summarizes the prerequisites for GitHub controlled merge
+- merge is controlled by GitHub or an equivalent host control plane; `loom ship`
+  is the default CLI wrapper that consumes the prerequisites, executes host
+  merge when requested, and performs inline or host-only closeout when the
+  closeout policy allows it
 
 ## Skills Library
 
@@ -44,6 +52,12 @@ Loom exposes one root entry and ten scenario skills:
 | `loom-retire` | Cleans up or retires the current worksite. |
 | `loom-merge-ready` | Performs the final `merge gate` summary before GitHub-controlled merge. |
 
+Primary delivery command:
+
+```bash
+loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json
+```
+
 ## Entry Model
 
 Loom supports two entry modes:
@@ -59,7 +73,8 @@ Routing only decides the scene skill. It does not replace the stable control pla
 - execution entry stays on `Work Item`
 - gates stay on the shared `gate chain`
 - status reads stay on the shared `status control plane`
-- merge stays on the host platform control plane
+- merge stays on the host platform control plane, with `loom ship` as the
+  ordinary delivery wrapper
 
 ## Install Model
 

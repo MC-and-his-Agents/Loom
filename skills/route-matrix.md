@@ -21,6 +21,7 @@
 | formal spec review | formal spec review、spec review、确认 spec 是否通过、审查 formal spec 路径、确认 spec gate | `loom-spec-review` | `loom spec-review --target <repo> [--item <id>] --json` + `loom review run --target <repo> --item <id> --review-file .loom/reviews/<item>.spec.json` + `loom review record --target <repo> --item <id> --review-file .loom/reviews/<item>.spec.json --kind spec_review` |
 | 正式 review | 正式 review、语义审查、输出 review 结论、code review、implementation review、确认 review gate | `loom-review` | `loom review --target <repo> [--item <id>] --json` + `loom review run --target <repo> --item <id>` + `loom review record --target <repo> --item <id>` |
 | 交接 | 交接、回写停点、移交当前事项 | `loom-handoff` | `loom handoff --target <repo> [--item <id>] --json` |
+| 普通交付 / ship | 工作项已有拉取请求，用户要求合并并收尾，且不属于发布、父级 / 里程碑、多个工作项同批交付、宿主冲突或强化治理升级 | `loom-init` 输出 ship 路径；`loom-merge-ready` 仅作显式预检 | `loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json` |
 | 清理 / retire | 清理现场、退休现场、结束当前事项现场 | `loom-retire` | `loom retire --target <repo> --item <id> --json` |
 | merge 前放行 | merge-ready、最终放行前预检、确认是否可合并、确认 GitHub controlled merge 前置是否齐全 | `loom-merge-ready` | `loom merge-ready --target <repo> [--item <id>] --json` |
 
@@ -43,7 +44,7 @@
 - `maturity upgrade`
   - profile maturity 固定按 `light -> standard -> strong`，事项成熟度由 governance state machine 承接
 - `GitHub controlled merge`
-  - merge 由宿主控制面执行；Loom 只消费 required checks、review、head 绑定与 merge gate 结果
+  - merge 由宿主控制面执行；普通交付通过 `loom ship` 串联拉取请求元数据、拉取请求门控、受控合并与收尾策略
 
 ## 4. Formal Spec Suite Path 消费边界
 
@@ -145,6 +146,8 @@ suite path、evidence-map 或 task-carrier 判定。
 - 用户要求 formal spec review，进入 `loom-spec-review`
 - 用户要求 implementation/code review，进入 `loom-review`
 - 用户要求 merge-ready 或合并前检查，进入 `loom-merge-ready`
+- 用户要求普通拉取请求合并并收尾，且工作项、拉取请求、分支和代码头已明确，优先输出
+  `loom ship` 路径
 - 用户只是在整理 actor、capability、outcome、business value 或 acceptance scenarios，进入 `loom-story`
 
 planning 输出只能包含：
