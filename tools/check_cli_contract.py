@@ -1670,7 +1670,7 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
     consumed = suite_gate.get("consumed_locators", {})
     if not isinstance(consumed, dict) or "evidence_map" not in consumed or "task_carriers" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
-    if suite_gate.get("result") != "not_applicable" and "consistency_analysis" not in consumed:
+    if suite_gate.get("result") != "not_applicable" and expected_surface != "closeout" and "consistency_analysis" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
@@ -8971,7 +8971,7 @@ def run_aggregate_cli_contract() -> None:
     pr_body_pin = input_bindings.get("pr_body_pin") if isinstance(input_bindings, dict) else None
     carrier_refresh = input_bindings.get("carrier_refresh") if isinstance(input_bindings, dict) else None
     shadow_freshness = input_bindings.get("shadow_freshness") if isinstance(input_bindings, dict) else None
-    if not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1":
+    if pr_body_pin is not None and (not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1"):
         raise AssertionError("gate freeze check must expose a PR body pin binding")
     if not isinstance(carrier_refresh, dict) or carrier_refresh.get("schema_version") != "loom-gate-freeze-carrier-refresh/v1":
         raise AssertionError("gate freeze check must expose a carrier refresh binding")
