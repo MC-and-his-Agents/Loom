@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1713
-- Goal: 在 Codex 插件 payload manifest 中写入 release 绑定 metadata，让安装态能读出来源 package、payload version、payload hash 和 release commit 绑定状态。
-- Scope: Issue #1713 only. Update `plugins/loom/.codex-plugin/plugin.json`, plugin payload hash validation, version surface checks, `loom` version context, targeted tests, and WI-1713 carriers. Ownership: plugin release metadata fields, deterministic hash self-reference normalization, package/version contract checks, and WI-1713 carriers only. Non-goals: no #1721 source/cache readback, no #1715 freshness reporting, no #1716 refresh guidance, no #1722 legacy installer retirement, no version bump, no npm publish, no GitHub release.
-- Execution Path: issue #1713 -> branch `work/1713-plugin-release-metadata` -> worktree `.loom/..` -> targeted validation -> PR -> controlled merge -> closeout.
+- Item ID: WI-1737
+- Goal: 将 checkpoint 写入收敛为 canonical enum
+- Scope: Issue #1737: reading remains backward-compatible, checkpoint writes emit canonical enum values only.
+- Execution Path: issue #1737 -> branch work/1737-canonical-checkpoint -> PR #1746 -> controlled merge -> closeout
 - Workspace Entry: .loom/..
-- Recovery Entry: .loom/progress/WI-1713.md
-- Review Entry: .loom/reviews/WI-1713.json
-- Validation Entry: `PYTHONDONTWRITEBYTECODE=1 python3 test/plugin_payload_hash_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/check_npm_package.py tools/version_surface_check.py tools/loom.py`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:distribution`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; `npm run test:package`; Loom fact-chain, suite, and build validations.
-- Closing Condition: PR for `work/1713-plugin-release-metadata` is merged into `main`, issue #1713 is closed, and closeout consumes PR, issue, branch, target branch, hosted checks, and repo carrier readback.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1713 closed out by closeout run: PR #1730 merged at ad07e229e2a1fedf237403109a44dda51dfaab5f, issue #1713 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1713 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1737.md
+- Review Entry: .loom/reviews/WI-1737.json
+- Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/checkpoint_canonicalization_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check
+- Closing Condition: PR #1746 merged and issue #1737 closed with canonical checkpoint write evidence.
+- Current Checkpoint: build
+- Current Stop: Implementation complete for #1737; PR #1746 is open and waiting for refreshed WI-1737 carrier/review evidence and merge gate consumption.
+- Next Step: Record spec and implementation review, refresh carrier/shadow readback, update PR metadata, then consume hosted checks and merge PR #1746.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-22 local validation passed for WI-1713 implementation and carrier scope: `PYTHONDONTWRITEBYTECODE=1 python3 test/plugin_payload_hash_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/check_npm_package.py tools/version_surface_check.py tools/loom.py`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:distribution`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; `npm run test:package`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --item WI-1713 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1713 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1713 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1713 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py version --json`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1713 --build-evidence .loom/progress/WI-1713-build-evidence.json`; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:hosts`; `npm --prefix packages/loom-installer run check:payload`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py review record --target . --item WI-1713 --review-file .loom/reviews/WI-1713.spec.json --decision allow --kind spec_review`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py review record --target . --item WI-1713 --review-file .loom/reviews/WI-1713.json --decision allow --kind code_review`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1713 --write`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py adopt verify --target . --item WI-1713`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py governance-profile status --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .`; `git diff --check`. Prior full `make loom-check` completed all surfaces except root-self-adoption before review/shadow refresh; after review and shadow carrier refresh, `bootstrap-regression` passed with root-self-adoption failures=0.
-- Recovery Boundary: WI-1713 owns release metadata fields, plugin payload hash self-reference normalization, and local package/version checks. It does not implement source/cache runtime freshness comparison or plugin refresh commands.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-06-23 local validation passed at head 4ee510f976211b751e772c4a1ccc6d436a5d61a6: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/checkpoint_canonicalization_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/retained_item_lookup_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1737 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1737 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1737 --json.
+- Recovery Boundary: WI-1737 owns checkpoint canonical enum write behavior, backward-compatible read normalization, generated runtime/plugin copies, demo fixture sync, focused tests, plugin payload hash, and WI-1737 fact-chain/review/shadow evidence only.
+- Current Lane: canonical-checkpoint
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-22 WI-1713 build started in issue-scoped worktree `work/1713-plugin-release-metadata`.
-- Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1713.md`.
-- Diagnostics Entry: `x-loom.plugin_payload_hash` is normalized during digest computation; other plugin manifest metadata remains part of the payload evidence.
-- Verification Entry: Targeted checks, suite validation, build flow, version readback, package checks, CLI contract aggregate checks, review records, shadow parity, adopt verify, and governance profile status passed before PR creation.
-- Lane Entry: plugin-release-metadata
+- Run Entry: 2026-06-23 WI-1737 canonical checkpoint lane continued in issue-scoped worktree `work/1737-canonical-checkpoint`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1737.md`.
+- Diagnostics Entry: Checkpoint write paths now persist canonical enum values while read paths remain backward-compatible with legacy spellings.
+- Verification Entry: Targeted checkpoint tests, demo fixture check, skills surface check, suite validate, suite evidence validate, suite carrier validate, plugin payload hash, shadow parity, adopt verify, and hosted checks are consumed before merge.
+- Lane Entry: canonical-checkpoint
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1713.md
-- Dynamic Truth: .loom/progress/WI-1713.md
+- Static Truth: .loom/work-items/WI-1737.md
+- Dynamic Truth: .loom/progress/WI-1737.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
