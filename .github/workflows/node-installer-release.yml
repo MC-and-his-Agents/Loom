@@ -47,27 +47,16 @@ jobs:
           node-version: '22.14.0'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Install tombstone package dependencies
+        run: npm --prefix packages/loom-installer ci
 
       - name: Check doc sync
         run: npm --prefix packages/loom-installer run check:docs
 
-      - name: Check generated skills surface
-        run: npm --prefix packages/loom-installer run check:distribution
-
-      - name: Check host adapter matrix
-        run: npm --prefix packages/loom-installer run check:hosts
-
       - name: Check version surfaces
         run: npm --prefix packages/loom-installer run check:versions
 
-      - name: Check payload drift
-        run: npm --prefix packages/loom-installer run check:payload
-
-      - name: Run installer regression
+      - name: Run tombstone regression
         run: node packages/loom-installer/scripts/run-regression.mjs
 
       - name: Run loom check

@@ -39,7 +39,7 @@ jobs:
           echo "relevant_changes=$relevant_changes" >> "$GITHUB_OUTPUT"
 
           if [ "$relevant_changes" = true ]; then
-            echo "Relevant node installer paths changed; running the full installer gate."
+            echo "Relevant node installer paths changed; running the tombstone gate."
           else
             echo "No relevant node installer paths changed; fast-success path."
           fi
@@ -50,41 +50,27 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup Python
-        if: steps.relevant.outputs.relevant_changes == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Check version bump
-        if: steps.relevant.outputs.relevant_changes == 'true'
-        run: node packages/loom-installer/scripts/check-version-bump.mjs --base "origin/${{ github.base_ref }}"
-
       - name: Check release surface split
         if: steps.relevant.outputs.relevant_changes == 'true'
         run: python3 tools/check_release_surface.py
+
+      - name: Install tombstone package dependencies
+        if: steps.relevant.outputs.relevant_changes == 'true'
+        run: npm --prefix packages/loom-installer ci
 
       - name: Check doc sync
         if: steps.relevant.outputs.relevant_changes == 'true'
         run: npm --prefix packages/loom-installer run check:docs
 
-      - name: Check generated skills surface
+      - name: Check tombstone package
         if: steps.relevant.outputs.relevant_changes == 'true'
-        run: npm --prefix packages/loom-installer run check:distribution
-
-      - name: Check host adapter matrix
-        if: steps.relevant.outputs.relevant_changes == 'true'
-        run: npm --prefix packages/loom-installer run check:hosts
+        run: npm --prefix packages/loom-installer test
 
       - name: Check version surfaces
         if: steps.relevant.outputs.relevant_changes == 'true'
         run: npm --prefix packages/loom-installer run check:versions
 
-      - name: Check payload drift
-        if: steps.relevant.outputs.relevant_changes == 'true'
-        run: npm --prefix packages/loom-installer run check:payload
-
-      - name: Run installer regression
+      - name: Run tombstone regression
         if: steps.relevant.outputs.relevant_changes == 'true'
         run: node packages/loom-installer/scripts/run-regression.mjs
 

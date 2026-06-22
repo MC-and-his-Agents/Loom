@@ -6454,102 +6454,38 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
     )
     failures.extend(check_required_paths(root, "root-self-plugin", root_plugin_paths))
 
-    package_root = root / "packages/loom-installer"
-    cli_entry = package_root / "dist/src/cli.js"
-    package_json = package_root / "package.json"
-    if not package_json.exists():
-        failures.append(Failure("root-self-plugin", "installer package must exist for downstream plugin verification"))
+    source_plugin_root = root / "plugins/loom"
+    if not source_plugin_root.exists():
+        failures.append(Failure("root-self-plugin", "source plugin payload is missing: `plugins/loom`"))
         return failures
-    npm_bin = host_executable("npm")
-    node_bin = host_executable("node")
-    python_bin = (
-        os.environ.get("LOOM_INSTALLER_PYTHON_BIN")
-        or os.environ.get("LOOM_INSTALLER_TEST_PYTHON_BIN")
-        or host_executable("python3")
-    )
     with tempfile.TemporaryDirectory(prefix="loom-root-self-plugin-") as tmp:
         tmp_root = Path(tmp)
         target = tmp_root / "target"
-        home = tmp_root / "home"
-        npm_cache = tmp_root / "npm-cache"
         target.mkdir(parents=True, exist_ok=True)
-        home.mkdir(parents=True, exist_ok=True)
-        npm_cache.mkdir(parents=True, exist_ok=True)
-        env = {
-            "HOME": str(home),
-            "CODEX_HOME": str(home / ".codex"),
-            "LOOM_INSTALLER_BUILD_TIMESTAMP": "2026-01-01T00:00:00.000Z",
-            "LOOM_INSTALLER_PYTHON_BIN": python_bin,
-            "npm_config_cache": str(npm_cache),
-            "NPM_CONFIG_CACHE": str(npm_cache),
-        }
-        clean_path_entries = [
-            entry
-            for entry in os.environ.get("PATH", "").split(os.pathsep)
-            if entry and "/mise/shims" not in entry
-        ]
-        env["PATH"] = os.pathsep.join(
-            [str(Path(python_bin).parent), str(Path(node_bin).parent), str(Path(npm_bin).parent), *clean_path_entries]
-        )
-        commands: list[tuple[str, list[str], Path]] = []
-        if not (package_root / "node_modules/.bin/tsc").exists():
-            commands.append(
-                (
-                    "install self-plugin build dependencies",
-                    [npm_bin, "ci", "--prefix", str(package_root)],
-                    root,
-                )
-            )
-        commands.extend(
-            (
-                (
-                    "build downstream plugin installer",
-                    [npm_bin, "--prefix", str(package_root), "run", "build"],
-                    root,
-                ),
-                (
-                    "install downstream plugin payload",
-                    [
-                        node_bin,
-                        str(cli_entry),
-                        "add",
-                        "plugin",
-                        "--host",
-                        "codex",
-                        "--target",
-                        str(target),
-                        "--force",
-                        "--json",
-                    ],
-                    root,
-                ),
-            )
-        )
-        try:
-            lock = acquire_installer_regression_lock(
-                package_root,
-                command="loom_check root-self-plugin installer build/install",
-                cwd=root,
-            )
-        except RuntimeError as exc:
-            failures.append(Failure("root-self-plugin", str(exc)))
-            return failures
-        try:
-            for label, args, cwd in commands:
-                try:
-                    result = run_command(root, args, cwd=cwd, env=env, timeout_seconds=300)
-                except subprocess.TimeoutExpired:
-                    failures.append(Failure("root-self-plugin", f"`{label}` timed out"))
-                    return failures
-                if result.returncode != 0:
-                    detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
-                    failures.append(Failure("root-self-plugin", f"`{label}` failed: {detail}"))
-                    return failures
-        finally:
-            release_installer_regression_lock(lock)
-
         installed_marketplace = target / ".agents/plugins/marketplace.json"
         plugin_root = target / "plugins/loom"
+        shutil.copytree(source_plugin_root, plugin_root)
+        installed_marketplace.parent.mkdir(parents=True, exist_ok=True)
+        installed_marketplace.write_text(
+            json.dumps(
+                {
+                    "name": "loom-local",
+                    "interface": {"displayName": "Loom Local Plugins"},
+                    "plugins": [
+                        {
+                            "name": "loom",
+                            "source": {"source": "local", "path": "./plugins/loom"},
+                            "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                            "category": "Productivity",
+                        }
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         expected_paths = (
             plugin_root / ".codex-plugin/plugin.json",
             plugin_root / "skills/registry.json",

@@ -447,19 +447,8 @@ def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
     require_needles(
         INSTALLER_PR,
         (
-            "node packages/loom-installer/scripts/check-version-bump.mjs",
+            "Run tombstone regression",
             "python3 tools/check_release_surface.py",
-        ),
-        errors,
-        surface_label=surface_label,
-        evidence_locator=locator,
-    )
-    bump_check = require_needles(
-        INSTALLER_BUMP_CHECK,
-        (
-            "packages/loom-installer/src/",
-            "packages/loom-installer/package.json",
-            "no installer shim changes",
         ),
         errors,
         surface_label=surface_label,
@@ -505,15 +494,16 @@ def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
                 summary=f"installer release workflow must not contain active publish capability `{needle}`",
             )
 
-    for needle in ("plugins/loom/.codex-plugin/", "skills/"):
-        if needle in bump_check and "ignoredCompatibilityPaths" not in bump_check:
+    if INSTALLER_BUMP_CHECK.exists():
+        bump_check = INSTALLER_BUMP_CHECK.read_text(encoding="utf-8")
+        if "version bump gate retired" not in bump_check:
             add_error(
                 errors,
                 surface_label=surface_label,
-                failure_label=f"{surface_label}-shim-bump-scope-expanded",
+                failure_label=f"{surface_label}-active-bump-gate",
                 evidence_locator=locator,
                 source_locator=relative_to_root(INSTALLER_BUMP_CHECK),
-                summary=f"installer version bump check must not classify `{needle}` as shim behavior",
+                summary="installer version bump check must stay retired for the tombstone package",
             )
 
 
