@@ -102,12 +102,13 @@ The labels below are stable evidence labels. Named release/package checks are ta
 | `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
 | `npm-package-manifest` | `python3 tools/check_npm_package.py --surface npm-package-manifest` | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
 | `npm-pack-payload` | `python3 tools/check_npm_package.py --surface npm-pack-payload`, `npm pack --dry-run --json --ignore-scripts`, or `npm run test:package` when it consumes the same payload proof | Proves the dry-run package payload contains required CLI/runtime/docs/skills/plugin files and excludes repository-internal or deprecated installer surfaces. |
+| `plugin-payload-hash` | `python3 tools/check_npm_package.py --surface plugin-payload-hash` | Proves the installable `plugins/loom` payload has a deterministic SHA-256 digest over sorted relative paths and bytes, ignoring OS/Python cache artifacts. |
 | `installed-global-cli-smoke` | `python3 tools/check_release_surface.py --surface installed-global-cli-smoke` | Proves the packed package can be installed into a temporary global prefix, exposes the `loom` bin, and runs release-required version/help smoke from the installed package instead of only the source checkout. |
 
 Aggregate release/package validation remains available through:
 
 - `python3 tools/check_release_surface.py` or explicit `python3 tools/check_release_surface.py --surface aggregate-release-surface`, which runs the named release contract, workflow, installer sunset, forbidden-pattern, and installed/global CLI smoke surfaces.
-- `python3 tools/check_npm_package.py` or explicit `python3 tools/check_npm_package.py --surface aggregate`, which runs the named `npm-package-manifest` and `npm-pack-payload` surfaces.
+- `python3 tools/check_npm_package.py` or explicit `python3 tools/check_npm_package.py --surface aggregate`, which runs the named `npm-package-manifest`, `npm-pack-payload`, and `plugin-payload-hash` surfaces.
 - `npm run test:package`, when a release/package validation summary needs the packaged npm payload proof as well as the raw checker output.
 
 All release validation evidence must retain:
@@ -130,7 +131,7 @@ When release-required work publishes a Loom CLI release, pre-merge evidence must
 - the chosen `VERSION` and matching `package.json` npm version;
 - plugin payload release metadata, `plugin_payload_hash`, `plugins/loom/skills/registry.json`, generated skills mirror, and skill `contract.json` surfaces synchronized when the release ships skills payload changes;
 - target GitHub `v*` tag and npm `@mc-and-his-agents/loom` version are unoccupied before publish;
-- `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, `installed-global-cli-smoke`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
+- `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, `plugin-payload-hash`, `installed-global-cli-smoke`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
 - PR-event `release-judgment-only`, if present, is recorded only as pre-merge judgment evidence and not as final release evidence.
 
 Post-merge release closeout evidence must show:

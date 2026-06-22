@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -14,6 +15,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_JSON = REPO_ROOT / "package.json"
 VERSION = REPO_ROOT / "VERSION"
+PLUGIN_PAYLOAD_ROOT = REPO_ROOT / "plugins" / "loom"
+PLUGIN_MANIFEST = PLUGIN_PAYLOAD_ROOT / ".codex-plugin" / "plugin.json"
 
 EXPECTED_PACKAGE = "@mc-and-his-agents/loom"
 EXPECTED_BIN = "bin/loom.mjs"
@@ -84,6 +87,9 @@ REQUIRED_MANIFEST_FILES = (
 SURFACE_AGGREGATE = "aggregate"
 SURFACE_MANIFEST = "npm-package-manifest"
 SURFACE_PAYLOAD = "npm-pack-payload"
+SURFACE_PLUGIN_PAYLOAD_HASH = "plugin-payload-hash"
+PLUGIN_PAYLOAD_IGNORE_NAMES = {".DS_Store", "__pycache__"}
+PLUGIN_PAYLOAD_IGNORE_SUFFIXES = {".pyc"}
 
 
 @dataclass(frozen=True)
@@ -105,8 +111,9 @@ SURFACES: dict[str, SurfaceDefinition] = {
             "package.json",
             "VERSION",
             "npm pack --dry-run --json --ignore-scripts",
+            "plugins/loom",
         ),
-        evidence_labels=(SURFACE_MANIFEST, SURFACE_PAYLOAD),
+        evidence_labels=(SURFACE_MANIFEST, SURFACE_PAYLOAD, SURFACE_PLUGIN_PAYLOAD_HASH),
         failure_label="npm-package-validation-failed",
     ),
     SURFACE_MANIFEST: SurfaceDefinition(
@@ -128,6 +135,14 @@ SURFACES: dict[str, SurfaceDefinition] = {
         evidence_labels=(SURFACE_PAYLOAD,),
         failure_label="npm-pack-payload-failed",
     ),
+    SURFACE_PLUGIN_PAYLOAD_HASH: SurfaceDefinition(
+        name=SURFACE_PLUGIN_PAYLOAD_HASH,
+        command=f"python3 tools/check_npm_package.py --surface {SURFACE_PLUGIN_PAYLOAD_HASH}",
+        description="Deterministic SHA-256 validation for the installable Codex plugin payload under plugins/loom.",
+        evidence_locators=("plugins/loom", "plugins/loom/.codex-plugin/plugin.json"),
+        evidence_labels=(SURFACE_PLUGIN_PAYLOAD_HASH,),
+        failure_label="plugin-payload-hash-failed",
+    ),
 }
 SURFACE_ALIASES = {
     SURFACE_AGGREGATE: SURFACE_AGGREGATE,
@@ -136,6 +151,8 @@ SURFACE_ALIASES = {
     SURFACE_MANIFEST: SURFACE_MANIFEST,
     "payload": SURFACE_PAYLOAD,
     SURFACE_PAYLOAD: SURFACE_PAYLOAD,
+    "plugin-hash": SURFACE_PLUGIN_PAYLOAD_HASH,
+    SURFACE_PLUGIN_PAYLOAD_HASH: SURFACE_PLUGIN_PAYLOAD_HASH,
 }
 
 
@@ -306,6 +323,85 @@ def validate_payload() -> set[str]:
     return pack_files
 
 
+def ignored_plugin_payload_path(path: Path, payload_root: Path) -> bool:
+    relative = path.relative_to(payload_root)
+    if any(part in PLUGIN_PAYLOAD_IGNORE_NAMES for part in relative.parts):
+        return True
+    return path.suffix in PLUGIN_PAYLOAD_IGNORE_SUFFIXES
+
+
+def plugin_payload_files(payload_root: Path = PLUGIN_PAYLOAD_ROOT) -> list[Path]:
+    return sorted(
+        (
+            path
+            for path in payload_root.rglob("*")
+            if path.is_file() and not ignored_plugin_payload_path(path, payload_root)
+        ),
+        key=lambda path: path.relative_to(payload_root).as_posix(),
+    )
+
+
+def plugin_payload_root_label(payload_root: Path) -> str:
+    try:
+        return payload_root.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(payload_root)
+
+
+def compute_plugin_payload_hash(payload_root: Path = PLUGIN_PAYLOAD_ROOT) -> dict[str, Any]:
+    hasher = hashlib.sha256()
+    files = plugin_payload_files(payload_root)
+    for path in files:
+        relative = path.relative_to(payload_root).as_posix()
+        hasher.update(relative.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(path.read_bytes())
+        hasher.update(b"\0")
+    return {
+        "algorithm": "sha256",
+        "digest": hasher.hexdigest(),
+        "file_count": len(files),
+        "payload_root": plugin_payload_root_label(payload_root),
+        "ignored_names": sorted(PLUGIN_PAYLOAD_IGNORE_NAMES),
+        "ignored_suffixes": sorted(PLUGIN_PAYLOAD_IGNORE_SUFFIXES),
+        "files": [path.relative_to(payload_root).as_posix() for path in files],
+    }
+
+
+def validate_plugin_payload_hash() -> dict[str, Any]:
+    if not PLUGIN_PAYLOAD_ROOT.is_dir():
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            "plugin payload root is missing: plugins/loom",
+            evidence_locators=("plugins/loom",),
+        )
+    if not PLUGIN_MANIFEST.is_file():
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            "plugin manifest is missing: plugins/loom/.codex-plugin/plugin.json",
+            evidence_locators=("plugins/loom/.codex-plugin/plugin.json",),
+        )
+    computed = compute_plugin_payload_hash(PLUGIN_PAYLOAD_ROOT)
+    if computed["file_count"] == 0:
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            "plugin payload hash has no input files",
+            evidence_locators=("plugins/loom",),
+        )
+    manifest = load_json(PLUGIN_MANIFEST)
+    x_loom = manifest.get("x-loom")
+    declared_hash = x_loom.get("plugin_payload_hash") if isinstance(x_loom, dict) else None
+    if declared_hash is not None and declared_hash != computed["digest"]:
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            "declared plugin_payload_hash does not match the current plugins/loom payload",
+            evidence_locators=("plugins/loom/.codex-plugin/plugin.json:x-loom.plugin_payload_hash", "plugins/loom"),
+        )
+    computed["declared_hash"] = declared_hash
+    computed["declared_hash_status"] = "missing_pending_metadata" if declared_hash is None else "matched"
+    return computed
+
+
 def surface_pass(surface: str, *, payload_file_count: int | None = None) -> dict[str, Any]:
     definition = SURFACES[surface]
     payload: dict[str, Any] = {
@@ -350,7 +446,24 @@ def emit_payload_pass(pack_files: set[str]) -> None:
     }, indent=2))
 
 
-def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str]) -> None:
+def emit_plugin_payload_hash_pass(hash_payload: dict[str, Any]) -> None:
+    print(json.dumps({
+        "schema_version": "loom-npm-package-check/v1",
+        "result": "pass",
+        "surface": SURFACE_PLUGIN_PAYLOAD_HASH,
+        "package": EXPECTED_PACKAGE,
+        "plugin_payload_hash": hash_payload["digest"],
+        "plugin_payload_hash_algorithm": hash_payload["algorithm"],
+        "plugin_payload_file_count": hash_payload["file_count"],
+        "declared_hash_status": hash_payload["declared_hash_status"],
+        "ignored_names": hash_payload["ignored_names"],
+        "ignored_suffixes": hash_payload["ignored_suffixes"],
+        "evidence_label": SURFACE_PLUGIN_PAYLOAD_HASH,
+        "evidence_locators": list(SURFACES[SURFACE_PLUGIN_PAYLOAD_HASH].evidence_locators),
+    }, indent=2))
+
+
+def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str], hash_payload: dict[str, Any]) -> None:
     print(json.dumps({
         "schema_version": "loom-npm-package-check/v1",
         "result": "pass",
@@ -359,15 +472,23 @@ def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str]) -> None:
         "version": package["version"],
         "bin": "loom",
         "payload_file_count": len(pack_files),
+        "plugin_payload_hash": hash_payload["digest"],
+        "plugin_payload_file_count": hash_payload["file_count"],
         "required_files": sorted(REQUIRED_FILES),
         "required_manifest_files": sorted(REQUIRED_MANIFEST_FILES),
         "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
         "forbidden_path_parts": list(FORBIDDEN_PATH_PARTS),
-        "evidence_labels": [SURFACE_MANIFEST, SURFACE_PAYLOAD],
+        "evidence_labels": [SURFACE_MANIFEST, SURFACE_PAYLOAD, SURFACE_PLUGIN_PAYLOAD_HASH],
         "evidence_locators": list(SURFACES[SURFACE_AGGREGATE].evidence_locators),
         "surfaces": [
             surface_pass(SURFACE_MANIFEST),
             surface_pass(SURFACE_PAYLOAD, payload_file_count=len(pack_files)),
+            {
+                **surface_pass(SURFACE_PLUGIN_PAYLOAD_HASH),
+                "plugin_payload_hash": hash_payload["digest"],
+                "plugin_payload_file_count": hash_payload["file_count"],
+                "declared_hash_status": hash_payload["declared_hash_status"],
+            },
         ],
     }, indent=2))
 
@@ -398,7 +519,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=SURFACE_AGGREGATE,
         help=(
             "Validation surface to run. Stable surfaces: aggregate, "
-            f"{SURFACE_MANIFEST}, {SURFACE_PAYLOAD}."
+            f"{SURFACE_MANIFEST}, {SURFACE_PAYLOAD}, {SURFACE_PLUGIN_PAYLOAD_HASH}."
         ),
     )
     parser.add_argument(
@@ -422,10 +543,14 @@ def main(argv: list[str] | None = None) -> int:
     if surface == SURFACE_PAYLOAD:
         emit_payload_pass(validate_payload())
         return 0
+    if surface == SURFACE_PLUGIN_PAYLOAD_HASH:
+        emit_plugin_payload_hash_pass(validate_plugin_payload_hash())
+        return 0
 
     package = validate_manifest()
     pack_files = validate_payload()
-    emit_aggregate_pass(package, pack_files)
+    hash_payload = validate_plugin_payload_hash()
+    emit_aggregate_pass(package, pack_files, hash_payload)
     return 0
 
 
