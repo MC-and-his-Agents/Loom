@@ -2734,6 +2734,9 @@ def assert_version_freshness_contract(tmp: Path) -> None:
         freshness = current.get("version_freshness", {})
         if freshness.get("action") != "already_current" or freshness.get("plugin_payload", {}).get("freshness") != "already_current":
             raise AssertionError("version did not report current CLI and plugin payload freshness")
+        current_guidance = freshness.get("plugin_payload", {}).get("refresh_guidance", {})
+        if current_guidance.get("status") != "current" or current_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json":
+            raise AssertionError("current plugin payload freshness did not expose host readback guidance")
 
         _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
         if host_doctor.get("version_freshness", {}).get("action") != "already_current":
@@ -2743,15 +2746,50 @@ def assert_version_freshness_contract(tmp: Path) -> None:
         freshness_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "cli-plugin-freshness"), None)
         if not freshness_action or freshness_action.get("status") != "current":
             raise AssertionError("upgrade-plan did not expose current CLI/plugin freshness action")
+        if freshness_action.get("readback_command") != "loom host doctor --host codex --scope user --json":
+            raise AssertionError("upgrade-plan current freshness action did not expose host readback command")
 
         _, stale_cli = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": "99.0.0"})
         if stale_cli.get("version_freshness", {}).get("action") != "upgrade_cli":
             raise AssertionError("version did not identify stale CLI")
 
+        write_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json", "stale-marketplace")
+        _, stale_marketplace_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        stale_marketplace_action = next((action for action in stale_marketplace_plan.get("actions", []) if action.get("id") == "cli-plugin-freshness"), None)
+        expected_apply = [
+            "loom host install --host codex --scope user --apply --json",
+            "loom host register --host codex --scope user --apply --json",
+        ]
+        if (
+            not stale_marketplace_action
+            or stale_marketplace_action.get("action") != "refresh_plugin"
+            or stale_marketplace_action.get("apply_commands") != expected_apply
+            or stale_marketplace_action.get("readback_command") != "loom host doctor --host codex --scope user --json"
+        ):
+            raise AssertionError("upgrade-plan did not expose executable stale marketplace plugin refresh guidance")
+        run_json(["host", "install", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        _, repaired_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if repaired_marketplace.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("host install/register guidance did not repair stale plugin marketplace payload")
+
         write_payload_hash(runtime / ".codex-plugin" / "plugin.json", "stale-runtime")
         _, stale_plugin = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
         if stale_plugin.get("version_freshness", {}).get("action") != "refresh_plugin":
             raise AssertionError("version did not identify stale plugin payload")
+        stale_guidance = stale_plugin.get("version_freshness", {}).get("plugin_payload", {}).get("refresh_guidance", {})
+        if (
+            stale_guidance.get("action") != "reload_host"
+            or stale_guidance.get("reload_required") is not True
+            or stale_guidance.get("apply_commands") != []
+            or stale_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json"
+        ):
+            raise AssertionError("stale runtime payload did not expose reload/readback guidance")
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        _, repaired_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if repaired_runtime.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("simulated Codex reload did not repair stale runtime payload readback")
 
         remove_payload_hash(runtime / ".codex-plugin" / "plugin.json")
         _, missing_metadata = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
