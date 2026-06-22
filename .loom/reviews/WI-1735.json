@@ -3,11 +3,11 @@
   "item_id": "WI-1735",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1735 current-head review allows the ship main-path contract freeze: docs and contract checker changes define short diagnostics, dry-run/apply order, automatic repair boundaries, generated-only drift boundary, validation profile expectation, and closeout escalation without implementing runtime repair-chain, review freshness, validation profile, closeout, or release behavior.",
+  "summary": "WI-1735 current-head review allows the ship main-path contract freeze after merging origin/main: docs and contract checker changes define short diagnostics, dry-run/apply order, automatic repair boundaries, generated-only drift boundary, validation profile expectation, and closeout escalation without implementing runtime repair-chain, review freshness, validation profile, closeout, or release behavior. Mainline WI-1732 tombstone changes are consumed as existing target-branch state.",
   "reviewer": "Codex main controller",
-  "authored_at": "2026-06-22T17:45:10Z",
-  "reviewed_head": "89baac5edd5b7b63cbb0272d456b0c880275f279",
-  "reviewed_validation_summary": "2026-06-23 local validation passed at head 89baac5edd5b7b63cbb0272d456b0c880275f279: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json returned result=not_applicable with no missing inputs or blocking gaps; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py governance-profile status --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; shadow/adopt verify pending current-head review and carrier refresh.",
+  "authored_at": "2026-06-22T18:06:50Z",
+  "reviewed_head": "2cff3d6e6db93c2986209d7da59e1bb362b548f1",
+  "reviewed_validation_summary": "2026-06-23 local validation passed at merge head 2cff3d6e6db93c2986209d7da59e1bb362b548f1: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json returned result=not_applicable with no missing inputs or blocking gaps; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; current-head review and carrier refresh pending.",
   "fallback_to": null,
   "findings": [
     {
