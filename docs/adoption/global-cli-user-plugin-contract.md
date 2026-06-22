@@ -92,6 +92,29 @@ Dry-run output must list only user-level planned writes, such as:
 No dry-run or apply path may plan target repository writes for plugin install or
 registration.
 
+## Plugin Payload Freshness
+
+The Codex user-level plugin payload is fresh only when the source package,
+registered plugin source, and host runtime cache agree on plugin payload release
+metadata:
+
+- `source_package`: `@mc-and-his-agents/loom`
+- `source_package_version`: the root npm package version that produced the
+  payload
+- `source_git_sha`: the release commit that produced the payload
+- `plugin_payload_version`: the same release line as the root Loom package, for
+  example `0.19.0`
+- `plugin_payload_hash`: the deterministic hash defined in
+  [version-authority-map.md](./version-authority-map.md)
+
+`plugin_surface_version` remains the Codex plugin interface compatibility line.
+It may stay unchanged while `plugin_payload_version` and
+`plugin_payload_hash` change across Loom releases.
+
+`registry_version` and per-skill `contract_version` are still validated as
+payload integrity and behavior-contract evidence, but they must not be used as
+the freshness decision for the installed Codex plugin payload.
+
 ## Legacy Residue
 
 The following paths are unsupported legacy residue in downstream repositories:

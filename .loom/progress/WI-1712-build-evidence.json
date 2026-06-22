@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [],
+  "integration_evidence": [
+    {
+      "id": "main-thread-contract-freeze",
+      "status": "integrated",
+      "summary": "Main executor integrated #1712 contract docs, generated skill mirrors, version_surface_check guard, not_applicable suite decision, task carrier, and fact-chain carriers.",
+      "locators": [
+        "docs/adoption/version-authority-map.md",
+        "docs/adoption/global-cli-user-plugin-contract.md",
+        "docs/adoption/cli-only-install-contract.md",
+        "docs/adoption/loom-cli-release-surface.md",
+        "src/skills/distribution-and-adapter-contract.md",
+        "skills/distribution-and-adapter-contract.md",
+        "plugins/loom/skills/distribution-and-adapter-contract.md",
+        "tools/version_surface_check.py",
+        ".loom/work-items/WI-1712.md",
+        ".loom/progress/WI-1712.md",
+        ".loom/specs/WI-1712/spec.md",
+        ".loom/specs/WI-1712/plan.md",
+        ".loom/specs/WI-1712/task-carrier.md",
+        ".loom/status/current.md"
+      ],
+      "validation": [
+        "python3 tools/version_surface_check.py",
+        "python3 tools/skills_surface.py check",
+        "git diff --check",
+        "python3 tools/check_release_surface.py --surface release-doc-contract",
+        "python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns",
+        "python3 tools/check_npm_package.py --surface npm-package-manifest",
+        "python3 tools/loom.py pr metadata-readback 1723 --surface merge_ready --json"
+      ]
+    }
+  ]
+}

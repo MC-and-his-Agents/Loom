@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1696
-- Goal: Execute milestone #15 release closeout for the intensity-aware ship path and publish Loom CLI v0.18.0.
-- Scope: Bump root CLI release authority to v0.18.0, add release readiness evidence, validate package/release surfaces, publish through the existing main-push release workflow, terminalize stale milestone #15 carrier WI-1687, refresh shadow evidence for the active status surface, then close issue #1696 and phase #1680 after readback. Ownership: main executor owns VERSION, package.json, WI-1696 carriers, release evidence, PR metadata, release readback, milestone #15 carrier closeout cleanup, and host closeout. Non-goals: no new ship path implementation, no release workflow semantic change, no plugin surface version bump, no installer release.
-- Execution Path: issue #1696 -> branch work/1696-release-closeout -> PR -> controlled merge -> release workflow -> release readback -> issue/phase closeout
+- Item ID: WI-1712
+- Goal: Define the authoritative plugin payload version and hash contract for #1711 so later implementation work can decide Codex plugin freshness without confusing plugin surface compatibility, skills registry versions, or single-skill contract versions.
+- Scope: Update version authority and install-surface contracts; mirror the skills distribution contract into `src/skills`, `skills`, and `plugins/loom/skills`; add a `version_surface_check` guard for the new terminology; repair the stale WI-1696 terminal carrier that otherwise keeps the current workspace multi-bound. Ownership: WI-1712 owns only the listed contract docs, generated skill mirrors, version surface checker guard, not_applicable suite decision, evidence map, task carrier, fact-chain carriers, doc-sync guard, repo-relative workspace binding, and the WI-1696 terminal checkpoint repair. Non-goals: no CLI behavior change, no payload hash implementation, no plugin metadata generation, no legacy installer behavior change, no version bump, and no release publication in this Work Item.
+- Execution Path: issue #1712 -> branch `work/1712-payload-version-contract` -> issue-scoped worktree -> PR #1723 -> merge -> issue closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1696.md
-- Review Entry: .loom/reviews/WI-1696.json
-- Validation Entry: release readback; version surface; release surface; npm package check; npm package smoke; npm pack dry-run; suite validate/evidence/carrier; fact-chain; state-check; git diff --check.
-- Closing Condition: PR is merged into main, v0.18.0 tag/GitHub Release/npm package publish successfully, issue #1696 is closed, phase #1680 is closed, and milestone #15 has no open issues.
+- Recovery Entry: `.loom/progress/WI-1712.md`
+- Review Entry: `.loom/reviews/WI-1712.json`
+- Validation Entry: `python3 tools/version_surface_check.py`; `python3 tools/skills_surface.py check`; `git diff --check`; `python3 tools/check_release_surface.py --surface release-doc-contract`; `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns`; `python3 tools/check_npm_package.py --surface npm-package-manifest`.
+- Closing Condition: PR #1723 is merged into `main`, issue #1712 is closed, and #1713-#1722 can consume the frozen payload version/hash contract.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Release PR #1709 is merged at `4b90a8e317b2a46d2d735670327986132c678f8e`; v0.18.0 is published on GitHub Releases and npm; closeout carrier PR is being prepared on branch `work/1696-release-closeout-carrier`.
-- Next Step: Merge the final closeout carrier PR, then close issue #1696, close phase #1680, and close milestone #15 after readback.
+- Current Stop: PR #1723 is open; semantic review, PR metadata readback, and gate shadow refresh are integrated for the current head.
+- Next Step: Wait for hosted checks, rerun PR gate / merge-ready, then proceed to controlled merge and closeout for PR #1723.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-22 post-merge release readback passed: PR #1709 merged at `4b90a8e317b2a46d2d735670327986132c678f8e`; tag `v0.18.0`, GitHub Release, npm package `@mc-and-his-agents/loom@0.18.0`, `loom-cli-release` run `27929615490`, and post-merge `loom-check` run `27929615493` are successful. Carrier closeout sync dry-run and apply passed for WI-1696.
-- Recovery Boundary: Work Item #1696 closeout carrier is active in `/Users/mc/dev/Loom-WI-1696` on branch `work/1696-release-closeout-carrier`; no work is performed in `/Users/mc/dev/Loom`.
-- Current Lane: milestone-15-release-closeout
+- Latest Validation Summary: 2026-06-22 local validation passed for the current WI-1712 worktree: `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/skills_surface.py check`; `python3 tools/check_release_surface.py --surface release-doc-contract`; `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns`; `python3 tools/check_npm_package.py --surface npm-package-manifest`; `npm --prefix packages/loom-installer run check:docs`; `python3 tools/loom.py fact-chain --target . --item WI-1712 --json`; `python3 tools/loom.py suite validate --target . --item WI-1712 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1712 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1712 --json`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/check_cli_contract.py --surface aggregate`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. PR #1723 metadata must be rendered and read back again after the next push so the PR machine carrier remains the head SHA authority.
+- Recovery Boundary: WI-1712 owns only the contract freeze, current evidence/review/merge-ready carriers, doc-sync guard, repo-relative workspace binding, and the WI-1696 stale terminal checkpoint repair required to unblock current workspace purity. It does not implement payload hashing, metadata generation, host source/cache readback, stale plugin diagnostics, legacy installer retirement, fixtures, version bump, npm publish, GitHub release, or #1711 final release closeout.
+- Current Lane: payload-version-contract
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-22 WI-1696 release closeout started in issue-scoped worktree `/Users/mc/dev/Loom-WI-1696`.
-- Logs Entry: Local command output retained in current Codex milestone #15 thread; concise validation commands will be listed in the Latest Validation Summary.
-- Diagnostics Entry: `v0.18.0` is the release target for the completed intensity-aware ship path; `v0.18.0` was unoccupied before release PR preparation.
-- Verification Entry: 2026-06-22 post-merge validation passed for release readback, GitHub Release, npm package, release workflow run `27929615490`, post-merge loom-check run `27929615493`, and WI-1696 carrier closeout sync.
-- Lane Entry: milestone-15-release-closeout
+- Run Entry: 2026-06-22 WI-1712 contract freeze started in the issue-scoped worktree for branch `work/1712-payload-version-contract`.
+- Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1712.md`.
+- Diagnostics Entry: `plugin_payload_version` follows the root Loom release/npm package; `plugin_payload_hash` is the payload freshness authority; `plugin_surface_version`, `registry_version`, `contract_version`, and legacy `skill_package_version` are separate lines.
+- Verification Entry: 2026-06-22 local validation passed for the current WI-1712 worktree; PR metadata preflight/readback must be refreshed after each push.
+- Lane Entry: payload-version-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1696.md
-- Dynamic Truth: .loom/progress/WI-1696.md
-- Locator Truth: .loom/bootstrap/init-result.json
-- Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
+- Static Truth: `.loom/work-items/WI-1712.md`
+- Dynamic Truth: `.loom/progress/WI-1712.md`
+- Locator Truth: `.loom/bootstrap/init-result.json`
+- Fact Chain CLI: `python3 .loom/bin/loom_init.py fact-chain --target .`

@@ -18,7 +18,8 @@ Loom 当前唯一的 skills 发布形态是 Codex 用户级 plugin payload：
 当前发布合同固定为：
 
 - 发布物必须包含完整 plugin payload，而不是每个 skill 的自包含包。
-- `plugins/loom/skills/registry.json` 是 plugin payload 的版本与入口索引。
+- `plugins/loom/.codex-plugin/plugin.json` 中的 `x-loom.plugin_payload_version` 与 `x-loom.plugin_payload_hash` 是完整 plugin payload 的新鲜度权威。
+- `plugins/loom/skills/registry.json` 是 skills payload 的入口索引与 registry 版本，不是整包新鲜度权威。
 - `plugins/loom/skills/install-layout.json` 定义完整 payload 的最小文件布局。
 - `plugins/loom/skills/upgrade-contract.json` 定义完整 payload 的升级判断。
 - 每个 scenario skill 可以按目录组织源码和资源，但不得声明为可单独安装的 Loom 发布产物。
@@ -42,7 +43,8 @@ Loom 当前唯一的 skills 发布形态是 Codex 用户级 plugin payload：
 - 用户级 plugin 安装不写目标仓库。
 - 目标仓库采用 Loom 时只写 adoption metadata 和工作事实载体。
 - 缺失 manifest、registry、root entry、scenario skill、shared scripts、shared references 或 shared assets 时 fail closed。
-- 升级比较 plugin manifest version、host adapter version、plugin payload `registry_version` 与各 skill `contract_version`。
+- 升级先用 plugin manifest version 与 host adapter version 判断宿主接口兼容，再用 `plugin_payload_version` 与 `plugin_payload_hash` 判断 payload 新鲜度。
+- 各 skill 的 `contract_version` 只表达该 skill 的行为合同兼容性，不作为单 skill 分发版本，也不单独决定完整 plugin payload 是否新鲜。
 
 适配器不得：
 
@@ -77,3 +79,4 @@ Loom skills 对外只承诺三类接口：
 - scenario skills 完整。
 - plugin payload 不含 single-skill package artifacts。
 - npm package 包含完整 `plugins/loom` payload。
+- payload 新鲜度由 `plugin_payload_version` 与 `plugin_payload_hash` 判定，而不是由 `registry_version`、`contract_version` 或历史 `skill_package_version` 判定。
