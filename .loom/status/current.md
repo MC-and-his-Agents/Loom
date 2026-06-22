@@ -6,7 +6,7 @@
 - Goal: 实现 `loom ship --apply`，在 gate 通过后执行 controlled merge，并完成默认 host-only closeout。
 - Scope: 消费 #1690 的 `loom ship` dry-run surface 与 #1695 closeout policy；添加 root CLI apply 编排、safe metadata repair、controlled merge execute、host reconciliation sync、final closeout check，以及 focused wrapper regression coverage。Ownership constraints are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/work-items/WI-1691.md`, `.loom/progress/WI-1691.md`, `.loom/progress/WI-1691-build-evidence.json`, `.loom/reviews/WI-1691.json`, `.loom/reviews/WI-1691.spec.json`, `.loom/specs/WI-1691/`, and PR metadata for #1691.
 - Execution Path: issue #1691 -> branch `work/1691-ship-apply` -> focused CLI/test update -> PR -> controlled merge -> issue closeout.
-- Workspace Entry: `/Users/mc/dev/Loom-WI-1691`
+- Workspace Entry: ./WI-1691/..
 - Recovery Entry: .loom/progress/WI-1691.md
 - Review Entry: .loom/reviews/WI-1691.json
 - Validation Entry: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface merge-wrapper --surface closeout-wrapper --surface ship-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1691 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1691`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1691`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1691 --build-evidence .loom/progress/WI-1691-build-evidence.json`.
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-22 WI-1691 milestone #15 ship apply implementation in progress.
 - Logs Entry: local command output retained in current Codex milestone #15 thread.
 - Diagnostics Entry: `loom ship --apply` now preserves dry-run gates, executes controlled merge only after blockers clear, runs host reconciliation and final closeout check for eligible inline/host-only policies, and does not create a closeout PR by default.
-- Verification Entry: 2026-06-22 focused local validation for diff check, py compile, ship-wrapper, adjacent wrapper surfaces, release-readback, aggregate, suite validate, suite evidence, suite carrier, fact-chain, state-check, build flow, spec review, and implementation review passed; PR #1706 metadata readback passed; hosted checks, merge-ready, controlled merge, and closeout remain.
+- Verification Entry: 2026-06-22 focused local validation for diff check, py compile, ship-wrapper, adjacent wrapper surfaces, release-readback, aggregate, suite validate, suite evidence, suite carrier, fact-chain, state-check, build flow, spec review, and implementation review passed; PR #1706 metadata readback passed; workspace entry is repo-relative for hosted runner portability; hosted checks, merge-ready, controlled merge, and closeout remain.
 - Lane Entry: milestone-15-ship-apply
 
 ## Sources
