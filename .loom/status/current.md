@@ -15,7 +15,7 @@
 - Current Stop: Implementation complete for #1735; PR #1744 is open and waiting for merge gate/review consumption.
 - Next Step: Consume current-head review and hosted checks, then merge PR #1744 and close out issue #1735.
 - Blockers: None recorded
-- Latest Validation Summary: 2026-06-23 local validation passed at merge head 2cff3d6e6db93c2986209d7da59e1bb362b548f1: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json returned result=not_applicable with no missing inputs or blocking gaps; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py review --target . --item WI-1735 --review-file .loom/reviews/WI-1735.json --decision allow --kind code_review --reviewer "Codex main controller" record; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --write; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1735.
+- Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1735-ship-contract`: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1735.
 - Recovery Boundary: WI-1735 owns ship contract docs and ship-wrapper contract checks only; no runtime repair-chain implementation or closeout permission changes.
 - Current Lane: ship-contract
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-23 WI-1735 ship contract lane continued in issue-scoped worktree `work/1735-ship-contract`.
 - Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1735.md`.
 - Diagnostics Entry: `loom ship` contract freezes short diagnostics, full-output boundary, dry-run/apply order, auto-repair boundary, validation profile expectation, and closeout escalation.
-- Verification Entry: Targeted ship-wrapper contract check, not_applicable suite decision, review record, shadow parity, adopt verify, and hosted checks passed before merge.
+- Verification Entry: Targeted ship-wrapper contract check, not_applicable suite decision, evidence-map/task-carrier readback, review record, shadow parity, adopt verify, and hosted checks passed before merge.
 - Lane Entry: ship-contract
 
 ## Sources
