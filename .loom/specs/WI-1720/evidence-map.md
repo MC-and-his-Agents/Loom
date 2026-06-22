@@ -6,8 +6,8 @@
 - FR / parent locator: issue #1711 sequence, direct Work Item issue #1720
 - Scope: target install/upgrade versus host plugin refresh command boundary.
 - Suite path: minimal
-- Current `HEAD`: refresh after commit.
-- PR locator, or N/A rationale: N/A; user explicitly requested no PR unless later requested.
+- Current `HEAD`: refresh after final commit.
+- PR locator, or N/A rationale: PR #1727.
 - Host state locator, or N/A rationale: GitHub issue #1720
 
 ## Input Snapshot
@@ -26,7 +26,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | EV-001 | behavior_evidence | `tools/loom.py` | S1-S3 CLI output boundary | WI-1720 / branch `work/1720-host-command-boundary-v2` | present | build / review / PR gate | Re-run py_compile and targeted CLI contract after CLI output changes. |
 | EV-002 | test_evidence | `tools/check_cli_contract.py` | A1-A4 fixture/doc guard | WI-1720 / adoption-host-metadata surface | present | build / review / PR gate | Re-run `tools/check_cli_contract.py --surface adoption-host-metadata`. |
-| EV-003 | behavior_evidence | `README.md` | A4 docs sync with README.zh-CN and src/skills/README.md guarded by `tools/check_cli_contract.py` | WI-1720 / docs boundary snippets | present | docs sync / review | Re-read docs and rerun targeted contract check after wording changes. |
+| EV-003 | behavior_evidence | `README.md`, `README.zh-CN.md`, `src/skills/README.md`, `skills/README.md`, `plugins/loom/skills/README.md` | A4 docs sync with generated payload copies guarded by `tools/check_cli_contract.py` and `tools/skills_surface.py check` | WI-1720 / docs boundary snippets / generated skills surface | present | docs sync / review / hosted node-installer gate | Re-read docs, regenerate skills surface, and rerun targeted contract plus generated surface checks after wording changes. |
 | EV-004 | fresh_verification_input | `.loom/progress/WI-1720.md` | EV-001 EV-002 EV-003 | current branch / current head before push | present | build / review / push evidence | Refresh after validation and commit. |
 | EV-005 | build_evidence | `.loom/progress/WI-1720-build-evidence.json` | integrated implementation and validation evidence | WI-1720 / build checkpoint | present | build / review / PR gate | Regenerate through loom-build after validation or ownership changes. |
 

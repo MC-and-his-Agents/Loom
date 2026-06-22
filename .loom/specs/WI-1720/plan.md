@@ -58,7 +58,8 @@
 - Automated checks:
   - `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`
   - `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface adoption-host-metadata`
-  - `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface reference-integrity`
+  - `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`
+  - `npm --prefix packages/loom-installer run check:distribution`
   - `git diff --check`
   - `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --item WI-1720 --json`
   - `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1720 --json`

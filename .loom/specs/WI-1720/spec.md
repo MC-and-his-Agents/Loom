@@ -4,7 +4,7 @@
 
 - Suite path: minimal
 - Suite index locator, or N/A rationale: `.loom/specs/WI-1720`
-- Full-suite-artifacts not_applicable: artifacts: suite-index.md, research.md, contracts.md, readiness-checklist.md; rationale: WI-1720 is a bounded CLI/docs/fixture command-boundary change over existing install, upgrade, upgrade-plan, and host codex commands. consumer boundary: suite validate, build checkpoint, review, PR gate, merge-ready, and closeout may consume this minimal spec, plan, task carrier, evidence map, Work Item carriers, and targeted validation output. recheck condition: require full suite artifacts if scope expands into payload hash/freshness implementation, host source/cache readback, destructive migration apply semantics, release/version publishing, or a new `loom plugin` command surface.
+- Full-suite-artifacts not_applicable: artifacts: suite-index.md, research.md, contracts.md, readiness-checklist.md; rationale: WI-1720 is a bounded CLI/docs/fixture command-boundary change over existing install, upgrade, upgrade-plan, and host codex commands. consumer boundary: suite validate, build checkpoint, review, PR gate, merge-ready, and closeout may consume this minimal spec, plan, implementation contract, task carrier, evidence map, Work Item carriers, and targeted validation output. recheck condition: require full suite artifacts if scope expands into payload hash/freshness implementation, host source/cache readback, destructive migration apply semantics, release/version publishing, or a new `loom plugin` command surface.
 - Consumes:
   - Work Item / FR locator: GitHub issue #1720.
   - Story Readiness confirmed locator, blocking locator, or N/A rationale: N/A; issue #1720 is already scoped as a bounded Work Item.
