@@ -258,7 +258,6 @@ function payloadVersionContext(manifest: PayloadManifest, skill?: PayloadSkillRe
     ...(skill
       ? {
           skill_package_id: skill.id,
-          skill_package_version: skill.skill_package_version,
           skill_contract_version: skill.contract_version,
           runtime_core_version: skill.runtime_core_version,
         }
@@ -469,7 +468,6 @@ function sameVersionContext(left: VersionContext | null, right: VersionContext):
     'host_adapter_version',
     'skills_registry_version',
     'runtime_core_version',
-    'skill_package_version',
     'skill_contract_version',
     'skill_package_id',
   ];

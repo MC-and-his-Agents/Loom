@@ -103,7 +103,8 @@ test('payload manifest tracks loom-spec-review as a public skill', () => {
   assert.equal(skill.relative_path, 'plugin/loom/skills/loom-spec-review');
   assert.equal(skill.package_metadata, 'plugin/loom/skills/registry.json');
   assert.equal(skill.runtime_root, 'plugin/loom/skills');
-  assert.equal(typeof skill.skill_package_version, 'string');
+  assert.equal(typeof skill.contract_version, 'string');
+  assert.equal(Object.hasOwn(skill, 'skill_package_version'), false);
   assert.equal(typeof skill.runtime_core_version, 'string');
   assert.equal(typeof manifest.version_context.repo_version, 'string');
   assert.equal(typeof manifest.version_context.installer_package_version, 'string');
@@ -480,9 +481,59 @@ test('codex skill install writes repo-scoped .agents skill', () => {
   assert.equal(result.mode, 'skill');
   assert.equal(result.distribution_layer, 'generated-single-skill');
   assert.equal(result.version_context?.skill_package_id, 'loom-review');
-  assert.equal(typeof result.version_context?.skill_package_version, 'string');
+  assert.equal(typeof result.version_context?.skill_contract_version, 'string');
+  assert.equal(Object.hasOwn(result.version_context ?? {}, 'skill_package_version'), false);
   assert.equal(existsSync(skillPath), true);
   assert.equal(existsSync(join(envSource.CODEX_HOME!, 'config.toml')), false);
+});
+
+test('legacy per-skill package metadata does not drive single-skill upgrade freshness', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  runInstaller(
+    {
+      mode: 'skill',
+      skillId: 'loom-review',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+  const statusPath = join(repoRoot, '.agents', 'skills', 'loom-review', '.loom-install-status.json');
+  const status = JSON.parse(readFileSync(statusPath, 'utf8'));
+  status.version_context.skill_package_version = '0.0.0';
+  writeFileSync(statusPath, `${JSON.stringify(status, null, 2)}\n`, 'utf8');
+
+  const plan = runInstaller(
+    {
+      operation: 'upgrade-plan',
+      mode: 'skill',
+      skillId: 'loom-review',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.installed_status?.upgrade_eligibility, 'current');
+  assert.deepEqual(plan.changed_paths, []);
+  assert.deepEqual(plan.drift, []);
+  assert.equal(plan.rollback_path, null);
 });
 
 test('codex skill install fails closed on conflicting repo skill directory without force', () => {

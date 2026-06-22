@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1714
-- Goal: Implement deterministic plugin payload hash generation and release/package validation so Loom can detect stale Codex plugin payloads without relying on registry or per-skill versions.
-- Scope: Add the `plugin-payload-hash` package validation surface, compute SHA-256 over sorted `plugins/loom` relative paths and bytes, ignore `.DS_Store`, `__pycache__`, and `*.pyc`, document the release evidence label, and add focused tests. Ownership is limited to the hash surface, release-surface documentation, focused tests, WI-1714 carriers, WI-1714 review records, and the WI-1712 terminal carrier repair required to keep this workspace pure. Non-goals: no plugin manifest metadata writeback, no host source/cache readback, no `loom version` freshness report, no host command boundary changes, no legacy installer retirement, no version bump, and no v0.19.0 release.
-- Execution Path: issue #1714 -> branch `work/1714-plugin-payload-hash` -> issue-scoped worktree -> PR -> merge -> issue closeout.
-- Workspace Entry: .
-- Recovery Entry: `.loom/progress/WI-1714.md`
-- Review Entry: `.loom/reviews/WI-1714.json`
-- Validation Entry: `PYTHONDONTWRITEBYTECODE=1 python3 test/plugin_payload_hash_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`; `python3 tools/check_release_surface.py --surface release-doc-contract`.
-- Closing Condition: PR is merged into `main`, issue #1714 is closed, and downstream #1713/#1721/#1715 can consume the hash surface.
+- Item ID: WI-1719
+- Goal: Deprecate single SKILL distribution version semantics in the legacy installer so per-skill metadata is contract-only and cannot drive freshness or upgrade recommendations.
+- Scope: Update `packages/loom-installer` payload skill metadata, single-skill version context, version context comparison, and installer regression tests; author WI-1719 minimal suite, evidence, task carrier, progress, status, and bootstrap fact-chain binding. Non-goals: no current single SKILL install recommendation, no legacy installer recommendation, no full-repo clone fallback, no CLI release/version bump, no npm publish, no release files, no host command boundary docs/skills, no `tools/check_npm_package.py`, no `test/plugin_payload_hash_test.py`, and no other worktree changes.
+- Execution Path: issue #1719 -> worktree `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only` -> branch `work/1719-skill-contract-version-only` -> PR #1725 -> merge -> issue closeout.
+- Workspace Entry: `.loom/..`
+- Recovery Entry: `.loom/progress/WI-1719.md`
+- Review Entry: `.loom/reviews/WI-1719.json`
+- Validation Entry: `npm --prefix packages/loom-installer test`; `npm --prefix packages/loom-installer run check:docs`; `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main`; `git diff --check`; `python3 tools/loom.py fact-chain --target . --item WI-1719 --json`; `python3 tools/loom.py suite validate --target . --item WI-1719 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1719 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1719 --json`.
+- Closing Condition: PR #1725 is merged into `main`, issue #1719 is closed, and closeout consumes the PR, issue, branch, and main readback.
 - Current Checkpoint: merge checkpoint
-- Current Stop: PR #1724 metadata readback, spec review gate, implementation review flow, and PR metadata preflight are passing for the current branch.
-- Next Step: Run PR gate / merge-ready against the current PR head, then proceed to controlled merge and closeout.
+- Current Stop: PR #1725 is open; local gate and merge-ready passed at head `d79846887ba0a26c47751c4009fa7baee3b038f8`; hosted gates exposed that `Workspace Entry` must be repo-local, must exist as written, and must remain distinct from historical `.` carriers.
+- Next Step: Commit the repo-relative workspace-entry carrier repair, refresh shadow evidence, rebind spec/code review to the new head, refresh PR #1725 metadata, then rerun PR gate, merge-ready, and hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-22 local validation passed in `/Users/mc/dev/Loom-WI-1714-plugin-payload-hash`: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 test/plugin_payload_hash_test.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`; `python3 tools/check_release_surface.py --surface release-doc-contract`; `python3 tools/loom.py fact-chain --target . --item WI-1714 --json`; `python3 tools/loom.py suite validate --target . --item WI-1714 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1714 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1714 --json`; `python3 tools/loom.py build --target . --item WI-1714 --build-evidence .loom/progress/WI-1714-build-evidence.json --json`; `python3 tools/skills_surface.py check`; `python3 tools/check_cli_contract.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/loom.py pr metadata-readback 1724 --surface merge_ready --item WI-1714 --issue 1714 --branch work/1714-plugin-payload-hash --head-sha <head> --readback-file .loom/runtime/pr/WI-1714-pr-body-readback.md --json`; `python3 tools/loom.py review record --target . --item WI-1714 --kind spec_review --decision allow --review-file .loom/reviews/WI-1714.spec.json --json`; `python3 tools/loom.py review record --target . --item WI-1714 --kind code_review --decision allow --review-file .loom/reviews/WI-1714.json --json`; `python3 skills/shared/scripts/loom_flow.py flow review --target . --item WI-1714 --pr 1724 --branch work/1714-plugin-payload-hash`.
-- Recovery Boundary: WI-1714 owns only plugin payload hash generation/package validation, release evidence label docs, focused tests, its fact-chain carriers, its review records, and the WI-1712 terminal carrier repair required to keep workspace purity. It does not write plugin release metadata, implement host source/cache readback, change CLI freshness reporting, alter host command boundaries, retire single-skill installer behavior, bump versions, publish npm, or close #1711.
-- Current Lane: plugin-payload-hash
+- Latest Validation Summary: 2026-06-22 local validation passed in `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only` after installer package metadata patch bump `0.1.148` -> `0.1.149`: `npm --prefix packages/loom-installer test` passed 22 installer tests after rebuilding payload and compiling TypeScript; `npm --prefix packages/loom-installer run check:docs` passed; `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main` passed with `0.1.148 -> 0.1.149`; `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1719 --json` passed.
+- Recovery Boundary: WI-1719 owns only `packages/loom-installer/**`, directly related installer tests/docs, `.loom/work-items/WI-1719.md`, `.loom/progress/WI-1719.md`, `.loom/progress/WI-1719-build-evidence.json`, `.loom/specs/WI-1719/**`, `.loom/status/current.md`, and `.loom/bootstrap/init-result.json`. It must not touch `tools/check_npm_package.py`, `test/plugin_payload_hash_test.py`, host command boundary README/skills docs, root release version files, npm publish/release files, installer tags/releases, other worktrees, #1714, or #1720.
+- Current Lane: skill-contract-version-only
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-22 WI-1714 started in the issue-scoped worktree for branch `work/1714-plugin-payload-hash`.
-- Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1714.md`.
-- Diagnostics Entry: `plugin_payload_hash` is generated from sorted relative paths and bytes under `plugins/loom`; `.DS_Store`, `__pycache__`, and `*.pyc` are ignored.
-- Verification Entry: 2026-06-22 local validation passed for the current WI-1714 worktree; PR metadata preflight/readback must be refreshed after each push.
-- Lane Entry: plugin-payload-hash
+- Run Entry: 2026-06-22 WI-1719 build started in the issue-scoped worktree for branch `work/1719-skill-contract-version-only`.
+- Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1719.md`.
+- Diagnostics Entry: legacy `skill_package_version` may be tolerated in installed metadata for migration diagnostics but is not emitted in current single-skill version context and is ignored for freshness comparison.
+- Verification Entry: targeted installer tests and docs sync passed before final carrier validation; final validation is recorded in `.loom/progress/WI-1719.md`.
+- Lane Entry: skill-contract-version-only
 
 ## Sources
 
-- Static Truth: `.loom/work-items/WI-1714.md`
-- Dynamic Truth: `.loom/progress/WI-1714.md`
+- Static Truth: `.loom/work-items/WI-1719.md`
+- Dynamic Truth: `.loom/progress/WI-1719.md`
 - Locator Truth: `.loom/bootstrap/init-result.json`
 - Fact Chain CLI: `python3 .loom/bin/loom_init.py fact-chain --target .`

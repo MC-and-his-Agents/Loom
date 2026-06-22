@@ -147,7 +147,6 @@ function buildPluginSkillRecords(pluginTarget, entries, requiredPaths, registryV
       id: contract.id,
       display_name: contract.display_name,
       contract_version: contract.contract_version,
-      skill_package_version: registryVersion,
       runtime_core_version: '1.0.0',
       package_metadata: 'plugin/loom/skills/registry.json',
       runtime_root: 'plugin/loom/skills',
