@@ -20,8 +20,8 @@ npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
-Single-skill compatibility commands are historical only and are not part of the
-current Loom distribution contract:
+Single-skill compatibility commands are historical only, fail closed, and are
+not part of the current Loom distribution contract:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
@@ -65,8 +65,10 @@ The plugin payload is committed and verified with the skills and release
 surface checks.
 
 Installer JSON output reports `distribution_layer`, `version_context`, and
-`failed_layer` only as deprecated legacy evidence. Current Loom install flows
-must use the root `loom` CLI and Codex user plugin provider path.
+`failed_layer` only as deprecated legacy evidence. Single-skill requests return
+`legacy-single-skill-diagnostic` and do not install payloads or produce upgrade
+success. Current Loom install flows must use the root `loom` CLI and Codex user
+plugin provider path.
 
 Installer-managed layers also write `loom-installed-surface-status/v1` metadata. `upgrade-plan` and `verify-upgrade` read that metadata, compare it to the package payload, and report `upgrade_eligibility`, `changed_paths`, `drift`, `rollback_path`, and fail-closed reasons without mutating the target repository. See `docs/adoption/installed-loom-status.md` for the status contract.
 

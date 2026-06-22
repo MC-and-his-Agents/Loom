@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { InstallResult, PayloadManifest, PayloadSkillRecord, ResolvedEnv } from './types.js';
-import { InstallerError, copyTree, dirExists, ensureDirectory, fileExists, readJson, replaceTree, writeJson } from './utils.js';
+import { InstallerError, copyTree, dirExists, fileExists, readJson, replaceTree, writeJson } from './utils.js';
 
 function codexMarketplacePath(targetRoot: string): string {
   return join(targetRoot, '.agents', 'plugins', 'marketplace.json');
@@ -118,46 +118,23 @@ export function installCodexPlugin(
 
 export function installCodexSkill(
   _env: ResolvedEnv,
-  targetRoot: string,
-  packageRoot: string,
+  _targetRoot: string,
+  _packageRoot: string,
   skill: PayloadSkillRecord,
-  force: boolean,
+  _force: boolean,
 ): InstallResult {
-  const skillDirName = skill.id.startsWith('loom-') ? skill.id : `loom-${skill.id}`;
-  const sourceDir = join(packageRoot, 'payload', skill.relative_path);
-  const targetDir = join(targetRoot, '.agents', 'skills', skillDirName);
-  const skillMarkdownPath = join(targetDir, 'SKILL.md');
-
-  ensureDirectory(join(targetRoot, '.agents', 'skills'));
-  if (dirExists(targetDir)) {
-    if (!force && !fileExists(skillMarkdownPath)) {
-      throw new InstallerError(
-        `target already contains .agents/skills/${skillDirName} but it is not a Loom skill: ${targetDir}`,
-        `refusing to take over non-Loom repo skill directory: ${targetDir}`,
-      );
-    }
-    replaceTree(sourceDir, targetDir);
-  } else {
-    copyTree(sourceDir, targetDir, true);
-  }
-
-  if (!fileExists(skillMarkdownPath)) {
-    throw new InstallerError(`Codex repo skill install is missing SKILL.md: ${skillMarkdownPath}`);
-  }
+  const reason = 'legacy single-skill installation is retired; use the root `loom` CLI and host plugin payload instead';
 
   return {
     mode: 'skill',
     host: 'codex',
-    distribution_layer: 'generated-single-skill',
-    status: 'installed',
-    installed_paths: [targetDir],
-    verification: [
-      `verified skill payload at ${targetDir}`,
-      `verified repo skill discovery path at ${skillMarkdownPath}`,
-    ],
-    warnings: ['Codex repo-scoped single-skill install exposes only the named skill, not the full Loom plugin surface.'],
+    distribution_layer: 'legacy-single-skill-diagnostic',
+    status: 'blocked',
+    installed_paths: [],
+    verification: [`legacy Codex single-skill install request blocked for ${skill.id}`],
+    warnings: ['single-skill install surfaces are retired; current Loom distribution is CLI + host plugin payload'],
     version_context: null,
-    failed_layer: null,
-    fail_closed_reason: null,
+    failed_layer: 'distribution-layer',
+    fail_closed_reason: reason,
   };
 }

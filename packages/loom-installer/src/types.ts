@@ -2,7 +2,7 @@ export type Host = 'codex' | 'claude';
 export type Mode = 'plugin' | 'skill';
 export type InstallerOperation = 'add' | 'upgrade-plan' | 'verify-upgrade';
 export type InstallStatus = 'installed' | 'already-installed' | 'planned' | 'verified' | 'blocked';
-export type DistributionLayer = 'host-adapter-plugin' | 'generated-single-skill';
+export type DistributionLayer = 'host-adapter-plugin' | 'legacy-single-skill-diagnostic';
 export type RuntimeState = 'ready' | 'blocked' | 'unknown';
 export type UpgradeEligibility = 'current' | 'upgrade-available' | 'drift' | 'incompatible' | 'unknown';
 

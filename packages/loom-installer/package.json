@@ -1,7 +1,7 @@
 {
   "name": "@mc-and-his-agents/loom-installer",
   "version": "0.1.149",
-  "description": "Node installer for Loom plugin and single-skill installation surfaces.",
+  "description": "Deprecated Node installer for Loom plugin payloads and legacy single-skill diagnostics.",
   "type": "module",
   "bin": {
     "loom-installer": "dist/src/cli.js"

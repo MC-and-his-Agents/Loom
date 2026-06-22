@@ -1,0 +1,44 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [],
+  "integration_evidence": [
+    {
+      "id": "main-thread-retire-single-skill-installer",
+      "status": "integrated",
+      "summary": "Main executor retired current single-skill install semantics in the legacy installer: skill-mode add/upgrade-plan/verify-upgrade now return blocked migration diagnostics, generated-single-skill is no longer emitted as a current distribution layer, host-specific direct skill installer exports no longer copy payloads, and regression tests cover no-mutation plus legacy metadata diagnostics.",
+      "locators": [
+        "packages/loom-installer/src/index.ts",
+        "packages/loom-installer/src/types.ts",
+        "packages/loom-installer/src/codex.ts",
+        "packages/loom-installer/src/claude.ts",
+        "packages/loom-installer/test/installer.test.ts",
+        "packages/loom-installer/package.json",
+        "packages/loom-installer/README.md",
+        "packages/loom-installer/README.zh-CN.md",
+        ".loom/work-items/WI-1722.md",
+        ".loom/progress/WI-1722.md",
+        ".loom/specs/WI-1722/spec.md",
+        ".loom/specs/WI-1722/plan.md",
+        ".loom/specs/WI-1722/evidence-map.md",
+        ".loom/specs/WI-1722/task-carrier.md"
+      ],
+      "validation": [
+        "npm --prefix packages/loom-installer test: pass",
+        "npm --prefix packages/loom-installer run check:docs: pass",
+        "npm --prefix packages/loom-installer run check:distribution: pass",
+        "git diff --check: pass",
+        "python3 tools/loom.py suite validate --target . --item WI-1722 --json: pass",
+        "python3 tools/loom.py suite evidence validate --target . --item WI-1722 --json: pass",
+        "python3 tools/loom.py suite carrier validate --target . --item WI-1722 --json: pass",
+        "python3 tools/loom.py fact-chain --target . --item WI-1722 --json: blocked by shared .loom/status/current.md current item mismatch WI-1720"
+      ],
+      "forbidden_scope_review": [
+        "tools/loom.py not modified",
+        "plugins/loom/.codex-plugin/plugin.json not modified",
+        "plugins/loom release metadata/hash not modified",
+        "root README broad marketing/install copy not modified",
+        "version bump, npm publish, and release files not modified"
+      ]
+    }
+  ]
+}

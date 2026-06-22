@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { InstallResult, PayloadManifest, PayloadSkillRecord, ResolvedEnv } from './types.js';
 import { InstallerError, copyTree, dirExists, ensureDirectory, fileExists, readJson, replaceTree, runCommand, writeJson } from './utils.js';
@@ -152,48 +151,23 @@ export function installClaudePlugin(
 }
 
 export function installClaudeSkill(
-  targetRoot: string,
-  packageRoot: string,
+  _targetRoot: string,
+  _packageRoot: string,
   skill: PayloadSkillRecord,
-  force: boolean,
+  _force: boolean,
 ): InstallResult {
-  const sourceDir = join(packageRoot, 'payload', skill.relative_path);
-  const targetDir = join(targetRoot, '.claude', 'skills', skill.id);
-  const skillMarkdownPath = join(targetDir, 'SKILL.md');
-
-  ensureDirectory(join(targetRoot, '.claude', 'skills'));
-  if (dirExists(targetDir)) {
-    if (!force && !fileExists(skillMarkdownPath)) {
-      throw new InstallerError(
-        `existing Claude skill directory is not Loom-managed: ${targetDir}`,
-        `refusing to take over non-Loom Claude skill directory: ${targetDir}`,
-      );
-    }
-    replaceTree(sourceDir, targetDir);
-  } else {
-    copyTree(sourceDir, targetDir, true);
-  }
-
-  if (!fileExists(skillMarkdownPath)) {
-    throw new InstallerError(`Claude skill install is missing SKILL.md: ${skillMarkdownPath}`);
-  }
-  if (!readFileSync(skillMarkdownPath, 'utf8').startsWith('---\n')) {
-    throw new InstallerError(`Claude skill install must keep YAML frontmatter in ${skillMarkdownPath}`);
-  }
+  const reason = 'legacy single-skill installation is retired; use the root `loom` CLI and host plugin payload instead';
 
   return {
     mode: 'skill',
     host: 'claude',
-    distribution_layer: 'generated-single-skill',
-    status: 'installed',
-    installed_paths: [targetDir],
-    verification: [
-      `verified skill payload at ${targetDir}`,
-      `verified discoverable SKILL.md at ${skillMarkdownPath}`,
-    ],
-    warnings: ['Claude single-skill install relies on project-level `.claude/skills` discovery and does not expose the full Loom plugin surface.'],
+    distribution_layer: 'legacy-single-skill-diagnostic',
+    status: 'blocked',
+    installed_paths: [],
+    verification: [`legacy Claude single-skill install request blocked for ${skill.id}`],
+    warnings: ['single-skill install surfaces are retired; current Loom distribution is CLI + host plugin payload'],
     version_context: null,
-    failed_layer: null,
-    fail_closed_reason: null,
+    failed_layer: 'distribution-layer',
+    fail_closed_reason: reason,
   };
 }

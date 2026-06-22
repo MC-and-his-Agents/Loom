@@ -459,7 +459,7 @@ test('codex plugin install lets --force take over conflicting marketplace entry'
   assert.equal(marketplace.plugins[0].source.path, './plugins/loom');
 });
 
-test('codex skill install writes repo-scoped .agents skill', () => {
+test('codex single-skill add fails closed without writing repo skill payload', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CODEX_HOME!, { recursive: true });
@@ -479,39 +479,55 @@ test('codex skill install writes repo-scoped .agents skill', () => {
   const result = runInstaller(parsed, envSource, packageRoot());
   const skillPath = join(repoRoot, '.agents', 'skills', 'loom-review', 'SKILL.md');
   assert.equal(result.mode, 'skill');
-  assert.equal(result.distribution_layer, 'generated-single-skill');
-  assert.equal(result.version_context?.skill_package_id, 'loom-review');
-  assert.equal(typeof result.version_context?.skill_contract_version, 'string');
-  assert.equal(Object.hasOwn(result.version_context ?? {}, 'skill_package_version'), false);
-  assert.equal(existsSync(skillPath), true);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.distribution_layer, 'legacy-single-skill-diagnostic');
+  assert.equal(result.version_context, null);
+  assert.equal(result.available_version_context?.skill_package_id, 'loom-review');
+  assert.equal(typeof result.available_version_context?.skill_contract_version, 'string');
+  assert.equal(Object.hasOwn(result.available_version_context ?? {}, 'skill_package_version'), false);
+  assert.match(result.fail_closed_reason ?? '', /single-skill installation is retired/);
+  assert.equal(existsSync(skillPath), false);
   assert.equal(existsSync(join(envSource.CODEX_HOME!, 'config.toml')), false);
 });
 
-test('legacy per-skill package metadata does not drive single-skill upgrade freshness', () => {
+test('legacy per-skill package metadata only drives migration diagnostics', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CODEX_HOME!, { recursive: true });
   const repoRoot = join(base, 'repo');
   mkdirSync(repoRoot, { recursive: true });
 
-  runInstaller(
-    {
-      mode: 'skill',
-      skillId: 'loom-review',
-      options: {
-        host: 'codex',
-        target: repoRoot,
-        force: false,
-        json: false,
-      },
-    },
-    envSource,
-    packageRoot(),
-  );
   const statusPath = join(repoRoot, '.agents', 'skills', 'loom-review', '.loom-install-status.json');
-  const status = JSON.parse(readFileSync(statusPath, 'utf8'));
-  status.version_context.skill_package_version = '0.0.0';
-  writeFileSync(statusPath, `${JSON.stringify(status, null, 2)}\n`, 'utf8');
+  mkdirSync(join(repoRoot, '.agents', 'skills', 'loom-review'), { recursive: true });
+  writeFileSync(
+    statusPath,
+    `${JSON.stringify(
+      {
+        schema_version: 'loom-installed-surface-status/v1',
+        installed_layer: 'generated-single-skill',
+        host_adapter: 'codex',
+        mode: 'skill',
+        skill_id: 'loom-review',
+        version_context: {
+          repo_version: '0.0.0',
+          installer_package_version: '0.0.0',
+          plugin_surface_version: '0.0.0',
+          host_adapter_version: '0.0.0',
+          skills_registry_version: '0.0.0',
+          runtime_core_version: '0.0.0',
+          skill_package_version: '0.0.0',
+        },
+        runtime_state: 'ready',
+        upgrade_eligibility: 'current',
+        evidence: ['legacy fixture'],
+        failed_layer: null,
+        fail_closed_reason: null,
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
 
   const plan = runInstaller(
     {
@@ -529,14 +545,20 @@ test('legacy per-skill package metadata does not drive single-skill upgrade fres
     packageRoot(),
   );
 
-  assert.equal(plan.status, 'planned');
-  assert.equal(plan.installed_status?.upgrade_eligibility, 'current');
+  assert.equal(plan.status, 'blocked');
+  assert.equal(plan.distribution_layer, 'legacy-single-skill-diagnostic');
+  assert.equal(plan.installed_status?.installed_layer, 'legacy-single-skill-diagnostic');
+  assert.equal(plan.installed_status?.upgrade_eligibility, 'incompatible');
+  assert.match(plan.installed_status?.fail_closed_reason ?? '', /single-skill installation is retired/);
   assert.deepEqual(plan.changed_paths, []);
   assert.deepEqual(plan.drift, []);
-  assert.equal(plan.rollback_path, null);
+  assert.equal(plan.rollback_path, join(repoRoot, '.agents', 'skills', 'loom-review'));
+  const persistedStatus = JSON.parse(readFileSync(statusPath, 'utf8'));
+  assert.equal(persistedStatus.installed_layer, 'generated-single-skill');
+  assert.equal(persistedStatus.version_context.skill_package_version, '0.0.0');
 });
 
-test('codex skill install fails closed on conflicting repo skill directory without force', () => {
+test('codex single-skill add does not take over conflicting repo skill directory', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CODEX_HOME!, { recursive: true });
@@ -556,10 +578,14 @@ test('codex skill install fails closed on conflicting repo skill directory witho
     },
   };
 
-  assert.throws(() => runInstaller(parsed, envSource, packageRoot()), /not a Loom skill/);
+  const result = runInstaller(parsed, envSource, packageRoot());
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.distribution_layer, 'legacy-single-skill-diagnostic');
+  assert.equal(existsSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'SKILL.md')), false);
+  assert.equal(readFileSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'README.md'), 'utf8'), '# Not a Loom skill\n');
 });
 
-test('codex skill install lets --force take over conflicting repo skill directory', () => {
+test('codex single-skill add with force still fails closed without mutating target', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CODEX_HOME!, { recursive: true });
@@ -580,36 +606,9 @@ test('codex skill install lets --force take over conflicting repo skill director
   };
 
   const result = runInstaller(parsed, envSource, packageRoot());
-  const skillPath = join(repoRoot, '.agents', 'skills', 'loom-review', 'SKILL.md');
-  assert.equal(result.mode, 'skill');
-  assert.equal(existsSync(skillPath), true);
-  assert.equal(existsSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'README.md')), false);
-});
-
-test('single-skill installs stay scoped to the named skill for codex', () => {
-  const base = fixtureRoot();
-  const envSource = prepareEnv(base);
-  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
-  const repoRoot = join(base, 'repo');
-  mkdirSync(repoRoot, { recursive: true });
-
-  const parsed: ParsedCommand = {
-    mode: 'skill',
-    skillId: 'loom-init',
-    options: {
-      host: 'codex',
-      target: repoRoot,
-      force: false,
-      json: false,
-    },
-  };
-
-  const result = runInstaller(parsed, envSource, packageRoot());
-  assert.equal(result.mode, 'skill');
-  assert.match(result.warnings[0] ?? '', /only the named skill, not the full Loom plugin surface/);
-  assert.equal(existsSync(join(repoRoot, '.agents', 'skills', 'loom-init', 'SKILL.md')), true);
-  assert.equal(existsSync(join(repoRoot, 'plugins', 'loom')), false);
-  assert.equal(existsSync(join(repoRoot, '.agents', 'plugins', 'marketplace.json')), false);
+  assert.equal(result.status, 'blocked');
+  assert.equal(existsSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'SKILL.md')), false);
+  assert.equal(readFileSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'README.md'), 'utf8'), '# Not a Loom skill\n');
 });
 
 test('claude plugin install assembles marketplace and calls claude CLI', () => {
@@ -643,7 +642,7 @@ test('claude plugin install assembles marketplace and calls claude CLI', () => {
   assert.match(log, /plugin install loom@loom-local/);
 });
 
-test('single-skill installs stay scoped to the named skill for claude', () => {
+test('claude single-skill add fails closed without writing project skill payload', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CLAUDE_CONFIG_DIR!, { recursive: true });
@@ -663,8 +662,10 @@ test('single-skill installs stay scoped to the named skill for claude', () => {
 
   const result = runInstaller(parsed, envSource, packageRoot());
   assert.equal(result.mode, 'skill');
-  assert.match(result.warnings[0] ?? '', /does not expose the full Loom plugin surface/);
-  assert.equal(existsSync(join(repoRoot, '.claude', 'skills', 'loom-init', 'SKILL.md')), true);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.distribution_layer, 'legacy-single-skill-diagnostic');
+  assert.match(result.fail_closed_reason ?? '', /single-skill installation is retired/);
+  assert.equal(existsSync(join(repoRoot, '.claude', 'skills', 'loom-init', 'SKILL.md')), false);
   assert.equal(existsSync(join(repoRoot, '.claude', 'marketplaces', 'loom-local')), false);
 });
 

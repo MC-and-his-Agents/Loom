@@ -20,6 +20,9 @@ import { loadPayloadManifest, resolveSkillRecord, verifyPayload } from './payloa
 import { installCodexPlugin, installCodexSkill } from './codex.js';
 import { installClaudePlugin, installClaudeSkill } from './claude.js';
 
+const LEGACY_SINGLE_SKILL_REASON =
+  'legacy single-skill installation is retired; use the root `loom` CLI and host plugin payload instead';
+
 const DEFAULT_OPTIONS: CliOptions = {
   host: 'auto',
   target: '.',
@@ -214,6 +217,17 @@ export function runInstaller(parsed: ParsedCommand, envSource: NodeJS.ProcessEnv
   const warnings = checkPython(resolvedEnv);
   ensureClaudeCliWhenNeeded(host, parsed.mode, operation, resolvedEnv);
   const skill = parsed.mode === 'skill' ? resolveSkillRecord(manifest, parsed.skillId ?? '') : undefined;
+  if (parsed.mode === 'skill') {
+    const result = legacySingleSkillDiagnostic({
+      operation,
+      host,
+      manifest,
+      skill,
+      targetRoot,
+    });
+    result.warnings.unshift(...warnings);
+    return result;
+  }
 
   if (operation !== 'add') {
     const result = inspectInstalledSurface({
@@ -275,7 +289,7 @@ function withVersionContext(result: InstallResult, manifest: PayloadManifest, sk
 }
 
 function distributionLayer(mode: Mode): DistributionLayer {
-  return mode === 'plugin' ? 'host-adapter-plugin' : 'generated-single-skill';
+  return mode === 'plugin' ? 'host-adapter-plugin' : 'legacy-single-skill-diagnostic';
 }
 
 function skillDirName(host: Host, skillId: string): string {
@@ -454,6 +468,67 @@ function statusFailureResult(input: {
     },
     failed_layer: 'installed-surface',
     fail_closed_reason: input.reason,
+  };
+}
+
+function legacySingleSkillDiagnostic(input: {
+  operation: InstallerOperation;
+  host: Host;
+  manifest: PayloadManifest;
+  skill?: PayloadSkillRecord;
+  targetRoot: string;
+}): InstallResult {
+  const available = payloadVersionContext(input.manifest, input.skill);
+  const root = input.skill ? installedRoot(input.targetRoot, input.host, 'skill', input.skill) : input.targetRoot;
+  const statusPath = installedStatusPath(root);
+  const hasLegacyStatus = fileExists(statusPath);
+  const evidence = [
+    LEGACY_SINGLE_SKILL_REASON,
+    `migration diagnostic for legacy skill surface${input.skill ? ` ${input.skill.id}` : ''}`,
+  ];
+  let installedStatus: InstalledLoomSurfaceStatus | undefined;
+  if (hasLegacyStatus) {
+    const legacyStatus = readJson<InstalledLoomSurfaceStatus>(statusPath);
+    installedStatus = {
+      ...legacyStatus,
+      installed_layer: 'legacy-single-skill-diagnostic',
+      runtime_state: 'blocked',
+      upgrade_eligibility: 'incompatible',
+      evidence: [
+        `read legacy single-skill status metadata at ${statusPath}`,
+        'legacy skill metadata is retained only for migration diagnostics',
+      ],
+      failed_layer: 'distribution-layer',
+      fail_closed_reason: LEGACY_SINGLE_SKILL_REASON,
+    };
+    evidence.push(`read legacy single-skill status metadata at ${statusPath}`);
+  }
+
+  return {
+    schema_version: 'loom-installer-result/v1',
+    operation: input.operation,
+    mode: 'skill',
+    host: input.host,
+    distribution_layer: 'legacy-single-skill-diagnostic',
+    status: 'blocked',
+    installed_paths: [],
+    verification: evidence,
+    warnings: ['single-skill install and upgrade surfaces are retired; current Loom distribution is CLI + host plugin payload'],
+    version_context: null,
+    installed_status: installedStatus,
+    available_version_context: available,
+    changed_paths: [],
+    drift: [],
+    rollback_path: hasLegacyStatus ? root : null,
+    rehearsal: {
+      schema_version: 'loom-upgrade-rehearsal/v1',
+      mutates_target: false,
+      changed_paths: [],
+      drift: [],
+      rollback_path: hasLegacyStatus ? root : null,
+    },
+    failed_layer: 'distribution-layer',
+    fail_closed_reason: LEGACY_SINGLE_SKILL_REASON,
   };
 }
 
