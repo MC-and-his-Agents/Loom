@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1716.json
 - Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`.
 - Closing Condition: PR for `work/1716-plugin-refresh-guidance` is merged into `main`, issue #1716 is closed, and closeout consumes PR, issue, hosted checks, target branch, and repo carrier readback.
-- Current Checkpoint: merge
-- Current Stop: WI-1716 implementation, targeted validation, spec review, implementation review, review flow, and PR metadata preflight passed for PR #1753; PR gate and hosted checks remain.
-- Next Step: Commit merge-checkpoint carrier update, refresh PR metadata for the new head, rerun PR gate, wait for hosted checks, then run controlled merge and closeout for WI-1716.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1716 closed out by closeout run: PR #1753 merged at 01e55b66cf300084b1e537e6b1776b01c44d8a24, issue #1716 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1716 implementation work remains.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-23 local checks passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface adoption-host-metadata; git diff --check; python3 tools/loom.py suite validate --target . --item WI-1716 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1716 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1716 --json; python3 tools/loom.py fact-chain --target . --item WI-1716 --json; LOOM_TEST_NPM_LATEST_VERSION=$(cat VERSION) python3 tools/loom.py upgrade-plan --target . --host codex --json | jq '.actions[] | select(.id == "cli-plugin-freshness")'.
 - Recovery Boundary: WI-1716 owns refresh guidance fields, docs, scoped carriers, and scoped review artifacts for stale Codex plugin payload diagnostics. It does not implement broad fixtures (#1717), v0.19.0 release closeout (#1718), legacy installer tombstone behavior (#1732), or v0.20.0 ship friction work (#1735-#1737).
-- Current Lane: plugin-refresh-guidance
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
