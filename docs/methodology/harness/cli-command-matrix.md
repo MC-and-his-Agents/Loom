@@ -241,11 +241,42 @@ loom build
 loom pre-review
 loom closeout
 loom closeout queue status
+loom ship
 loom handoff
 loom retire
 ```
 
 `story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `closeout queue status` is a read-only post-merge residue queue view; it suggests follow-up commands but does not perform host sync or carrier sync. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling; it does not write terminal carrier metadata.
+
+`loom ship` is the ordinary delivery wrapper once a Work Item already has a PR.
+Its main-path contract is:
+
+- dry-run order is fixed: `pr-metadata preflight -> pr gate -> controlled merge
+  check -> closeout policy`;
+- `--apply` may prepend one deterministic `safe metadata repair` step, but only
+  when `--issue`, `--branch`, and `--head-sha` are all explicit;
+- that auto-repair boundary is limited to deterministic PR metadata rendering
+  and must fail closed on Work Item, branch, head SHA, release, or closeout
+  conflicts instead of choosing a side;
+- default `--json` output stays on short wrapper diagnostics. When the payload
+  fits budget it may include `steps`, `first_blocker`, `missing_inputs`,
+  `closeout_policy`, and `next_action`; when it does not fit budget it must
+  degrade to an agent-safe summary envelope with blocker summary, `key_gaps`,
+  `next_action`, and an artifact locator for the full structured payload.
+  `--full-output` is reserved for explicit debugging, audit, or blocker
+  classification;
+- blocker classification stays step-scoped. Current wrapper blocker names are
+  `safe-metadata-repair`, `pr-metadata-preflight`, `pr-gate`,
+  `controlled-merge-check`, `ship-apply-admission`, `controlled-merge-apply`,
+  `host-reconciliation-sync`, and `host-closeout-check`;
+- closeout policy decides whether `loom ship --apply` may continue through the
+  current ordinary inline/host-only host-closeout path or must stop before
+  merge and hand off to an explicit batched carrier or full closeout path.
+
+The current implementation only executes the ordinary inline/host-only host
+closeout path. Batched carrier writes and explicit full closeout PR execution
+remain follow-up issue scope; `loom ship` must block and point callers at the
+explicit path rather than inferring the missing path.
 
 ## Reserved Phase Commands
 

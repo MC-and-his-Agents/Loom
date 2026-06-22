@@ -100,11 +100,34 @@ loom ship \
   --json
 ```
 
+The wrapper contract stays narrow and ordered:
+
+- dry-run reads `pr-metadata preflight -> pr gate -> controlled merge check ->
+  closeout policy`, then reports the first blocker summary, `missing_inputs`,
+  and `next_action` without mutating host or repo state;
+- `--apply` may add one deterministic safe metadata repair step before that
+  read-only sequence, but only when `--issue`, `--branch`, and `--head-sha` are
+  explicit;
+- that safe repair boundary never invents or resolves conflicting Work Item,
+  branch, head SHA, release, or closeout facts on its own;
+- `--json` stays on short wrapper diagnostics and may collapse detailed steps
+  behind an artifact locator when stdout would be too large, while
+  `--full-output` is only for explicit debugging, audit, or blocker
+  classification;
+- closeout policy decides whether ordinary delivery can continue through the
+  shared inline/host-only host closeout path or must stop and hand off to an
+  explicit batched carrier / full closeout path.
+
 Light and standard changes should normally finish in that one command. Loom only
 upgrades to a batched carrier PR or an explicit full closeout PR when the work is
 a release, parent or milestone closeout, multi-Work-Item delivery, host/repo
 conflict, reinforced-governance change, or another case that needs versioned
 terminal evidence.
+
+Today `loom ship` only executes the ordinary inline/host-only host closeout
+path. Batched carrier writes and explicit full closeout PR execution stay in
+follow-up issue scope; this wrapper blocks and points callers at the explicit
+path instead of guessing.
 
 ## Try It In A Repository
 
