@@ -1,0 +1,58 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1721",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Review allow: Codex plugin payload readback is read-only, fails closed on malformed metadata, distinguishes metadata-missing from stale payloads, and keeps runtime cache read-only. Subagent findings P1/P2/P3 were addressed before this review; targeted contract, py_compile, diff, suite, fact-chain, carrier, host doctor, checkpoint build, and shadow parity passed.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-06-22T18:05:20Z",
+  "reviewed_head": "7647e701a4aaba6320a27a72a414d8b6c9ff8822",
+  "reviewed_validation_summary": "2026-06-23 local validation on branch `work/1721-codex-source-cache-readback`: `python3 tools/check_cli_contract.py --surface adoption-host-metadata` passed after adding current/stale/metadata-missing/malformed-manifest fixtures; `python3 -m py_compile tools/loom.py tools/check_cli_contract.py` passed; `git diff --check` passed; `python3 tools/loom.py suite validate --target . --item WI-1721 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1721 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1721 --json` passed; `python3 tools/loom.py fact-chain --target . --item WI-1721 --json` passed. `loom host doctor --host codex --scope user --json` now reports `plugin_payload_readback` with source-payload, marketplace-source, runtime-cache layers and actionable freshness state.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1721.md",
+    "recovery_entry": ".loom/progress/WI-1721.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1721-codex-source-cache-readback/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-WI-1721-codex-source-cache-readback --item WI-1721 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1721-codex-source-cache-readback/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-WI-1721-codex-source-cache-readback --item WI-1721 --json",
+    "suite_evidence_map": ".loom/specs/WI-1721/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1721/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
