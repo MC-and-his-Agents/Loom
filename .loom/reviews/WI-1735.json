@@ -3,15 +3,28 @@
   "item_id": "WI-1735",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1735 current-head review allows the ship main-path contract freeze: docs and contract checker changes define short diagnostics, dry-run/apply order, auto-repair boundaries, generated-only drift boundary, validation profile expectation, and closeout escalation without implementing runtime repair-chain, review freshness, validation profile, closeout, or release behavior. Local validation passed and suite path is formally not_applicable with no blocking gaps.",
+  "summary": "WI-1735 current-head review allows the ship main-path contract freeze: docs and contract checker changes define short diagnostics, dry-run/apply order, automatic repair boundaries, generated-only drift boundary, validation profile expectation, and closeout escalation without implementing runtime repair-chain, review freshness, validation profile, closeout, or release behavior.",
   "reviewer": "Codex main controller",
-  "authored_at": "2026-06-22T17:28:57Z",
-  "reviewed_head": "33cf63da63dd4bc4c5a594cf5a0c5573127d20c8",
-  "reviewed_validation_summary": "2026-06-23 local validation passed at head 33cf63da63dd4bc4c5a594cf5a0c5573127d20c8: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735. Suite validation returned result=not_applicable with no missing inputs or blocking gaps via PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json. PR metadata preflight is pending PR head/body refresh after the carrier commit is pushed.",
+  "authored_at": "2026-06-22T17:45:10Z",
+  "reviewed_head": "89baac5edd5b7b63cbb0272d456b0c880275f279",
+  "reviewed_validation_summary": "2026-06-23 local validation passed at head 89baac5edd5b7b63cbb0272d456b0c880275f279: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json returned result=not_applicable with no missing inputs or blocking gaps; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py governance-profile status --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; shadow/adopt verify pending current-head review and carrier refresh.",
   "fallback_to": null,
-  "findings": [],
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "Runtime repair-chain, review freshness, validation profile, closeout, and release behavior remain scoped to dependent issues #1738-#1743.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
   "blocking_issues": [],
-  "follow_ups": [],
+  "follow_ups": [
+    "Runtime repair-chain, review freshness, validation profile, closeout, and release behavior remain scoped to dependent issues #1738-#1743."
+  ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1735.md",
     "recovery_entry": ".loom/progress/WI-1735.md",
