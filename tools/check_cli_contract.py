@@ -2610,6 +2610,111 @@ def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
                 raise AssertionError(f"user-level host install/register wrote unsupported repository payload: {unexpected}")
 
 
+def write_payload_hash(manifest: Path, value: str) -> None:
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.setdefault("x-loom", {})["plugin_payload_hash"] = value
+    manifest.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def remove_payload_hash(manifest: Path) -> None:
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.setdefault("x-loom", {}).pop("plugin_payload_hash", None)
+    manifest.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def assert_codex_payload_readback_contract(tmp: Path) -> None:
+    target = tmp / "codex-payload-readback"
+    home = tmp / "codex-payload-home"
+    bad_source = tmp / "codex-payload-bad-source"
+    target.mkdir()
+    home.mkdir()
+    with isolated_codex_workstation(home):
+        run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.4.0"
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        older_surface_runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.3.0"
+        shutil.copytree(home / "plugins" / "loom", older_surface_runtime)
+        write_payload_hash(older_surface_runtime / ".codex-plugin" / "plugin.json", "stale-older-surface")
+
+        _, current = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        if current.get("plugin_payload_readback", {}).get("freshness") != "already_current":
+            raise AssertionError("host doctor did not report current plugin payload freshness")
+
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", bad_source)
+        (bad_source / ".codex-plugin" / "plugin.json").write_text("{not-json", encoding="utf-8")
+        _, invalid_source = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--source", str(bad_source), "--target", str(target), "--json"], expect=0)
+        source_layer = next(
+            (
+                layer
+                for layer in invalid_source.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "source-payload"
+            ),
+            {},
+        )
+        if invalid_source.get("plugin_payload_readback", {}).get("freshness") != "source_metadata_missing" or not source_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex source payload metadata")
+
+        remove_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json")
+        _, missing_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = missing_marketplace.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "marketplace_source_metadata_missing" or readback.get("action") != "install_plugin":
+            raise AssertionError("host doctor did not identify missing Codex marketplace source metadata")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        marketplace_manifest = home / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
+        marketplace_manifest.write_text("{not-json", encoding="utf-8")
+        _, invalid_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        marketplace_layer = next(
+            (
+                layer
+                for layer in invalid_marketplace.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "marketplace-source"
+            ),
+            {},
+        )
+        if invalid_marketplace.get("plugin_payload_readback", {}).get("freshness") != "marketplace_source_metadata_missing" or not marketplace_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex marketplace source metadata")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        write_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json", "stale-marketplace")
+        _, stale_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = stale_marketplace.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "marketplace_source_stale" or readback.get("action") != "install_plugin":
+            raise AssertionError("host doctor did not identify stale Codex marketplace source")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        remove_payload_hash(runtime / ".codex-plugin" / "plugin.json")
+        _, missing_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = missing_runtime.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "runtime_cache_metadata_missing" or readback.get("action") != "reload_host":
+            raise AssertionError("host doctor did not identify missing Codex runtime cache metadata")
+
+        shutil.rmtree(runtime)
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", runtime)
+        write_payload_hash(runtime / ".codex-plugin" / "plugin.json", "stale-runtime")
+        _, stale_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = stale_runtime.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "runtime_cache_stale" or readback.get("action") != "reload_host":
+            raise AssertionError("host doctor did not identify stale Codex runtime cache")
+
+        runtime_manifest = runtime / ".codex-plugin" / "plugin.json"
+        runtime_manifest.write_text("{not-json", encoding="utf-8")
+        _, invalid_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        runtime_layer = next(
+            (
+                layer
+                for layer in invalid_runtime.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "runtime-cache"
+            ),
+            {},
+        )
+        if invalid_runtime.get("plugin_payload_readback", {}).get("freshness") != "runtime_cache_metadata_missing" or not runtime_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex runtime cache metadata")
+
+
 def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     target = tmp / "metadata-only-adoption"
     target.mkdir()
@@ -8579,7 +8684,9 @@ def run_governance_closeout_contract() -> None:
 
 def run_adoption_host_metadata_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-adoption-host-metadata-") as raw_tmp:
-        assert_metadata_only_adoption_contract(Path(raw_tmp))
+        tmp = Path(raw_tmp)
+        assert_codex_payload_readback_contract(tmp)
+        assert_metadata_only_adoption_contract(tmp)
     assert_install_upgrade_host_boundary_docs()
 
     print("adoption host metadata surface checks passed")
