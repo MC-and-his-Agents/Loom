@@ -68,7 +68,18 @@ def main() -> int:
     if not isinstance(x_loom, dict):
         errors.append("plugin manifest must expose x-loom metadata")
     else:
-        for key in ("plugin_surface_version", "host_adapter_version", "version_authority", "default_entry", "distribution_model"):
+        for key in (
+            "plugin_surface_version",
+            "host_adapter_version",
+            "version_authority",
+            "default_entry",
+            "distribution_model",
+            "source_package",
+            "source_package_version",
+            "source_git_sha",
+            "plugin_payload_version",
+            "plugin_payload_hash",
+        ):
             if key not in x_loom:
                 errors.append(f"plugin x-loom metadata missing `{key}`")
         if x_loom.get("plugin_surface_version") != plugin.get("version"):
@@ -85,6 +96,21 @@ def main() -> int:
         errors.append("installer package version is missing")
     if not registry_version:
         errors.append("skills registry_version is missing")
+    package_version = read_json(ROOT / "package.json").get("version")
+    repo_version_without_prefix = repo_version[1:] if repo_version.startswith("v") else repo_version
+    if package_version != repo_version_without_prefix:
+        errors.append("package.json version must match VERSION without the v prefix")
+    if isinstance(x_loom, dict):
+        if x_loom.get("source_package") != "@mc-and-his-agents/loom":
+            errors.append("plugin source_package must be @mc-and-his-agents/loom")
+        if x_loom.get("source_package_version") != package_version:
+            errors.append("plugin source_package_version must match package.json version")
+        if x_loom.get("plugin_payload_version") != package_version:
+            errors.append("plugin_payload_version must match package.json version")
+        if not isinstance(x_loom.get("source_git_sha"), str) or not x_loom.get("source_git_sha"):
+            errors.append("plugin source_git_sha must be a non-empty string")
+        if not isinstance(x_loom.get("plugin_payload_hash"), str) or not x_loom.get("plugin_payload_hash"):
+            errors.append("plugin_payload_hash must be a non-empty string")
     if plugin_registry != registry:
         errors.append("plugin payload registry must match generated skills registry")
     if plugin_registry.get("root_entry") != "loom-init":

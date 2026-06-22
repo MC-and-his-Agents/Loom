@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -90,6 +91,9 @@ SURFACE_PAYLOAD = "npm-pack-payload"
 SURFACE_PLUGIN_PAYLOAD_HASH = "plugin-payload-hash"
 PLUGIN_PAYLOAD_IGNORE_NAMES = {".DS_Store", "__pycache__"}
 PLUGIN_PAYLOAD_IGNORE_SUFFIXES = {".pyc"}
+PLUGIN_PAYLOAD_HASH_FIELD_RE = re.compile(
+    rb'("plugin_payload_hash"\s*:\s*)("[^"]*"|null)'
+)
 
 
 @dataclass(frozen=True)
@@ -351,11 +355,17 @@ def plugin_payload_root_label(payload_root: Path) -> str:
 def compute_plugin_payload_hash(payload_root: Path = PLUGIN_PAYLOAD_ROOT) -> dict[str, Any]:
     hasher = hashlib.sha256()
     files = plugin_payload_files(payload_root)
+    normalized_files: list[str] = []
     for path in files:
         relative = path.relative_to(payload_root).as_posix()
+        content = path.read_bytes()
+        if relative == ".codex-plugin/plugin.json":
+            content, substitutions = PLUGIN_PAYLOAD_HASH_FIELD_RE.subn(rb'\1""', content)
+            if substitutions:
+                normalized_files.append(relative)
         hasher.update(relative.encode("utf-8"))
         hasher.update(b"\0")
-        hasher.update(path.read_bytes())
+        hasher.update(content)
         hasher.update(b"\0")
     return {
         "algorithm": "sha256",
@@ -364,7 +374,26 @@ def compute_plugin_payload_hash(payload_root: Path = PLUGIN_PAYLOAD_ROOT) -> dic
         "payload_root": plugin_payload_root_label(payload_root),
         "ignored_names": sorted(PLUGIN_PAYLOAD_IGNORE_NAMES),
         "ignored_suffixes": sorted(PLUGIN_PAYLOAD_IGNORE_SUFFIXES),
+        "normalized_self_references": normalized_files,
         "files": [path.relative_to(payload_root).as_posix() for path in files],
+    }
+
+
+def expected_plugin_payload_metadata() -> dict[str, str]:
+    package = load_json(PACKAGE_JSON)
+    package_version = str(package.get("version") or "")
+    version_file = VERSION.read_text(encoding="utf-8").strip()
+    version_without_prefix = version_file[1:] if version_file.startswith("v") else version_file
+    if package_version != version_without_prefix:
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            f"package.json version {package_version!r} does not match VERSION {version_file!r}",
+            evidence_locators=("package.json", "VERSION"),
+        )
+    return {
+        "source_package": EXPECTED_PACKAGE,
+        "source_package_version": package_version,
+        "plugin_payload_version": package_version,
     }
 
 
@@ -390,7 +419,34 @@ def validate_plugin_payload_hash() -> dict[str, Any]:
         )
     manifest = load_json(PLUGIN_MANIFEST)
     x_loom = manifest.get("x-loom")
+    if not isinstance(x_loom, dict):
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            "plugin manifest x-loom metadata is missing",
+            evidence_locators=("plugins/loom/.codex-plugin/plugin.json:x-loom",),
+        )
+    expected_metadata = expected_plugin_payload_metadata()
+    metadata_errors = [
+        f"{key}={x_loom.get(key)!r} expected {expected!r}"
+        for key, expected in expected_metadata.items()
+        if x_loom.get(key) != expected
+    ]
+    source_git_sha = x_loom.get("source_git_sha")
+    if not isinstance(source_git_sha, str) or not source_git_sha:
+        metadata_errors.append("source_git_sha must be a non-empty string")
+    if metadata_errors:
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            "plugin release metadata is missing or stale: " + "; ".join(metadata_errors),
+            evidence_locators=("plugins/loom/.codex-plugin/plugin.json:x-loom", "package.json", "VERSION"),
+        )
     declared_hash = x_loom.get("plugin_payload_hash") if isinstance(x_loom, dict) else None
+    if not isinstance(declared_hash, str) or not declared_hash:
+        fail(
+            SURFACE_PLUGIN_PAYLOAD_HASH,
+            "plugin manifest x-loom.plugin_payload_hash is missing",
+            evidence_locators=("plugins/loom/.codex-plugin/plugin.json:x-loom.plugin_payload_hash",),
+        )
     if declared_hash is not None and declared_hash != computed["digest"]:
         fail(
             SURFACE_PLUGIN_PAYLOAD_HASH,
@@ -398,7 +454,13 @@ def validate_plugin_payload_hash() -> dict[str, Any]:
             evidence_locators=("plugins/loom/.codex-plugin/plugin.json:x-loom.plugin_payload_hash", "plugins/loom"),
         )
     computed["declared_hash"] = declared_hash
-    computed["declared_hash_status"] = "missing_pending_metadata" if declared_hash is None else "matched"
+    computed["declared_hash_status"] = "matched"
+    computed["release_metadata"] = {
+        "source_package": x_loom.get("source_package"),
+        "source_package_version": x_loom.get("source_package_version"),
+        "source_git_sha": source_git_sha,
+        "plugin_payload_version": x_loom.get("plugin_payload_version"),
+    }
     return computed
 
 
@@ -456,6 +518,8 @@ def emit_plugin_payload_hash_pass(hash_payload: dict[str, Any]) -> None:
         "plugin_payload_hash_algorithm": hash_payload["algorithm"],
         "plugin_payload_file_count": hash_payload["file_count"],
         "declared_hash_status": hash_payload["declared_hash_status"],
+        "normalized_self_references": hash_payload["normalized_self_references"],
+        "release_metadata": hash_payload["release_metadata"],
         "ignored_names": hash_payload["ignored_names"],
         "ignored_suffixes": hash_payload["ignored_suffixes"],
         "evidence_label": SURFACE_PLUGIN_PAYLOAD_HASH,
@@ -488,6 +552,7 @@ def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str], hash_payl
                 "plugin_payload_hash": hash_payload["digest"],
                 "plugin_payload_file_count": hash_payload["file_count"],
                 "declared_hash_status": hash_payload["declared_hash_status"],
+                "normalized_self_references": hash_payload["normalized_self_references"],
             },
         ],
     }, indent=2))

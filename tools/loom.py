@@ -1062,13 +1062,18 @@ def repo_version() -> str:
 def version_context() -> dict[str, Any]:
     registry = read_optional_json(PLUGIN_SKILLS_ROOT / "registry.json") or {}
     plugin = read_optional_json(PLUGIN_MANIFEST) or {}
+    x_loom = plugin.get("x-loom", {}) if isinstance(plugin.get("x-loom"), dict) else {}
     return {
         "repo_version": repo_version(),
         "skills_registry_version": registry.get("registry_version", "unknown"),
-        "plugin_surface_version": plugin.get("x-loom", {}).get("plugin_surface_version", plugin.get("version", "unknown")),
-        "host_adapter_version": plugin.get("x-loom", {}).get("host_adapter_version", "unknown"),
+        "plugin_surface_version": x_loom.get("plugin_surface_version", plugin.get("version", "unknown")),
+        "host_adapter_version": x_loom.get("host_adapter_version", "unknown"),
         "plugin_payload_root": "plugins/loom/skills",
-        "plugin_payload_version": registry.get("registry_version", "unknown"),
+        "plugin_payload_version": x_loom.get("plugin_payload_version", "unknown"),
+        "plugin_payload_hash": x_loom.get("plugin_payload_hash", "unknown"),
+        "source_package": x_loom.get("source_package", "unknown"),
+        "source_package_version": x_loom.get("source_package_version", "unknown"),
+        "source_git_sha": x_loom.get("source_git_sha", "unknown"),
         "version_authority": "docs/adoption/version-authority-map.md",
     }
 
