@@ -70,6 +70,44 @@ class PluginPayloadHashTest(unittest.TestCase):
             self.assertEqual(after["files"], ["skills/loom-init/SKILL.md"])
             self.assertEqual(before["digest"], after["digest"])
 
+    def test_manifest_hash_field_is_self_reference_normalized(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            payload = Path(tempdir) / "plugins" / "loom"
+            manifest = payload / ".codex-plugin" / "plugin.json"
+            write_bytes(
+                manifest,
+                b'{\n  "name": "loom",\n  "x-loom": {\n    "plugin_payload_hash": "first"\n  }\n}\n',
+            )
+            write_bytes(payload / "skills" / "loom-init" / "SKILL.md", b"stable\n")
+
+            before = check_npm_package.compute_plugin_payload_hash(payload)
+            write_bytes(
+                manifest,
+                b'{\n  "name": "loom",\n  "x-loom": {\n    "plugin_payload_hash": "second"\n  }\n}\n',
+            )
+            after = check_npm_package.compute_plugin_payload_hash(payload)
+
+            self.assertEqual(before["digest"], after["digest"])
+            self.assertEqual(before["normalized_self_references"], [".codex-plugin/plugin.json"])
+
+    def test_manifest_other_metadata_changes_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            payload = Path(tempdir) / "plugins" / "loom"
+            manifest = payload / ".codex-plugin" / "plugin.json"
+            write_bytes(
+                manifest,
+                b'{\n  "name": "loom",\n  "x-loom": {\n    "plugin_payload_version": "0.18.0",\n    "plugin_payload_hash": "same"\n  }\n}\n',
+            )
+
+            before = check_npm_package.compute_plugin_payload_hash(payload)
+            write_bytes(
+                manifest,
+                b'{\n  "name": "loom",\n  "x-loom": {\n    "plugin_payload_version": "0.19.0",\n    "plugin_payload_hash": "same"\n  }\n}\n',
+            )
+            after = check_npm_package.compute_plugin_payload_hash(payload)
+
+            self.assertNotEqual(before["digest"], after["digest"])
+
 
 if __name__ == "__main__":
     unittest.main()
