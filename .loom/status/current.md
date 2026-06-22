@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1712
-- Goal: Define the authoritative plugin payload version and hash contract for #1711 so later implementation work can decide Codex plugin freshness without confusing plugin surface compatibility, skills registry versions, or single-skill contract versions.
-- Scope: Update version authority and install-surface contracts; mirror the skills distribution contract into `src/skills`, `skills`, and `plugins/loom/skills`; add a `version_surface_check` guard for the new terminology; repair the stale WI-1696 terminal carrier that otherwise keeps the current workspace multi-bound. Ownership: WI-1712 owns only the listed contract docs, generated skill mirrors, version surface checker guard, not_applicable suite decision, evidence map, task carrier, fact-chain carriers, doc-sync guard, repo-relative workspace binding, and the WI-1696 terminal checkpoint repair. Non-goals: no CLI behavior change, no payload hash implementation, no plugin metadata generation, no legacy installer behavior change, no version bump, and no release publication in this Work Item.
-- Execution Path: issue #1712 -> branch `work/1712-payload-version-contract` -> issue-scoped worktree -> PR #1723 -> merge -> issue closeout.
-- Workspace Entry: .
-- Recovery Entry: `.loom/progress/WI-1712.md`
-- Review Entry: `.loom/reviews/WI-1712.json`
-- Validation Entry: `python3 tools/version_surface_check.py`; `python3 tools/skills_surface.py check`; `git diff --check`; `python3 tools/check_release_surface.py --surface release-doc-contract`; `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns`; `python3 tools/check_npm_package.py --surface npm-package-manifest`.
-- Closing Condition: PR #1723 is merged into `main`, issue #1712 is closed, and #1713-#1722 can consume the frozen payload version/hash contract.
-- Current Checkpoint: merge checkpoint
-- Current Stop: PR #1723 is open; semantic review, PR metadata readback, and gate shadow refresh are integrated for the current head.
-- Next Step: Wait for hosted checks, rerun PR gate / merge-ready, then proceed to controlled merge and closeout for PR #1723.
+- Item ID: WI-1719
+- Goal: Deprecate single SKILL distribution version semantics in the legacy installer so per-skill metadata is contract-only and cannot drive freshness or upgrade recommendations.
+- Scope: Update `packages/loom-installer` payload skill metadata, single-skill version context, version context comparison, and installer regression tests; author WI-1719 minimal suite, evidence, task carrier, progress, status, and bootstrap fact-chain binding. Non-goals: no current single SKILL install recommendation, no legacy installer recommendation, no full-repo clone fallback, no CLI release/version bump, no npm publish, no release files, no host command boundary docs/skills, no `tools/check_npm_package.py`, no `test/plugin_payload_hash_test.py`, and no other worktree changes.
+- Execution Path: issue #1719 -> worktree `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only` -> branch `work/1719-skill-contract-version-only` -> commit and push; PR creation is not part of this request.
+- Workspace Entry: `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only`
+- Recovery Entry: `.loom/progress/WI-1719.md`
+- Review Entry: not required until PR/review is requested.
+- Validation Entry: `npm --prefix packages/loom-installer test`; `npm --prefix packages/loom-installer run check:docs`; `git diff --check`; `python3 tools/loom.py fact-chain --target . --item WI-1719 --json`; `python3 tools/loom.py suite validate --target . --item WI-1719 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1719 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1719 --json`.
+- Closing Condition: branch is pushed with tests/checks passing and no forbidden ownership touched; issue/PR closeout is reserved for the main thread.
+- Current Checkpoint: pushed branch checkpoint
+- Current Stop: Installer code/test changes and WI-1719 minimal suite carriers are committed and pushed on branch `work/1719-skill-contract-version-only`.
+- Next Step: Main thread may open a PR or continue #1719 review/merge-ready when ready; this worker does not create a PR.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-22 local validation passed for the current WI-1712 worktree: `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/skills_surface.py check`; `python3 tools/check_release_surface.py --surface release-doc-contract`; `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns`; `python3 tools/check_npm_package.py --surface npm-package-manifest`; `npm --prefix packages/loom-installer run check:docs`; `python3 tools/loom.py fact-chain --target . --item WI-1712 --json`; `python3 tools/loom.py suite validate --target . --item WI-1712 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1712 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1712 --json`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/check_cli_contract.py --surface aggregate`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. PR #1723 metadata must be rendered and read back again after the next push so the PR machine carrier remains the head SHA authority.
-- Recovery Boundary: WI-1712 owns only the contract freeze, current evidence/review/merge-ready carriers, doc-sync guard, repo-relative workspace binding, and the WI-1696 stale terminal checkpoint repair required to unblock current workspace purity. It does not implement payload hashing, metadata generation, host source/cache readback, stale plugin diagnostics, legacy installer retirement, fixtures, version bump, npm publish, GitHub release, or #1711 final release closeout.
-- Current Lane: payload-version-contract
+- Latest Validation Summary: 2026-06-22 local validation passed in `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only`: `npm --prefix packages/loom-installer ci` installed missing devDependencies with no vulnerabilities; `npm --prefix packages/loom-installer test` passed 22 installer tests after rebuilding payload and compiling TypeScript; `npm --prefix packages/loom-installer run check:docs` passed; `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1719 --json` passed. Post-commit carrier sync was validated with fact-chain, suite validate/evidence/carrier, and diff hygiene before amend/push readback.
+- Recovery Boundary: WI-1719 owns only `packages/loom-installer/**`, directly related installer tests/docs, `.loom/work-items/WI-1719.md`, `.loom/progress/WI-1719.md`, `.loom/progress/WI-1719-build-evidence.json`, `.loom/specs/WI-1719/**`, `.loom/status/current.md`, and `.loom/bootstrap/init-result.json`. It must not touch `tools/check_npm_package.py`, `test/plugin_payload_hash_test.py`, host command boundary README/skills docs, release version files, npm publish/release files, other worktrees, #1714, or #1720.
+- Current Lane: skill-contract-version-only
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-22 WI-1712 contract freeze started in the issue-scoped worktree for branch `work/1712-payload-version-contract`.
-- Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1712.md`.
-- Diagnostics Entry: `plugin_payload_version` follows the root Loom release/npm package; `plugin_payload_hash` is the payload freshness authority; `plugin_surface_version`, `registry_version`, `contract_version`, and legacy `skill_package_version` are separate lines.
-- Verification Entry: 2026-06-22 local validation passed for the current WI-1712 worktree; PR metadata preflight/readback must be refreshed after each push.
-- Lane Entry: payload-version-contract
+- Run Entry: 2026-06-22 WI-1719 build started in the issue-scoped worktree for branch `work/1719-skill-contract-version-only`.
+- Logs Entry: Local validation output retained in this Codex thread and summarized in `.loom/progress/WI-1719.md`.
+- Diagnostics Entry: legacy `skill_package_version` may be tolerated in installed metadata for migration diagnostics but is not emitted in current single-skill version context and is ignored for freshness comparison.
+- Verification Entry: targeted installer tests and docs sync passed before final carrier validation; final validation is recorded in `.loom/progress/WI-1719.md`.
+- Lane Entry: skill-contract-version-only
 
 ## Sources
 
-- Static Truth: `.loom/work-items/WI-1712.md`
-- Dynamic Truth: `.loom/progress/WI-1712.md`
+- Static Truth: `.loom/work-items/WI-1719.md`
+- Dynamic Truth: `.loom/progress/WI-1719.md`
 - Locator Truth: `.loom/bootstrap/init-result.json`
 - Fact Chain CLI: `python3 .loom/bin/loom_init.py fact-chain --target .`
