@@ -26,8 +26,9 @@
 | EV-002 | behavior_evidence | skills/shared/scripts/loom_flow.py | generated source mirror | branch=work/1736-carrier-refresh-readback | present | hosted checks / packaged runtime behavior | Run skills surface check after source edits. |
 | EV-003 | behavior_evidence | plugins/loom/skills/shared/scripts/loom_flow.py | plugin runtime mirror | branch=work/1736-carrier-refresh-readback | present | plugin packaging / release judgment | Refresh plugin payload hash after plugin payload changes. |
 | EV-004 | test_evidence | test/work_item_audit_test.py | apply readback regression | head / PR #1745 | present | review / merge-ready / PR gate | Re-run targeted test after carrier refresh changes. |
-| EV-005 | test_evidence | tools/check_cli_contract.py --surface closeout-wrapper | wrapper contract regression | head / PR #1745 | present | review / merge-ready / PR gate | Re-run fixture after output contract changes. |
+| EV-005 | test_evidence | tools/check_cli_contract.py | closeout-wrapper contract regression | head / PR #1745 | present | review / merge-ready / PR gate | Re-run `--surface closeout-wrapper` after output contract changes. |
 | EV-006 | package_evidence | plugins/loom/.codex-plugin/plugin.json | plugin payload hash readback | head / PR #1745 | present | release judgment / package gate | Recompute hash after plugin payload changes. |
+| EV-007 | fresh_verification_input | .loom/progress/WI-1736.md | EV-001 EV-004 EV-005 EV-006 | head=b98930c7d555bc167f0d5fb187840837f0f8bb94; PR #1745 | present | merge-ready / PR gate / closeout | Refresh validation summary after implementation, generated mirror, PR metadata, review, or head changes. |
 
 ## Suite Applicability
 
