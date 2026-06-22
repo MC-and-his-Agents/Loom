@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1694
-- Goal: 收敛 README、skills 与 fixtures 到 intensity-aware ship 主路径，让普通用户以 loom ship 完成交付，不需要手动串 reconciliation、carrier closeout 或 closeout check。
-- Scope: 更新 README / README.zh-CN Quick Start 与 agent prompt、merge-ready/closeout/retire 相关 skill 指引，以及 targeted CLI contract fixtures，说明 light/standard 默认使用 ship/inline/host-only closeout；reinforced/release/parent/milestone 等场景才升级到显式 closeout PR 或 release closeout。Ownership: main executor owns README, src skills, generated skills, plugin skills, WI-1694 carriers, and fixture integration; Goodall lane is read-only inventory only. 不得改变 CLI 行为，不扩大到 release #1696。
-- Execution Path: issue #1694 -> branch work/1694-ship-entry-convergence -> PR -> controlled merge -> closeout
-- Workspace Entry: ./WI-1694/..
-- Recovery Entry: .loom/progress/WI-1694.md
-- Review Entry: .loom/reviews/WI-1694.json
-- Validation Entry: git diff --check; targeted docs/skills grep checks; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group merge-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1694 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1694; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1694
-- Closing Condition: PR is merged into main, issue #1694 is closed, and closeout confirms docs/skills/fixtures point users to ship as the primary delivery path with closeout policy boundaries intact.
+- Item ID: WI-1696
+- Goal: Execute milestone #15 release closeout for the intensity-aware ship path and publish Loom CLI v0.18.0.
+- Scope: Bump root CLI release authority to v0.18.0, add release readiness evidence, validate package/release surfaces, publish through the existing main-push release workflow, terminalize stale milestone #15 carrier WI-1687, refresh shadow evidence for the active status surface, then close issue #1696 and phase #1680 after readback. Ownership: main executor owns VERSION, package.json, WI-1696 carriers, release evidence, PR metadata, release readback, milestone #15 carrier closeout cleanup, and host closeout. Non-goals: no new ship path implementation, no release workflow semantic change, no plugin surface version bump, no installer release.
+- Execution Path: issue #1696 -> branch work/1696-release-closeout -> PR -> controlled merge -> release workflow -> release readback -> issue/phase closeout
+- Workspace Entry: .
+- Recovery Entry: .loom/progress/WI-1696.md
+- Review Entry: .loom/reviews/WI-1696.json
+- Validation Entry: release readback; version surface; release surface; npm package check; npm package smoke; npm pack dry-run; suite validate/evidence/carrier; fact-chain; state-check; git diff --check.
+- Closing Condition: PR is merged into main, v0.18.0 tag/GitHub Release/npm package publish successfully, issue #1696 is closed, phase #1680 is closed, and milestone #15 has no open issues.
 - Current Checkpoint: merge checkpoint
-- Current Stop: PR #1708 is open for issue #1694; PR metadata render/readback preflight passed and implementation review is recorded.
-- Next Step: Run PR gate, hosted checks, merge-ready, controlled merge, and closeout for PR #1708.
+- Current Stop: WI-1696 release PR inputs are locally validated in issue-scoped worktree /Users/mc/dev/Loom-WI-1696; review and PR metadata are next.
+- Next Step: Record spec/implementation review, render PR metadata, open release PR, then run hosted checks, ship, release readback, and close #1696/#1680.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-22 local validation passed: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group merge-wrapper`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1694 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1694 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1694 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1694`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1694`; `PYTHONDONTWRITEBYTECODE=1 python3 skills/loom-build/scripts/loom-build.py flow build --target . --item WI-1694 --build-evidence .loom/progress/WI-1694-build-evidence.json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`.
-- Recovery Boundary: Work Item #1694 is active in `/Users/mc/dev/Loom-WI-1694` on branch `work/1694-ship-entry-convergence`; no work was performed in `/Users/mc/dev/Loom`.
-- Current Lane: milestone-15-ship-entry-convergence
+- Latest Validation Summary: 2026-06-22 local validation passed: `git diff --check`; `CODEX_EXPORT_GH_TOKEN=1 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py release readback --target . --version v0.18.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1696 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1696 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1696 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py fact-chain --target . --item WI-1696`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py state-check --target . --item WI-1696`.
+- Recovery Boundary: Work Item #1696 is active in `/Users/mc/dev/Loom-WI-1696` on branch `work/1696-release-closeout`; no work is performed in `/Users/mc/dev/Loom`.
+- Current Lane: milestone-15-release-closeout
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-22 WI-1694 README / skills / fixture convergence completed in issue-scoped worktree `/Users/mc/dev/Loom-WI-1694`.
-- Logs Entry: Local command output retained in current Codex milestone #15 thread; concise validation commands are listed in the Latest Validation Summary.
-- Diagnostics Entry: `loom ship` is now documented as the ordinary delivery path after install/adoption; merge-ready and retire skills remain available as explicit preflight / diagnosis and local cleanup surfaces.
-- Verification Entry: Targeted local validation passed for diff hygiene, Python compile, generated skills parity, ship-wrapper, merge-wrapper, suite validate, suite evidence validate, suite carrier validate, fact-chain, state-check, build flow, source contract-only loom_check, release surface, version surface, and npm package checks on 2026-06-22.
-- Lane Entry: milestone-15-ship-entry-convergence
+- Run Entry: 2026-06-22 WI-1696 release closeout started in issue-scoped worktree `/Users/mc/dev/Loom-WI-1696`.
+- Logs Entry: Local command output retained in current Codex milestone #15 thread; concise validation commands will be listed in the Latest Validation Summary.
+- Diagnostics Entry: `v0.18.0` is the release target for the completed intensity-aware ship path; `v0.18.0` was unoccupied before release PR preparation.
+- Verification Entry: 2026-06-22 local validation passed for release readback, version/release/package surfaces, npm package smoke, npm pack dry-run, suite validate/evidence/carrier, fact-chain, state-check, and git diff whitespace check.
+- Lane Entry: milestone-15-release-closeout
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1694.md
-- Dynamic Truth: .loom/progress/WI-1694.md
+- Static Truth: .loom/work-items/WI-1696.md
+- Dynamic Truth: .loom/progress/WI-1696.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
