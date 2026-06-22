@@ -3,28 +3,15 @@
   "item_id": "WI-1735",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1735 current-head review allows the ship main-path contract freeze after merging origin/main: docs and contract checker changes define short diagnostics, dry-run/apply order, automatic repair boundaries, generated-only drift boundary, validation profile expectation, and closeout escalation without implementing runtime repair-chain, review freshness, validation profile, closeout, or release behavior. Mainline WI-1732 tombstone changes are consumed as existing target-branch state.",
+  "summary": "WI-1735 current-head review allows the ship main-path contract freeze: docs and contract checker changes define short diagnostics, dry-run/apply order, automatic repair boundaries, generated-only drift boundary, validation profile expectation, and closeout escalation without implementing runtime repair-chain, review freshness, validation profile, closeout, or release behavior. WI-1735 evidence-map and task-carrier are readiness carriers for hosted freeze only.",
   "reviewer": "Codex main controller",
-  "authored_at": "2026-06-22T18:06:50Z",
-  "reviewed_head": "2cff3d6e6db93c2986209d7da59e1bb362b548f1",
-  "reviewed_validation_summary": "2026-06-23 local validation passed at merge head 2cff3d6e6db93c2986209d7da59e1bb362b548f1: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json returned result=not_applicable with no missing inputs or blocking gaps; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; current-head review and carrier refresh pending.",
+  "authored_at": "2026-06-22T18:27:11Z",
+  "reviewed_head": "eb3f27ee8447b089d2fda687887957f3fc6e0f85",
+  "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1735-ship-contract`: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1735.",
   "fallback_to": null,
-  "findings": [
-    {
-      "id": "compat-follow-up-1",
-      "summary": "Runtime repair-chain, review freshness, validation profile, closeout, and release behavior remain scoped to dependent issues #1738-#1743.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    }
-  ],
+  "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "Runtime repair-chain, review freshness, validation profile, closeout, and release behavior remain scoped to dependent issues #1738-#1743."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1735.md",
     "recovery_entry": ".loom/progress/WI-1735.md",
