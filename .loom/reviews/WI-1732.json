@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1732",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Code review allows WI-1732 current implementation: legacy installer active paths are removed, tombstone CLI fails closed, CI/release guards use tombstone checks, root self-plugin no longer invokes loom-installer, and npm deprecate remains a separate closeout action.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-22T16:08:46Z",
+  "reviewed_head": "07b3d83dce6aa5a2be3052fe29f4c7280a243887",
+  "reviewed_validation_summary": "2026-06-22 local validation on branch `work/1732-retire-loom-installer-package`: `npm --prefix packages/loom-installer run check:release` passed; `node packages/loom-installer/scripts/run-regression.mjs` passed; `python3 tools/check_loom_check_runtime_regressions.py --surface installer-regression-lock-output` passed; `python3 tools/check_release_surface.py --surface installer-sunset-guard` passed; `python3 tools/skills_surface.py check --surface generated-tree-drift` passed; `python3 tools/py_compile_clean.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py` passed; direct `check_root_self_plugin_install(Path('.'))` returned pass; `git diff --check` passed; `python3 tools/loom.py suite validate --target . --item WI-1732 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1732 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1732 --json` passed; `python3 tools/loom.py fact-chain --target . --item WI-1732 --json` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1732.md",
+    "recovery_entry": ".loom/progress/WI-1732.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1732-retire-loom-installer-package/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-WI-1732-retire-loom-installer-package --item WI-1732 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1732-retire-loom-installer-package/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-WI-1732-retire-loom-installer-package --item WI-1732 --json",
+    "suite_evidence_map": ".loom/specs/WI-1732/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1732/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
