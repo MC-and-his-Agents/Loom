@@ -6,10 +6,15 @@
 
 `skills/` 是源仓库内的 generated skills mirror；真正发布给 Codex 的 skills payload 位于 `plugins/loom/skills/`。每个 `skills/<skill-id>` 仍然保留源码组织与兼容镜像语义，但不再是自包含 single-skill package。方法论和架构文档位于这层之后，用户通常应该从 skills 进入，而不是先读内部治理文档。
 
-默认从 `loom-init` 开始。它是 Loom 唯一的 root entry，负责两件事：
+采用、路由和恢复工作时，默认从 `loom-init` 开始。它是 Loom 唯一的 root entry，
+负责两件事：
 
 - 初始化 Loom，或把 Loom retrofit 进既有仓库
 - 在没有显式指定场景 skill 时，根据任务信号把执行者导向正确场景
+
+当工作项已经有拉取请求后，普通交付默认使用 `loom ship`。它消费拉取请求元数据、
+拉取请求门控、受控合并和收尾策略，让轻量与标准强度变更可以完成合并与收尾，而不再
+额外创建后续收尾拉取请求。
 
 当前 `skills/` 层消费的是新的强治理控制面，固定约束如下：
 
@@ -19,7 +24,8 @@
 - 执行放行链固定收敛为 `spec gate -> build gate -> review gate -> merge gate`
 - `status control plane` 只读取并汇总事实链与宿主控制面，不新增 authored 真相
 - profile maturity 按 `light -> standard -> strong` 升级；事项成熟度仍按治理状态机推进
-- merge 由 GitHub 或等价宿主控制面受控执行；Loom 只消费并汇总 `GitHub controlled merge` 的前置条件
+- merge 由 GitHub 或等价宿主控制面受控执行；`loom ship` 是默认命令行包装器，
+  负责消费前置条件，在用户要求时执行宿主合并，并在收尾策略允许时完成内联或仅宿主收尾
 
 ## Skills Library
 
@@ -39,6 +45,12 @@ Loom 暴露一个 root entry 和十个 scenario skills：
 | `loom-retire` | 清理或退场当前工作现场。 |
 | `loom-merge-ready` | 在 GitHub controlled merge 前执行最终 `merge gate` 汇总。 |
 
+主要交付命令：
+
+```bash
+loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json
+```
+
 ## Entry Model
 
 Loom 支持两种入口模式：
@@ -54,7 +66,7 @@ Loom 支持两种入口模式：
 - 执行入口仍然绑定在 `Work Item`
 - gate 仍然绑定在共享 `gate chain`
 - 状态读取仍然绑定在共享 `status control plane`
-- merge 仍然由宿主平台控制面执行
+- merge 仍然由宿主平台控制面执行，普通交付由 `loom ship` 包装
 
 ## Install Model
 

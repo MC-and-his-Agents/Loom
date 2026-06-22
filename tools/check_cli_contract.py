@@ -891,6 +891,62 @@ def assert_ship_apply_wrapper_contract() -> None:
         module.emit = original_emit
 
 
+def assert_ship_docs_entry_contract() -> None:
+    required_snippets = {
+        "README.md": [
+            "## Daily Delivery Path",
+            "loom ship \\",
+            "inline or host-only closeout",
+            "explicit full closeout PR",
+        ],
+        "README.zh-CN.md": [
+            "## 日常交付路径",
+            "loom ship \\",
+            "内联或仅宿主收尾",
+            "显式完整收尾拉取请求",
+        ],
+        "src/skills/README.md": [
+            "For ordinary delivery after a Work Item has a PR, use `loom ship`",
+            "follow-up closeout PR",
+        ],
+        "src/skills/README.zh-CN.md": [
+            "普通交付默认使用 `loom ship`",
+            "额外创建后续收尾拉取请求",
+            "收尾拉取请求",
+        ],
+        "src/skills/route-matrix.md": [
+            "普通交付 / ship",
+            "`loom ship --target <repo>",
+        ],
+        "src/skills/loom-merge-ready/SKILL.md": [
+            "普通交付默认使用 `loom ship`",
+            "内联或仅宿主收尾",
+        ],
+        "src/skills/loom-retire/SKILL.md": [
+            "普通交付后的合并与收尾默认由 `loom ship` 完成",
+            "仅宿主收尾通过",
+        ],
+    }
+    for relative_path, snippets in required_snippets.items():
+        text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+        for snippet in snippets:
+            if snippet not in text:
+                raise AssertionError(f"{relative_path} missing ship entry snippet `{snippet}`")
+
+    generated_pairs = [
+        ("src/skills/README.md", "skills/README.md"),
+        ("src/skills/README.zh-CN.md", "skills/README.zh-CN.md"),
+        ("src/skills/route-matrix.md", "skills/route-matrix.md"),
+        ("src/skills/loom-merge-ready/SKILL.md", "skills/loom-merge-ready/SKILL.md"),
+        ("src/skills/loom-retire/SKILL.md", "skills/loom-retire/SKILL.md"),
+    ]
+    for source_path, generated_path in generated_pairs:
+        source_text = (REPO_ROOT / source_path).read_text(encoding="utf-8")
+        generated_text = (REPO_ROOT / generated_path).read_text(encoding="utf-8")
+        if source_text != generated_text:
+            raise AssertionError(f"{generated_path} drifted from {source_path}")
+
+
 def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
     target = tmp / "controlled-merge-triggered-check-rollup"
     target.mkdir()
@@ -8486,6 +8542,7 @@ def run_merge_wrapper_surface() -> None:
 def run_ship_wrapper_surface() -> None:
     assert_ship_dry_run_wrapper_contract()
     assert_ship_apply_wrapper_contract()
+    assert_ship_docs_entry_contract()
     print("ship wrapper surface checks passed")
 
 

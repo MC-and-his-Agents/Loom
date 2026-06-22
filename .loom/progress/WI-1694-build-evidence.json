@@ -1,0 +1,96 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1694-goodall-readonly-entry-inventory",
+      "task_goal": "Identify the smallest README, skills, and fixture surfaces that must converge to the `loom ship` ordinary delivery path without modifying files.",
+      "context_locators": [
+        "README.md",
+        "README.zh-CN.md",
+        "src/skills/",
+        "tools/check_cli_contract.py",
+        "issue #1694"
+      ],
+      "read_scope": [
+        "README quick start and delivery flow",
+        "Source skills entry, route matrix, merge-ready, retire, and pre-review positioning",
+        "Existing ship-wrapper and closeout policy fixture surfaces"
+      ],
+      "write_ownership": [
+        "none; read-only analysis lane"
+      ],
+      "non_goals": [
+        "No authored file changes by subagent",
+        "No runtime behavior changes",
+        "No release #1696 closeout work"
+      ],
+      "validation_expectation": "Main executor integrates README, skills, generated payload, and fixture updates before review.",
+      "output_format": "Summary only: relevant files, validation commands, risks, and no long logs.",
+      "integration_target": [
+        "README.md",
+        "README.zh-CN.md",
+        "src/skills/",
+        "skills/",
+        "plugins/loom/skills/",
+        "tools/check_cli_contract.py",
+        ".loom/specs/WI-1694/",
+        ".loom/progress/WI-1694.md"
+      ],
+      "status": "integrated",
+      "summary": "Main executor consumed the read-only inventory: document `loom ship` as the ordinary delivery path, keep merge-ready and retire as advanced/preflight/local-cleanup surfaces, add a ship-wrapper drift guard, and keep release closeout in #1696."
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1694-readme-delivery-path",
+      "status": "integrated",
+      "summary": "README and README.zh-CN now add a daily delivery path showing `loom ship` as the ordinary post-install PR delivery command and explaining when closeout escalates to carrier or full closeout PR paths.",
+      "locators": [
+        "README.md",
+        "README.zh-CN.md"
+      ]
+    },
+    {
+      "id": "WI-1694-skills-entry-convergence",
+      "status": "integrated",
+      "summary": "Source skills, generated skills, and plugin skills now position `loom ship` as ordinary delivery, `loom-merge-ready` as preflight/diagnosis, and `loom-retire` as local cleanup after closeout evidence exists.",
+      "locators": [
+        "src/skills/README.md",
+        "src/skills/README.zh-CN.md",
+        "src/skills/route-matrix.md",
+        "src/skills/loom-merge-ready/SKILL.md",
+        "src/skills/loom-retire/SKILL.md",
+        "skills/",
+        "plugins/loom/skills/"
+      ]
+    },
+    {
+      "id": "WI-1694-fixture-guard",
+      "status": "integrated",
+      "summary": "tools/check_cli_contract.py adds `assert_ship_docs_entry_contract()` to the ship-wrapper surface, guarding README/source-skill wording and source/generated mirror drift.",
+      "locators": [
+        "tools/check_cli_contract.py"
+      ]
+    },
+    {
+      "id": "WI-1694-carriers",
+      "status": "integrated",
+      "summary": "WI-1694 work item, progress, status, minimal suite, task carrier, and build evidence bind the branch, scope, ownership, non-goals, validation path, and #1696 release deferral.",
+      "locators": [
+        ".loom/work-items/WI-1694.md",
+        ".loom/progress/WI-1694.md",
+        ".loom/status/current.md",
+        ".loom/specs/WI-1694/",
+        ".loom/progress/WI-1694-build-evidence.json"
+      ]
+    },
+    {
+      "id": "WI-1694-local-validation",
+      "status": "integrated",
+      "summary": "2026-06-22 local validation on branch work/1694-ship-entry-convergence passed: diff check, py compile, skills surface check, ship-wrapper, merge-wrapper, suite validate, fact-chain, and state-check.",
+      "locators": [
+        ".loom/progress/WI-1694.md"
+      ]
+    }
+  ]
+}
