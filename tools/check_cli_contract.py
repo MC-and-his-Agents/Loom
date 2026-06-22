@@ -2734,9 +2734,23 @@ def assert_version_freshness_contract(tmp: Path) -> None:
         freshness = current.get("version_freshness", {})
         if freshness.get("action") != "already_current" or freshness.get("plugin_payload", {}).get("freshness") != "already_current":
             raise AssertionError("version did not report current CLI and plugin payload freshness")
+        if freshness.get("surface_compatibility", {}).get("status") != "compatible":
+            raise AssertionError("version did not report compatible plugin surface for current payloads")
         current_guidance = freshness.get("plugin_payload", {}).get("refresh_guidance", {})
         if current_guidance.get("status") != "current" or current_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json":
             raise AssertionError("current plugin payload freshness did not expose host readback guidance")
+        short_output = subprocess.run(
+            [sys.executable, str(LOOM), "version"],
+            cwd=REPO_ROOT,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "LOOM_TEST_NPM_LATEST_VERSION": installed_version},
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+        if short_output.returncode != 0 or "action already_current" not in short_output.stdout:
+            raise AssertionError(f"version short output did not expose freshness action\n{short_output.stderr}\n{short_output.stdout}")
 
         _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
         if host_doctor.get("version_freshness", {}).get("action") != "already_current":
@@ -2785,6 +2799,18 @@ def assert_version_freshness_contract(tmp: Path) -> None:
             or stale_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json"
         ):
             raise AssertionError("stale runtime payload did not expose reload/readback guidance")
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        runtime_manifest = runtime / ".codex-plugin" / "plugin.json"
+        runtime_payload = json.loads(runtime_manifest.read_text(encoding="utf-8"))
+        runtime_payload.setdefault("x-loom", {})["plugin_surface_version"] = "0.0.0-test"
+        runtime_manifest.write_text(json.dumps(runtime_payload, indent=2) + "\n", encoding="utf-8")
+        _, incompatible_surface = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if (
+            incompatible_surface.get("version_freshness", {}).get("surface_compatibility", {}).get("status") != "incompatible"
+            or "runtime-cache" not in incompatible_surface.get("version_freshness", {}).get("surface_compatibility", {}).get("incompatible_layers", [])
+        ):
+            raise AssertionError("version did not identify plugin surface incompatibility")
         shutil.rmtree(runtime)
         shutil.copytree(home / "plugins" / "loom", runtime)
         _, repaired_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
