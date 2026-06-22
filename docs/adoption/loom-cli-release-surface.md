@@ -12,7 +12,7 @@ The `loom` CLI release line is the primary release line for Loom execution behav
 | Published Loom CLI release | GitHub `v*` tag and GitHub Release | The tag must point at the release commit. Release notes must describe the CLI/runtime behavior being shipped or explicitly state that no CLI behavior changed. |
 | Deprecated installer legacy artifact | `packages/loom-installer/package.json` | Historical evidence only. The last active release baseline is `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`; it is not a current publish path. |
 
-The `loom` CLI release line is the only active CLI release line. It is not synchronized with the deprecated installer package version, plugin surface version, skill package version, runtime contract version, or schema version.
+The `loom` CLI release line is the only active CLI release line. It is not synchronized with the deprecated installer package version, plugin surface version, skill contract version, runtime contract version, or schema version. The Codex plugin payload version follows the root Loom release because the payload is published inside the root `@mc-and-his-agents/loom` package, while the plugin surface version remains a separate host-interface compatibility line.
 
 ## Distribution Channel
 
@@ -128,7 +128,7 @@ When release-required work publishes a Loom CLI release, pre-merge evidence must
 
 - the Work Item, branch, PR, current head, base, and parent release-required issue;
 - the chosen `VERSION` and matching `package.json` npm version;
-- plugin payload `plugins/loom/skills/registry.json`, generated skills mirror, and skill `contract.json` surfaces synchronized when the release ships skills payload changes;
+- plugin payload release metadata, `plugin_payload_hash`, `plugins/loom/skills/registry.json`, generated skills mirror, and skill `contract.json` surfaces synchronized when the release ships skills payload changes;
 - target GitHub `v*` tag and npm `@mc-and-his-agents/loom` version are unoccupied before publish;
 - `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, `installed-global-cli-smoke`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
 - PR-event `release-judgment-only`, if present, is recorded only as pre-merge judgment evidence and not as final release evidence.
