@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1715",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Review allow: WI-1715 remains ready for merge checkpoint consumption after portable workspace-entry repair. The product freshness diagnostics stay in scope; carrier metadata now uses .loom/.. so hosted CI can consume the fact chain, and aggregate/governance-closeout contract surfaces plus fact-chain/carrier validation passed locally.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-06-22T19:53:00Z",
+  "reviewed_head": "cc1db9cda4774c3bce25333f6332512964c34dad",
+  "reviewed_validation_summary": "2026-06-23 local checks passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_cli_contract.py --surface aggregate; git diff --check; python3 tools/loom.py suite validate --target . --item WI-1715 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1715 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1715 --json; python3 tools/loom.py fact-chain --target . --item WI-1715 --json; local PR gate passed at head f1d5efe before portable workspace-entry repair.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1715.md",
+    "recovery_entry": ".loom/progress/WI-1715.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1715-freshness-reporting/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-WI-1715-freshness-reporting --item WI-1715 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1715-freshness-reporting/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-WI-1715-freshness-reporting --item WI-1715 --json",
+    "suite_evidence_map": ".loom/specs/WI-1715/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1715/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
