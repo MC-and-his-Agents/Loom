@@ -3,11 +3,11 @@
   "item_id": "WI-1719",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review allows WI-1719: the current PR head keeps the minimal suite scoped to contract-only single SKILL version semantics, legacy metadata diagnostic tolerance, payload manifest behavior, and targeted installer validation; release and host command boundary work remain explicitly out of scope.",
+  "summary": "Spec review allows WI-1719: the current PR head keeps the minimal suite scoped to contract-only single SKILL version semantics, legacy metadata diagnostic tolerance, payload manifest behavior, and the installer package metadata bump required by node-installer-pr admission without restoring installer publish or release authority.",
   "reviewer": "codex-main",
-  "authored_at": "2026-06-22T09:50:01Z",
-  "reviewed_head": "e6be96ca7f6d395c2cbe9168e48993ac10ae44fe",
-  "reviewed_validation_summary": "2026-06-22 local validation passed in `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only`: `npm --prefix packages/loom-installer ci`; `npm --prefix packages/loom-installer test` passed 22 installer tests after rebuilding payload and compiling TypeScript; `npm --prefix packages/loom-installer run check:docs` passed; `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1719 --json` passed; PR #1725 metadata preflight/readback passed for head `4b5f0fa0263180dd2b0d49b73ee02eecda73a7c3`; `python3 tools/loom.py review record --target . --item WI-1719 --kind spec_review --decision allow --review-file .loom/reviews/WI-1719.spec.json --json` passed; `python3 tools/loom.py review record --target . --item WI-1719 --kind code_review --decision allow --review-file .loom/reviews/WI-1719.json --json` passed; `python3 skills/shared/scripts/loom_flow.py flow spec-review --target . --item WI-1719` passed; `python3 skills/shared/scripts/loom_flow.py flow review --target . --item WI-1719 --pr 1725 --branch work/1719-skill-contract-version-only` passed.",
+  "authored_at": "2026-06-22T10:00:41Z",
+  "reviewed_head": "cfa7c45b4761c8d2b28e41cf42b90c5756144d7b",
+  "reviewed_validation_summary": "2026-06-22 local validation passed in `/Users/mc/dev/Loom-WI-1719-skill-contract-version-only` after installer package metadata patch bump `0.1.148` -> `0.1.149`: `npm --prefix packages/loom-installer test` passed 22 installer tests after rebuilding payload and compiling TypeScript; `npm --prefix packages/loom-installer run check:docs` passed; `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main` passed with `0.1.148 -> 0.1.149`; `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1719 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1719 --json` passed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
