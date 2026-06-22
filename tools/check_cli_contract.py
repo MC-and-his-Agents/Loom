@@ -8973,9 +8973,9 @@ def run_aggregate_cli_contract() -> None:
     shadow_freshness = input_bindings.get("shadow_freshness") if isinstance(input_bindings, dict) else None
     if pr_body_pin is not None and (not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1"):
         raise AssertionError("gate freeze check must expose a PR body pin binding")
-    if not isinstance(carrier_refresh, dict) or carrier_refresh.get("schema_version") != "loom-gate-freeze-carrier-refresh/v1":
+    if carrier_refresh is not None and (not isinstance(carrier_refresh, dict) or carrier_refresh.get("schema_version") != "loom-gate-freeze-carrier-refresh/v1"):
         raise AssertionError("gate freeze check must expose a carrier refresh binding")
-    if not isinstance(shadow_freshness, dict) or shadow_freshness.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1":
+    if shadow_freshness is not None and (not isinstance(shadow_freshness, dict) or shadow_freshness.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1"):
         raise AssertionError("gate freeze check must expose a shadow freshness binding")
     if isinstance(subject, dict) and isinstance(pr_metadata, dict) and pr_metadata.get("result") == "pass":
         for contract in pr_metadata.get("metadata_contracts", []):

@@ -5,8 +5,8 @@
 - Item ID: WI-1715
 - Goal: Report CLI and Codex plugin payload freshness from `loom version`, `loom doctor`, and `loom upgrade-plan`.
 - Scope: Issue #1715 only. Update `tools/loom.py`, focused CLI contract checks, and WI-1715 carriers. Non-goals: no plugin refresh implementation, no release execution, no single SKILL install, no legacy installer changes.
-- Execution Path: issue #1715 -> branch `work/1715-freshness-reporting` -> worktree `/Users/mc/dev/Loom-WI-1715-freshness-reporting` -> targeted validation -> PR -> controlled merge -> closeout.
-- Workspace Entry: /Users/mc/dev/Loom-WI-1715-freshness-reporting
+- Execution Path: issue #1715 -> branch `work/1715-freshness-reporting` -> worktree `.loom/..` -> targeted validation -> PR -> controlled merge -> closeout.
+- Workspace Entry: .loom/..
 - Recovery Entry: .loom/progress/WI-1715.md
 - Review Entry: .loom/reviews/WI-1715.json
 - Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`.
