@@ -6,7 +6,7 @@
 - Goal: Execute milestone #15 release closeout for the intensity-aware ship path and publish Loom CLI v0.18.0.
 - Scope: Bump root CLI release authority to v0.18.0, add release readiness evidence, validate package/release surfaces, publish through the existing main-push release workflow, then close issue #1696 and phase #1680 after readback. Ownership: main executor owns VERSION, package.json, WI-1696 carriers, release evidence, PR metadata, release readback, and host closeout. Non-goals: no new ship path implementation, no release workflow semantic change, no plugin surface version bump, no installer release.
 - Execution Path: issue #1696 -> branch work/1696-release-closeout -> PR -> controlled merge -> release workflow -> release readback -> issue/phase closeout
-- Workspace Entry: /Users/mc/dev/Loom-WI-1696
+- Workspace Entry: ./WI-1696/..
 - Recovery Entry: .loom/progress/WI-1696.md
 - Review Entry: .loom/reviews/WI-1696.json
 - Validation Entry: release readback; version surface; release surface; npm package check; npm package smoke; npm pack dry-run; suite validate/evidence/carrier; fact-chain; state-check; git diff --check.
