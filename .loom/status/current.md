@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1739.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group closeout-wrapper
 - Closing Condition: PR merged and issue #1739 closed with ship repair-chain evidence.
-- Current Checkpoint: merge
-- Current Stop: WI-1739 implementation, spec review, implementation review, PR metadata preflight, carrier refresh, and shadow parity are ready for PR gate and hosted checks.
-- Next Step: Run PR gate, wait for hosted checks on PR #1768, then perform controlled merge and closeout sync.
+- Current Checkpoint: closeout
+- Current Stop: WI-1739 PR #1768 merged into main at 0fcd272e5d039e2f619480d0514fbc341e19e584; closeout carrier PR #1769 is preparing terminal metadata consumption.
+- Next Step: Merge closeout PR #1769, then close GitHub issue #1739 and continue to dependent WI-1742.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 targeted validation passed for WI-1739: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1739 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1739 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1739 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1739 --apply; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking.
-- Recovery Boundary: WI-1739 owns loom ship --apply pre-merge repair-chain sequencing and focused contract coverage only; it does not implement closeout e2e regression, validation profile selection, or release behavior.
-- Current Lane: ship-repair-chain
+- Latest Validation Summary: 2026-06-23 closeout sync passed for WI-1739: PR #1768 merged at 0fcd272e5d039e2f619480d0514fbc341e19e584; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier closeout-sync --target . --item WI-1739 --terminal-state merged --issue 1739 --pr 1768 --merge-commit 0fcd272e5d039e2f619480d0514fbc341e19e584 --target-branch main --closed-at 2026-06-23T09:06:49Z --evidence-locator 'github.com/MC-and-his-Agents/Loom/issues/1739;github.com/MC-and-his-Agents/Loom/pull/1768' --apply.
+- Recovery Boundary: WI-1739 closeout sync only consumes the already-merged #1768 facts; it does not implement WI-1742 or release behavior.
+- Current Lane: ship-repair-chain-closeout
 
 ## Runtime Evidence
 
