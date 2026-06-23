@@ -115,6 +115,33 @@ It may stay unchanged while `plugin_payload_version` and
 payload integrity and behavior-contract evidence, but they must not be used as
 the freshness decision for the installed Codex plugin payload.
 
+## Plugin Refresh Guidance
+
+`loom version --json`, `loom doctor`, `loom host doctor --host codex --scope
+user --json`, and `loom upgrade-plan --target <repo> --host codex --json` expose
+the same plugin payload freshness decision.
+
+When the registered Codex plugin source is missing, stale, or missing release
+metadata, the executable refresh path is:
+
+```bash
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --scope user --apply --json
+loom host doctor --host codex --scope user --json
+```
+
+When only the Codex-owned runtime cache is stale or missing metadata, Loom must
+not write that cache directly. The guidance is to start a new Codex session, or
+restart Codex Desktop if the plugin list was already loaded, then read back:
+
+```bash
+loom host doctor --host codex --scope user --json
+```
+
+`loom install` and `loom upgrade` continue to manage only the target
+repository's metadata-only installed-state. They do not refresh the Codex
+workstation plugin payload and must redirect that intent to `loom host ...`.
+
 ## Legacy Residue
 
 The following paths are unsupported legacy residue in downstream repositories:
