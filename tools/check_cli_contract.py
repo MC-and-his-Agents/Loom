@@ -677,8 +677,16 @@ def assert_ship_dry_run_wrapper_contract() -> None:
 
     original_flow_payload = module.flow_payload
     original_emit = module.emit
+    original_changed_paths = module.ship_changed_paths_payload
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["docs/adoption/legacy-install-migration.md"],
+        "missing_inputs": [],
+    }
     try:
         status = module.handle_ship([
             "--item",
@@ -716,10 +724,16 @@ def assert_ship_dry_run_wrapper_contract() -> None:
             raise AssertionError("ship dry-run did not consume light closeout policy")
         if not any(step.get("name") == "post-merge-closeout" and step.get("result") == "skipped" for step in emitted.get("steps", [])):
             raise AssertionError("ship dry-run must plan post-merge closeout without executing it")
+        validation_profile = emitted.get("validation_profile", {})
+        if validation_profile.get("selected_profile") != "light" or validation_profile.get("source_surface") != "contract-only":
+            raise AssertionError(f"ship dry-run did not expose the light validation profile for docs-only paths: {validation_profile}")
+        if not any(step.get("name") == "validation-profile" and step.get("result") == "pass" for step in emitted.get("steps", [])):
+            raise AssertionError("ship dry-run must include a validation-profile diagnostic step")
 
     finally:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
+        module.ship_changed_paths_payload = original_changed_paths
 
 
 def assert_ship_infers_pr_bindings_contract() -> None:
@@ -776,11 +790,19 @@ def assert_ship_infers_pr_bindings_contract() -> None:
     original_ship_pr_payload = module.ship_pr_payload
     original_git_branch = module.git_branch_for_target
     original_git_head = module.git_head_sha_for_target
+    original_changed_paths = module.ship_changed_paths_payload
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = fake_ship_pr_payload
     module.git_branch_for_target = lambda target: "work/local-checkout"
     module.git_head_sha_for_target = lambda target: "e" * 40
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["README.md"],
+        "missing_inputs": [],
+    }
     try:
         status = module.handle_ship(["--item", "WI-1738", "--pr", "1748", "--json"])
         if status != 0 or emitted.get("result") != "pass":
@@ -798,6 +820,7 @@ def assert_ship_infers_pr_bindings_contract() -> None:
         module.ship_pr_payload = original_ship_pr_payload
         module.git_branch_for_target = original_git_branch
         module.git_head_sha_for_target = original_git_head
+        module.ship_changed_paths_payload = original_changed_paths
 
 
 def assert_ship_pr_readback_uses_api_contract() -> None:
@@ -840,6 +863,79 @@ def assert_ship_pr_readback_uses_api_contract() -> None:
     finally:
         module.run_capture = original_run_capture
         module.infer_github_repo = original_infer_github_repo
+
+
+def assert_ship_changed_paths_readback_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship changed path regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args[:3] == ["gh", "api", "--paginate"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps(["README.md", "tools/loom.py"]), stderr="")
+        raise AssertionError(f"unexpected changed path readback command: {args}")
+
+    original_run_capture = module.run_capture
+    original_infer_github_repo = module.infer_github_repo
+    module.run_capture = fake_run_capture
+    module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
+    try:
+        args = argparse.Namespace(pr=1741, owner=None, repo_name=None)
+        paths, errors = module.ship_pr_changed_paths(args, REPO_ROOT)
+        if errors or paths != ["README.md", "tools/loom.py"]:
+            raise AssertionError(f"ship changed paths readback should normalize PR file paths, got paths={paths} errors={errors}")
+        if not calls or calls[0][3] != "repos/MC-and-his-Agents/Loom/pulls/1741/files":
+            raise AssertionError(f"ship changed paths must read the pull request files endpoint, got {calls}")
+        if "--slurp" not in calls[0] or "--jq" not in calls[0]:
+            raise AssertionError("ship changed paths readback must request a normalized JSON path list")
+    finally:
+        module.run_capture = original_run_capture
+        module.infer_github_repo = original_infer_github_repo
+
+
+def assert_ship_validation_profile_selection_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship validation profile regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def payload(paths: list[str], *, requested: str = "auto", closeout_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+        args = argparse.Namespace(validation_profile=requested)
+        changed_paths = {
+            "schema_version": "loom-ship-changed-paths/v1",
+            "result": "pass",
+            "source": "fixture",
+            "changed_paths": paths,
+            "missing_inputs": [],
+        }
+        return module.ship_validation_profile_payload(args, changed_paths, closeout_policy or {"policy": "inline"})
+
+    docs_profile = payload(["docs/adoption/legacy-install-migration.md", "packages/loom-installer/package.json"])
+    if docs_profile.get("selected_profile") != "light" or docs_profile.get("source_surface") != "contract-only":
+        raise AssertionError(f"docs/package tombstone paths must select light validation: {docs_profile}")
+    if "docs_or_package_tombstone_only" not in docs_profile.get("selection_reasons", []):
+        raise AssertionError("light validation profile must explain docs/package tombstone selection")
+
+    runtime_profile = payload(["tools/loom.py", "skills/shared/scripts/loom_flow.py"])
+    if runtime_profile.get("selected_profile") != "full" or runtime_profile.get("source_surface") != "daily-execution-cli-full":
+        raise AssertionError(f"runtime/harness paths must select full validation: {runtime_profile}")
+
+    release_profile = payload(
+        ["docs/evidence/v0.20.0-release-readiness.md"],
+        closeout_policy={"policy": "full_closeout_pr", "release_judgment": "release_required", "upgrade_reasons": ["release_or_version_closeout"]},
+    )
+    if release_profile.get("selected_profile") != "release" or "python3 tools/check_npm_package.py" not in release_profile.get("validation_commands", []):
+        raise AssertionError(f"release closeout must select release validation commands: {release_profile}")
+
+    explicit_full = payload(["README.md"], requested="full")
+    if explicit_full.get("selected_profile") != "full" or explicit_full.get("source_surface") != "daily-execution-cli-full":
+        raise AssertionError(f"explicit full validation profile override was not preserved: {explicit_full}")
 
 
 def assert_ship_apply_wrapper_contract() -> None:
@@ -916,9 +1012,17 @@ def assert_ship_apply_wrapper_contract() -> None:
     original_flow_payload = module.flow_payload
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
+    original_changed_paths = module.ship_changed_paths_payload
     module.flow_payload = passing_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["README.md"],
+        "missing_inputs": [],
+    }
     try:
         status = module.handle_ship(
             [
@@ -1025,6 +1129,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
+        module.ship_changed_paths_payload = original_changed_paths
 
 
 def assert_ship_closeout_policy_admission_contract() -> None:
@@ -1073,9 +1178,17 @@ def assert_ship_closeout_policy_admission_contract() -> None:
     original_flow_payload = module.flow_payload
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
+    original_changed_paths = module.ship_changed_paths_payload
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["skills/shared/scripts/loom_flow.py"],
+        "missing_inputs": [],
+    }
     try:
         status = module.handle_ship(
             [
@@ -1108,6 +1221,7 @@ def assert_ship_closeout_policy_admission_contract() -> None:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
+        module.ship_changed_paths_payload = original_changed_paths
 
 
 def assert_ship_docs_entry_contract() -> None:
@@ -1118,6 +1232,8 @@ def assert_ship_docs_entry_contract() -> None:
             "inline or host-only closeout",
             "explicit full closeout PR",
             "The wrapper contract stays narrow and ordered",
+            "validation profile -> closeout policy",
+            "--validation-profile auto",
             "short wrapper diagnostics",
             "follow-up issue scope",
         ],
@@ -1127,12 +1243,16 @@ def assert_ship_docs_entry_contract() -> None:
             "内联或仅宿主收尾",
             "显式完整收尾拉取请求",
             "这个包装器的合同保持收敛且有固定顺序",
+            "validation profile -> closeout policy",
+            "--validation-profile auto",
             "短诊断输出",
             "后续 issue 承接",
         ],
         "docs/methodology/harness/cli-command-matrix.md": [
             "loom ship",
             "Its main-path contract is",
+            "validation profile -> closeout policy",
+            "--validation-profile",
             "blocker classification stays step-scoped",
             "remain follow-up issue scope; `loom ship` must block",
         ],
@@ -9077,6 +9197,8 @@ def run_ship_wrapper_surface() -> None:
     assert_ship_dry_run_wrapper_contract()
     assert_ship_infers_pr_bindings_contract()
     assert_ship_pr_readback_uses_api_contract()
+    assert_ship_changed_paths_readback_contract()
+    assert_ship_validation_profile_selection_contract()
     assert_ship_apply_wrapper_contract()
     assert_ship_closeout_policy_admission_contract()
     assert_ship_docs_entry_contract()

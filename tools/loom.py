@@ -364,7 +364,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "delivery",
         "status": "implemented",
         "json": True,
-        "summary": "Dry-run the intensity-aware delivery path across PR metadata, PR gate, controlled merge, and closeout policy.",
+        "summary": "Dry-run the delivery path across PR metadata, PR gate, controlled merge, changed-path validation profile, and closeout policy.",
     },
     {
         "command": "reconcile",
@@ -4731,6 +4731,180 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
     }
 
 
+SHIP_VALIDATION_PROFILE_CHOICES = ("auto", "light", "standard", "full", "release")
+SHIP_VALIDATION_SOURCE_SURFACES = {
+    "light": "contract-only",
+    "standard": "source-self-fixture",
+    "full": "daily-execution-cli-full",
+    "release": "distribution-regression",
+}
+
+
+def normalize_changed_path(path: object) -> str | None:
+    text = str(path or "").strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    return text or None
+
+
+def ship_pr_changed_paths(args: argparse.Namespace, target: Path) -> tuple[list[str], list[str]]:
+    if args.pr is None:
+        return [], ["PR number is required for changed path readback"]
+    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else infer_github_repo(target)
+    if not repo_slug:
+        return [], ["unable to infer GitHub repository for changed path readback; pass --owner and --repo"]
+    completed = run_capture(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            f"repos/{repo_slug}/pulls/{args.pr}/files",
+            "--slurp",
+            "--jq",
+            "map(.[].filename)",
+        ],
+        cwd=target,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "gh api pull request files readback failed"
+        return [], [detail]
+    try:
+        decoded = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return [], [f"invalid JSON from gh api pull request files readback: {exc.msg}"]
+    if not isinstance(decoded, list):
+        return [], ["gh api pull request files readback did not return a JSON array"]
+    paths = sorted({normalized for value in decoded if (normalized := normalize_changed_path(value))})
+    return paths, []
+
+
+def ship_local_changed_paths(target: Path, *, target_branch: str | None, head_sha: str | None) -> tuple[list[str], list[str]]:
+    candidates: list[str] = []
+    if target_branch:
+        candidates.extend([f"origin/{target_branch}", target_branch])
+    errors: list[str] = []
+    for base in candidates:
+        range_spec = f"{base}...{head_sha or 'HEAD'}"
+        completed = run_capture(["git", "-C", str(target), "diff", "--name-only", range_spec])
+        if completed.returncode == 0:
+            paths = sorted({normalized for line in completed.stdout.splitlines() if (normalized := normalize_changed_path(line))})
+            return paths, []
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        if detail:
+            errors.append(detail)
+    return [], errors or ["target branch is unavailable for local changed path diff"]
+
+
+def ship_changed_paths_payload(args: argparse.Namespace, target: Path, *, target_branch: str | None, head_sha: str | None) -> dict[str, Any]:
+    paths, errors = ship_pr_changed_paths(args, target)
+    source = "github_pr_files"
+    if errors:
+        local_paths, local_errors = ship_local_changed_paths(target, target_branch=target_branch, head_sha=head_sha)
+        if local_paths or not local_errors:
+            paths = local_paths
+            errors = []
+            source = "local_git_diff"
+        else:
+            errors.extend(local_errors)
+    result = "pass" if not errors else "warn"
+    return {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": result,
+        "summary": (
+            f"ship read {len(paths)} changed path(s) from {source}."
+            if result == "pass"
+            else "ship could not read changed paths and will choose the safe standard validation profile."
+        ),
+        "source": source if result == "pass" else None,
+        "changed_paths": paths,
+        "missing_inputs": errors,
+        "fallback_to": None if result == "pass" else "rerun loom ship with readable PR files or an up-to-date target branch",
+    }
+
+
+def path_matches_any(path: str, prefixes: tuple[str, ...], exact: tuple[str, ...] = ()) -> bool:
+    return path in exact or any(path.startswith(prefix) for prefix in prefixes)
+
+
+def ship_validation_profile_for_paths(paths: list[str], closeout_policy: dict[str, Any]) -> tuple[str, list[str]]:
+    if closeout_policy.get("policy") == "full_closeout_pr" and (
+        closeout_policy.get("release_judgment") == "release_required"
+        or "release_or_version_closeout" in closeout_policy.get("upgrade_reasons", [])
+    ):
+        return "release", ["closeout_policy_requires_release_validation"]
+    if not paths:
+        return "standard", ["changed_paths_unavailable_default_standard"]
+
+    release_exact = {"VERSION", "package.json", "package-lock.json", "npm-shrinkwrap.json"}
+    release_prefixes = (".github/workflows/loom-cli-release", "docs/evidence/v",)
+    full_prefixes = (
+        ".github/workflows/",
+        ".loom/bin/",
+        "bin/",
+        "examples/",
+        "plugins/loom/",
+        "skills/shared/scripts/",
+        "src/skills/shared/scripts/",
+        "test/",
+        "tools/",
+    )
+    full_exact = {"Makefile"}
+    light_prefixes = ("docs/", "skills/route-matrix.md", "src/skills/route-matrix.md", "plugins/loom/skills/route-matrix.md", "packages/loom-installer/")
+    light_exact = {"README.md", "README.zh-CN.md", "VISION.md", "AGENTS.md", "LICENSE"}
+
+    if any(path_matches_any(path, release_prefixes, release_exact) for path in paths):
+        return "release", ["release_or_package_surface_changed"]
+    if any(path_matches_any(path, full_prefixes, full_exact) for path in paths):
+        return "full", ["runtime_or_harness_surface_changed"]
+    if all(path_matches_any(path, light_prefixes, light_exact) or path.endswith(".md") for path in paths):
+        return "light", ["docs_or_package_tombstone_only"]
+    return "standard", ["mixed_or_unclassified_paths"]
+
+
+def ship_validation_profile_payload(
+    args: argparse.Namespace,
+    changed_paths_payload: dict[str, Any],
+    closeout_policy: dict[str, Any],
+) -> dict[str, Any]:
+    changed_paths = [
+        normalized
+        for value in changed_paths_payload.get("changed_paths", [])
+        if (normalized := normalize_changed_path(value))
+    ]
+    requested = args.validation_profile
+    if requested != "auto":
+        selected = requested
+        reasons = ["explicit_validation_profile_override"]
+    else:
+        selected, reasons = ship_validation_profile_for_paths(changed_paths, closeout_policy)
+        if changed_paths_payload.get("result") != "pass":
+            reasons = ["changed_paths_unavailable_default_standard"]
+            selected = "standard"
+    source_surface = SHIP_VALIDATION_SOURCE_SURFACES[selected]
+    validation_commands = [
+        f"python3 tools/loom_check.py --profile source --source-surface {source_surface} .",
+    ]
+    if selected == "release":
+        validation_commands.extend([
+            "python3 tools/check_release_surface.py",
+            "python3 tools/check_npm_package.py",
+        ])
+    return {
+        "schema_version": "loom-ship-validation-profile/v1",
+        "result": "pass",
+        "summary": f"ship selected `{selected}` validation profile from changed paths.",
+        "requested_profile": requested,
+        "selected_profile": selected,
+        "source_surface": source_surface,
+        "changed_paths": changed_paths,
+        "changed_paths_source": changed_paths_payload.get("source"),
+        "changed_paths_readback": changed_paths_payload,
+        "selection_reasons": reasons,
+        "validation_commands": validation_commands,
+        "fallback_to": None,
+    }
+
+
 def first_ship_blocker(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
     for step in steps:
         if step.get("result") not in {"pass", "skipped"}:
@@ -4756,6 +4930,7 @@ def ship_apply_admission_block(
     args: argparse.Namespace,
     steps: list[dict[str, Any]],
     closeout_policy: dict[str, Any],
+    validation_profile: dict[str, Any] | None = None,
     summary: str,
     missing_inputs: list[str],
     fallback_to: list[str],
@@ -4774,6 +4949,7 @@ def ship_apply_admission_block(
         pr={"number": args.pr},
         intensity=args.intensity,
         effective_intensity=closeout_policy.get("governance_intensity"),
+        validation_profile=validation_profile,
         merge_method=args.merge_method,
         closeout_policy=closeout_policy,
         steps=steps,
@@ -4994,6 +5170,7 @@ def handle_ship(argv: list[str]) -> int:
     parser.add_argument("--target-branch")
     parser.add_argument("--head-sha")
     parser.add_argument("--intensity", choices=("auto", "light", "standard", "reinforced"), default="auto")
+    parser.add_argument("--validation-profile", choices=SHIP_VALIDATION_PROFILE_CHOICES, default="auto")
     parser.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="squash")
     parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, default="implementation_pr")
     parser.add_argument("--implementation-pr", type=int)
@@ -5050,6 +5227,18 @@ def handle_ship(argv: list[str]) -> int:
                     pr={"number": args.pr},
                     intensity=args.intensity,
                     effective_intensity=closeout_policy.get("governance_intensity"),
+                    validation_profile={
+                        "schema_version": "loom-ship-validation-profile/v1",
+                        "result": "skipped",
+                        "requested_profile": args.validation_profile,
+                        "selected_profile": "standard" if args.validation_profile == "auto" else args.validation_profile,
+                        "source_surface": SHIP_VALIDATION_SOURCE_SURFACES["standard" if args.validation_profile == "auto" else args.validation_profile],
+                        "selection_reasons": ["binding_inference_blocked"],
+                        "changed_paths": [],
+                        "validation_commands": [
+                            f"python3 tools/loom_check.py --profile source --source-surface {SHIP_VALIDATION_SOURCE_SURFACES['standard' if args.validation_profile == 'auto' else args.validation_profile]} ."
+                        ],
+                    },
                     merge_method=args.merge_method,
                     closeout_policy=closeout_policy,
                     binding_inference=binding_inference,
@@ -5121,10 +5310,13 @@ def handle_ship(argv: list[str]) -> int:
 
     fields = governance_metadata_fields(metadata)
     closeout_policy = ship_closeout_policy(fields, intensity_override=args.intensity)
+    changed_paths = ship_changed_paths_payload(args, target, target_branch=effective_target_branch, head_sha=effective_head_sha)
+    validation_profile = ship_validation_profile_payload(args, changed_paths, closeout_policy)
     steps.extend([
         ship_step("pr-metadata-preflight", metadata),
         ship_step("pr-gate", pr_gate),
         ship_step("controlled-merge-check", merge_check),
+        ship_step("validation-profile", validation_profile),
         ship_step("closeout-policy", closeout_policy),
     ])
     if not args.apply:
@@ -5155,6 +5347,7 @@ def handle_ship(argv: list[str]) -> int:
                     pr={"number": args.pr},
                     intensity=args.intensity,
                     effective_intensity=closeout_policy.get("governance_intensity"),
+                    validation_profile=validation_profile,
                     merge_method=args.merge_method,
                     closeout_policy=closeout_policy,
                     binding_inference=binding_inference,
@@ -5175,6 +5368,7 @@ def handle_ship(argv: list[str]) -> int:
             args=args,
             steps=steps,
             closeout_policy=closeout_policy,
+            validation_profile=validation_profile,
             summary="ship --apply stopped before merge because issue closeout cannot be addressed.",
             missing_inputs=["--issue is required for ship --apply"],
             fallback_to=["loom ship --item <id> --issue <n> --pr <n> --apply --json"],
@@ -5188,6 +5382,7 @@ def handle_ship(argv: list[str]) -> int:
             args=args,
             steps=steps,
             closeout_policy=closeout_policy,
+            validation_profile=validation_profile,
             summary="ship --apply stopped before merge because this item requires a non-default closeout path.",
             missing_inputs=[f"closeout policy `{policy}` is not eligible for default host-only closeout"],
             fallback_to=["loom closeout queue status --item <id> --issue <n> --pr <n> --json", "use explicit full closeout PR path when policy requires it"],
@@ -5201,6 +5396,7 @@ def handle_ship(argv: list[str]) -> int:
             args=args,
             steps=steps,
             closeout_policy=closeout_policy,
+            validation_profile=validation_profile,
             summary="ship --apply stopped before merge because target branch is unknown.",
             missing_inputs=["target branch is required for post-merge closeout"],
             fallback_to=["rerun with --target-branch <base-branch>"],
@@ -5237,6 +5433,7 @@ def handle_ship(argv: list[str]) -> int:
                         pr={"number": args.pr},
                         intensity=args.intensity,
                         effective_intensity=closeout_policy.get("governance_intensity"),
+                        validation_profile=validation_profile,
                         merge_method=args.merge_method,
                         closeout_policy=closeout_policy,
                         binding_inference=binding_inference,
@@ -5282,6 +5479,7 @@ def handle_ship(argv: list[str]) -> int:
                     pr={"number": args.pr},
                     intensity=args.intensity,
                     effective_intensity=closeout_policy.get("governance_intensity"),
+                    validation_profile=validation_profile,
                     merge_method=args.merge_method,
                     closeout_policy=closeout_policy,
                     binding_inference=binding_inference,
@@ -5311,6 +5509,7 @@ def handle_ship(argv: list[str]) -> int:
         pr={"number": args.pr},
         intensity=args.intensity,
         effective_intensity=closeout_policy.get("governance_intensity"),
+        validation_profile=validation_profile,
         merge_method=args.merge_method,
         closeout_policy=closeout_policy,
         binding_inference=binding_inference,
