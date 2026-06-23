@@ -2305,6 +2305,200 @@ def assert_closeout_wrapper_argument_contract() -> None:
         module.emit = original_emit
 
 
+def assert_closeout_sync_status_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for closeout sync regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    flow_payload_calls: list[list[str]] = []
+    closeout_run_calls: list[dict[str, Any]] = []
+    emitted_payloads: list[dict[str, Any]] = []
+    readback_attempts = {"count": 0}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        flow_payload_calls.append(list(flow_args))
+        if flow_args[:2] == ["pr-metadata", "readback"]:
+            readback_attempts["count"] += 1
+            if "WI-race" in flow_args and readback_attempts["count"] == 1:
+                return {
+                    "command": command,
+                    "result": "block",
+                    "summary": "metadata head drift",
+                    "missing_inputs": ["fields.head_sha"],
+                    "fallback_to": "update_pr_body",
+                }
+            return {"command": command, "result": "pass", "summary": "metadata readback pass", "missing_inputs": [], "fallback_to": None}
+        if flow_args[:2] == ["pr-metadata", "update"]:
+            return {"command": command, "result": "pass", "summary": "metadata update pass", "missing_inputs": [], "fallback_to": None}
+        if flow_args[:2] == ["closeout", "check"]:
+            return {
+                "command": command,
+                "result": "pass",
+                "summary": "closeout check pass",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "issue": {"number": 1775, "state": "CLOSED"},
+                "pr": {"number": 1781, "state": "MERGED", "mergeCommit": {"oid": "merge-sha"}, "baseRefName": "main"},
+            }
+        return {"command": command, "result": "pass", "summary": "pass", "missing_inputs": [], "fallback_to": None}
+
+    def fake_run_closeout_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+        closeout_run_calls.append({"apply": args.apply, "item": args.item, "issue": args.issue, "pr": args.pr, "branch": args.branch})
+        return {
+            "command": "closeout run",
+            "schema_version": "loom-closeout-run/v1",
+            "result": "pass",
+            "summary": "closeout run pass",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "terminal_metadata": {"merge_commit": "merge-sha"},
+        }
+
+    def fake_cleanup(target: Path, args: argparse.Namespace) -> dict[str, Any]:
+        if args.branch == "work/cleanup-needed":
+            return {
+                "schema_version": "loom-closeout-terminal-cleanup/v1",
+                "command": "closeout cleanup-check",
+                "result": "warn",
+                "verdict": "cleanup_needed",
+                "summary": "cleanup needed",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "cleanup_actions": ["git worktree remove /repo/WI", "git branch -d work/cleanup-needed"],
+                "next_action": "git worktree remove /repo/WI; git branch -d work/cleanup-needed",
+            }
+        return {
+            "schema_version": "loom-closeout-terminal-cleanup/v1",
+            "command": "closeout cleanup-check",
+            "result": "pass",
+            "verdict": "clean_terminal",
+            "summary": "clean",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "cleanup_actions": [],
+            "next_action": "No terminal cleanup action required.",
+        }
+
+    def fake_emit(payload: dict[str, Any]) -> int:
+        emitted_payloads.append(payload)
+        return 0
+
+    original_flow_payload = module.flow_payload
+    original_run_closeout_payload = module.run_closeout_payload
+    original_cleanup = module.closeout_terminal_cleanup_payload
+    original_emit = module.emit
+    module.flow_payload = fake_flow_payload
+    module.run_closeout_payload = fake_run_closeout_payload
+    module.closeout_terminal_cleanup_payload = fake_cleanup
+    module.emit = fake_emit
+    try:
+        status = module.handle_closeout_sync(
+            "status",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-status",
+                "--issue",
+                "1775",
+                "--pr",
+                "1781",
+                "--branch",
+                "work/clean-terminal",
+                "--head-sha",
+                "1" * 40,
+                "--json",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout status did not complete")
+        status_payload = emitted_payloads[-1]
+        if status_payload.get("schema_version") != "loom-closeout-sync/v1" or status_payload.get("command") != "closeout status":
+            raise AssertionError("closeout status must emit loom-closeout-sync/v1")
+        if status_payload.get("diagnostic", {}).get("blocked") is not False or status_payload.get("diagnostic", {}).get("cleanup_verdict") != "clean_terminal":
+            raise AssertionError("closeout status must expose a clean short diagnostic")
+        status_heads = [call[:2] for call in flow_payload_calls]
+        if status_heads != [["pr-metadata", "readback"], ["closeout", "check"]]:
+            raise AssertionError(f"closeout status delegated unexpected sequence: {status_heads}")
+        if closeout_run_calls:
+            raise AssertionError("closeout status must not run closeout-run")
+
+        flow_payload_calls.clear()
+        closeout_run_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_sync(
+            "sync",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-sync",
+                "--issue",
+                "1775",
+                "--pr",
+                "1781",
+                "--branch",
+                "work/clean-terminal",
+                "--head-sha",
+                "2" * 40,
+                "--json",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout sync dry-run did not complete")
+        sync_payload = emitted_payloads[-1]
+        if sync_payload.get("result") != "pass" or sync_payload.get("diagnostic", {}).get("fixed") is not False:
+            raise AssertionError("closeout sync dry-run must pass without claiming it fixed state")
+        expected_call = {"apply": False, "item": "WI-sync", "issue": 1775, "pr": 1781, "branch": "work/clean-terminal"}
+        if closeout_run_calls != [expected_call]:
+            raise AssertionError(f"closeout sync dry-run did not call closeout-run once: {closeout_run_calls}")
+
+        flow_payload_calls.clear()
+        closeout_run_calls.clear()
+        emitted_payloads.clear()
+        readback_attempts["count"] = 0
+        status = module.handle_closeout_sync(
+            "sync",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-race",
+                "--issue",
+                "1775",
+                "--pr",
+                "1781",
+                "--branch",
+                "work/cleanup-needed",
+                "--head-sha",
+                "3" * 40,
+                "--apply",
+                "--json",
+                "--full-output",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout sync apply did not complete")
+        race_payload = emitted_payloads[-1]
+        step_names = [step.get("name") for step in race_payload.get("steps", [])]
+        if step_names[:4] != ["metadata-readback", "metadata-update", "metadata-readback-after-update", "closeout-run"]:
+            raise AssertionError(f"metadata race guard did not stabilize before closeout-run: {step_names}")
+        if race_payload.get("diagnostic", {}).get("fixed") is not True:
+            raise AssertionError("closeout sync apply should report fixed after metadata repair and closeout-run pass")
+        if race_payload.get("diagnostic", {}).get("cleanup_verdict") != "cleanup_needed":
+            raise AssertionError("closeout sync apply should preserve terminal cleanup-needed diagnostic")
+        update_args = next((call for call in flow_payload_calls if call[:2] == ["pr-metadata", "update"]), [])
+        if "--apply" not in update_args:
+            raise AssertionError("metadata race repair must apply before consuming hosted closeout gate")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.run_closeout_payload = original_run_closeout_payload
+        module.closeout_terminal_cleanup_payload = original_cleanup
+        module.emit = original_emit
+
+
 def assert_workspace_audit_wrapper_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -9685,6 +9879,7 @@ def run_ship_wrapper_surface() -> None:
 
 def run_closeout_wrapper_surface() -> None:
     assert_closeout_wrapper_argument_contract()
+    assert_closeout_sync_status_contract()
     print("closeout wrapper surface checks passed")
 
 
