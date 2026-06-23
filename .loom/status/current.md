@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1785.json
 - Validation Entry: `git diff --check`; workflow syntax/readback smoke; `loom pr gate --surface closeout` regression against #1784 body; suite/fact-chain/shadow checks.
 - Closing Condition: PR merged and issue #1785 closed, then #1784 hosted merge gate rerun passes with closeout metadata.
-- Current Checkpoint: build
-- Current Stop: Hosted merge gate surface inference is implemented locally and awaiting validation, review, PR metadata, hosted checks, merge, and closeout.
-- Next Step: Validate workflow surface inference for closeout and merge_ready PR bodies, then open PR for `work/1785-closeout-gate-surface`.
+- Current Checkpoint: merge
+- Current Stop: WI-1785 implementation and review are locally complete; PR #1786 metadata is stable and the branch is awaiting hosted checks, controlled merge, and closeout.
+- Next Step: Consume hosted checks for PR #1786, merge after gate pass, then update #1784 branch so its hosted closeout gate can consume the workflow fix.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1785-closeout-gate-surface`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py; local Python smoke verified closeout, merge_ready, malformed, and empty PR metadata surface inference. #1784 closeout-surface gate was separately proven in its closeout worktree before this fix; hosted #1784 rerun remains the post-merge consumer proof.
 - Recovery Boundary: WI-1785 owns only hosted `loom-pr-merge-gate` surface inference for PR body machine metadata and its Loom carriers. It does not change release readback verdicts, terminal closeout carrier semantics, or cleanup automation.

@@ -1,5 +1,5 @@
 {
-  "schema_version": "loom-spec-review/v1",
+  "schema_version": "loom-review/v1",
   "item_id": "WI-1785",
   "decision": "allow",
   "kind": "spec_review",
