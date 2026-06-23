@@ -5277,6 +5277,38 @@ def handle_ship(argv: list[str]) -> int:
                     fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --head-sha <sha> --apply --json"],
                 )
 
+        carrier_refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--apply"]
+        carrier_refresh = flow_payload(command, carrier_refresh_args, fallback_to=["loom carrier refresh --target <repo> --item <id> --apply --json"])
+        steps.append(ship_step("carrier-refresh", carrier_refresh, mutates=True))
+        if carrier_refresh.get("result") != "pass":
+            closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
+            return ship_apply_admission_block(
+                command=command,
+                target=target,
+                args=args,
+                steps=steps,
+                closeout_policy=closeout_policy,
+                summary="ship --apply stopped before merge because carrier refresh did not pass.",
+                missing_inputs=[str(value) for value in carrier_refresh.get("missing_inputs", [])],
+                fallback_to=["loom carrier refresh --target <repo> --item <id> --apply --json"],
+            )
+
+        shadow_parity_args = ["shadow-parity", "--target", str(target), "--surface", "all", "--blocking"]
+        shadow_parity = flow_payload(command, shadow_parity_args, fallback_to=["loom shadow-parity --target <repo> --surface all --blocking --json"])
+        steps.append(ship_step("shadow-parity", shadow_parity, mutates=False))
+        if shadow_parity.get("result") != "pass":
+            closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
+            return ship_apply_admission_block(
+                command=command,
+                target=target,
+                args=args,
+                steps=steps,
+                closeout_policy=closeout_policy,
+                summary="ship --apply stopped before merge because shadow parity did not pass.",
+                missing_inputs=[str(value) for value in shadow_parity.get("missing_inputs", [])],
+                fallback_to=["loom shadow-parity --target <repo> --surface all --blocking --json"],
+            )
+
     metadata_args = ["pr-metadata", "preflight", *common, "--surface", "merge_ready", "--pr", str(args.pr), "--item", args.item]
     if args.issue is not None:
         metadata_args.extend(["--issue", str(args.issue)])

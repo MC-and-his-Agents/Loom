@@ -954,6 +954,14 @@ def assert_ship_apply_wrapper_contract() -> None:
             if "--apply" not in flow_args:
                 raise AssertionError("ship --apply safe metadata repair must apply PR metadata update")
             return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+        if flow_args[:2] == ["carrier", "refresh"]:
+            if "--apply" not in flow_args:
+                raise AssertionError("ship --apply carrier refresh must apply safe carrier refresh")
+            return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+        if flow_args[:1] == ["shadow-parity"]:
+            if "--blocking" not in flow_args or "--surface" not in flow_args or flow_args[flow_args.index("--surface") + 1] != "all":
+                raise AssertionError("ship --apply shadow parity must run blocking all-surface readback")
+            return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
         if flow_args[:2] == ["pr-metadata", "preflight"]:
             return {
                 "command": "pr-metadata",
@@ -1050,6 +1058,8 @@ def assert_ship_apply_wrapper_contract() -> None:
             raise AssertionError("ship --apply must default to host-only closeout without creating a closeout PR")
         expected_prefixes = [
             ["pr-metadata", "update"],
+            ["carrier", "refresh"],
+            ["shadow-parity", "--target"],
             ["pr-metadata", "preflight"],
             ["pr-gate", "check"],
             ["controlled-merge", "check"],
@@ -1059,10 +1069,10 @@ def assert_ship_apply_wrapper_contract() -> None:
         ]
         if [call[:2] for call in calls] != expected_prefixes:
             raise AssertionError(f"ship --apply delegated unexpected sequence: {[call[:2] for call in calls]}")
-        merge_call = calls[4]
+        merge_call = calls[6]
         if "--merge-method" not in merge_call or merge_call[merge_call.index("--merge-method") + 1] != "squash":
             raise AssertionError("ship --apply did not preserve merge method")
-        reconciliation_call = calls[5]
+        reconciliation_call = calls[7]
         for flag, expected in {"--item": "WI-1691", "--issue": "1691", "--pr": "1706", "--branch": "main"}.items():
             if flag not in reconciliation_call or reconciliation_call[reconciliation_call.index(flag) + 1] != expected:
                 raise AssertionError(f"ship --apply did not preserve {flag} for host closeout")
@@ -1071,6 +1081,10 @@ def assert_ship_apply_wrapper_contract() -> None:
             calls.append(flow_args)
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass"}
             if flow_args[:2] == ["pr-metadata", "preflight"]:
                 return {
                     "command": "pr-metadata",
@@ -1125,6 +1139,43 @@ def assert_ship_apply_wrapper_contract() -> None:
             raise AssertionError("ship --apply blocker summary must retain an artifact locator for full diagnostics")
         if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
             raise AssertionError("ship --apply must not merge after a gate blocker")
+
+        def carrier_blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "block", "summary": "carrier stale", "missing_inputs": ["shadow refresh required"]}
+            raise AssertionError(f"ship --apply should stop before preflight after carrier refresh block: {flow_args}")
+
+        module.flow_payload = carrier_blocking_flow_payload
+        calls.clear()
+        emitted.clear()
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1691",
+                "--issue",
+                "1691",
+                "--pr",
+                "1706",
+                "--branch",
+                "work/1691-ship-apply",
+                "--head-sha",
+                "b" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("ship --apply carrier refresh blocker must emit block")
+        if emitted.get("key_gaps") != ["shadow refresh required"]:
+            raise AssertionError("ship --apply must preserve carrier refresh missing_inputs as short diagnostics")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom carrier refresh --target <repo> --item <id> --apply --json" for finding in findings):
+            raise AssertionError("ship --apply must surface the carrier refresh single next action")
+        if [call[:2] for call in calls] != [["pr-metadata", "update"], ["carrier", "refresh"]]:
+            raise AssertionError(f"ship --apply must stop before metadata preflight after carrier refresh block, got {[call[:2] for call in calls]}")
     finally:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
@@ -1146,6 +1197,10 @@ def assert_ship_closeout_policy_admission_contract() -> None:
         calls.append(flow_args)
         if flow_args[:2] == ["pr-metadata", "update"]:
             return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+        if flow_args[:2] == ["carrier", "refresh"]:
+            return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+        if flow_args[:1] == ["shadow-parity"]:
+            return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
         if flow_args[:2] == ["pr-metadata", "preflight"]:
             return {
                 "command": "pr-metadata",
