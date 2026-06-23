@@ -3,10 +3,10 @@
   "item_id": "WI-1777",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1777 minimal spec suite covers read-only ship status/preflight diagnostics, checkout freshness, target release presence, host/carrier drift, no-PR-binding behavior, implementation boundary, and evidence mapping required by hosted freeze admission.",
+  "summary": "WI-1777 minimal spec suite covers read-only ship status/preflight diagnostics, checkout freshness, target release presence, host/carrier drift, no-PR-binding behavior, implementation boundary, evidence mapping, and the WI-1714 terminal carrier repair required by hosted freeze admission.",
   "reviewer": "Codex main controller",
-  "authored_at": "2026-06-23T15:07:00Z",
-  "reviewed_head": "6da16808ae0f98cc93d0d6fa90892eeb7b124c2f",
+  "authored_at": "2026-06-23T15:12:16Z",
+  "reviewed_head": "a59a1dab33f5e3a3e21124e7b39ccb58ffaa6a6f",
   "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1777-ship-preflight-status`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface ship-wrapper; python3 tools/loom.py suite validate --target . --item WI-1777 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1777 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1777 --json; python3 tools/loom.py fact-chain --target . --item WI-1777 --json; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py help --json | rg -n 'ship status|ship preflight|ship\"'; python3 tools/loom.py ship preflight --target . --item WI-1777 --issue 1777 --milestone 18 --version v0.21.0 --package @mc-and-his-agents/loom --json --full-output.",
   "fallback_to": null,
   "findings": [],
@@ -31,7 +31,8 @@
       "docs/methodology/harness/full-spec-suite-cli-surface.md",
       "docs/methodology/templates/spec-suite.md",
       "docs/methodology/templates/evidence-map.md"
-    ]
+    ],
+    "wi_1714_terminal_carrier": ".loom/progress/WI-1714.md"
   },
   "semantic_review_disposition": {
     "status": "passed",

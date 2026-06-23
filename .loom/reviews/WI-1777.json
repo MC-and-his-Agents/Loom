@@ -3,10 +3,10 @@
   "item_id": "WI-1777",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1777 adds read-only `loom ship status` and `loom ship preflight` commands that report checkout, host issue, release, npm, and carrier state with a short blocked/fixed/next_action diagnostic. The diff stays scoped to the ship status surface, its contract regression, and issue-scoped Loom carriers.",
+  "summary": "WI-1777 adds read-only `loom ship status` and `loom ship preflight` commands that report checkout, host issue, release, npm, and carrier state with a short blocked/fixed/next_action diagnostic. The diff stays scoped to the ship status surface, its contract regression, issue-scoped Loom carriers, and the WI-1714 terminal carrier repair required to unblock hosted workspace purity after PR #1724 merged.",
   "reviewer": "Codex main controller",
-  "authored_at": "2026-06-23T15:05:30Z",
-  "reviewed_head": "95a1cb744ba3d3529cf175857084b1cc25c170e2",
+  "authored_at": "2026-06-23T15:12:16Z",
+  "reviewed_head": "a59a1dab33f5e3a3e21124e7b39ccb58ffaa6a6f",
   "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1777-ship-preflight-status`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface ship-wrapper; python3 tools/loom.py suite validate --target . --item WI-1777 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1777 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1777 --json; python3 tools/loom.py fact-chain --target . --item WI-1777 --json; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py help --json | rg -n 'ship status|ship preflight|ship\"'; python3 tools/loom.py ship preflight --target . --item WI-1777 --issue 1777 --milestone 18 --version v0.21.0 --package @mc-and-his-agents/loom --json --full-output.",
   "fallback_to": null,
   "findings": [],
@@ -24,7 +24,8 @@
     ],
     "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1777 --json",
     "suite_evidence_map": ".loom/specs/WI-1777/evidence-map.md",
-    "implementation_contract": ".loom/specs/WI-1777/implementation-contract.md"
+    "implementation_contract": ".loom/specs/WI-1777/implementation-contract.md",
+    "wi_1714_terminal_carrier": ".loom/progress/WI-1714.md"
   },
   "semantic_review_disposition": {
     "status": "passed",
