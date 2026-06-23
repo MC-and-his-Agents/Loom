@@ -7482,14 +7482,26 @@ def review_head_binding_for_head(
         return payload, [f"review HEAD comparison failed: {detail}" for detail in head_errors]
 
     payload["changed_paths"] = changed_paths
-    disallowed_paths = [path for path in changed_paths if path not in allowed_paths]
-    payload["disallowed_paths"] = disallowed_paths
-    if changed_paths and not disallowed_paths:
+    carrier_paths = [path for path in changed_paths if path in allowed_paths]
+    non_carrier_paths = [path for path in changed_paths if path not in allowed_paths]
+    generated_paths = [path for path in non_carrier_paths if review_generated_only_path_metadata(path) is not None]
+    semantic_paths = [path for path in non_carrier_paths if path not in generated_paths]
+    payload["carrier_only_paths"] = carrier_paths
+    payload["generated_only_paths"] = generated_paths
+    payload["generated_only_validation_actions"] = generated_only_validation_actions(generated_paths)
+    payload["semantic_drift_paths"] = semantic_paths
+    payload["disallowed_paths"] = semantic_paths
+    if changed_paths and not non_carrier_paths:
         payload["status"] = "carrier-only"
         payload["stale"] = False
         return payload, []
 
-    if disallowed_paths and len(disallowed_paths) == len(changed_paths):
+    if generated_paths and not semantic_paths:
+        payload["status"] = "carrier-and-generated-only" if carrier_paths else "generated-only"
+        payload["stale"] = False
+        return payload, []
+
+    if semantic_paths and len(semantic_paths) == len(changed_paths):
         payload["status"] = "implementation-drift-only"
         payload["stale"] = True
         return payload, ["review artifact has implementation drift after review"]
@@ -7499,6 +7511,49 @@ def review_head_binding_for_head(
     if not changed_paths:
         return payload, ["review artifact was recorded against a different HEAD"]
     return payload, ["review artifact is stale for the target HEAD"]
+
+
+def review_generated_only_path_metadata(path: str) -> dict[str, str] | None:
+    if path.startswith(".loom/bin/") and path.endswith(".py"):
+        return {
+            "kind": "repo-local-runtime-copy",
+            "validation_action": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --apply",
+        }
+    if path.startswith("skills/"):
+        return {
+            "kind": "generated-skills-tree",
+            "validation_action": "python3 tools/skills_surface.py check",
+        }
+    if path.startswith("docs/evidence/fixtures/") and ("demo" in path or "new-project" in path):
+        return {
+            "kind": "demo-bootstrap-fixture-output",
+            "validation_action": "python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift",
+        }
+    if path.startswith("examples/new-project/"):
+        return {
+            "kind": "demo-bootstrap-example-output",
+            "validation_action": "python3 tools/check_demo_bootstrap_fixture.py --surface aggregate",
+        }
+    return None
+
+
+def generated_only_validation_actions(paths: list[str]) -> list[dict[str, Any]]:
+    actions: dict[str, dict[str, Any]] = {}
+    for path in paths:
+        metadata = review_generated_only_path_metadata(path)
+        if metadata is None:
+            continue
+        action = metadata["validation_action"]
+        entry = actions.setdefault(
+            action,
+            {
+                "action": action,
+                "kind": metadata["kind"],
+                "paths": [],
+            },
+        )
+        entry["paths"].append(path)
+    return list(actions.values())
 
 
 def spec_review_head_binding(
@@ -17365,6 +17420,17 @@ def gate_freeze_review_binding_next_action(binding: dict[str, Any]) -> str | Non
     if binding.get("result") == "pass":
         if binding.get("binding_status") == "carrier-only":
             return "carrier-only drift is allowed for this review binding; refresh carrier evidence if operator-facing metadata must be repinned."
+        if binding.get("binding_status") in {"generated-only", "carrier-and-generated-only"}:
+            actions = (
+                binding.get("head_binding", {}).get("generated_only_validation_actions", [])
+                if isinstance(binding.get("head_binding"), dict)
+                else []
+            )
+            if actions:
+                first_action = actions[0].get("action") if isinstance(actions[0], dict) else None
+                if isinstance(first_action, str) and first_action:
+                    return f"generated-only drift is allowed after generated surface validation; run `{first_action}` if evidence must be refreshed."
+            return "generated-only drift is allowed after generated surface validation."
         return None
 
     messages = [str(message).lower() for message in binding.get("missing_inputs", []) if str(message).strip()]
@@ -19176,6 +19242,7 @@ def pre_review_readiness_cost_guard_payload(
             "schema_version": "loom-post-review-carrier-policy/v1",
             "allowed_paths_source": "allowed_post_review_carrier_paths(context, review_path)",
             "carrier_only_status": "retained_review_allowed",
+            "generated_only_status": "generated_surface_validation_then_retained_review_allowed",
             "semantic_path_drift_status": "review_required",
         },
         "model_profile_proof": model_proof_contract,
@@ -19353,7 +19420,12 @@ def semantic_review_disposition_payload(
             errors.append("semantic_review_disposition passed requires review decision allow")
         if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
             errors.append("semantic_review_disposition passed requires an implementation review kind")
-        if head_binding.get("stale") is True or head_binding.get("status") not in {"fresh", "carrier-only"}:
+        if head_binding.get("stale") is True or head_binding.get("status") not in {
+            "fresh",
+            "carrier-only",
+            "generated-only",
+            "carrier-and-generated-only",
+        }:
             errors.append("semantic_review_disposition passed is not bound to the current PR head")
         if (
             isinstance(current_validation_summary, str)
@@ -19554,6 +19626,12 @@ def approval_boundary_lint_status(
     if (
         status == "approved"
         and head_binding.get("status") == "carrier-only"
+        and head_binding.get("stale") is False
+    ):
+        stale_taxonomy.discard("head_binding_drift")
+    if (
+        status == "approved"
+        and head_binding.get("status") in {"generated-only", "carrier-and-generated-only"}
         and head_binding.get("stale") is False
     ):
         stale_taxonomy.discard("head_binding_drift")
@@ -19854,7 +19932,12 @@ def pr_gate_payload(
                 terminal_closeout_missing.append("merge checkpoint is not terminal closeout")
             if normalize_checkpoint(str(context.get("current_checkpoint", ""))) not in {"closed", "closed_out", "done"}:
                 terminal_closeout_missing.append("current checkpoint is not terminal closed_out")
-            if terminal_closeout_binding.get("status") not in {"fresh", "carrier-only"} or terminal_closeout_binding.get("stale") is True:
+            if terminal_closeout_binding.get("status") not in {
+                "fresh",
+                "carrier-only",
+                "generated-only",
+                "carrier-and-generated-only",
+            } or terminal_closeout_binding.get("stale") is True:
                 terminal_closeout_missing.extend(terminal_closeout_binding_errors or ["terminal closeout carrier drift is not review-safe"])
             non_review_checkpoint_missing = [
                 message
@@ -20428,7 +20511,8 @@ def retained_pr_gate_consumption(
             and review_approval.get("reviewed_head") != retained_head
             and not (
                 isinstance(review_approval.get("head_binding"), dict)
-                and review_approval["head_binding"].get("status") == "carrier-only"
+                and review_approval["head_binding"].get("status")
+                in {"carrier-only", "generated-only", "carrier-and-generated-only"}
                 and review_approval["head_binding"].get("stale") is False
             )
         ):

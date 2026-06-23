@@ -5070,6 +5070,33 @@ def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
             f"pr-gate did not consume machine-carrier-only PR binding: {machine_only_pr_gate_payload.get('missing_inputs')}"
         )
 
+    generated_path = "skills/README.md"
+    (target / "skills").mkdir(parents=True, exist_ok=True)
+    (target / generated_path).write_text("# Generated fixture drift\n", encoding="utf-8")
+    commit_fixture_file(target, generated_path, "fixture generated-only drift after freeze review")
+    update_fixture_pr_head(target, fixture)
+    generated_payload = gate_freeze_fixture_payload(target, fixture)
+    generated_binding = generated_payload.get("input_bindings", {}).get("review_binding")
+    generated_head = generated_binding.get("head_binding", {}) if isinstance(generated_binding, dict) else {}
+    generated_actions = generated_head.get("generated_only_validation_actions", [])
+    if (
+        not isinstance(generated_binding, dict)
+        or generated_binding.get("result") != "pass"
+        or generated_binding.get("binding_status") != "generated-only"
+        or generated_path not in generated_head.get("generated_only_paths", [])
+        or generated_head.get("disallowed_paths") != []
+        or not any("tools/skills_surface.py check" in str(action.get("action")) for action in generated_actions if isinstance(action, dict))
+        or "generated-only" not in str(generated_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze generated-only review binding did not pass with validation action: {generated_binding}")
+    generated_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        generated_pr_gate_payload.get("result") != "pass"
+        or generated_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "generated-only"
+        or generated_pr_gate_payload.get("governance_lint", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"pr-gate did not consume generated-only review drift: {generated_pr_gate_payload.get('missing_inputs')}")
+
     (target / "implementation-drift.txt").write_text("unreviewed drift\n", encoding="utf-8")
     commit_fixture_file(target, "implementation-drift.txt", "fixture implementation drift after freeze review")
     update_fixture_pr_head(target, fixture)
