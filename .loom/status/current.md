@@ -11,12 +11,12 @@
 - Review Entry: .loom/reviews/WI-1785.json
 - Validation Entry: `git diff --check`; workflow syntax/readback smoke; `loom pr gate --surface closeout` regression against #1784 body; suite/fact-chain/shadow checks.
 - Closing Condition: PR merged and issue #1785 closed, then #1784 hosted merge gate rerun passes with closeout metadata.
-- Current Checkpoint: merge
-- Current Stop: WI-1785 implementation and review are locally complete; PR #1786 metadata is stable and the branch is awaiting hosted checks, controlled merge, and closeout.
-- Next Step: Consume hosted checks for PR #1786, merge after gate pass, then update #1784 branch so its hosted closeout gate can consume the workflow fix.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1785 closed out after PR #1786 merged at 24c1eb6a2a1889bf771d5da92a571c4c4b54b40e and issue #1785 closed at 2026-06-23T17:44:52Z.
+- Next Step: Return to #1776 closeout PR #1784, update it onto main so hosted closeout gate consumes the workflow surface fix, then continue #1778 release closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1785-closeout-gate-surface`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py; local Python smoke verified closeout, merge_ready, malformed, and empty PR metadata surface inference. #1784 closeout-surface gate was separately proven in its closeout worktree before this fix; hosted #1784 rerun remains the post-merge consumer proof.
-- Recovery Boundary: WI-1785 owns only hosted `loom-pr-merge-gate` surface inference for PR body machine metadata and its Loom carriers. It does not change release readback verdicts, terminal closeout carrier semantics, or cleanup automation.
+- Latest Validation Summary: 2026-06-23 WI-1785 closeout readback: PR #1786 merged at 2026-06-23T17:42:20Z with merge commit 24c1eb6a2a1889bf771d5da92a571c4c4b54b40e; issue #1785 closed at 2026-06-23T17:44:52Z; PR metadata readback surface closeout passed; closeout status passed; carrier closeout-sync wrote closed_out metadata. Hosted #1786 checks passed before merge: loom-pr-merge-gate, loom-check, node-installer-pr, py-compile, demo-bootstrap, repo-local-cli, root-self-governance.
+- Recovery Boundary: WI-1785 terminal closeout only consumes PR #1786 and issue #1785 facts. It does not change release readback verdicts, #1776 implementation facts, #1784 carrier content beyond later consumption, or #1778 release behavior.
 - Current Lane: closeout-gate-surface
 
 ## Runtime Evidence
