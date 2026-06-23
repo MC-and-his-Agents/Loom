@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1738.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper
 - Closing Condition: PR merged and issue #1738 closed with ship binding inference evidence.
-- Current Checkpoint: build
-- Current Stop: Ship binding inference implementation and targeted ship wrapper contract are passing locally; PR metadata and hosted checks are pending.
-- Next Step: Refresh suite/review/shadow carriers, push branch, open PR, and run hosted checks.
+- Current Checkpoint: merge
+- Current Stop: WI-1738 implementation, minimal suite, review records, and shadow refresh are ready for PR metadata readback and hosted checks.
+- Next Step: Push branch work/1738-ship-inference, open PR, verify PR metadata/head SHA/checks, then merge and close out issue #1738.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local validation passed for git diff --check; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper.
+- Latest Validation Summary: 2026-06-23 local validation passed for git diff --check; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1738 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1738 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1738 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1738 --apply returned remaining_refresh=[]; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking.
 - Recovery Boundary: WI-1738 owns `loom ship` binding inference behavior, its CLI contract regression, and WI-1738 fact-chain/review/shadow evidence only.
 - Current Lane: ship-inference
 
