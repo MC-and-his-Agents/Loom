@@ -21,6 +21,92 @@ spec.loader.exec_module(loom_flow)
 
 
 class WorkItemAuditTest(unittest.TestCase):
+    def test_carrier_refresh_apply_recomputes_remaining_after_readback(self) -> None:
+        original_runtime_state = loom_flow.runtime_state_payload
+        original_load_context = loom_flow.load_context
+        original_runtime_updates = loom_flow.runtime_artifact_updates
+        original_apply_runtime_updates = loom_flow.apply_runtime_artifact_updates
+        original_shadow = loom_flow.refresh_shadow_evidence_actions
+        original_apply_shadow = loom_flow.apply_shadow_evidence_actions
+        try:
+            loom_flow.runtime_state_payload = lambda _target: {
+                "result": "pass",
+                "summary": "runtime ok",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+            loom_flow.load_context = lambda _target, _output, _item: (None, [loom_flow.IDLE_FACT_CHAIN_ERROR])
+            phase = {"refreshed": False}
+
+            def fake_runtime_artifact_updates(
+                _target: Path,
+                payload: dict[str, object],
+                *,
+                source: str,
+            ) -> list[dict[str, object]]:
+                path = ".loom/bootstrap/manifest.json" if source == "manifest" else ".loom/bootstrap/init-result.json"
+                status = "current" if phase["refreshed"] else "refresh-needed"
+                return [
+                    {
+                        "path": path,
+                        "source": source,
+                        "status": status,
+                    }
+                ]
+
+            def fake_apply_runtime_artifact_updates(
+                payload: dict[str, object],
+                actions: list[dict[str, object]],
+                *,
+                source: str,
+            ) -> None:
+                if any(action.get("source") == source and action.get("status") == "refresh-needed" for action in actions):
+                    phase["refreshed"] = True
+
+            loom_flow.runtime_artifact_updates = fake_runtime_artifact_updates
+            loom_flow.apply_runtime_artifact_updates = fake_apply_runtime_artifact_updates
+            loom_flow.refresh_shadow_evidence_actions = lambda _target: []
+            loom_flow.apply_shadow_evidence_actions = lambda _target, _actions: None
+
+            with tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                bootstrap = root / ".loom" / "bootstrap"
+                bootstrap.mkdir(parents=True, exist_ok=True)
+                (bootstrap / "manifest.json").write_text("{}\n", encoding="utf-8")
+                (bootstrap / "init-result.json").write_text("{}\n", encoding="utf-8")
+
+                dry_run = loom_flow.carrier_refresh_payload(
+                    root,
+                    ".loom/bootstrap/init-result.json",
+                    None,
+                    dry_run=True,
+                )
+                applied = loom_flow.carrier_refresh_payload(
+                    root,
+                    ".loom/bootstrap/init-result.json",
+                    None,
+                    dry_run=False,
+                )
+
+            self.assertEqual(dry_run["result"], "pass")
+            self.assertEqual(len(dry_run["refresh_needed"]), 2)
+            self.assertFalse(applied["dry_run"])
+            self.assertEqual(applied["result"], "pass")
+            self.assertEqual(applied["refresh_needed"], [])
+            self.assertEqual(len(applied["fixed"]), 2)
+            self.assertEqual(applied["remaining_refresh"], [])
+            self.assertEqual(
+                applied["summary"],
+                "carrier refresh completed and readback found no remaining updates.",
+            )
+        finally:
+            loom_flow.runtime_state_payload = original_runtime_state
+            loom_flow.load_context = original_load_context
+            loom_flow.runtime_artifact_updates = original_runtime_updates
+            loom_flow.apply_runtime_artifact_updates = original_apply_runtime_updates
+            loom_flow.refresh_shadow_evidence_actions = original_shadow
+            loom_flow.apply_shadow_evidence_actions = original_apply_shadow
+
     def test_host_complete_diagnostic_blocks_startup(self) -> None:
         finding = loom_flow.work_item_audit_finding_from_diagnostic(
             {
