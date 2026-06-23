@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1777.json
 - Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface ship-wrapper`; live `loom.py ship preflight` read-only smoke.
 - Closing Condition: PR merged and issue #1777 closed with ship preflight/status evidence consumed by #1775.
-- Current Checkpoint: merged
+- Current Checkpoint: closed_out
 - Current Stop: PR #1779 merged at 7b6ea7ff187c86ea2aa15339a46223af4a1970fb and issue #1777 closed at 2026-06-23T15:38:42Z.
 - Next Step: None; WI-1777 is terminal and #1775 can consume the shipped `ship preflight/status` surface.
 - Blockers: none
