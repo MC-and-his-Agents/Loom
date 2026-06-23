@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1740.json
 - Validation Entry: git diff --check; python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py
 - Closing Condition: PR merged and issue #1740 closed with review freshness classification evidence.
-- Current Checkpoint: merge
-- Current Stop: WI-1740 review freshness classifier, generated-only validation actions, runtime copies, plugin payload hash, demo bootstrap generated fixture sync, focused pr-metadata regression, spec review, and implementation review are ready for PR gate.
-- Next Step: Push updated work/1740-review-freshness head for PR #1764, wait for hosted checks, then merge and close out issue #1740.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1740 implementation PR #1764 merged into main and issue #1740 closed; terminal closeout metadata recorded in .loom/progress/WI-1740.md.
+- Next Step: WI-1740 complete; downstream lanes #1739 and #1741 may consume review freshness classification after closeout PR merges.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local validation passed: git diff --check; python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; python3 tools/stamp_plugin_payload_metadata.py --source-git-sha unreleased --write --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json; suite validate/evidence/carrier validate for WI-1740; spec review and implementation review allow records; checkpoint merge pass; carrier refresh --apply readback remaining_refresh=[]; shadow-parity all blocking passed.
-- Recovery Boundary: WI-1740 owns review head binding freshness classification, generated-only drift diagnostics, focused regression coverage, and WI-1740 readiness carriers only.
-- Current Lane: review-freshness
+- Latest Validation Summary: 2026-06-23 closeout validation passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1740 --apply readback remaining_refresh=[]; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; review record allow for closeout-only carrier sync.
+- Recovery Boundary: WI-1740 closeout sync owns terminal progress/status/review/shadow carrier updates only; no runtime or product behavior changes.
+- Current Lane: review-freshness-closeout
 
 ## Runtime Evidence
 
