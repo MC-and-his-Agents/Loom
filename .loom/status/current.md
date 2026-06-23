@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1743.json
 - Validation Entry: release readback, release/package checks, ship-wrapper regression, npm package smoke, suite/fact-chain, hosted checks, and post-merge release readback.
 - Closing Condition: v0.20.0 tag, GitHub Release, npm `@mc-and-his-agents/loom@0.20.0`, plugin payload metadata/hash, #1743/#1734 closeout evidence, and milestone #17 readback are consistent.
-- Current Checkpoint: merge
-- Current Stop: v0.20.0 release candidate files, WI-1743 minimal suite, release readback, package/release checks, npm package smoke, npm pack dry-run, and ship-wrapper regression passed locally; review, PR metadata, hosted checks, controlled merge, and post-merge release readback remain.
-- Next Step: Run suite/fact-chain/state-check readback, shadow parity, review, PR metadata, hosted checks, controlled merge, and post-merge release readback.
+- Current Checkpoint: closed_out
+- Current Stop: v0.20.0 release closeout is complete: PR #1771 merged, tag v0.20.0 points to the merge commit, GitHub Release v0.20.0 is published, npm @mc-and-his-agents/loom@0.20.0 is published as latest, #1743 and parent #1734 are closed, and milestone #17 is closed with no open issue.
+- Next Step: None; v0.20.0 release closeout is complete.
 - Blockers: none
-- Latest Validation Summary: 2026-06-23 local release/package validation passed on branch `work/1743-v0.20-release`: release readback classified v0.20.0 as unpublished/unoccupied with npm latest `0.19.0`; `stamp_plugin_payload_metadata.py --source-git-sha unreleased --json`, `version_surface_check.py`, `check_npm_package.py --surface plugin-payload-hash`, `check_release_surface.py`, `check_npm_package.py`, `npm run test:package`, `npm pack --dry-run --json --ignore-scripts`, `tools/check_cli_contract.py --fixture-group ship-wrapper`, and `git diff --check` passed. `state-check` initially blocked only on non-canonical pending evidence freshness and was repaired to canonical `current` / `present` values before rerun.
+- Latest Validation Summary: 2026-06-23 post-merge release readback passed at merge commit ecfa7a722018c20f5c26e9bc988b8004db9b9768: `loom.py release readback --version v0.20.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` classified published; tag v0.20.0 commit matched ecfa7a722018c20f5c26e9bc988b8004db9b9768; GitHub Release v0.20.0 published at 2026-06-23T12:18:42Z; npm readback returned @mc-and-his-agents/loom@0.20.0 with latest dist-tag 0.20.0; main push workflows loom-cli-release, node-installer-release, and loom-check completed successfully; reconciliation sync closed #1743 and parent #1734 with no remaining findings; milestone #17 readback returned closed with open_issues=0.
 - Recovery Boundary: WI-1743 owns v0.20.0 root release authority, plugin payload release metadata/hash, release readiness evidence, and WI-1743 carriers. It does not publish a legacy installer version, change plugin surface compatibility version, or alter #1711-#1722/v0.19.0 state.
 - Current Lane: release-closeout
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-06-23 WI-1743 release lane started in issue-scoped worktree `/Users/mc/dev/Loom-WI-1743-v0.20-release` on branch `work/1743-v0.20-release`.
 - Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1743.md`.
 - Diagnostics Entry: v0.20.0 release candidate publishes the completed ship main-path capability and keeps release/versioned closeout as explicit upgrade paths.
-- Verification Entry: Release readback, package/release checks, ship-wrapper regression, suite/fact-chain/state-check, PR metadata, hosted checks, controlled merge, and post-merge release readback are consumed before final closeout.
+- Verification Entry: Release readback, package/release checks, ship-wrapper regression, suite/fact-chain/state-check, PR metadata, hosted checks, controlled merge, post-merge release readback, issue/parent closeout, and milestone readback are consumed.
 - Lane Entry: release-closeout
 
 ## Sources
