@@ -34,14 +34,29 @@ jobs:
             > .loom/runtime/pr/pr-readback.json
           python3 - <<'PY'
           import json
+          import re
           from pathlib import Path
 
           payload = json.loads(Path(".loom/runtime/pr/pr-readback.json").read_text(encoding="utf-8"))
-          Path(".loom/runtime/pr/pr-body-readback.md").write_text(payload.get("body") or "", encoding="utf-8")
+          body = payload.get("body") or ""
+          Path(".loom/runtime/pr/pr-body-readback.md").write_text(body, encoding="utf-8")
+
+          surface = "merge_ready"
+          for match in re.finditer(r"<!--\s*loom:repo-pr-metadata\s*(.*?)\s*-->", body, re.S):
+              try:
+                  block = json.loads(match.group(1))
+              except json.JSONDecodeError:
+                  continue
+              if block.get("surface") == "closeout":
+                  surface = "closeout"
+                  break
+          Path(".loom/runtime/pr/pr-gate-surface.txt").write_text(surface, encoding="utf-8")
           PY
+          pr_gate_surface="$(cat .loom/runtime/pr/pr-gate-surface.txt)"
           args=(
             pr-gate check
             --target .
+            --surface "$pr_gate_surface"
             --head-sha "$PR_HEAD_SHA"
             --branch "$PR_HEAD_REF"
             --pr-payload-file .loom/runtime/pr/pr-readback.json
