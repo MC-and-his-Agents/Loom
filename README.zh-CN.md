@@ -88,9 +88,27 @@ loom ship \
   --json
 ```
 
+这个包装器的合同保持收敛且有固定顺序：
+
+- dry-run 只读消费 `pr-metadata preflight -> pr gate -> controlled merge check
+  -> closeout policy`，然后输出首个阻塞摘要、`missing_inputs` 与
+  `next_action`，不修改宿主或仓库状态；
+- `--apply` 最多只会在上述只读序列前增加一步确定性的安全 metadata repair，
+  且前提是显式提供 `--issue`、`--branch` 与 `--head-sha`；
+- 这一步自动修复不会替你发明或裁决冲突的 Work Item、branch、head SHA、
+  release 或 closeout 事实；
+- `--json` 只保留短诊断输出；若 stdout 超预算，详细步骤会折叠到 artifact
+  locator 之后；`--full-output` 只用于显式调试、审计或阻塞分类；
+- closeout policy 决定普通交付是继续走当前共享的 inline/host-only 宿主收尾
+  路径，还是停下并切到显式 batched carrier / full closeout 路径。
+
 轻量和标准强度变更通常应在这一条命令里完成。只有发布、父级或里程碑收尾、多个工作项
 共用一次交付、宿主与仓库事实冲突、强化治理变更，或确实需要版本化终态证据时，Loom
 才升级为批量载体拉取请求或显式完整收尾拉取请求。
+
+当前 `loom ship` 只执行普通 inline/host-only 宿主收尾路径。批量载体写入与
+显式完整收尾拉取请求执行仍由后续 issue 承接；此包装器会显式阻断，并把调用者导向
+对应的显式路径，而不是自行猜测。
 
 ## 在仓库中试用
 

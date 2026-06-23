@@ -1078,6 +1078,207 @@ def version_context() -> dict[str, Any]:
     }
 
 
+def semver_tuple(value: str) -> tuple[int, ...] | None:
+    match = re.match(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$", value.strip())
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def npm_latest_version(package_name: str = "@mc-and-his-agents/loom") -> dict[str, Any]:
+    override = os.environ.get("LOOM_TEST_NPM_LATEST_VERSION")
+    if override:
+        if override == "__unreadable__":
+            return {"status": "unreadable", "version": None, "source": "test-override", "error": "simulated npm read failure"}
+        return {"status": "readable", "version": override, "source": "test-override"}
+    if os.environ.get("LOOM_SKIP_NPM_LATEST") == "1":
+        return {"status": "unreadable", "version": None, "source": "disabled", "error": "npm latest lookup disabled"}
+    try:
+        completed = subprocess.run(
+            ["npm", "view", package_name, "version", "--json"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=4,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"status": "unreadable", "version": None, "source": "npm", "error": str(exc)}
+    if completed.returncode != 0:
+        return {"status": "unreadable", "version": None, "source": "npm", "error": (completed.stderr or completed.stdout).strip()}
+    try:
+        version = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        version = completed.stdout.strip().strip('"')
+    if not isinstance(version, str) or not version:
+        return {"status": "unreadable", "version": None, "source": "npm", "error": "npm returned no version"}
+    return {"status": "readable", "version": version, "source": "npm"}
+
+
+def plugin_payload_refresh_guidance(plugin_readback: dict[str, Any]) -> dict[str, Any]:
+    action = plugin_readback.get("action")
+    freshness = plugin_readback.get("freshness")
+    readback_command = "loom host doctor --host codex --scope user --json"
+    install_command = "loom host install --host codex --scope user --apply --json"
+    register_command = "loom host register --host codex --scope user --apply --json"
+    reload_note = "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded."
+
+    apply_commands: list[str] = []
+    next_steps: list[str]
+    reload_required = False
+    status = "required"
+    summary = "Codex plugin payload refresh is required."
+
+    if action == "install_cli":
+        apply_commands = [
+            "npm install -g @mc-and-his-agents/loom@latest",
+            install_command,
+            register_command,
+        ]
+        next_steps = [*apply_commands, readback_command]
+        summary = "Install the current root Loom CLI, then refresh and register the Codex user plugin payload."
+    elif action == "install_plugin":
+        apply_commands = [install_command, register_command]
+        next_steps = [*apply_commands, readback_command]
+        summary = "Refresh the Codex user plugin source from the root Loom CLI, then register it."
+    elif action == "reload_host":
+        reload_required = True
+        next_steps = [reload_note, readback_command]
+        summary = "The Codex-owned runtime cache is stale; reload Codex, then read back host doctor."
+    elif action == "already_current" or freshness == "already_current":
+        status = "current"
+        next_steps = [readback_command]
+        summary = "Codex plugin payload is already current."
+    else:
+        command = plugin_readback.get("command") if isinstance(plugin_readback.get("command"), str) else readback_command
+        next_steps = [command, readback_command] if command != readback_command else [readback_command]
+
+    return {
+        "schema": "loom-plugin-payload-refresh-guidance/v1",
+        "status": status,
+        "freshness": freshness,
+        "action": action,
+        "summary": summary,
+        "apply_commands": apply_commands,
+        "readback_command": readback_command,
+        "reload_required": reload_required,
+        "reload_note": reload_note if reload_required else None,
+        "next_steps": next_steps,
+        "authority_boundary": {
+            "provider": "codex-user-plugin",
+            "managed_by": "loom host doctor|install|register --host codex --scope user",
+            "target_install_upgrade_scope": "repository installed-state only",
+            "legacy_installer": "not_primary_path",
+        },
+    }
+
+
+def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any] | None = None) -> dict[str, Any]:
+    versions = version_context()
+    installed_cli = versions["repo_version"]
+    latest = npm_latest_version()
+    installed_tuple = semver_tuple(installed_cli)
+    latest_tuple = semver_tuple(str(latest.get("version") or ""))
+    if latest["status"] != "readable" or latest_tuple is None:
+        cli_freshness = "npm_unreadable"
+        cli_action = "check_cli_latest"
+    elif installed_tuple is None:
+        cli_freshness = "installed_version_unknown"
+        cli_action = "upgrade_cli"
+    elif installed_tuple is not None and installed_tuple < latest_tuple:
+        cli_freshness = "stale"
+        cli_action = "upgrade_cli"
+    else:
+        cli_freshness = "current"
+        cli_action = "already_current"
+
+    try:
+        plugin_readback = plugin_readback or codex_plugin_payload_readback(source or global_codex_plugin_source(), codex_workstation_paths())
+    except Exception as exc:  # pragma: no cover - defensive host boundary guard.
+        plugin_readback = {
+            "schema": "loom-codex-plugin-payload-readback/v1",
+            "result": "block",
+            "freshness": "host_api_unreadable",
+            "action": "refresh_plugin",
+            "command": "loom host doctor --host codex --scope user --json",
+            "error": f"{type(exc).__name__}: {exc}",
+            "layers": [],
+        }
+    plugin_freshness = plugin_readback.get("freshness")
+    plugin_action = "already_current" if plugin_freshness == "already_current" else "refresh_plugin"
+    if plugin_readback.get("action") == "install_cli":
+        plugin_action = "upgrade_cli"
+    refresh_guidance = plugin_payload_refresh_guidance(plugin_readback)
+    source_surface = next((layer.get("plugin_surface_version") for layer in plugin_readback.get("layers", []) if layer.get("layer") == "source-payload"), None)
+    surface_versions = {
+        layer.get("layer"): layer.get("plugin_surface_version")
+        for layer in plugin_readback.get("layers", [])
+        if layer.get("plugin_surface_version")
+    }
+    incompatible_surfaces = [
+        layer
+        for layer, surface in surface_versions.items()
+        if source_surface and surface != source_surface
+    ]
+    if cli_action == "upgrade_cli" or plugin_action == "upgrade_cli":
+        action = "upgrade_cli"
+        command = "npm install -g @mc-and-his-agents/loom@latest"
+    elif plugin_action == "refresh_plugin":
+        action = "refresh_plugin"
+        command = plugin_readback.get("command") or "loom host install --host codex --scope user --apply --json"
+    elif cli_action == "check_cli_latest":
+        action = "check_cli_latest"
+        command = "npm view @mc-and-his-agents/loom version --json"
+    else:
+        action = "already_current"
+        command = None
+    return {
+        "schema": "loom-version-freshness/v1",
+        "action": action,
+        "command": command,
+        "cli": {
+            "package": "@mc-and-his-agents/loom",
+            "installed_version": installed_cli,
+            "latest_version": latest.get("version"),
+            "freshness": cli_freshness,
+            "latest_status": latest.get("status"),
+            "latest_source": latest.get("source"),
+            "error": latest.get("error"),
+        },
+        "plugin_payload": {
+            "freshness": plugin_freshness,
+            "action": plugin_action,
+            "installed": next((layer for layer in plugin_readback.get("layers", []) if layer.get("layer") == "runtime-cache"), None),
+            "latest": next((layer for layer in plugin_readback.get("layers", []) if layer.get("layer") == "source-payload"), None),
+            "readback": plugin_readback,
+            "refresh_guidance": refresh_guidance,
+        },
+        "surface_compatibility": {
+            "status": "incompatible" if incompatible_surfaces else "compatible",
+            "source_surface_version": source_surface,
+            "surface_versions": surface_versions,
+            "incompatible_layers": incompatible_surfaces,
+        },
+    }
+
+
+def version_freshness_action(freshness: dict[str, Any]) -> dict[str, Any]:
+    action = freshness.get("action")
+    guidance = freshness.get("plugin_payload", {}).get("refresh_guidance", {})
+    return {
+        "id": "cli-plugin-freshness",
+        "kind": "version-freshness",
+        "status": "current" if action == "already_current" else "required",
+        "action": action,
+        "command": freshness.get("command") or "loom version --json",
+        "apply_commands": guidance.get("apply_commands", []),
+        "readback_command": guidance.get("readback_command"),
+        "reload_required": guidance.get("reload_required", False),
+        "reload_note": guidance.get("reload_note"),
+        "next_steps": guidance.get("next_steps", []),
+    }
+
+
 def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
     if stream is None:
         stream = sys.stdout
@@ -1827,6 +2028,7 @@ def handle_version(argv: list[str]) -> int:
         "pass",
         summary="Loom CLI version context resolved.",
         versions=version_context(),
+        version_freshness=version_freshness(),
         command_contract="docs/methodology/harness/cli-command-matrix.md",
     )
     if args.json:
@@ -1835,6 +2037,10 @@ def handle_version(argv: list[str]) -> int:
     print(f"loom repo {versions['repo_version']}")
     print(f"skills registry {versions['skills_registry_version']}")
     print(f"plugin surface {versions['plugin_surface_version']}")
+    freshness = payload["version_freshness"]
+    print(f"action {freshness['action']}")
+    if freshness.get("command"):
+        print(f"next {freshness['command']}")
     return 0
 
 
@@ -2314,6 +2520,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
     detection = detect_payload(target)
     path, state, installed_error = load_installed_state(target)
     validation_errors = validate_installed_state(state) if installed_error is None else []
+    freshness = version_freshness()
     checks: list[dict[str, Any]] = [
         {
             "name": "surface-detection",
@@ -2390,6 +2597,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
         summary="Installed surface diagnostics passed." if result == "pass" else "Installed surface diagnostics found blocking repair inputs.",
         target=str(target),
         detection=detection,
+        version_freshness=freshness,
         checks=checks,
         failed_layer=failed_layer,
         fail_closed_reason=None if result == "pass" else "doctor found blocking checks: " + ", ".join(check["name"] for check in blocking_checks),
@@ -2992,6 +3200,122 @@ def codex_marketplace_plugin_entry() -> dict[str, Any]:
     }
 
 
+def codex_payload_metadata(path: Path, *, layer: str) -> dict[str, Any]:
+    manifest_path = path / ".codex-plugin" / "plugin.json"
+    parse_error = None
+    try:
+        manifest = read_optional_json(manifest_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        manifest = None
+        parse_error = f"{type(exc).__name__}: {exc}"
+    x_loom = manifest.get("x-loom", {}) if isinstance(manifest, dict) and isinstance(manifest.get("x-loom"), dict) else {}
+    version = x_loom.get("plugin_payload_version")
+    digest = x_loom.get("plugin_payload_hash")
+    payload = {
+        "layer": layer,
+        "path": str(path),
+        "manifest": str(manifest_path),
+        "status": "present" if manifest_path.exists() else "missing",
+        "plugin_surface_version": x_loom.get("plugin_surface_version"),
+        "plugin_payload_version": version,
+        "plugin_payload_hash": digest,
+        "source_package": x_loom.get("source_package"),
+        "source_package_version": x_loom.get("source_package_version"),
+        "source_git_sha": x_loom.get("source_git_sha"),
+        "metadata_complete": isinstance(version, str) and bool(version) and isinstance(digest, str) and bool(digest),
+    }
+    if parse_error:
+        payload["error"] = parse_error
+    return payload
+
+
+def latest_codex_runtime_cache(paths: dict[str, Path | str], *, surface_version: str | None = None) -> Path | None:
+    root = Path(paths["codex_home"]) / "plugins" / "cache" / str(paths["marketplace_name"]) / "loom"
+    if not root.exists():
+        return None
+    if surface_version:
+        candidate = root / surface_version
+        if (candidate / ".codex-plugin" / "plugin.json").exists():
+            return candidate
+    candidates = [path for path in root.iterdir() if (path / ".codex-plugin" / "plugin.json").exists()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def codex_plugin_payload_readback(source: Path, paths: dict[str, Path | str]) -> dict[str, Any]:
+    source_payload = codex_payload_metadata(source, layer="source-payload")
+    marketplace_payload = codex_payload_metadata(Path(paths["plugin_cache_path"]), layer="marketplace-source")
+    surface_version = (
+        marketplace_payload.get("plugin_surface_version")
+        if isinstance(marketplace_payload.get("plugin_surface_version"), str)
+        else source_payload.get("plugin_surface_version")
+    )
+    runtime_path = latest_codex_runtime_cache(paths, surface_version=surface_version if isinstance(surface_version, str) else None)
+    runtime_payload = codex_payload_metadata(runtime_path, layer="runtime-cache") if runtime_path else {
+        "layer": "runtime-cache",
+        "path": str(Path(paths["codex_home"]) / "plugins" / "cache" / str(paths["marketplace_name"]) / "loom"),
+        "status": "missing",
+        "metadata_complete": False,
+    }
+    layers = [source_payload, marketplace_payload, runtime_payload]
+
+    missing_metadata = [layer["layer"] for layer in layers if layer.get("status") == "present" and not layer.get("metadata_complete")]
+    if source_payload["status"] != "present" or not source_payload["metadata_complete"]:
+        freshness = "source_metadata_missing"
+        action = "install_cli"
+        command = "npm install -g @mc-and-his-agents/loom"
+    elif marketplace_payload["status"] != "present":
+        freshness = "marketplace_source_missing"
+        action = "install_plugin"
+        command = "loom host install --host codex --scope user --apply --json"
+    elif not marketplace_payload["metadata_complete"]:
+        freshness = "marketplace_source_metadata_missing"
+        action = "install_plugin"
+        command = "loom host install --host codex --scope user --apply --json"
+    elif (
+        marketplace_payload.get("plugin_payload_version") != source_payload.get("plugin_payload_version")
+        or marketplace_payload.get("plugin_payload_hash") != source_payload.get("plugin_payload_hash")
+    ):
+        freshness = "marketplace_source_stale"
+        action = "install_plugin"
+        command = "loom host install --host codex --scope user --apply --json"
+    elif runtime_payload["status"] != "present":
+        freshness = "runtime_cache_missing"
+        action = "reload_host"
+        command = "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded."
+    elif not runtime_payload.get("metadata_complete"):
+        freshness = "runtime_cache_metadata_missing"
+        action = "reload_host"
+        command = "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded."
+    elif (
+        runtime_payload.get("plugin_payload_version") != marketplace_payload.get("plugin_payload_version")
+        or runtime_payload.get("plugin_payload_hash") != marketplace_payload.get("plugin_payload_hash")
+    ):
+        freshness = "runtime_cache_stale"
+        action = "reload_host"
+        command = "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded."
+    else:
+        freshness = "already_current"
+        action = "already_current"
+        command = None
+
+    return {
+        "schema": "loom-codex-plugin-payload-readback/v1",
+        "result": "pass" if freshness == "already_current" else "block",
+        "freshness": freshness,
+        "action": action,
+        "command": command,
+        "layers": layers,
+        "missing_metadata": missing_metadata,
+        "authority_boundary": {
+            "source_payload": "Loom package payload selected by --source or the global Loom package",
+            "marketplace_source": "Codex local user marketplace source managed by `loom host install`",
+            "runtime_cache": "Codex-owned loaded plugin cache; Loom only reads it and asks the user to reload Codex when stale",
+        },
+    }
+
+
 def codex_workstation_plugin_install_status(source: Path | None = None) -> dict[str, Any]:
     source = source or global_codex_plugin_source()
     paths = codex_workstation_paths()
@@ -3016,6 +3340,7 @@ def codex_workstation_plugin_install_status(source: Path | None = None) -> dict[
         }
     )
     blocking = [check for check in checks if check["result"] != "pass"]
+    payload_readback = codex_plugin_payload_readback(source, paths)
     return {
         "schema": WORKSTATION_SCHEMA,
         "host": "codex",
@@ -3026,6 +3351,7 @@ def codex_workstation_plugin_install_status(source: Path | None = None) -> dict[
         "result": "pass" if not blocking else "block",
         "paths": {key: str(value) for key, value in paths.items() if isinstance(value, Path)},
         "checks": checks,
+        "plugin_payload_readback": payload_readback,
         "authority_boundary": {
             "kind": "developer-workstation-plugin-cache",
             "does_not_write_repo_truth": True,
@@ -3120,6 +3446,7 @@ def codex_workstation_registration_status(source: Path | None = None) -> dict[st
         "marketplace_name": marketplace_name,
         "config_plugin_key": config_plugin_key,
         "checks": checks,
+        "plugin_payload_readback": install_status.get("plugin_payload_readback"),
         "reload_required": True,
         "reload_guidance": "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded.",
         "authority_boundary": {
@@ -3339,6 +3666,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
 
     if command == "upgrade-plan":
         actions: list[dict[str, Any]] = []
+        freshness = version_freshness()
         if installed_error is not None or validation_errors:
             actions.append(
                 {
@@ -3386,6 +3714,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
         refresh_boundary_action = host_plugin_refresh_boundary_action(args.host)
         if refresh_boundary_action:
             actions.append(refresh_boundary_action)
+        actions.append(version_freshness_action(freshness))
         return emit(
             output(
                 command,
@@ -3398,6 +3727,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 installed_state_path=str(path) if path else None,
                 detection=detection,
                 installed_state_errors=validation_errors,
+                version_freshness=freshness,
                 actions=actions,
                 fallback_to=None if installed_ready and not legacy_surfaces else ["loom repair plan --target <repo> --json"],
             )
@@ -3531,6 +3861,8 @@ def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
     refresh_boundary_action = host_plugin_refresh_boundary_action("codex")
     if refresh_boundary_action:
         actions.append(refresh_boundary_action)
+    freshness = version_freshness()
+    actions.append(version_freshness_action(freshness))
     return output(
         "upgrade-plan",
         "pass",
@@ -3542,6 +3874,7 @@ def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
         installed_state_path=str(path) if path else None,
         detection=detection,
         installed_state_errors=validation_errors,
+        version_freshness=freshness,
         actions=actions,
     )
 
@@ -5313,7 +5646,8 @@ def handle_host(argv: list[str]) -> int:
         source, source_kind = resolve_codex_plugin_source(args.source) if host == "codex" else (None, None)
         registration = codex_workstation_registration_status(source) if host == "codex" else None
         install_status = codex_workstation_plugin_install_status(source) if host == "codex" else None
-        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, scope=args.scope, provider="codex-user-plugin" if host == "codex" else "unsupported-for-install", hosts=hosts, source_kind=source_kind, workstation_install=install_status, workstation_registration=registration, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
+        payload_readback = install_status.get("plugin_payload_readback") if isinstance(install_status, dict) else None
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, scope=args.scope, provider="codex-user-plugin" if host == "codex" else "unsupported-for-install", hosts=hosts, source_kind=source_kind, workstation_install=install_status, workstation_registration=registration, plugin_payload_readback=payload_readback, version_freshness=version_freshness(source, payload_readback) if host == "codex" else None, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
     if args.action == "install" and host == "codex":
         source, source_kind = resolve_codex_plugin_source(args.source)
         paths = codex_workstation_paths()

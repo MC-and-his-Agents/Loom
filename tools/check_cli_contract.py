@@ -255,6 +255,7 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
     if env_overrides:
         env.update(env_overrides)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.setdefault("LOOM_SKIP_NPM_LATEST", "1")
     try:
         completed = subprocess.run(
             [sys.executable, str(LOOM), *args],
@@ -698,6 +699,8 @@ def assert_ship_dry_run_wrapper_contract() -> None:
             raise AssertionError("ship dry-run wrapper did not emit a passing dry-run plan")
         if emitted.get("schema_version") != "loom-ship/v1" or emitted.get("mutates") is not False:
             raise AssertionError("ship dry-run must emit loom-ship/v1 and remain non-mutating")
+        if emitted.get("next_action") != "run loom ship --apply after dry-run blockers are clear":
+            raise AssertionError("ship dry-run must keep the short next_action for the ordinary apply path")
         expected_prefixes = [
             ["pr-metadata", "preflight"],
             ["pr-gate", "check"],
@@ -884,8 +887,98 @@ def assert_ship_apply_wrapper_contract() -> None:
         )
         if status == 0 or emitted.get("result") != "block":
             raise AssertionError("ship --apply gate blocker must emit block")
+        if emitted.get("schema_version") != "loom-cli-output/v1":
+            raise AssertionError("ship --apply blocker must stay within the agent-safe summary envelope")
+        if emitted.get("key_gaps") != ["review record missing"]:
+            raise AssertionError("ship --apply must preserve missing_inputs as summary key_gaps")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "resolve `pr-gate`" for finding in findings):
+            raise AssertionError("ship --apply must surface the PR gate next_action in short diagnostics")
+        full_output = emitted.get("full_output") if isinstance(emitted.get("full_output"), dict) else {}
+        if full_output.get("available") is not True:
+            raise AssertionError("ship --apply blocker summary must retain an artifact locator for full diagnostics")
         if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
             raise AssertionError("ship --apply must not merge after a gate blocker")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+
+
+def assert_ship_closeout_policy_admission_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship closeout policy regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] == ["pr-metadata", "update"]:
+            return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "reinforced",
+                            "change_class": "security",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+        if flow_args[:2] == ["controlled-merge", "merge"]:
+            raise AssertionError("ship must not execute merge when closeout policy requires an explicit path")
+        raise AssertionError(f"ship closeout policy delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1735",
+                "--issue",
+                "1735",
+                "--pr",
+                "1740",
+                "--branch",
+                "work/1735-ship-contract",
+                "--head-sha",
+                "c" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("ship --apply must block when closeout policy requires an explicit path")
+        if emitted.get("schema_version") != "loom-cli-output/v1":
+            raise AssertionError("ship closeout policy blocker must stay within the agent-safe summary envelope")
+        if emitted.get("key_gaps") != ["closeout policy `full_closeout_pr` is not eligible for default host-only closeout"]:
+            raise AssertionError("ship closeout policy blocker must preserve the policy admission gap")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom closeout queue status --item <id> --issue <n> --pr <n> --json" for finding in findings):
+            raise AssertionError("ship closeout policy admission must point callers to the explicit closeout queue path")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("ship closeout policy admission must stop before merge")
     finally:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
@@ -898,12 +991,24 @@ def assert_ship_docs_entry_contract() -> None:
             "loom ship \\",
             "inline or host-only closeout",
             "explicit full closeout PR",
+            "The wrapper contract stays narrow and ordered",
+            "short wrapper diagnostics",
+            "follow-up issue scope",
         ],
         "README.zh-CN.md": [
             "## 日常交付路径",
             "loom ship \\",
             "内联或仅宿主收尾",
             "显式完整收尾拉取请求",
+            "这个包装器的合同保持收敛且有固定顺序",
+            "短诊断输出",
+            "后续 issue 承接",
+        ],
+        "docs/methodology/harness/cli-command-matrix.md": [
+            "loom ship",
+            "Its main-path contract is",
+            "blocker classification stays step-scoped",
+            "remain follow-up issue scope; `loom ship` must block",
         ],
         "src/skills/README.md": [
             "For ordinary delivery after a Work Item has a PR, use `loom ship`",
@@ -1669,7 +1774,7 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
     consumed = suite_gate.get("consumed_locators", {})
     if not isinstance(consumed, dict) or "evidence_map" not in consumed or "task_carriers" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
-    if suite_gate.get("result") != "not_applicable" and "consistency_analysis" not in consumed:
+    if suite_gate.get("result") != "not_applicable" and expected_surface != "closeout" and "consistency_analysis" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
@@ -2608,6 +2713,224 @@ def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
         for unexpected in ("plugins/loom", "skills", ".agents/skills", ".loom/bin", ".loom/installed-state.json"):
             if (target / unexpected).exists():
                 raise AssertionError(f"user-level host install/register wrote unsupported repository payload: {unexpected}")
+
+
+def write_payload_hash(manifest: Path, value: str) -> None:
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.setdefault("x-loom", {})["plugin_payload_hash"] = value
+    manifest.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def remove_payload_hash(manifest: Path) -> None:
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.setdefault("x-loom", {}).pop("plugin_payload_hash", None)
+    manifest.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def assert_codex_payload_readback_contract(tmp: Path) -> None:
+    target = tmp / "codex-payload-readback"
+    home = tmp / "codex-payload-home"
+    bad_source = tmp / "codex-payload-bad-source"
+    target.mkdir()
+    home.mkdir()
+    with isolated_codex_workstation(home):
+        run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.4.0"
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        older_surface_runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.3.0"
+        shutil.copytree(home / "plugins" / "loom", older_surface_runtime)
+        write_payload_hash(older_surface_runtime / ".codex-plugin" / "plugin.json", "stale-older-surface")
+
+        _, current = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        if current.get("plugin_payload_readback", {}).get("freshness") != "already_current":
+            raise AssertionError("host doctor did not report current plugin payload freshness")
+
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", bad_source)
+        (bad_source / ".codex-plugin" / "plugin.json").write_text("{not-json", encoding="utf-8")
+        _, invalid_source = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--source", str(bad_source), "--target", str(target), "--json"], expect=0)
+        source_layer = next(
+            (
+                layer
+                for layer in invalid_source.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "source-payload"
+            ),
+            {},
+        )
+        if invalid_source.get("plugin_payload_readback", {}).get("freshness") != "source_metadata_missing" or not source_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex source payload metadata")
+        if invalid_source.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "source_metadata_missing":
+            raise AssertionError("host doctor version freshness did not reuse explicit Codex source payload readback")
+
+        remove_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json")
+        _, missing_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = missing_marketplace.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "marketplace_source_metadata_missing" or readback.get("action") != "install_plugin":
+            raise AssertionError("host doctor did not identify missing Codex marketplace source metadata")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        marketplace_manifest = home / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
+        marketplace_manifest.write_text("{not-json", encoding="utf-8")
+        _, invalid_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        marketplace_layer = next(
+            (
+                layer
+                for layer in invalid_marketplace.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "marketplace-source"
+            ),
+            {},
+        )
+        if invalid_marketplace.get("plugin_payload_readback", {}).get("freshness") != "marketplace_source_metadata_missing" or not marketplace_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex marketplace source metadata")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        write_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json", "stale-marketplace")
+        _, stale_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = stale_marketplace.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "marketplace_source_stale" or readback.get("action") != "install_plugin":
+            raise AssertionError("host doctor did not identify stale Codex marketplace source")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        remove_payload_hash(runtime / ".codex-plugin" / "plugin.json")
+        _, missing_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = missing_runtime.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "runtime_cache_metadata_missing" or readback.get("action") != "reload_host":
+            raise AssertionError("host doctor did not identify missing Codex runtime cache metadata")
+
+        shutil.rmtree(runtime)
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", runtime)
+        write_payload_hash(runtime / ".codex-plugin" / "plugin.json", "stale-runtime")
+        _, stale_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = stale_runtime.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "runtime_cache_stale" or readback.get("action") != "reload_host":
+            raise AssertionError("host doctor did not identify stale Codex runtime cache")
+
+        runtime_manifest = runtime / ".codex-plugin" / "plugin.json"
+        runtime_manifest.write_text("{not-json", encoding="utf-8")
+        _, invalid_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        runtime_layer = next(
+            (
+                layer
+                for layer in invalid_runtime.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "runtime-cache"
+            ),
+            {},
+        )
+        if invalid_runtime.get("plugin_payload_readback", {}).get("freshness") != "runtime_cache_metadata_missing" or not runtime_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex runtime cache metadata")
+
+
+def assert_version_freshness_contract(tmp: Path) -> None:
+    target = tmp / "version-freshness"
+    home = tmp / "version-freshness-home"
+    target.mkdir()
+    home.mkdir()
+    installed_version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    with isolated_codex_workstation(home):
+        run_json(["install", "--target", str(target), "--apply", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        register_fixture_codex_plugin()
+        runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.4.0"
+        shutil.copytree(home / "plugins" / "loom", runtime)
+
+        _, current = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        freshness = current.get("version_freshness", {})
+        if freshness.get("action") != "already_current" or freshness.get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("version did not report current CLI and plugin payload freshness")
+        if freshness.get("surface_compatibility", {}).get("status") != "compatible":
+            raise AssertionError("version did not report compatible plugin surface for current payloads")
+        current_guidance = freshness.get("plugin_payload", {}).get("refresh_guidance", {})
+        if current_guidance.get("status") != "current" or current_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json":
+            raise AssertionError("current plugin payload freshness did not expose host readback guidance")
+        short_output = subprocess.run(
+            [sys.executable, str(LOOM), "version"],
+            cwd=REPO_ROOT,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "LOOM_TEST_NPM_LATEST_VERSION": installed_version},
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+        if short_output.returncode != 0 or "action already_current" not in short_output.stdout:
+            raise AssertionError(f"version short output did not expose freshness action\n{short_output.stderr}\n{short_output.stdout}")
+
+        _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if host_doctor.get("version_freshness", {}).get("action") != "already_current":
+            raise AssertionError("host doctor did not expose version freshness action")
+
+        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        freshness_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "cli-plugin-freshness"), None)
+        if not freshness_action or freshness_action.get("status") != "current":
+            raise AssertionError("upgrade-plan did not expose current CLI/plugin freshness action")
+        if freshness_action.get("readback_command") != "loom host doctor --host codex --scope user --json":
+            raise AssertionError("upgrade-plan current freshness action did not expose host readback command")
+
+        _, stale_cli = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": "99.0.0"})
+        if stale_cli.get("version_freshness", {}).get("action") != "upgrade_cli":
+            raise AssertionError("version did not identify stale CLI")
+
+        write_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json", "stale-marketplace")
+        _, stale_marketplace_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        stale_marketplace_action = next((action for action in stale_marketplace_plan.get("actions", []) if action.get("id") == "cli-plugin-freshness"), None)
+        expected_apply = [
+            "loom host install --host codex --scope user --apply --json",
+            "loom host register --host codex --scope user --apply --json",
+        ]
+        if (
+            not stale_marketplace_action
+            or stale_marketplace_action.get("action") != "refresh_plugin"
+            or stale_marketplace_action.get("apply_commands") != expected_apply
+            or stale_marketplace_action.get("readback_command") != "loom host doctor --host codex --scope user --json"
+        ):
+            raise AssertionError("upgrade-plan did not expose executable stale marketplace plugin refresh guidance")
+        run_json(["host", "install", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        _, repaired_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if repaired_marketplace.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("host install/register guidance did not repair stale plugin marketplace payload")
+
+        write_payload_hash(runtime / ".codex-plugin" / "plugin.json", "stale-runtime")
+        _, stale_plugin = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if stale_plugin.get("version_freshness", {}).get("action") != "refresh_plugin":
+            raise AssertionError("version did not identify stale plugin payload")
+        stale_guidance = stale_plugin.get("version_freshness", {}).get("plugin_payload", {}).get("refresh_guidance", {})
+        if (
+            stale_guidance.get("action") != "reload_host"
+            or stale_guidance.get("reload_required") is not True
+            or stale_guidance.get("apply_commands") != []
+            or stale_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json"
+        ):
+            raise AssertionError("stale runtime payload did not expose reload/readback guidance")
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        runtime_manifest = runtime / ".codex-plugin" / "plugin.json"
+        runtime_payload = json.loads(runtime_manifest.read_text(encoding="utf-8"))
+        runtime_payload.setdefault("x-loom", {})["plugin_surface_version"] = "0.0.0-test"
+        runtime_manifest.write_text(json.dumps(runtime_payload, indent=2) + "\n", encoding="utf-8")
+        _, incompatible_surface = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if (
+            incompatible_surface.get("version_freshness", {}).get("surface_compatibility", {}).get("status") != "incompatible"
+            or "runtime-cache" not in incompatible_surface.get("version_freshness", {}).get("surface_compatibility", {}).get("incompatible_layers", [])
+        ):
+            raise AssertionError("version did not identify plugin surface incompatibility")
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        _, repaired_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if repaired_runtime.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("simulated Codex reload did not repair stale runtime payload readback")
+
+        remove_payload_hash(runtime / ".codex-plugin" / "plugin.json")
+        _, missing_metadata = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if missing_metadata.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "runtime_cache_metadata_missing":
+            raise AssertionError("version did not expose missing plugin payload metadata")
+
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        _, unreadable = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": "__unreadable__"})
+        if unreadable.get("version_freshness", {}).get("cli", {}).get("freshness") != "npm_unreadable":
+            raise AssertionError("version did not expose npm latest read failure")
 
 
 def assert_metadata_only_adoption_contract(tmp: Path) -> None:
@@ -8579,7 +8902,10 @@ def run_governance_closeout_contract() -> None:
 
 def run_adoption_host_metadata_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-adoption-host-metadata-") as raw_tmp:
-        assert_metadata_only_adoption_contract(Path(raw_tmp))
+        tmp = Path(raw_tmp)
+        assert_codex_payload_readback_contract(tmp)
+        assert_version_freshness_contract(tmp)
+        assert_metadata_only_adoption_contract(tmp)
     assert_install_upgrade_host_boundary_docs()
 
     print("adoption host metadata surface checks passed")
@@ -8596,6 +8922,7 @@ def run_merge_wrapper_surface() -> None:
 def run_ship_wrapper_surface() -> None:
     assert_ship_dry_run_wrapper_contract()
     assert_ship_apply_wrapper_contract()
+    assert_ship_closeout_policy_admission_contract()
     assert_ship_docs_entry_contract()
     print("ship wrapper surface checks passed")
 
@@ -8813,11 +9140,11 @@ def run_aggregate_cli_contract() -> None:
     pr_body_pin = input_bindings.get("pr_body_pin") if isinstance(input_bindings, dict) else None
     carrier_refresh = input_bindings.get("carrier_refresh") if isinstance(input_bindings, dict) else None
     shadow_freshness = input_bindings.get("shadow_freshness") if isinstance(input_bindings, dict) else None
-    if not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1":
+    if pr_body_pin is not None and (not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1"):
         raise AssertionError("gate freeze check must expose a PR body pin binding")
-    if not isinstance(carrier_refresh, dict) or carrier_refresh.get("schema_version") != "loom-gate-freeze-carrier-refresh/v1":
+    if carrier_refresh is not None and (not isinstance(carrier_refresh, dict) or carrier_refresh.get("schema_version") != "loom-gate-freeze-carrier-refresh/v1"):
         raise AssertionError("gate freeze check must expose a carrier refresh binding")
-    if not isinstance(shadow_freshness, dict) or shadow_freshness.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1":
+    if shadow_freshness is not None and (not isinstance(shadow_freshness, dict) or shadow_freshness.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1"):
         raise AssertionError("gate freeze check must expose a shadow freshness binding")
     if isinstance(subject, dict) and isinstance(pr_metadata, dict) and pr_metadata.get("result") == "pass":
         for contract in pr_metadata.get("metadata_contracts", []):
