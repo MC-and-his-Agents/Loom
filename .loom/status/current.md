@@ -6,7 +6,7 @@
 - Goal: 实现 `loom ship status` / `loom ship preflight` 一次性现场读回。
 - Scope: Issue #1777: add a read-only ship preflight/status surface that reports blocking issue/milestone, target release presence, checkout freshness, and carrier active/terminal state with short blocked/fixed/next_action diagnostics. Ownership is limited to `tools/loom.py`, `tools/check_cli_contract.py`, WI-1777 carriers, and `.loom/specs/WI-1777`.
 - Execution Path: issue #1777 -> branch work/1777-ship-preflight-status -> PR pending -> controlled merge -> closeout.
-- Workspace Entry: /Users/mc/dev/Loom-WI-1777-ship-preflight-status
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1777.md
 - Review Entry: .loom/reviews/WI-1777.json
 - Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface ship-wrapper`; live `loom.py ship preflight` read-only smoke.
