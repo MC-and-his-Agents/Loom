@@ -91,8 +91,10 @@ loom ship \
 这个包装器的合同保持收敛且有固定顺序：
 
 - dry-run 只读消费 `pr-metadata preflight -> pr gate -> controlled merge check
-  -> closeout policy`，然后输出首个阻塞摘要、`missing_inputs` 与
-  `next_action`，不修改宿主或仓库状态；
+  -> validation profile -> closeout policy`，然后输出首个阻塞摘要、
+  `missing_inputs` 与 `next_action`，不修改宿主或仓库状态；
+- `--validation-profile auto` 会按 changed paths 选择最小必要 profile，并输出对应的
+  `loom_check --source-surface` 命令；显式 `--validation-profile full` 仍会强制完整路径；
 - `--apply` 最多只会在上述只读序列前增加一步确定性的安全 metadata repair，
   且前提是显式提供 `--issue`、`--branch` 与 `--head-sha`；
 - 这一步自动修复不会替你发明或裁决冲突的 Work Item、branch、head SHA、

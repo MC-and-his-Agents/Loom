@@ -252,7 +252,11 @@ loom retire
 Its main-path contract is:
 
 - dry-run order is fixed: `pr-metadata preflight -> pr gate -> controlled merge
-  check -> closeout policy`;
+  check -> validation profile -> closeout policy`;
+- validation profile selection is read-only: `auto` reads PR changed paths,
+  chooses `light`, `standard`, `full`, or `release`, and reports the
+  corresponding `loom_check --source-surface` command; `--validation-profile
+  full` and other explicit profiles override path inference;
 - `--apply` may prepend one deterministic `safe metadata repair` step, but only
   when `--issue`, `--branch`, and `--head-sha` are all explicit;
 - that auto-repair boundary is limited to deterministic PR metadata rendering

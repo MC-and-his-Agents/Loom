@@ -103,8 +103,12 @@ loom ship \
 The wrapper contract stays narrow and ordered:
 
 - dry-run reads `pr-metadata preflight -> pr gate -> controlled merge check ->
-  closeout policy`, then reports the first blocker summary, `missing_inputs`,
-  and `next_action` without mutating host or repo state;
+  validation profile -> closeout policy`, then reports the first blocker
+  summary, `missing_inputs`, and `next_action` without mutating host or repo
+  state;
+- `--validation-profile auto` uses changed paths to pick the smallest useful
+  profile and reports the matching `loom_check --source-surface` command;
+  explicit `--validation-profile full` still forces the full path;
 - `--apply` may add one deterministic safe metadata repair step before that
   read-only sequence, but only when `--issue`, `--branch`, and `--head-sha` are
   explicit;
