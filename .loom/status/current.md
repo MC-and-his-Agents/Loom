@@ -4,7 +4,7 @@
 
 - Item ID: WI-1777
 - Goal: 实现 `loom ship status` / `loom ship preflight` 一次性现场读回。
-- Scope: Issue #1777: add a read-only ship preflight/status surface that reports blocking issue/milestone, target release presence, checkout freshness, and carrier active/terminal state with short blocked/fixed/next_action diagnostics. Ownership is limited to `tools/loom.py`, `tools/check_cli_contract.py`, WI-1777 carriers, `.loom/specs/WI-1777`, `.loom/reviews/WI-1777.json`, `.loom/reviews/WI-1777.spec.json`, and the `.loom/progress/WI-1714.md` terminal carrier repair required to keep hosted workspace purity after issue #1714 closed and PR #1724 merged.
+- Scope: Issue #1777: add a read-only ship preflight/status surface that reports blocking issue/milestone, target release presence, checkout freshness, and carrier active/terminal state with short blocked/fixed/next_action diagnostics. Ownership is limited to `tools/loom.py`, `tools/check_cli_contract.py`, WI-1777 carriers, `.loom/specs/WI-1777`, `.loom/reviews/WI-1777.json`, `.loom/reviews/WI-1777.spec.json`, `.loom/shadow/closeout-loom.json`, `.loom/shadow/merge-ready-loom.json`, and the `.loom/progress/WI-1714.md` terminal carrier repair required to keep hosted workspace purity after issue #1714 closed and PR #1724 merged.
 - Execution Path: issue #1777 -> branch work/1777-ship-preflight-status -> PR pending -> controlled merge -> closeout.
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1777.md
@@ -16,7 +16,7 @@
 - Next Step: Push the current head, refresh PR metadata/readback to the pushed head, wait for hosted checks, merge PR #1779, then close out #1777 before #1775 begins.
 - Blockers: none
 - Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1777-ship-preflight-status`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface ship-wrapper; python3 tools/loom.py suite validate --target . --item WI-1777 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1777 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1777 --json; python3 tools/loom.py fact-chain --target . --item WI-1777 --json; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py help --json | rg -n 'ship status|ship preflight|ship"'; python3 tools/loom.py ship preflight --target . --item WI-1777 --issue 1777 --milestone 18 --version v0.21.0 --package @mc-and-his-agents/loom --json --full-output. 2026-06-23 readback confirmed WI-1714 is terminal after changing `.loom/progress/WI-1714.md` checkpoint from non-terminal `closeout` to canonical terminal `merged`.
-- Recovery Boundary: WI-1777 owns ship status/preflight readback, diagnostics, its spec/review carriers, and the WI-1714 terminal carrier repair required to unblock hosted purity only; it does not implement closeout sync, release verdict, merge fallback, publishing, or any new #1714 behavior.
+- Recovery Boundary: WI-1777 owns ship status/preflight readback, diagnostics, its spec/review/shadow carriers, and the WI-1714 terminal carrier repair required to unblock hosted purity only; it does not implement closeout sync, release verdict, merge fallback, publishing, or any new #1714 behavior.
 - Current Lane: ship-preflight-status
 
 ## Runtime Evidence
