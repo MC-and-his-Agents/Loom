@@ -9,7 +9,7 @@
 - Workspace Entry: .loom/..
 - Recovery Entry: .loom/progress/WI-1741.md
 - Review Entry: .loom/reviews/WI-1741.json
-- Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py
+- Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash
 - Closing Condition: PR merged and issue #1741 closed with ship validation profile selection evidence.
 - Current Checkpoint: merge
 - Current Stop: PR #1766 is open for WI-1741 with canonical PR metadata, authored spec and implementation review records, carrier-only review drift readback, and local validation evidence.
