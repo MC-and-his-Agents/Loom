@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1739.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group closeout-wrapper
 - Closing Condition: PR merged and issue #1739 closed with ship repair-chain evidence.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1739 PR #1768 merged into main at 0fcd272e5d039e2f619480d0514fbc341e19e584 and versioned closeout metadata was written.
-- Next Step: Close GitHub issue #1739 after closeout PR merges, then continue to dependent WI-1742.
+- Current Checkpoint: closeout
+- Current Stop: WI-1739 PR #1768 merged into main at 0fcd272e5d039e2f619480d0514fbc341e19e584; closeout carrier PR #1769 is preparing terminal metadata consumption.
+- Next Step: Merge closeout PR #1769, then close GitHub issue #1739 and continue to dependent WI-1742.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-23 closeout sync passed for WI-1739: PR #1768 merged at 0fcd272e5d039e2f619480d0514fbc341e19e584; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier closeout-sync --target . --item WI-1739 --terminal-state merged --issue 1739 --pr 1768 --merge-commit 0fcd272e5d039e2f619480d0514fbc341e19e584 --target-branch main --closed-at 2026-06-23T09:06:49Z --evidence-locator 'github.com/MC-and-his-Agents/Loom/issues/1739;github.com/MC-and-his-Agents/Loom/pull/1768' --apply.
 - Recovery Boundary: WI-1739 closeout sync only consumes the already-merged #1768 facts; it does not implement WI-1742 or release behavior.
