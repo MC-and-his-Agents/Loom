@@ -3,11 +3,11 @@
   "item_id": "WI-1738",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1738 current-head review allows the ship inference implementation and PR readback budget fix: behavior remains scoped to inferred branch/head/target bindings, effective delegated gate arguments, conflict fail-closed diagnostics, GitHub API PR readback, focused ship wrapper regression, and WI-1738 carriers.",
+  "summary": "WI-1738 closeout review allows the carrier-only post-merge terminalization for PR #1762: changes are limited to WI-1738 progress/status/review/shadow evidence, consume issue #1738 closed and merge commit d10f421aaed781471b0f590e78163016b8be8e0f, and do not alter ship runtime behavior.",
   "reviewer": "Codex main controller",
-  "authored_at": "2026-06-23T05:10:47Z",
-  "reviewed_head": "4641730d4950a76ff6bd0afb85407eb6b1156bc3",
-  "reviewed_validation_summary": "2026-06-23 local validation passed for git diff --check; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; rg confirmed github-api-budget forbidden gh view strings absent from tools and skills/shared/scripts; PR metadata preflight for #1762 passed at head 7a2af448e2b822b446e9d5380a972a07edf248bb before the budget fix; hosted loom-pr-merge-gate rerun passed after PR body readback; hosted loom-check failed on github-api-budget before replacing ship PR readback with gh api.",
+  "authored_at": "2026-06-23T05:25:18Z",
+  "reviewed_head": "6b37ae4fe13988b89dba77f8f4139c59baba14fd",
+  "reviewed_validation_summary": "Post-merge closeout evidence on 2026-06-23: PR #1762 merged at d10f421aaed781471b0f590e78163016b8be8e0f; issue #1738 closed at 2026-06-23T05:18:53Z; carrier closeout-sync recorded terminal metadata; implementation PR hosted checks passed for head 786c1d43f377ed54d880d7cff82e4982f1bf7142.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": net/http: TLS handshake timeout",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
