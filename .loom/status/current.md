@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper
 - Closing Condition: PR merged, issue #1742 closed, carrier refresh and shadow parity pass; ownership constraints remain limited to WI-1742 regression coverage and carriers.
 - Current Checkpoint: merge
-- Current Stop: WI-1742 implementation, build evidence, spec review, and implementation review are recorded; PR creation and merge gates are next.
-- Next Step: Push branch, create PR for issue #1742, update PR metadata, then run PR gate and controlled merge.
+- Current Stop: WI-1742 implementation, build evidence, spec review, implementation review, local full loom-check, and PR metadata readback are recorded; PR gate and controlled merge are next.
+- Next Step: Run PR gate and controlled merge for PR #1770 at head 6b41a3412d3f438475462622c1929732ba5ec6fc, then complete post-merge closeout.
 - Blockers: None
-- Latest Validation Summary: 2026-06-23 local validation passed after hosted failure classification and repo-local workspace locator repair: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1742 --apply; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking.
+- Latest Validation Summary: 2026-06-23 local validation passed at head 6b41a3412d3f438475462622c1929732ba5ec6fc after hosted failure classification and repo-local workspace locator repair: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1742; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1742 --apply; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 make loom-check (profile source, source_surface full, 45 surfaces); PR #1770 metadata update/readback passed for head 6b41a3412d3f438475462622c1929732ba5ec6fc.
 - Recovery Boundary: WI-1742 owns ship-wrapper closeout e2e regression coverage and WI-1742 carriers only; it does not publish v0.20.0 or alter #1711-#1722/v0.19.0 state.
 - Current Lane: closeout-e2e
 
