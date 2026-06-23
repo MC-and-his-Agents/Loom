@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1736.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash
 - Closing Condition: PR #1745 merged, issue #1736 closed, and WI-1736 carrier/shadow/status closeout synced without expanding into ship repair-chain orchestration.
-- Current Checkpoint: merge
-- Current Stop: Implementation complete for #1736; PR #1745 is open at the current branch head and waiting for hosted merge gate consumption.
-- Next Step: Consume hosted checks, then merge PR #1745 and close out issue #1736.
+- Current Checkpoint: closeout
+- Current Stop: PR #1745 merged and issue #1736 closed; repository carrier is terminalized for WI-1736.
+- Next Step: Resume #1737 canonical checkpoint lane.
 - Blockers: None recorded
 - Latest Validation Summary: 2026-06-23 local validation passed after merging origin/main: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/stamp_plugin_payload_metadata.py --source-git-sha unreleased --write --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1736 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1736 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1736 --json; CODEX_EXPORT_GH_TOKEN=1 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint merge --target . --item WI-1736; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --apply returned fixed shadow entries with remaining_refresh=[]; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking.
 - Recovery Boundary: WI-1736 owns carrier refresh readback runtime fix, generated runtime/plugin copies, focused regression, plugin payload hash, and WI-1736 fact-chain/review/shadow evidence only.
