@@ -14557,6 +14557,7 @@ def carrier_refresh_payload(
                 review_status["status"] = "current"
 
     if not dry_run and not missing_inputs:
+        fixed = [action for action in actions if action.get("status") == "refresh-needed"]
         if manifest_path is not None:
             apply_runtime_artifact_updates(manifest_payload, actions, source="manifest")
             write_json_file(manifest_path, manifest_payload)
@@ -14564,6 +14565,27 @@ def carrier_refresh_payload(
             apply_runtime_artifact_updates(init_payload, actions, source="init-result")
             write_json_file(init_path, init_payload)
         apply_shadow_evidence_actions(target_root, actions)
+        readback_payload = carrier_refresh_payload(
+            target_root,
+            output_relative,
+            expected_item,
+            dry_run=True,
+            surface=surface,
+        )
+        readback_result = "pass" if readback_payload.get("result") == "pass" and not readback_payload.get("refresh_needed") else "block"
+        return {
+            **readback_payload,
+            "result": readback_result,
+            "summary": (
+                "carrier refresh completed and readback found no remaining updates."
+                if readback_result == "pass"
+                else "carrier refresh applied updates but readback still found pending or blocking drift."
+            ),
+            "dry_run": False,
+            "fallback_to": None if readback_result == "pass" else "adoption",
+            "fixed": fixed,
+            "remaining_refresh": readback_payload.get("refresh_needed", []),
+        }
 
     refresh_needed = [action for action in actions if action.get("status") == "refresh-needed"]
     result = "block" if missing_inputs else "pass"

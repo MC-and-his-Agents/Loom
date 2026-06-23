@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1715",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allow: WI-1715 minimal suite is valid for a bounded CLI freshness diagnostic change; scope, non-goals, scenarios, acceptance mapping, and validation evidence are explicit, and no plugin refresh, release, or legacy installer behavior is included.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-06-22T19:19:18Z",
+  "reviewed_head": "46266cca5378c0c50868c376f7a3fce49e23253e",
+  "reviewed_validation_summary": "2026-06-23 local checks passed: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `git diff --check`; `python3 tools/loom.py suite validate --target . --item WI-1715 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1715 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1715 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1715 --json`; targeted `loom version` and `loom upgrade-plan` assertions for stale CLI, npm unreadable, and freshness action output.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1715.md",
+    "recovery_entry": ".loom/progress/WI-1715.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom-WI-1715-freshness-reporting/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1715/spec.md",
+    "suite_plan": ".loom/specs/WI-1715/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1715/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1715/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

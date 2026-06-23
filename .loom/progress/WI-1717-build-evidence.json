@@ -1,0 +1,97 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [],
+  "integration_evidence": [
+    {
+      "id": "WI-1717-freshness-fixtures",
+      "status": "integrated",
+      "summary": "The adoption-host-metadata contract check now covers current plugin payload/surface reporting, short loom version action output, and runtime plugin surface incompatibility.",
+      "locators": [
+        "tools/check_cli_contract.py"
+      ]
+    },
+    {
+      "id": "WI-1717-hash-regression-readback",
+      "status": "integrated",
+      "summary": "Existing plugin payload hash tests remain the regression authority for payload digest stability and ignored file behavior.",
+      "locators": [
+        "test/plugin_payload_hash_test.py"
+      ]
+    },
+    {
+      "id": "WI-1717-carriers",
+      "status": "integrated",
+      "summary": "WI-1717 work item, progress, minimal suite, task carrier, evidence map, status, bootstrap, and build evidence bind scope, non-goals, validation, worktree, and branch.",
+      "locators": [
+        ".loom/work-items/WI-1717.md",
+        ".loom/progress/WI-1717.md",
+        ".loom/progress/WI-1717-build-evidence.json",
+        ".loom/specs/WI-1717/",
+        ".loom/reviews/WI-1717.spec.json",
+        ".loom/status/current.md",
+        ".loom/bootstrap/init-result.json"
+      ]
+    }
+  ],
+  "ownership_contract": {
+    "write_ownership": [
+      "tools/check_cli_contract.py freshness fixture assertions",
+      ".loom/work-items/WI-1717.md",
+      ".loom/progress/WI-1717.md",
+      ".loom/progress/WI-1717-build-evidence.json",
+      ".loom/reviews/WI-1717.spec.json",
+      ".loom/specs/WI-1717/",
+      ".loom/status/current.md",
+      ".loom/bootstrap/init-result.json"
+    ],
+    "non_goals": [
+      "No release version bump, npm publish, GitHub release, or v0.19.0 closeout",
+      "No packages/loom-installer tombstone behavior",
+      "No new payload hash algorithm behavior",
+      "No new host install state mutation",
+      "No broad fixture framework"
+    ],
+    "forbidden_scope_touched": false
+  },
+  "validation": {
+    "status": "pass",
+    "commands": [
+      {
+        "command": "python3 tools/check_cli_contract.py --surface adoption-host-metadata",
+        "result": "pass",
+        "summary": "Freshness, plugin payload, plugin surface, and host guidance contract checks passed."
+      },
+      {
+        "command": "python3 test/plugin_payload_hash_test.py",
+        "result": "pass",
+        "summary": "Five plugin payload hash tests passed."
+      },
+      {
+        "command": "git diff --check",
+        "result": "pass",
+        "summary": "No whitespace errors."
+      },
+      {
+        "command": "python3 tools/loom.py suite validate --target . --item WI-1717 --json",
+        "result": "pass",
+        "summary": "Minimal suite path and spec/plan mappings passed."
+      },
+      {
+        "command": "python3 tools/loom.py suite evidence validate --target . --item WI-1717 --json",
+        "result": "pass",
+        "summary": "Behavior, test, and fresh verification evidence passed."
+      },
+      {
+        "command": "python3 tools/loom.py suite carrier validate --target . --item WI-1717 --json",
+        "result": "pass",
+        "summary": "Task carrier validation passed."
+      },
+      {
+        "command": "python3 tools/loom.py fact-chain --target . --item WI-1717 --json",
+        "result": "pass",
+        "summary": "Fact chain passed for WI-1717."
+      }
+    ]
+  },
+  "result": "pass"
+}
