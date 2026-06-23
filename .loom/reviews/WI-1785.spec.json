@@ -1,0 +1,33 @@
+{
+  "schema_version": "loom-spec-review/v1",
+  "item_id": "WI-1785",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1785 uses a minimal suite path appropriate for a narrow hosted workflow glue fix. The spec maps closeout, merge_ready, malformed fallback, and post-merge #1784 hosted proof to explicit validation evidence.",
+  "reviewer": "Codex main controller",
+  "authored_at": "2026-06-23T17:33:00Z",
+  "reviewed_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
+  "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1785-closeout-gate-surface`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py; local Python smoke verified closeout, merge_ready, malformed, and empty PR metadata surface inference. #1784 closeout-surface gate was separately proven in its closeout worktree before this fix; hosted #1784 rerun remains the post-merge consumer proof.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "consumed_inputs": {
+    "spec": ".loom/specs/WI-1785/spec.md",
+    "plan": ".loom/specs/WI-1785/plan.md",
+    "implementation_contract": ".loom/specs/WI-1785/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1785/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1785/task-carrier.md"
+  },
+  "head_binding": {
+    "reviewed_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
+    "current_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
+    "status": "current",
+    "stale": false,
+    "changed_paths": [],
+    "disallowed_paths": [],
+    "carrier_only_paths": [],
+    "generated_only_paths": [],
+    "generated_only_validation_actions": [],
+    "semantic_drift_paths": []
+  }
+}
