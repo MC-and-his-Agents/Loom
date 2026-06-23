@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1718
-- Goal: 执行插件 payload 新鲜度能力的 v0.19.0 release closeout。
-- Scope: bump root Loom CLI release authority to `v0.19.0`, align root npm package and Codex plugin payload release metadata, add publish-time `source_git_sha` stamping before npm publish, retain release readiness evidence, and close out #1711 after release readback. Ownership constraints are limited to v0.19.0 release authority, plugin payload release metadata/hash, release workflow stamping, release readiness evidence, and WI-1718 carriers. Do not bump plugin surface version, skills registry version, skill contract versions, or legacy `@mc-and-his-agents/loom-installer`.
-- Execution Path: issue #1718 -> branch work/1718-v0.19.0-release-closeout -> release readiness evidence -> release PR -> main push release workflow -> release readback -> #1718/#1711 closeout.
+- Item ID: WI-1735
+- Goal: 冻结 loom ship 主路径合同与短诊断输出。
+- Scope: Issue #1735 only: document dry-run/apply order, auto-repair boundary, blocker classification, short diagnostics, --full-output boundary, closeout policy escalation, and targeted ship-wrapper contract checks. Non-goals: no full repair chain, no merge permission change, no closeout permission change.
+- Execution Path: issue #1735 -> branch work/1735-ship-contract -> PR #1744 -> controlled merge -> closeout
 - Workspace Entry: .loom/..
-- Recovery Entry: .loom/progress/WI-1718.md
-- Review Entry: .loom/reviews/WI-1718.json
-- Validation Entry: release readback, release/package checks, stamp script check, npm package smoke, suite/fact-chain, hosted checks, and post-merge release readback.
-- Closing Condition: v0.19.0 tag, GitHub Release, npm `@mc-and-his-agents/loom@0.19.0`, plugin payload metadata/hash, and #1711/#1718 closeout evidence read back consistently.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1718 terminal closeout consumed: PR #1757 merged into main at 2026-06-22T23:12:56Z with merge commit f7c853209057732c56a163a02d022c71e90717f1; v0.19.0 GitHub Release, tag, npm package, plugin payload metadata/hash, #1718 closeout, and parent #1711 closeout read back consistently.
-- Next Step: No further WI-1718 implementation work remains; retire release and closeout-sync worktrees after carrier closeout PR merges and main/codegraph readback pass.
-- Blockers: none
-- Latest Validation Summary: 2026-06-22T22:49Z local release/package validation passed at pre-commit branch head: release readback classified v0.19.0 as unpublished/unoccupied; `stamp_plugin_payload_metadata.py --source-git-sha unreleased --json`, `version_surface_check.py`, `check_release_surface.py`, `check_npm_package.py`, `npm run test:package`, `npm pack --dry-run --json --ignore-scripts`, suite validate/evidence/carrier, fact-chain, state-check, and `git diff --check` passed.
-- Recovery Boundary: WI-1718 terminal closeout sync only: versioned carrier/status/shadow evidence for v0.19.0 release and #1711/#1718 closeout. Do not restore legacy installer behavior, publish or bump legacy installer, change plugin surface compatibility version, execute npm deprecate without separate confirmation, or add new product scope.
-- Current Lane: release-closeout-sync
+- Recovery Entry: .loom/progress/WI-1735.md
+- Review Entry: .loom/reviews/WI-1735.json
+- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; git diff --check; python3 tools/loom.py pr metadata-preflight 1744 --work-item WI-1735 --branch work/1735-ship-contract --head-sha <current-pr-head> --json
+- Closing Condition: PR #1744 is merged, issue #1735 is closed, and closeout consumes PR, issue, branch, target branch, hosted checks, and repo carrier readback.
+- Current Checkpoint: merge
+- Current Stop: Implementation complete for #1735; PR #1744 is open at the current branch head and waiting for hosted merge gate consumption.
+- Next Step: Consume hosted checks, then merge PR #1744 and close out issue #1735.
+- Blockers: None recorded
+- Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1735-ship-contract`: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1735; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1735 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1735.
+- Recovery Boundary: WI-1735 owns ship contract docs and ship-wrapper contract checks only; no runtime repair-chain implementation or closeout permission changes.
+- Current Lane: ship-contract
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-23 WI-1718 build started in issue-scoped worktree `work/1718-v0.19.0-release-closeout`.
-- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1718.md`.
-- Diagnostics Entry: Release readiness evidence records candidate occupancy, plugin payload metadata/hash, publish boundary, and npm deprecate boundary.
-- Verification Entry: Local release/package checks, suite validation, fact-chain, state-check, diff check, build gate, spec review, implementation review, PR metadata readback, and local PR gate input validation passed; hosted checks, controlled merge, and post-merge release readback remain pending.
-- Lane Entry: release-closeout
+- Run Entry: 2026-06-23 WI-1735 ship contract lane continued in issue-scoped worktree `work/1735-ship-contract`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1735.md`.
+- Diagnostics Entry: `loom ship` contract freezes short diagnostics, full-output boundary, dry-run/apply order, auto-repair boundary, validation profile expectation, and closeout escalation.
+- Verification Entry: Targeted ship-wrapper contract check, not_applicable suite decision, evidence-map/task-carrier readback, review record, shadow parity, adopt verify, and hosted checks passed before merge.
+- Lane Entry: ship-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1718.md
-- Dynamic Truth: .loom/progress/WI-1718.md
+- Static Truth: .loom/work-items/WI-1735.md
+- Dynamic Truth: .loom/progress/WI-1735.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

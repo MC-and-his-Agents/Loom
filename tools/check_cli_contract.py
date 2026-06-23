@@ -699,6 +699,8 @@ def assert_ship_dry_run_wrapper_contract() -> None:
             raise AssertionError("ship dry-run wrapper did not emit a passing dry-run plan")
         if emitted.get("schema_version") != "loom-ship/v1" or emitted.get("mutates") is not False:
             raise AssertionError("ship dry-run must emit loom-ship/v1 and remain non-mutating")
+        if emitted.get("next_action") != "run loom ship --apply after dry-run blockers are clear":
+            raise AssertionError("ship dry-run must keep the short next_action for the ordinary apply path")
         expected_prefixes = [
             ["pr-metadata", "preflight"],
             ["pr-gate", "check"],
@@ -885,8 +887,98 @@ def assert_ship_apply_wrapper_contract() -> None:
         )
         if status == 0 or emitted.get("result") != "block":
             raise AssertionError("ship --apply gate blocker must emit block")
+        if emitted.get("schema_version") != "loom-cli-output/v1":
+            raise AssertionError("ship --apply blocker must stay within the agent-safe summary envelope")
+        if emitted.get("key_gaps") != ["review record missing"]:
+            raise AssertionError("ship --apply must preserve missing_inputs as summary key_gaps")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "resolve `pr-gate`" for finding in findings):
+            raise AssertionError("ship --apply must surface the PR gate next_action in short diagnostics")
+        full_output = emitted.get("full_output") if isinstance(emitted.get("full_output"), dict) else {}
+        if full_output.get("available") is not True:
+            raise AssertionError("ship --apply blocker summary must retain an artifact locator for full diagnostics")
         if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
             raise AssertionError("ship --apply must not merge after a gate blocker")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+
+
+def assert_ship_closeout_policy_admission_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship closeout policy regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] == ["pr-metadata", "update"]:
+            return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "reinforced",
+                            "change_class": "security",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+        if flow_args[:2] == ["controlled-merge", "merge"]:
+            raise AssertionError("ship must not execute merge when closeout policy requires an explicit path")
+        raise AssertionError(f"ship closeout policy delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1735",
+                "--issue",
+                "1735",
+                "--pr",
+                "1740",
+                "--branch",
+                "work/1735-ship-contract",
+                "--head-sha",
+                "c" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("ship --apply must block when closeout policy requires an explicit path")
+        if emitted.get("schema_version") != "loom-cli-output/v1":
+            raise AssertionError("ship closeout policy blocker must stay within the agent-safe summary envelope")
+        if emitted.get("key_gaps") != ["closeout policy `full_closeout_pr` is not eligible for default host-only closeout"]:
+            raise AssertionError("ship closeout policy blocker must preserve the policy admission gap")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom closeout queue status --item <id> --issue <n> --pr <n> --json" for finding in findings):
+            raise AssertionError("ship closeout policy admission must point callers to the explicit closeout queue path")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("ship closeout policy admission must stop before merge")
     finally:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
@@ -899,12 +991,24 @@ def assert_ship_docs_entry_contract() -> None:
             "loom ship \\",
             "inline or host-only closeout",
             "explicit full closeout PR",
+            "The wrapper contract stays narrow and ordered",
+            "short wrapper diagnostics",
+            "follow-up issue scope",
         ],
         "README.zh-CN.md": [
             "## 日常交付路径",
             "loom ship \\",
             "内联或仅宿主收尾",
             "显式完整收尾拉取请求",
+            "这个包装器的合同保持收敛且有固定顺序",
+            "短诊断输出",
+            "后续 issue 承接",
+        ],
+        "docs/methodology/harness/cli-command-matrix.md": [
+            "loom ship",
+            "Its main-path contract is",
+            "blocker classification stays step-scoped",
+            "remain follow-up issue scope; `loom ship` must block",
         ],
         "src/skills/README.md": [
             "For ordinary delivery after a Work Item has a PR, use `loom ship`",
@@ -8818,6 +8922,7 @@ def run_merge_wrapper_surface() -> None:
 def run_ship_wrapper_surface() -> None:
     assert_ship_dry_run_wrapper_contract()
     assert_ship_apply_wrapper_contract()
+    assert_ship_closeout_policy_admission_contract()
     assert_ship_docs_entry_contract()
     print("ship wrapper surface checks passed")
 
