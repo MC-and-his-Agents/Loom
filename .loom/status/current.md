@@ -9,11 +9,11 @@
 - Workspace Entry: .loom/..
 - Recovery Entry: .loom/progress/WI-1741.md
 - Review Entry: .loom/reviews/WI-1741.json
-- Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash
+- Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py
 - Closing Condition: PR merged and issue #1741 closed with ship validation profile selection evidence.
-- Current Checkpoint: build
-- Current Stop: Implemented ship validation profile selection from changed paths, added ship wrapper contract coverage, filled WI-1741 full suite, and refreshed carrier/shadow evidence.
-- Next Step: Record review for the current head, push work/1741-validation-profile, open PR for issue #1741, then run PR gate and controlled merge.
+- Current Checkpoint: merge
+- Current Stop: PR #1766 is open for WI-1741 with canonical PR metadata, authored spec and implementation review records, carrier-only review drift readback, and local validation evidence.
+- Next Step: Run PR gate and hosted checks for PR #1766, then use controlled merge after required checks pass.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-23 targeted validation passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1741 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1741 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1741 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1741 --apply readback remaining_refresh=[]; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking.
 - Recovery Boundary: WI-1741 owns ship validation profile selection, docs for the ship main path, and issue-scoped Loom carriers only; it does not implement repair chain, closeout e2e, or release behavior.
