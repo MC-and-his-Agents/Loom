@@ -27,6 +27,7 @@
 | EV-003 | carrier_evidence | `.loom/status/current.md` | current checkpoint, validation summary, and host-safe workspace entry | WI-1777 / current recovery | present | fact-chain / hosted freeze admission / closeout | Refresh carrier and shadow evidence after status changes. |
 | EV-004 | review_evidence | `.loom/reviews/WI-1777.json` | current-head semantic review approval | reviewed implementation head / PR #1779 | present | merge-ready / PR gate | Refresh review only after non-carrier implementation changes or validation summary changes. |
 | EV-005 | fresh_verification_input | `.loom/progress/WI-1777.md` | EV-001 EV-002 EV-003 EV-004 | WI-1777 / latest validation summary | present | merge-ready / PR gate / closeout | Keep recovery validation summary identical to the review-consumed validation summary after verification updates. |
+| EV-006 | carrier_evidence | `.loom/progress/WI-1714.md` | terminal carrier repair for already merged PR #1724 / closed issue #1714 | WI-1714 terminal state consumed only as hosted purity input for WI-1777 | present | PR gate / hosted freeze admission | Do not add #1714 behavior; only update if host readback for #1714 changes. |
 
 ## Suite Applicability
 
