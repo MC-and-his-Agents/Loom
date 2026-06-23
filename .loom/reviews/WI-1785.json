@@ -7,7 +7,7 @@
   "reviewer": "Codex main controller",
   "authored_at": "2026-06-23T17:33:00Z",
   "reviewed_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
-  "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1785-closeout-gate-surface`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py; local Python smoke verified closeout, merge_ready, malformed, and empty PR metadata surface inference. #1784 closeout-surface gate was separately proven in its closeout worktree before this fix; hosted #1784 rerun remains the post-merge consumer proof.",
+  "reviewed_validation_summary": "2026-06-23 WI-1785 closeout readback: PR #1786 merged at 2026-06-23T17:42:20Z with merge commit 24c1eb6a2a1889bf771d5da92a571c4c4b54b40e; issue #1785 closed at 2026-06-23T17:44:52Z; PR metadata readback surface closeout passed; closeout status passed; carrier closeout-sync wrote closed_out metadata. Hosted #1786 checks passed before merge: loom-pr-merge-gate, loom-check, node-installer-pr, py-compile, demo-bootstrap, repo-local-cli, root-self-governance.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -33,12 +33,26 @@
   },
   "head_binding": {
     "reviewed_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
-    "current_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
-    "status": "current",
+    "current_head": "24c1eb6a2a1889bf771d5da92a571c4c4b54b40e",
+    "status": "carrier-only",
     "stale": false,
-    "changed_paths": [],
+    "changed_paths": [
+      ".loom/progress/WI-1785.md",
+      ".loom/reviews/WI-1785.json",
+      ".loom/shadow/closeout-loom.json",
+      ".loom/shadow/merge-ready-loom.json",
+      ".loom/specs/WI-1785/task-carrier.md",
+      ".loom/status/current.md"
+    ],
     "disallowed_paths": [],
-    "carrier_only_paths": [],
+    "carrier_only_paths": [
+      ".loom/progress/WI-1785.md",
+      ".loom/reviews/WI-1785.json",
+      ".loom/shadow/closeout-loom.json",
+      ".loom/shadow/merge-ready-loom.json",
+      ".loom/specs/WI-1785/task-carrier.md",
+      ".loom/status/current.md"
+    ],
     "generated_only_paths": [],
     "generated_only_validation_actions": [],
     "semantic_drift_paths": []
