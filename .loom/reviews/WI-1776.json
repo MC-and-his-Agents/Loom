@@ -6,7 +6,7 @@
   "summary": "WI-1776 adds a release readback verdict contract over existing readback surfaces. The implementation keeps release readback/resume non-mutating, adds package surface and carrier terminal status to the evidence set, emits diagnostic.next_action, and covers published/missing/drifted/blocked/no-release states with fixtures.",
   "reviewer": "Codex main controller",
   "authored_at": "2026-06-23T16:58:00Z",
-  "reviewed_head": "92ca131c",
+  "reviewed_head": "92ca131c2e66129cb21decbdfbdd7642381705c9",
   "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, `workflow_run_target_commit_missing`, `version_file_mismatch`, and `package_json_version_mismatch`; next action: align VERSION and package.json with the release target before publishing.",
   "fallback_to": null,
   "findings": [],
@@ -30,6 +30,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved implementation head 92ca131c for merge checkpoint consumption; subsequent carrier/review files are governance evidence for the same issue scope."
+    "reason": "Authored implementation review approved implementation head 92ca131c2e66129cb21decbdfbdd7642381705c9 for merge checkpoint consumption; subsequent carrier/review files are governance evidence for the same issue scope."
   }
 }

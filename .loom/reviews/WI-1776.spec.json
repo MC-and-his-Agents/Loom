@@ -6,7 +6,7 @@
   "summary": "WI-1776 minimal suite is approved for the bounded release readback verdict slice. Scope is limited to verdict taxonomy, package/carrier readback composition, fixture coverage, and short diagnostics; publishing, version bumping, destructive cleanup, and host-safe worktree locator automation remain out of scope.",
   "reviewer": "Codex main controller",
   "authored_at": "2026-06-23T16:58:00Z",
-  "reviewed_head": "92ca131c",
+  "reviewed_head": "92ca131c2e66129cb21decbdfbdd7642381705c9",
   "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` because VERSION/package.json still target 0.20.0 and v0.21.0 release artifacts are missing.",
   "fallback_to": null,
   "findings": [],
@@ -32,6 +32,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored spec review approved the minimal suite and scope boundary for implementation head 92ca131c."
+    "reason": "Authored spec review approved the minimal suite and scope boundary for implementation head 92ca131c2e66129cb21decbdfbdd7642381705c9."
   }
 }

@@ -27,7 +27,7 @@
 | EV-002 | test_evidence | `tools/check_cli_contract.py` | EV-001 and release fixtures | WI-1776 / release-readback surface | present | review / merge-ready / PR gate | Re-run `python3 tools/check_cli_contract.py --surface release-readback` after helper or payload changes. |
 | EV-003 | fixture_evidence | `docs/evidence/fixtures/release-readback-fixtures.json` | published, missing, drifted, blocked, fallback, and no-release scenarios | WI-1776 / release-readback surface | present | contract test / review / #1778 | Validate JSON and contract output after fixture edits. |
 | EV-004 | carrier_evidence | `.loom/status/current.md` | current checkpoint, validation summary, and workspace entry | WI-1776 / current recovery | present | fact-chain / hosted freeze admission / closeout | Refresh carrier and shadow evidence after status changes. |
-| EV-005 | review_evidence | `.loom/reviews/WI-1776.json` | current-head semantic review approval | implementation head `92ca131c` with carrier-only follow-up | present | merge-ready / PR gate | Refresh review after non-carrier implementation changes or validation summary changes. |
+| EV-005 | review_evidence | `.loom/reviews/WI-1776.json` | current-head semantic review approval | implementation head `92ca131c2e66129cb21decbdfbdd7642381705c9` with carrier-only follow-up | present | merge-ready / PR gate | Refresh review after non-carrier implementation changes or validation summary changes. |
 | EV-006 | fresh_verification_input | `.loom/progress/WI-1776.md` | EV-001 EV-002 EV-003 EV-004 EV-005 | WI-1776 / latest validation summary | present | merge-ready / PR gate / closeout | Keep recovery validation summary identical to the review-consumed validation summary after verification updates. |
 
 ## Suite Applicability
