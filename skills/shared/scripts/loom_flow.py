@@ -4631,6 +4631,8 @@ def normalize_checkpoint(raw: str) -> str:
         return "build"
     if "merge checkpoint" in lowered:
         return "merge"
+    if lowered in {"closed", "done", "closed_out", "closed-out", "closed out", "closed checkpoint", "done checkpoint"}:
+        return "closed_out"
     if "retired" in lowered:
         return "retired"
     return lowered.replace(" checkpoint", "").strip()
@@ -6972,7 +6974,7 @@ def replace_markdown_section(path: Path, section_name: str, new_lines: list[str]
 
 def render_status_surface(report: dict[str, Any], runtime_evidence: dict[str, dict[str, Any]]) -> str:
     facts = report["facts"]
-    status_path = report["fact_chain"]["entry_points"]["status_surface"]
+    current_checkpoint = normalize_checkpoint(str(facts["current_checkpoint"]["value"]))
     return (
         "# Current Status\n\n"
         "## Derived Fact Chain View\n\n"
@@ -6985,7 +6987,7 @@ def render_status_surface(report: dict[str, Any], runtime_evidence: dict[str, di
         f"- Review Entry: {facts['review_entry']['value']}\n"
         f"- Validation Entry: {facts['validation_entry']['value']}\n"
         f"- Closing Condition: {facts['closing_condition']['value']}\n"
-        f"- Current Checkpoint: {facts['current_checkpoint']['value']}\n"
+        f"- Current Checkpoint: {current_checkpoint}\n"
         f"- Current Stop: {facts['current_stop']['value']}\n"
         f"- Next Step: {facts['next_step']['value']}\n"
         f"- Blockers: {facts['blockers']['value']}\n"
@@ -9254,11 +9256,12 @@ def render_work_item(data: dict[str, Any]) -> str:
 
 
 def render_recovery_entry(item_id: str, values: dict[str, str]) -> str:
+    current_checkpoint = normalize_checkpoint(values["current_checkpoint"])
     return (
         f"# {item_id} Progress\n\n"
         "## Dynamic Facts\n\n"
         f"- Item ID: {item_id}\n"
-        f"- Current Checkpoint: {values['current_checkpoint']}\n"
+        f"- Current Checkpoint: {current_checkpoint}\n"
         f"- Current Stop: {values['current_stop']}\n"
         f"- Next Step: {values['next_step']}\n"
         f"- Blockers: {values['blockers']}\n"
@@ -12783,7 +12786,7 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
         "review_entry": str(work_item["review_entry"]),
         "validation_entry": str(work_item["validation_entry"]),
         "closing_condition": str(work_item["closing_condition"]),
-        "current_checkpoint": recovery_entry["current_checkpoint"],
+        "current_checkpoint": normalize_checkpoint(str(recovery_entry["current_checkpoint"])),
         "current_stop": recovery_entry["current_stop"],
         "next_step": recovery_entry["next_step"],
         "blockers": recovery_entry["blockers"],
@@ -12793,6 +12796,8 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
     }
     for field_name, expected_value in expected_status.items():
         actual_value = status_values.get(field_name)
+        if field_name == "current_checkpoint":
+            actual_value = normalize_checkpoint(str(actual_value or ""))
         if actual_value != expected_value:
             errors.append(
                 "status surface mismatch for "
@@ -13204,7 +13209,7 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
         },
         "recovery": {
             "path": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
-            "current_checkpoint": context["current_checkpoint_raw"],
+            "current_checkpoint": context["current_checkpoint"],
             "current_stop": context["current_stop"],
             "next_step": context["next_step"],
             "latest_validation_summary": context["latest_validation_summary"],
@@ -14607,7 +14612,7 @@ def carrier_refresh_payload(
 
 def terminal_state_from_checkpoint(checkpoint: str) -> str | None:
     normalized = normalize_checkpoint(checkpoint)
-    if normalized in {"closed", "done"}:
+    if normalized == "closed_out":
         return "closed_out"
     if normalized == "merged":
         return "merged"
@@ -25741,7 +25746,7 @@ def handle_recovery(args: argparse.Namespace) -> int:
 
     for field_name, value in provided.items():
         if field_name == "current_checkpoint":
-            value = normalize_checkpoint(value) if value.strip().lower() == "retired" else value
+            value = normalize_checkpoint(value)
         update_markdown_bullet(context["recovery_path"], RECOVERY_FIELD_LABELS[field_name], value)
 
     refreshed, refresh_errors = sync_status_surface(target_root, args.output, runtime_evidence)
@@ -26018,7 +26023,7 @@ def handle_work_item(args: argparse.Namespace) -> int:
                 render_recovery_entry(
                     args.item,
                     {
-                        "current_checkpoint": "admission checkpoint",
+                        "current_checkpoint": "admission",
                         "current_stop": "Work item scaffolded and waiting for the first execution pass.",
                         "next_step": "Write the first recovery update for this work item.",
                         "blockers": "None recorded.",
