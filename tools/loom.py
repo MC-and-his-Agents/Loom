@@ -5289,14 +5289,21 @@ def ship_checkout_status(target: Path) -> dict[str, Any]:
     head = git_head_sha_for_target(target)
     origin_main, origin_error = ship_git_read(target, ["rev-parse", "origin/main"])
     dirty, dirty_error = ship_git_read(target, ["status", "--short"])
+    stale = False
+    ancestry_error = None
+    if head and origin_main and head != origin_main:
+        completed = run_capture(["git", "-C", str(target), "merge-base", "--is-ancestor", head, origin_main], cwd=target)
+        stale = completed.returncode == 0
+        if completed.returncode not in (0, 1):
+            ancestry_error = completed.stderr.strip() or completed.stdout.strip() or "git merge-base --is-ancestor failed"
     return {
         "branch": branch,
         "head_sha": head,
         "origin_main": origin_main,
-        "stale_against_origin_main": bool(head and origin_main and head != origin_main),
+        "stale_against_origin_main": stale,
         "dirty": bool(dirty),
         "dirty_paths": dirty.splitlines() if dirty else [],
-        "errors": [error for error in [origin_error, dirty_error] if error],
+        "errors": [error for error in [origin_error, dirty_error, ancestry_error] if error],
     }
 
 

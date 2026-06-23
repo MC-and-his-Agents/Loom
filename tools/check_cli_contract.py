@@ -918,6 +918,8 @@ def assert_ship_status_preflight_contract(tmp: Path) -> None:
     def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "-C"] and args[3:] == ["rev-parse", "origin/main"]:
             return subprocess.CompletedProcess(args=args, returncode=0, stdout="b" * 40 + "\n", stderr="")
+        if args[:2] == ["git", "-C"] and args[3:6] == ["merge-base", "--is-ancestor", "a" * 40]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
         if args[:2] == ["git", "-C"] and args[3:] == ["status", "--short"]:
             return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
         if args[:2] == ["git", "-C"] and args[3:] == ["rev-list", "-n", "1", "v0.21.0"]:
