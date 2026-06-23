@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1777.json
 - Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface ship-wrapper`; live `loom.py ship preflight` read-only smoke.
 - Closing Condition: PR merged and issue #1777 closed with ship preflight/status evidence consumed by #1775.
-- Current Checkpoint: merge
-- Current Stop: PR #1779 is open for #1777, local validation is passing, and merge-ready readback passes locally after the WI-1714 terminal carrier repair.
-- Next Step: Push the current head, refresh PR metadata/readback to the pushed head, wait for hosted checks, merge PR #1779, then close out #1777 before #1775 begins.
+- Current Checkpoint: merged
+- Current Stop: PR #1779 merged at 7b6ea7ff187c86ea2aa15339a46223af4a1970fb and issue #1777 closed at 2026-06-23T15:38:42Z.
+- Next Step: None; WI-1777 is terminal and #1775 can consume the shipped `ship preflight/status` surface.
 - Blockers: none
 - Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1777-ship-preflight-status`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface ship-wrapper; python3 tools/loom.py suite validate --target . --item WI-1777 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1777 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1777 --json; python3 tools/loom.py fact-chain --target . --item WI-1777 --json; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py help --json | rg -n 'ship status|ship preflight|ship"'; python3 tools/loom.py ship preflight --target . --item WI-1777 --issue 1777 --milestone 18 --version v0.21.0 --package @mc-and-his-agents/loom --json --full-output. 2026-06-23 readback confirmed WI-1714 is terminal after changing `.loom/progress/WI-1714.md` checkpoint from non-terminal `closeout` to canonical terminal `merged`.
 - Recovery Boundary: WI-1777 owns ship status/preflight readback, diagnostics, its spec/review/shadow carriers, and the WI-1714 terminal carrier repair required to unblock hosted purity only; it does not implement closeout sync, release verdict, merge fallback, publishing, or any new #1714 behavior.
