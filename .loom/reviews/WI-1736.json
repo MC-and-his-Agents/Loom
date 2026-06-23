@@ -3,28 +3,15 @@
   "item_id": "WI-1736",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1736 current-head review allows the carrier refresh apply readback fix: runtime and generated copies recompute post-apply refresh state, expose fixed versus remaining refresh entries, preserve dry-run behavior, and sync plugin payload hash plus minimal suite evidence without implementing ship repair-chain orchestration or review/closeout policy changes.",
+  "summary": "WI-1736 current-head review allows the carrier refresh readback fix after merging v0.19.0 and WI-1735 closeout baseline: runtime changes remain scoped to carrier refresh apply/readback semantics, generated mirrors, plugin payload metadata, focused regression, and WI-1736 carriers.",
   "reviewer": "Codex main controller",
-  "authored_at": "2026-06-22T18:02:17Z",
-  "reviewed_head": "116a5ee90e1183fb35baa3c70a3f8af8b5329dd3",
-  "reviewed_validation_summary": "2026-06-23 local validation passed at head 116a5ee90e1183fb35baa3c70a3f8af8b5329dd3: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1736 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1736 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1736 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1736.",
+  "authored_at": "2026-06-23T03:50:23Z",
+  "reviewed_head": "8dab458386c20faa457cc9a662aa3a5d2e2a3a45",
+  "reviewed_validation_summary": "2026-06-23 local validation passed after merging origin/main: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/stamp_plugin_payload_metadata.py --source-git-sha unreleased --write --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1736 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1736 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1736 --json; CODEX_EXPORT_GH_TOKEN=1 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1736; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking.",
   "fallback_to": null,
-  "findings": [
-    {
-      "id": "compat-follow-up-1",
-      "summary": "#1739 consumes this fixed carrier refresh primitive in the ship pre-repair chain.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    }
-  ],
+  "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "#1739 consumes this fixed carrier refresh primitive in the ship pre-repair chain."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1736.md",
     "recovery_entry": ".loom/progress/WI-1736.md",
