@@ -3,11 +3,11 @@
   "item_id": "WI-1778",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1778 implementation review allows the v0.21.0 release candidate: VERSION/package.json are aligned to 0.21.0, plugin payload metadata/hash matches the candidate, release readiness evidence names the completed #1774 tree, and WI-1778 status/progress/shadow carriers are internally consistent. No product code behavior is changed in this release closeout PR beyond publishing already merged functionality.",
+  "summary": "WI-1778 final closeout review allows carrier-only closeout head b2aa10941be2a1a71a2c1a143bf29ed3a25f09fa: it only records release closeout readback after PR #1788 merge, v0.21.0 tag/GitHub Release/npm publication, #1778/#1774 closure, and milestone #18 closure; no implementation or release surface changes.",
   "reviewer": "codex-main-controller",
-  "authored_at": "2026-06-23T18:28:55Z",
-  "reviewed_head": "e6c158c4523e6fbcc7e077c8fbac2375a422cbae",
-  "reviewed_validation_summary": "2026-06-23 release candidate validation passed on branch `work/1778-v021-release-closeout`: git diff --check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; npm pack --dry-run --json --ignore-scripts; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --fixture-group ship-wrapper; python3 tools/loom.py suite validate/evidence/carrier --target . --item WI-1778 --json; python3 tools/loom.py fact-chain --target . --item WI-1778 --json; python3 tools/loom_flow.py state-check --target . --item WI-1778; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking. Live release readback for v0.21.0 returned verdict `missing` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_target_commit_missing`, confirming the publish path is still unoccupied while package surface is aligned.",
+  "authored_at": "2026-06-23T18:48:06Z",
+  "reviewed_head": "b2aa10941be2a1a71a2c1a143bf29ed3a25f09fa",
+  "reviewed_validation_summary": "2026-06-23 post-merge release readback passed at release merge commit a1867d5744794a53bd994bbb9b31244accb871f0: `loom.py release readback --version v0.21.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit a1867d5744794a53bd994bbb9b31244accb871f0 --release-judgment release_required --json` classified published; tag v0.21.0 points to the merge commit; GitHub Release v0.21.0 published at 2026-06-23T18:42:31Z; npm readback returned @mc-and-his-agents/loom@0.21.0 with latest dist-tag 0.21.0; loom-cli-release run 28048511623 completed successfully; #1778 and parent #1774 closed at 2026-06-23T18:44:56Z; milestone #18 readback returned closed with open_issues=0; terminal carrier, fact-chain, suite carrier, shadow parity, and diff check passed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current release candidate head for merge checkpoint consumption."
+    "reason": "Authored final closeout review approved the carrier-only terminal readback head for closeout gate consumption."
   }
 }
