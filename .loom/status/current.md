@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1775.json
 - Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface closeout-wrapper`; closeout sync/status smoke.
 - Closing Condition: PR merged and issue #1775 closed with closeout sync evidence consumed by #1776.
-- Current Checkpoint: implementation
+- Current Checkpoint: build
 - Current Stop: `closeout status` / `closeout sync` implementation and closeout-wrapper contract coverage are in progress on branch `work/1775-closeout-sync`.
 - Next Step: Validate WI-1775 suite/fact-chain/shadow, create PR, stabilize PR metadata, and merge after hosted checks pass.
 - Blockers: none
