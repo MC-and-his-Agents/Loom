@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1775.json
 - Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface closeout-wrapper`; closeout sync/status smoke.
 - Closing Condition: PR merged and issue #1775 closed with closeout sync evidence consumed by #1776.
-- Current Checkpoint: merge
-- Current Stop: PR #1781 metadata, review evidence, and hosted merge gate are being stabilized for branch `work/1775-closeout-sync`.
-- Next Step: Wait for hosted checks to consume PR head 859c5ef6daeb8c0cf1454b851cf7b0a8f6689c47, then merge PR #1781 and run closeout sync.
-- Blockers: none
+- Current Checkpoint: closed_out
+- Current Stop: WI-1775 closed out by closeout run: PR #1781 merged at 2be1d62b314340c2e3a2aca49d669e858f23f34e, issue #1775 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1775 implementation work remains.
+- Blockers: None recorded.
 - Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1775-closeout-sync`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/loom.py suite validate --target . --item WI-1775 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1775 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1775 --json; python3 tools/loom.py fact-chain --target . --item WI-1775 --json; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py help --json | rg -n 'closeout status|closeout sync|closeout run|closeout"'; python3 tools/loom.py closeout status --target . --item WI-1777 --issue 1777 --pr 1779 --branch work/1777-ship-preflight-status --head-sha c16c3e93c915574bff17629df8bc90a3e7c903d4 --skip-metadata --json --full-output. 2026-06-23 readback without --skip-metadata on historical PR #1779 produced the expected metadata-readback blocker because #1779 predates closeout-surface machine metadata.
 - Recovery Boundary: WI-1775 owns closeout status/sync readback, PR metadata race stabilization before closeout consumption, terminal cleanup readback, its spec/review/status carriers, and targeted closeout-wrapper regression coverage only. It does not implement release readback verdicts, publishing, automatic branch deletion, worktree deletion, or new release closeout behavior.
-- Current Lane: closeout-sync
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
