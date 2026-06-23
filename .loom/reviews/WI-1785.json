@@ -6,7 +6,7 @@
   "summary": "WI-1785 makes the hosted PR merge gate pass the PR body-declared closeout surface into the existing pr-gate checker. The change is narrow, keeps merge_ready as the default fallback, and leaves release readback, closeout carrier writeback, and cleanup behavior unchanged.",
   "reviewer": "Codex main controller",
   "authored_at": "2026-06-23T17:33:00Z",
-  "reviewed_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
+  "reviewed_head": "fede10f1294269c0bd13b7e9b9a580d678ff6d0c",
   "reviewed_validation_summary": "2026-06-23 WI-1785 closeout readback: PR #1786 merged at 2026-06-23T17:42:20Z with merge commit 24c1eb6a2a1889bf771d5da92a571c4c4b54b40e; issue #1785 closed at 2026-06-23T17:44:52Z; PR metadata readback surface closeout passed; closeout status passed; carrier closeout-sync wrote closed_out metadata. Hosted #1786 checks passed before merge: loom-pr-merge-gate, loom-check, node-installer-pr, py-compile, demo-bootstrap, repo-local-cli, root-self-governance.",
   "fallback_to": null,
   "findings": [],
@@ -29,30 +29,16 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored review approves the hosted workflow surface inference implementation at f18f62b3f9de819139b7bb28886c8ad211e4800f; subsequent review carrier updates are evidence-only."
+    "reason": "Authored implementation review approved the hosted workflow surface inference at f18f62b3f9de819139b7bb28886c8ad211e4800f; this closeout review also consumes terminal carrier commit fede10f1294269c0bd13b7e9b9a580d678ff6d0c."
   },
   "head_binding": {
-    "reviewed_head": "f18f62b3f9de819139b7bb28886c8ad211e4800f",
-    "current_head": "24c1eb6a2a1889bf771d5da92a571c4c4b54b40e",
-    "status": "carrier-only",
+    "reviewed_head": "fede10f1294269c0bd13b7e9b9a580d678ff6d0c",
+    "current_head": "fede10f1294269c0bd13b7e9b9a580d678ff6d0c",
+    "status": "fresh",
     "stale": false,
-    "changed_paths": [
-      ".loom/progress/WI-1785.md",
-      ".loom/reviews/WI-1785.json",
-      ".loom/shadow/closeout-loom.json",
-      ".loom/shadow/merge-ready-loom.json",
-      ".loom/specs/WI-1785/task-carrier.md",
-      ".loom/status/current.md"
-    ],
+    "changed_paths": [],
     "disallowed_paths": [],
-    "carrier_only_paths": [
-      ".loom/progress/WI-1785.md",
-      ".loom/reviews/WI-1785.json",
-      ".loom/shadow/closeout-loom.json",
-      ".loom/shadow/merge-ready-loom.json",
-      ".loom/specs/WI-1785/task-carrier.md",
-      ".loom/status/current.md"
-    ],
+    "carrier_only_paths": [],
     "generated_only_paths": [],
     "generated_only_validation_actions": [],
     "semantic_drift_paths": []
