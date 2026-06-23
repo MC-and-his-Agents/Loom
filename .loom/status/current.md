@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1738
-- Goal: 让 ship 自动推断 branch、head SHA 与 target branch
-- Scope: Issue #1738: `loom ship` infers missing host bindings from explicit inputs, PR readback, and current checkout state, then passes the effective bindings to metadata preflight, PR gate, controlled merge, and host-only closeout.
-- Execution Path: issue #1738 -> branch work/1738-ship-inference -> PR pending -> controlled merge -> closeout
+- Item ID: WI-1740
+- Goal: 实现 review stale 分级与 generated-only drift 判定
+- Scope: Issue #1740: classify post-review head drift as carrier-only, generated-only, carrier-and-generated-only, implementation-drift-only, or stale so generated drift does not create full semantic review friction while source and behavior drift still fail closed.
+- Execution Path: issue #1740 -> branch work/1740-review-freshness -> PR pending -> controlled merge -> closeout
 - Workspace Entry: .loom/..
-- Recovery Entry: .loom/progress/WI-1738.md
-- Review Entry: .loom/reviews/WI-1738.json
-- Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper
-- Closing Condition: PR merged and issue #1738 closed with ship binding inference evidence.
-- Current Checkpoint: closeout
-- Current Stop: WI-1738 implementation PR #1762 merged, issue #1738 closed, and terminal closeout metadata recorded.
-- Next Step: Merge WI-1738 closeout carrier sync PR, then continue dependent issue #1739.
+- Recovery Entry: .loom/progress/WI-1740.md
+- Review Entry: .loom/reviews/WI-1740.json
+- Validation Entry: git diff --check; python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py
+- Closing Condition: PR merged and issue #1740 closed with review freshness classification evidence.
+- Current Checkpoint: merge
+- Current Stop: WI-1740 review freshness classifier, generated-only validation actions, runtime copies, plugin payload hash, demo bootstrap generated fixture sync, focused pr-metadata regression, spec review, and implementation review are ready for PR gate.
+- Next Step: Push updated work/1740-review-freshness head for PR #1764, wait for hosted checks, then merge and close out issue #1740.
 - Blockers: None recorded.
-- Latest Validation Summary: Post-merge closeout evidence on 2026-06-23: PR #1762 merged at d10f421aaed781471b0f590e78163016b8be8e0f; issue #1738 closed at 2026-06-23T05:18:53Z; carrier closeout-sync recorded terminal metadata; implementation PR hosted checks passed for head 786c1d43f377ed54d880d7cff82e4982f1bf7142.
-- Recovery Boundary: WI-1738 owns `loom ship` binding inference behavior, its CLI contract regression, and WI-1738 fact-chain/review/shadow evidence only.
-- Current Lane: ship-inference
+- Latest Validation Summary: 2026-06-23 local validation passed: git diff --check; python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; python3 tools/stamp_plugin_payload_metadata.py --source-git-sha unreleased --write --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json; suite validate/evidence/carrier validate for WI-1740; spec review and implementation review allow records; checkpoint merge pass; carrier refresh --apply readback remaining_refresh=[]; shadow-parity all blocking passed.
+- Recovery Boundary: WI-1740 owns review head binding freshness classification, generated-only drift diagnostics, focused regression coverage, and WI-1740 readiness carriers only.
+- Current Lane: review-freshness
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1738.md
-- Dynamic Truth: .loom/progress/WI-1738.md
+- Static Truth: .loom/work-items/WI-1740.md
+- Dynamic Truth: .loom/progress/WI-1740.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

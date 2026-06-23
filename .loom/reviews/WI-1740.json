@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1740",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Review freshness classification accepts carrier-only, generated-only, and carrier-and-generated-only drift without full semantic rereview while source and behavior drift remain stale blockers.",
+  "reviewer": "Codex main controller",
+  "authored_at": "2026-06-23T06:40:47Z",
+  "reviewed_head": "2b0a8f549feadc4258869167b0fd54dbe3c29afe",
+  "reviewed_validation_summary": "2026-06-23 local validation passed: git diff --check; python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; python3 tools/stamp_plugin_payload_metadata.py --source-git-sha unreleased --write --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json; suite validate/evidence/carrier validate for WI-1740; spec review and implementation review allow records; checkpoint merge pass; carrier refresh --apply readback remaining_refresh=[]; shadow-parity all blocking passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1740.md",
+    "recovery_entry": ".loom/progress/WI-1740.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1740-review-freshness/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-WI-1740-review-freshness --item WI-1740 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-WI-1740-review-freshness/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-WI-1740-review-freshness --item WI-1740 --json",
+    "suite_evidence_map": ".loom/specs/WI-1740/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1740/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
