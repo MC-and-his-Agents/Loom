@@ -6,7 +6,7 @@
 - Goal: 让 ship 自动推断 branch、head SHA 与 target branch
 - Scope: Issue #1738: `loom ship` infers missing host bindings from explicit inputs, PR readback, and current checkout state, then passes the effective bindings to metadata preflight, PR gate, controlled merge, and host-only closeout.
 - Execution Path: issue #1738 -> branch work/1738-ship-inference -> PR pending -> controlled merge -> closeout
-- Workspace Entry: /Users/mc/dev/Loom-WI-1738-ship-inference
+- Workspace Entry: .loom/..
 - Recovery Entry: .loom/progress/WI-1738.md
 - Review Entry: .loom/reviews/WI-1738.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper
