@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1785
-- Goal: 修复 closeout PR hosted gate surface 推断。
-- Scope: Issue #1785: make the hosted `loom-pr-merge-gate` consume PR metadata surface `closeout` when the PR body machine carrier declares it, while keeping ordinary PRs on `merge_ready`. Ownership is limited to `.github/workflows/pr-merge-gate.yml`, WI-1785 carriers, `.loom/specs/WI-1785`, and `.loom/reviews/WI-1785*.json`.
-- Execution Path: issue #1785 -> branch work/1785-closeout-gate-surface -> PR pending -> controlled merge -> closeout.
+- Item ID: WI-1776
+- Goal: 实现 `loom release readback` / `loom release resume` 的发布读回 verdict 与短诊断。
+- Scope: Issue #1776: combine tag commit, GitHub Release, npm package/dist-tag, release workflow, package surface, carrier terminal state, and controlled-merge fallback readback into a release closeout verdict: `published`, `missing`, `drifted`, or `blocked`. Ownership is limited to `tools/loom.py`, `tools/check_cli_contract.py`, release-readback fixtures, WI-1776 carriers, `.loom/specs/WI-1776`, and `.loom/reviews/WI-1776*.json`.
+- Execution Path: issue #1776 -> branch work/1776-release-readback-verdict -> PR pending -> controlled merge -> closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1785.md
-- Review Entry: .loom/reviews/WI-1785.json
-- Validation Entry: `git diff --check`; workflow syntax/readback smoke; `loom pr gate --surface closeout` regression against #1784 body; suite/fact-chain/shadow checks.
-- Closing Condition: PR merged and issue #1785 closed, then #1784 hosted merge gate rerun passes with closeout metadata.
+- Recovery Entry: .loom/progress/WI-1776.md
+- Review Entry: .loom/reviews/WI-1776.json
+- Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface release-readback`; live `loom release readback` v0.21.0 dry-run.
+- Closing Condition: PR merged and issue #1776 closed with release readback verdict evidence consumed by #1778.
 - Current Checkpoint: closed_out
-- Current Stop: WI-1785 closed out after PR #1786 merged at 24c1eb6a2a1889bf771d5da92a571c4c4b54b40e and issue #1785 closed at 2026-06-23T17:44:52Z.
-- Next Step: Return to #1776 closeout PR #1784, update it onto main so hosted closeout gate consumes the workflow surface fix, then continue #1778 release closeout.
+- Current Stop: WI-1776 closed out by closeout run: PR #1783 merged at 2cb05e1ecd9f33bac024005e16caf3070cd1581a, issue #1776 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1776 implementation work remains.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 WI-1785 closeout readback: PR #1786 merged at 2026-06-23T17:42:20Z with merge commit 24c1eb6a2a1889bf771d5da92a571c4c4b54b40e; issue #1785 closed at 2026-06-23T17:44:52Z; PR metadata readback surface closeout passed; closeout status passed; carrier closeout-sync wrote closed_out metadata. Hosted #1786 checks passed before merge: loom-pr-merge-gate, loom-check, node-installer-pr, py-compile, demo-bootstrap, repo-local-cli, root-self-governance.
-- Recovery Boundary: WI-1785 terminal closeout only consumes PR #1786 and issue #1785 facts. It does not change release readback verdicts, #1776 implementation facts, #1784 carrier content beyond later consumption, or #1778 release behavior.
-- Current Lane: closeout-gate-surface
+- Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, `workflow_run_target_commit_missing`, `version_file_mismatch`, and `package_json_version_mismatch`; next action: align VERSION and package.json with the release target before publishing.
+- Recovery Boundary: WI-1776 owns release readback verdict classification and fixture coverage only. It does not publish, tag, create GitHub Releases, bump versions for v0.21.0, mutate closeout carriers, or implement automatic host-safe worktree locator generation.
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-23 WI-1785 implementation started in repo-relative workspace `.` on branch `work/1785-closeout-gate-surface`.
-- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1785.md`.
-- Diagnostics Entry: #1784 local `loom pr gate --surface closeout` passes, while hosted gate without surface blocks terminal closeout PRs.
-- Verification Entry: diff check, py compile, local workflow surface inference smoke, suite/fact-chain/shadow checks.
-- Lane Entry: closeout-gate-surface
+- Run Entry: 2026-06-23 WI-1776 implementation started in repo-relative workspace `.` on branch `work/1776-release-readback-verdict`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1776.md`.
+- Diagnostics Entry: `loom release readback` / `loom release resume` emit verdict, blocked, gaps, and next_action diagnostics for release closeout readback.
+- Verification Entry: py compile, release-readback contract, JSON fixture validation, live v0.21.0 dry-run readback, and diff check passed.
+- Lane Entry: release-readback-verdict
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1785.md
-- Dynamic Truth: .loom/progress/WI-1785.md
+- Static Truth: .loom/work-items/WI-1776.md
+- Dynamic Truth: .loom/progress/WI-1776.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
