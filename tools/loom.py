@@ -237,7 +237,21 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "scenario",
         "status": "implemented",
         "json": True,
-        "summary": "Check closeout readiness; host closeout sync remains separate from local retire and carrier closeout-sync.",
+        "summary": "Check closeout readiness; bare `loom closeout` remains a compatibility alias for closeout check.",
+    },
+    {
+        "command": "closeout status",
+        "domain": "scenario",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read closeout metadata, host reconciliation, carrier terminal state, and cleanup status with a short diagnostic.",
+    },
+    {
+        "command": "closeout sync",
+        "domain": "scenario",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan or apply PR metadata readback, host reconciliation, terminal carrier sync, and cleanup readback.",
     },
     {
         "command": "closeout run",
@@ -5968,6 +5982,315 @@ def closeout_run_next_action(*, apply: bool, blocking_step: dict[str, Any] | Non
     return f"Resolve blocked step `{blocking_step.get('name')}` before rerunning closeout run."
 
 
+def closeout_sync_step(name: str, payload: dict[str, Any], *, mutates: bool = False) -> dict[str, Any]:
+    return {
+        "name": name,
+        "result": payload.get("result"),
+        "summary": payload.get("summary"),
+        "missing_inputs": payload.get("missing_inputs", []),
+        "fallback_to": payload.get("fallback_to"),
+        "mutates": mutates,
+        "payload": payload,
+    }
+
+
+def closeout_sync_blocker(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for step in steps:
+        if step.get("result") == "block":
+            return step
+    return None
+
+
+def closeout_metadata_artifact(target: Path, args: argparse.Namespace, suffix: str) -> str:
+    item = args.item or "closeout"
+    pr = closeout_current_pr_input(args) or args.pr or "pr"
+    safe_item = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(item)).strip("-") or "closeout"
+    safe_pr = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(pr)).strip("-") or "pr"
+    return f".loom/runtime/pr/{safe_item}-{safe_pr}-closeout-{suffix}.md"
+
+
+def add_closeout_metadata_args(flow_args: list[str], args: argparse.Namespace, target: Path, *, include_output: bool = False, include_readback: bool = False) -> None:
+    for flag, value in (
+        ("--pr", closeout_current_pr_input(args) or args.pr),
+        ("--item", args.item),
+        ("--issue", args.issue),
+        ("--head-sha", getattr(args, "head_sha", None)),
+        ("--branch", args.branch),
+        ("--pr-payload-file", args.pr_payload_file),
+    ):
+        if value is not None:
+            flow_args.extend([flag, str(value)])
+    if include_output:
+        flow_args.extend(["--output-file", closeout_metadata_artifact(target, args, "rendered")])
+    if include_readback:
+        flow_args.extend(["--readback-file", closeout_metadata_artifact(target, args, "readback")])
+
+
+def closeout_metadata_readback_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+    if closeout_current_pr_input(args) is None and args.pr is None:
+        return {
+            "command": "closeout metadata-readback",
+            "result": "not_applicable",
+            "summary": "PR metadata readback was skipped because no PR binding was provided.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    flow_args = ["pr-metadata", "readback", "--target", str(target), "--surface", "closeout"]
+    add_closeout_metadata_args(flow_args, args, target, include_readback=True)
+    return flow_payload(
+        "closeout sync",
+        flow_args,
+        fallback_to=["loom pr metadata-update <pr> --surface closeout --item <id> --head-sha <sha> --apply --json"],
+    )
+
+
+def closeout_metadata_update_payload(args: argparse.Namespace, target: Path, *, apply: bool) -> dict[str, Any]:
+    flow_args = ["pr-metadata", "update", "--target", str(target), "--surface", "closeout"]
+    add_closeout_metadata_args(flow_args, args, target, include_output=True, include_readback=True)
+    flow_args.append("--apply" if apply else "--dry-run")
+    return flow_payload(
+        "closeout sync",
+        flow_args,
+        fallback_to=["loom pr metadata-render --surface closeout --item <id> --json", "loom pr metadata-readback <pr> --surface closeout --json"],
+    )
+
+
+def parse_git_worktree_porcelain(raw: str) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in raw.splitlines():
+        if not line.strip():
+            if current:
+                entries.append(current)
+                current = {}
+            continue
+        key, _, value = line.partition(" ")
+        if key:
+            current[key] = value.strip()
+    if current:
+        entries.append(current)
+    return entries
+
+
+def closeout_terminal_cleanup_payload(target: Path, args: argparse.Namespace) -> dict[str, Any]:
+    branch = args.branch
+    checks: list[dict[str, Any]] = []
+    cleanup_actions: list[str] = []
+    missing_inputs: list[str] = []
+    blocking = False
+
+    worktree_result = run_capture(["git", "worktree", "list", "--porcelain"], cwd=target)
+    worktrees: list[dict[str, str]] = []
+    if worktree_result.returncode == 0:
+        worktrees = parse_git_worktree_porcelain(worktree_result.stdout)
+    else:
+        missing_inputs.append(worktree_result.stderr.strip() or "git worktree list failed")
+        blocking = True
+
+    if branch:
+        branch_ref = f"refs/heads/{branch}"
+        matching_worktrees = [entry for entry in worktrees if entry.get("branch") == branch_ref]
+        if matching_worktrees:
+            for entry in matching_worktrees:
+                path = entry.get("worktree")
+                if path:
+                    cleanup_actions.append(f"git worktree remove {path}")
+            checks.append({"id": "issue_worktree", "result": "warn", "branch": branch, "worktrees": matching_worktrees})
+        else:
+            checks.append({"id": "issue_worktree", "result": "pass", "branch": branch, "worktrees": []})
+
+        local_branch = run_capture(["git", "show-ref", "--verify", f"refs/heads/{branch}"], cwd=target)
+        if local_branch.returncode == 0:
+            cleanup_actions.append(f"git branch -d {branch}")
+            checks.append({"id": "local_branch", "result": "warn", "branch": branch})
+        else:
+            checks.append({"id": "local_branch", "result": "pass", "branch": branch})
+
+        remote_branch = run_capture(["git", "show-ref", "--verify", f"refs/remotes/origin/{branch}"], cwd=target)
+        if remote_branch.returncode == 0:
+            cleanup_actions.append(f"git push origin --delete {branch}")
+            checks.append({"id": "remote_branch", "result": "warn", "branch": f"origin/{branch}"})
+        else:
+            checks.append({"id": "remote_branch", "result": "pass", "branch": f"origin/{branch}"})
+    else:
+        checks.append({"id": "branch_cleanup", "result": "not_applicable", "summary": "No branch binding was provided."})
+
+    main_worktree = next((entry.get("worktree") for entry in worktrees if entry.get("branch") == "refs/heads/main"), None)
+    if main_worktree:
+        dirty = run_capture(["git", "-C", main_worktree, "status", "--short"], cwd=target)
+        if dirty.returncode != 0:
+            missing_inputs.append(dirty.stderr.strip() or "main worktree dirty-state readback failed")
+            blocking = True
+            checks.append({"id": "main_worktree_dirty", "result": "block", "worktree": main_worktree})
+        elif dirty.stdout.strip():
+            missing_inputs.append("main worktree has uncommitted changes")
+            blocking = True
+            checks.append({"id": "main_worktree_dirty", "result": "block", "worktree": main_worktree, "status": dirty.stdout.strip().splitlines()})
+        else:
+            checks.append({"id": "main_worktree_dirty", "result": "pass", "worktree": main_worktree})
+    else:
+        checks.append({"id": "main_worktree_dirty", "result": "not_applicable", "summary": "No local main worktree was found in git worktree list."})
+
+    cleanup_actions = list(dict.fromkeys(cleanup_actions))
+    cleanup_needed = bool(cleanup_actions)
+    result = "block" if blocking else ("warn" if cleanup_needed else "pass")
+    verdict = "blocked" if blocking else ("cleanup_needed" if cleanup_needed else "clean_terminal")
+    next_action = (
+        "Resolve main worktree dirty state or unreadable git cleanup inputs before deleting branches."
+        if blocking
+        else ("; ".join(cleanup_actions) if cleanup_needed else "No terminal cleanup action required.")
+    )
+    return {
+        "schema_version": "loom-closeout-terminal-cleanup/v1",
+        "command": "closeout cleanup-check",
+        "result": result,
+        "verdict": verdict,
+        "summary": "terminal cleanup readback found cleanup actions." if cleanup_needed else "terminal cleanup readback is clean.",
+        "missing_inputs": missing_inputs,
+        "fallback_to": next_action if result == "block" else None,
+        "branch": branch,
+        "checks": checks,
+        "cleanup_actions": cleanup_actions,
+        "next_action": next_action,
+        "mutates": False,
+    }
+
+
+def closeout_sync_diagnostic(*, operation: str, apply: bool, steps: list[dict[str, Any]]) -> dict[str, Any]:
+    blocker = closeout_sync_blocker(steps)
+    cleanup_step = next((step for step in steps if step.get("name") == "terminal-cleanup-check"), None)
+    cleanup_payload = cleanup_step.get("payload") if isinstance(cleanup_step, dict) and isinstance(cleanup_step.get("payload"), dict) else {}
+    fixed = operation == "sync" and apply and blocker is None
+    if blocker is not None:
+        fallback = blocker.get("fallback_to")
+        next_action = fallback if isinstance(fallback, str) else (fallback[0] if isinstance(fallback, list) and fallback else f"Resolve `{blocker.get('name')}` before rerunning closeout sync.")
+    elif cleanup_payload.get("result") == "warn":
+        next_action = str(cleanup_payload.get("next_action") or "Run terminal cleanup actions after confirming no user work remains.")
+    elif operation == "sync" and not apply:
+        next_action = "Review the dry-run plan, then rerun `loom closeout sync --apply` when host and carrier mutations are acceptable."
+    else:
+        next_action = "Closeout sync is terminal; proceed to the next dependent Work Item."
+    return {
+        "blocked": blocker is not None,
+        "fixed": fixed,
+        "next_action": next_action,
+        "first_blocker": blocker.get("name") if blocker else None,
+        "cleanup_verdict": cleanup_payload.get("verdict") if isinstance(cleanup_payload, dict) else None,
+    }
+
+
+def build_closeout_sync_parser(prog: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=prog)
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item", required=True)
+    parser.add_argument("--issue", type=int, required=True)
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
+    parser.add_argument("--implementation-pr", type=int)
+    parser.add_argument("--release-pr", type=int)
+    parser.add_argument("--carrier-sync-pr", type=int)
+    parser.add_argument("--final-closeout-pr", type=int)
+    parser.add_argument("--project")
+    parser.add_argument("--phase")
+    parser.add_argument("--fr")
+    parser.add_argument("--branch")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--owner")
+    parser.add_argument("--repo", dest="repo_name")
+    parser.add_argument("--comment")
+    parser.add_argument("--comment-file")
+    parser.add_argument("--goal-completion")
+    parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"), default="auto")
+    parser.add_argument("--issue-payload-file")
+    parser.add_argument("--pr-payload-file")
+    parser.add_argument("--project-payload-file")
+    parser.add_argument("--status-checks-file")
+    parser.add_argument("--branch-protection-file")
+    parser.add_argument("--ruleset-file")
+    parser.add_argument("--skip-gate", action="store_true")
+    parser.add_argument("--skip-metadata", action="store_true")
+    parser.add_argument("--skip-cleanup", action="store_true")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    return parser
+
+
+def handle_closeout_sync(operation: str, argv: list[str]) -> int:
+    parser = build_closeout_sync_parser(f"loom closeout {operation}")
+    args = parser.parse_args(argv)
+    if closeout_current_pr_input(args) is None and args.pr is None:
+        parser.error("--pr or one closeout PR role flag is required")
+    target = resolve_target(args.target)
+    steps: list[dict[str, Any]] = []
+
+    metadata_readback: dict[str, Any] | None = None
+    if args.skip_metadata:
+        metadata_readback = {"command": "closeout metadata-readback", "result": "skipped", "summary": "metadata readback skipped by --skip-metadata", "missing_inputs": [], "fallback_to": None}
+        steps.append(closeout_sync_step("metadata-readback", metadata_readback))
+    else:
+        metadata_readback = closeout_metadata_readback_payload(args, target)
+        steps.append(closeout_sync_step("metadata-readback", metadata_readback))
+        if operation == "sync" and metadata_readback.get("result") == "block":
+            metadata_update = closeout_metadata_update_payload(args, target, apply=args.apply)
+            steps.append(closeout_sync_step("metadata-update", metadata_update, mutates=args.apply))
+            if args.apply and metadata_update.get("result") == "pass":
+                metadata_readback = closeout_metadata_readback_payload(args, target)
+                steps.append(closeout_sync_step("metadata-readback-after-update", metadata_readback))
+                if metadata_readback.get("result") != "block":
+                    for step in steps:
+                        if step.get("name") == "metadata-readback" and step.get("result") == "block":
+                            step["result"] = "fixed"
+                            step["resolved_by"] = "metadata-readback-after-update"
+                            break
+
+    if operation == "status":
+        closeout_args = ["closeout", "check", "--target", str(target)]
+        add_closeout_check_args(closeout_args, args)
+        closeout = flow_payload("closeout status", closeout_args, fallback_to=["loom closeout sync --item <id> --issue <n> --pr <n> --json", "manual-reconciliation"])
+        steps.append(closeout_sync_step("closeout-check", closeout))
+    else:
+        blocker = closeout_sync_blocker(steps)
+        if blocker is None:
+            closeout = run_closeout_payload(args, target)
+            steps.append(closeout_sync_step("closeout-run", closeout, mutates=args.apply))
+
+    if not args.skip_cleanup:
+        cleanup = closeout_terminal_cleanup_payload(target, args)
+        steps.append(closeout_sync_step("terminal-cleanup-check", cleanup))
+
+    blocker = closeout_sync_blocker(steps)
+    result = "pass" if blocker is None else "block"
+    diagnostic = closeout_sync_diagnostic(operation=operation, apply=args.apply, steps=steps)
+    summary = (
+        "closeout sync applied host/repo closeout readback and terminal carrier repair."
+        if operation == "sync" and args.apply and result == "pass"
+        else "closeout sync dry-run produced a readback and repair plan."
+        if operation == "sync"
+        else "closeout status read back closeout, metadata, and cleanup state."
+    )
+    payload = output(
+        f"closeout {operation}",
+        result,
+        schema_version="loom-closeout-sync/v1",
+        summary=summary if result == "pass" else "closeout sync/status stopped at a blocking readback step.",
+        target=str(target),
+        item={"id": args.item},
+        issue={"number": args.issue},
+        pr={"number": closeout_current_pr_input(args) or args.pr},
+        apply=args.apply,
+        dry_run=not args.apply,
+        mutates=operation == "sync" and args.apply,
+        steps=steps,
+        diagnostic=diagnostic,
+        first_blocker=blocker,
+        missing_inputs=blocker.get("missing_inputs", []) if blocker else [],
+        fallback_to=diagnostic["next_action"] if blocker else None,
+        next_action=diagnostic["next_action"],
+    )
+    return emit(agent_safe_payload(payload, full_output=args.full_output))
+
+
 def closeout_run_payload(
     *,
     args: argparse.Namespace,
@@ -9722,6 +10045,8 @@ def main(argv: list[str]) -> int:
     if command == "gate" or command.startswith("gate "):
         gate_args = command.split()[1:] + forwarded if command.startswith("gate ") else forwarded
         return handle_gate(gate_args)
+    if command in {"closeout status", "closeout sync"}:
+        return handle_closeout_sync(command.split()[1], forwarded)
     if command == "closeout run":
         return handle_closeout_run(forwarded)
     if command == "closeout queue status":
