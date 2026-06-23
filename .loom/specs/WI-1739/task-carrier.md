@@ -1,0 +1,5 @@
+# WI-1739 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1739 | Issue #1739 open under milestone #17 / parent FR #1734; branch work/1739-ship-repair-chain; PR pending | in_progress | primary | .loom/work-items/WI-1739.md | .loom/specs/WI-1739/plan.md#phases | .loom/specs/WI-1739/spec.md#acceptance-criteria | .loom/specs/WI-1739/plan.md#validation | .loom/specs/WI-1739/evidence-map.md | Milestone #17 child issue under FR #1734; branch work/1739-ship-repair-chain; worktree /Users/mc/dev/Loom-WI-1739-ship-repair-chain. | Recheck current head SHA, PR metadata, suite evidence, hosted checks, no_release judgment, and merge gate before merge-ready consumption. |
