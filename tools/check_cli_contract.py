@@ -1279,6 +1279,310 @@ def assert_ship_closeout_policy_admission_contract() -> None:
         module.ship_changed_paths_payload = original_changed_paths
 
 
+def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship inline/host-only closeout e2e regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def run_host_only_case(name: str, fields: dict[str, Any], expected_policy: str) -> None:
+        calls.clear()
+        emitted.clear()
+        merge_sha = f"fixture-{name}-merge-sha"
+
+        def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "summary": "metadata ok",
+                    "governance_intensity_carrier": {"envelope": {"fields": fields}},
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                if "--execute" not in flow_args:
+                    raise AssertionError(f"{name} ship --apply must execute controlled merge")
+                return {
+                    "command": "controlled-merge",
+                    "result": "pass",
+                    "summary": "merged",
+                    "pr": {
+                        "number": 1742,
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "mergeCommit": {"oid": merge_sha},
+                    },
+                }
+            if flow_args[:2] == ["reconciliation", "sync"]:
+                if "--apply" not in flow_args:
+                    raise AssertionError(f"{name} host reconciliation must apply after merge")
+                for flag, expected in {"--item": "WI-1742", "--issue": "1742", "--pr": "1742", "--branch": "main"}.items():
+                    if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                        raise AssertionError(f"{name} host reconciliation did not preserve {flag}")
+                return {
+                    "command": "reconciliation",
+                    "result": "pass",
+                    "summary": "issue closed",
+                    "issue": {"number": 1742, "state": "CLOSED"},
+                    "pr": {"number": 1742, "state": "MERGED", "baseRefName": "main", "mergeCommit": {"oid": merge_sha}},
+                }
+            if flow_args[:2] == ["closeout", "check"]:
+                for flag, expected in {"--item": "WI-1742", "--issue": "1742", "--pr": "1742", "--branch": "main"}.items():
+                    if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                        raise AssertionError(f"{name} closeout check did not preserve {flag}")
+                return {
+                    "command": "closeout",
+                    "result": "pass",
+                    "summary": "closeout pass",
+                    "issue": {"number": 1742, "state": "CLOSED"},
+                    "pr": {"number": 1742, "state": "MERGED", "baseRefName": "main", "mergeCommit": {"oid": merge_sha}},
+                    "target_branch": {"name": "main", "contains_merge_commit": True},
+                }
+            raise AssertionError(f"{name} ship apply delegated unexpected flow args: {flow_args}")
+
+        module.flow_payload = host_only_flow_payload
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1742",
+                "--issue",
+                "1742",
+                "--pr",
+                "1742",
+                "--branch",
+                "work/1742-closeout-e2e",
+                "--head-sha",
+                "d" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError(f"{name} ordinary ship --apply fixture did not pass")
+        if emitted.get("creates_closeout_pr") is not False or emitted.get("closeout_mode") != "host_only":
+            raise AssertionError(f"{name} ordinary ship --apply must not create a closeout PR: {emitted}")
+        if emitted.get("target_branch") != "main":
+            raise AssertionError(f"{name} ordinary ship --apply must read back the target branch")
+        expected_sequence = [
+            ["pr-metadata", "update"],
+            ["carrier", "refresh"],
+            ["shadow-parity", "--target"],
+            ["pr-metadata", "preflight"],
+            ["pr-gate", "check"],
+            ["controlled-merge", "check"],
+            ["controlled-merge", "merge"],
+            ["reconciliation", "sync"],
+            ["closeout", "check"],
+        ]
+        if [call[:2] for call in calls] != expected_sequence:
+            raise AssertionError(f"{name} host-only e2e delegated unexpected sequence: {[call[:2] for call in calls]}")
+        closeout_policy = emitted.get("closeout_policy") if isinstance(emitted.get("closeout_policy"), dict) else {}
+        if closeout_policy.get("policy") != expected_policy:
+            raise AssertionError(f"{name} closeout policy drifted: {closeout_policy}")
+        step_names = [step.get("name") for step in emitted.get("steps", []) if isinstance(step, dict)]
+        if "host-reconciliation-sync" not in step_names or "host-closeout-check" not in step_names:
+            raise AssertionError(f"{name} ship --apply must consume host reconciliation and closeout check")
+        closeout_steps = [step for step in emitted.get("steps", []) if isinstance(step, dict) and step.get("name") == "host-closeout-check"]
+        closeout_payload = closeout_steps[-1].get("payload", {}) if closeout_steps else {}
+        if closeout_payload.get("issue", {}).get("state") != "CLOSED":
+            raise AssertionError(f"{name} closeout readback must confirm issue closed")
+        if closeout_payload.get("pr", {}).get("state") != "MERGED":
+            raise AssertionError(f"{name} closeout readback must confirm PR merged")
+        if closeout_payload.get("pr", {}).get("mergeCommit", {}).get("oid") != merge_sha:
+            raise AssertionError(f"{name} closeout readback must preserve merge commit")
+        if closeout_payload.get("target_branch", {}).get("contains_merge_commit") is not True:
+            raise AssertionError(f"{name} closeout readback must confirm target branch contains merge commit")
+        if any(call[:2] == ["closeout-queue", "status"] for call in calls):
+            raise AssertionError(f"{name} ordinary ship --apply must not route through closeout queue")
+
+    def run_versioned_terminal_blocker() -> None:
+        calls.clear()
+        emitted.clear()
+
+        def versioned_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "summary": "metadata ok",
+                    "governance_intensity_carrier": {
+                        "envelope": {
+                            "fields": {
+                                "governance_intensity": "standard",
+                                "change_class": "runtime",
+                                "release_judgment": "no_release",
+                                "upgrade_triggers": ["versioned_terminal_carrier"],
+                            }
+                        }
+                    },
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                raise AssertionError("versioned terminal carrier must block before merge")
+            raise AssertionError(f"versioned terminal carrier delegated unexpected flow args: {flow_args}")
+
+        module.flow_payload = versioned_flow_payload
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1742",
+                "--issue",
+                "1742",
+                "--pr",
+                "1742",
+                "--branch",
+                "work/1742-closeout-e2e",
+                "--head-sha",
+                "e" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("versioned terminal carrier must block default ship --apply")
+        if emitted.get("key_gaps") != ["closeout policy `full_closeout_pr` is not eligible for default host-only closeout"]:
+            raise AssertionError("versioned terminal blocker must preserve explicit closeout gap")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom closeout queue status --item <id> --issue <n> --pr <n> --json" for finding in findings):
+            raise AssertionError("versioned terminal blocker must point to explicit closeout queue path")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("versioned terminal carrier must stop before merge")
+
+    def run_release_closeout_blocker() -> None:
+        calls.clear()
+        emitted.clear()
+
+        def release_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "summary": "metadata ok",
+                    "governance_intensity_carrier": {
+                        "envelope": {
+                            "fields": {
+                                "governance_intensity": "standard",
+                                "change_class": "release",
+                                "release_judgment": "release_required",
+                                "upgrade_triggers": ["release_or_version_closeout"],
+                            }
+                        }
+                    },
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                raise AssertionError("release closeout policy must block before merge")
+            raise AssertionError(f"release closeout policy delegated unexpected flow args: {flow_args}")
+
+        module.flow_payload = release_flow_payload
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1742",
+                "--issue",
+                "1742",
+                "--pr",
+                "1742",
+                "--branch",
+                "work/1742-closeout-e2e",
+                "--head-sha",
+                "f" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout policy must block default ship --apply")
+        if emitted.get("key_gaps") != ["closeout policy `full_closeout_pr` is not eligible for default host-only closeout"]:
+            raise AssertionError("release closeout blocker must preserve explicit closeout gap")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom closeout queue status --item <id> --issue <n> --pr <n> --json" for finding in findings):
+            raise AssertionError("release closeout blocker must point to explicit closeout queue path")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("release closeout policy must stop before merge")
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
+    original_changed_paths = module.ship_changed_paths_payload
+    module.emit = fake_emit
+    module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["tools/check_cli_contract.py"],
+        "missing_inputs": [],
+    }
+    try:
+        run_host_only_case(
+            "light",
+            {
+                "governance_intensity": "light",
+                "change_class": "docs_governance",
+                "release_judgment": "no_release",
+                "upgrade_triggers": [],
+            },
+            "host_only",
+        )
+        run_host_only_case(
+            "standard",
+            {
+                "governance_intensity": "standard",
+                "change_class": "runtime",
+                "release_judgment": "no_release",
+                "upgrade_triggers": [],
+            },
+            "inline",
+        )
+        run_versioned_terminal_blocker()
+        run_release_closeout_blocker()
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
+        module.ship_changed_paths_payload = original_changed_paths
+
+
 def assert_ship_docs_entry_contract() -> None:
     required_snippets = {
         "README.md": [
@@ -9256,6 +9560,7 @@ def run_ship_wrapper_surface() -> None:
     assert_ship_validation_profile_selection_contract()
     assert_ship_apply_wrapper_contract()
     assert_ship_closeout_policy_admission_contract()
+    assert_ship_inline_host_only_closeout_e2e_contract()
     assert_ship_docs_entry_contract()
     print("ship wrapper surface checks passed")
 

@@ -1,0 +1,88 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1742-readonly-fixture-gap-review",
+      "task_goal": "Read-only review of existing ship and closeout fixture coverage before finalizing WI-1742.",
+      "context_locators": [
+        "tools/check_cli_contract.py",
+        "tools/loom.py",
+        "GitHub issue #1742"
+      ],
+      "read_scope": [
+        "ship --apply wrapper fixtures",
+        "ship closeout policy implementation",
+        "merge closeout wrapper fixtures"
+      ],
+      "write_ownership": [
+        "read-only/no-write"
+      ],
+      "non_goals": [
+        "No file edits by the explorer",
+        "No GitHub writes",
+        "No release or npm publish actions"
+      ],
+      "validation_expectation": "Main controller integrates any accepted findings into tools/check_cli_contract.py and WI-1742 carriers, then reruns targeted validation.",
+      "output_format": "Short summary with current coverage, minimum fixture gaps, and relevant validation commands.",
+      "integration_target": [
+        "tools/check_cli_contract.py",
+        ".loom/specs/WI-1742/",
+        ".loom/progress/WI-1742.md"
+      ],
+      "status": "integrated",
+      "summary": "Read-only explorer feedback was integrated by adding exact host-only call order assertions and a release closeout blocker sample alongside light, standard, and versioned terminal cases."
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1742-ship-wrapper-e2e-fixture",
+      "status": "integrated",
+      "summary": "Added assert_ship_inline_host_only_closeout_e2e_contract to cover light ordinary host-only closeout, standard ordinary host-only closeout, release closeout blocker, and versioned terminal carrier blocker.",
+      "locators": [
+        "tools/check_cli_contract.py"
+      ]
+    },
+    {
+      "id": "WI-1742-carriers-and-suite",
+      "status": "integrated",
+      "summary": "WI-1742 work item, progress, full suite, evidence map, task carrier, status, bootstrap pointer, and shadow evidence bind issue #1742, branch work/1742-closeout-e2e, validation scope, and non-release boundary.",
+      "locators": [
+        ".loom/work-items/WI-1742.md",
+        ".loom/progress/WI-1742.md",
+        ".loom/progress/WI-1742-build-evidence.json",
+        ".loom/specs/WI-1742/",
+        ".loom/status/current.md",
+        ".loom/bootstrap/init-result.json"
+      ]
+    },
+    {
+      "id": "WI-1742-local-validation",
+      "status": "integrated",
+      "summary": "Local validation passed: git diff --check; py_compile_clean for tools/loom.py and tools/check_cli_contract.py; check_cli_contract.py --fixture-group ship-wrapper; suite validate; suite evidence validate; suite carrier validate; carrier refresh --apply; shadow-parity --surface all --blocking.",
+      "locators": [
+        ".loom/progress/WI-1742.md",
+        ".loom/specs/WI-1742/evidence-map.md"
+      ]
+    }
+  ],
+  "ownership_contract": {
+    "write_ownership": [
+      "tools/check_cli_contract.py",
+      ".loom/work-items/WI-1742.md",
+      ".loom/progress/WI-1742.md",
+      ".loom/progress/WI-1742-build-evidence.json",
+      ".loom/specs/WI-1742/**",
+      ".loom/status/current.md",
+      ".loom/bootstrap/init-result.json",
+      ".loom/shadow/merge-ready-loom.json",
+      ".loom/shadow/closeout-loom.json"
+    ],
+    "non_goals": [
+      "No real release publish",
+      "No GitHub permission model change",
+      "No #1743 release closeout",
+      "No #1711-#1722 or v0.19.0 state changes"
+    ],
+    "forbidden_scope_touched": false
+  }
+}
