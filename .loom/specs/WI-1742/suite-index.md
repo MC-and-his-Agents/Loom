@@ -33,6 +33,7 @@
 | --- | --- | --- | --- | --- |
 | `spec.md` | .loom/specs/WI-1742/spec.md | required / present | `plan.md`, review, merge-ready, closeout | issue #1742 |
 | `plan.md` | .loom/specs/WI-1742/plan.md | required / present | implementation, review, merge-ready, closeout | issue #1742 |
+| `implementation-contract.md` | .loom/specs/WI-1742/implementation-contract.md | required / present | implementation, review, merge-ready | issue #1742 |
 | `research.md` | .loom/specs/WI-1742/research.md | conditional / present | plan and review | existing ship/closeout fixture inventory |
 | `contracts.md` | .loom/specs/WI-1742/contracts.md | conditional / present | plan, review, CLI consumers | ship closeout e2e contract |
 | `readiness-checklist.md` | .loom/specs/WI-1742/readiness-checklist.md | conditional / present | build / review readiness consumers | local validation |
