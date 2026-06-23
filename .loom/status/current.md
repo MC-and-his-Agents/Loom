@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1740.json
 - Validation Entry: git diff --check; python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group pr-metadata; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py
 - Closing Condition: PR merged and issue #1740 closed with review freshness classification evidence.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1740 implementation PR #1764 merged into main and issue #1740 closed; terminal closeout metadata recorded in .loom/progress/WI-1740.md.
-- Next Step: WI-1740 complete; downstream lanes #1739 and #1741 may consume review freshness classification after closeout PR merges.
+- Current Checkpoint: merge
+- Current Stop: WI-1740 closeout carrier sync is ready for closeout review after PR #1764 merged and issue #1740 closed.
+- Next Step: Record closeout review, then terminalize WI-1740 as closed_out.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-23 closeout validation passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1740 --apply readback remaining_refresh=[]; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; review record allow for closeout-only carrier sync.
 - Recovery Boundary: WI-1740 closeout sync owns terminal progress/status/review/shadow carrier updates only; no runtime or product behavior changes.
