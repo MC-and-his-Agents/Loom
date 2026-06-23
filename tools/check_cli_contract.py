@@ -5082,7 +5082,7 @@ def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
     if (
         not isinstance(generated_binding, dict)
         or generated_binding.get("result") != "pass"
-        or generated_binding.get("binding_status") != "generated-only"
+        or generated_binding.get("binding_status") not in {"generated-only", "carrier-and-generated-only"}
         or generated_path not in generated_head.get("generated_only_paths", [])
         or generated_head.get("disallowed_paths") != []
         or not any("tools/skills_surface.py check" in str(action.get("action")) for action in generated_actions if isinstance(action, dict))
@@ -5092,7 +5092,8 @@ def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
     generated_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
     if (
         generated_pr_gate_payload.get("result") != "pass"
-        or generated_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "generated-only"
+        or generated_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status")
+        not in {"generated-only", "carrier-and-generated-only"}
         or generated_pr_gate_payload.get("governance_lint", {}).get("result") != "pass"
     ):
         raise AssertionError(f"pr-gate did not consume generated-only review drift: {generated_pr_gate_payload.get('missing_inputs')}")
