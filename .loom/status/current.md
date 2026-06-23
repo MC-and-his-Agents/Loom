@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1776.json
 - Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface release-readback`; live `loom release readback` v0.21.0 dry-run.
 - Closing Condition: PR merged and issue #1776 closed with release readback verdict evidence consumed by #1778.
-- Current Checkpoint: merge
-- Current Stop: WI-1776 implementation is locally validated and ready for PR metadata stabilization, hosted gate consumption, controlled merge, and closeout.
-- Next Step: Open PR for `work/1776-release-readback-verdict`, stabilize PR metadata against the current head SHA, consume hosted checks, merge, then let #1778 consume the release verdict behavior.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1776 closed out by closeout run: PR #1783 merged at 2cb05e1ecd9f33bac024005e16caf3070cd1581a, issue #1776 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1776 implementation work remains.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, `workflow_run_target_commit_missing`, `version_file_mismatch`, and `package_json_version_mismatch`; next action: align VERSION and package.json with the release target before publishing.
 - Recovery Boundary: WI-1776 owns release readback verdict classification and fixture coverage only. It does not publish, tag, create GitHub Releases, bump versions for v0.21.0, mutate closeout carriers, or implement automatic host-safe worktree locator generation.
-- Current Lane: release-readback-verdict
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
