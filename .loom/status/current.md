@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1738.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper
 - Closing Condition: PR merged and issue #1738 closed with ship binding inference evidence.
-- Current Checkpoint: merge
-- Current Stop: WI-1738 ship binding inference implementation, hosted workspace evidence, PR metadata readback, and GitHub API budget fix are ready for hosted checks.
-- Next Step: Push branch work/1738-ship-inference, verify PR metadata/head SHA/checks, then merge and close out issue #1738.
+- Current Checkpoint: closeout
+- Current Stop: WI-1738 implementation PR #1762 merged, issue #1738 closed, and terminal closeout metadata recorded.
+- Next Step: Merge WI-1738 closeout carrier sync PR, then continue dependent issue #1739.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local validation passed for git diff --check; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; rg confirmed github-api-budget forbidden gh view strings absent from tools and skills/shared/scripts; PR metadata preflight for #1762 passed at head 7a2af448e2b822b446e9d5380a972a07edf248bb before the budget fix; hosted loom-pr-merge-gate rerun passed after PR body readback; hosted loom-check failed on github-api-budget before replacing ship PR readback with gh api.
+- Latest Validation Summary: Post-merge closeout evidence on 2026-06-23: PR #1762 merged at d10f421aaed781471b0f590e78163016b8be8e0f; issue #1738 closed at 2026-06-23T05:18:53Z; carrier closeout-sync recorded terminal metadata; implementation PR hosted checks passed for head 786c1d43f377ed54d880d7cff82e4982f1bf7142.
 - Recovery Boundary: WI-1738 owns `loom ship` binding inference behavior, its CLI contract regression, and WI-1738 fact-chain/review/shadow evidence only.
 - Current Lane: ship-inference
 
