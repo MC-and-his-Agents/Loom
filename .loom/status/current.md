@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1741.json
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface plugin-payload-hash
 - Closing Condition: PR merged and issue #1741 closed with ship validation profile selection evidence.
-- Current Checkpoint: merge
-- Current Stop: PR #1766 is open for WI-1741 with canonical PR metadata, authored spec and implementation review records, carrier-only review drift readback, and local validation evidence.
-- Next Step: Run PR gate and hosted checks for PR #1766, then use controlled merge after required checks pass.
+- Current Checkpoint: closed_out
+- Current Stop: PR #1766 merged at ac5308d241dcdfd1901a7b329584dadecf1efeac; closeout PR #1767 records terminal metadata for WI-1741.
+- Next Step: After closeout PR #1767 merges, close issue #1741 and allow dependent #1739/#1742 work to consume WI-1741 as closed out.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 targeted validation passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1741 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1741 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1741 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1741 --apply readback remaining_refresh=[]; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking.
+- Latest Validation Summary: 2026-06-23 closeout validation passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --json --full-output; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --fixture-group closeout-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier closeout-sync --target . --item WI-1741 --terminal-state merged --issue 1741 --pr 1766 --merge-commit ac5308d241dcdfd1901a7b329584dadecf1efeac --target-branch main --closed-at 2026-06-23T08:17:56Z --evidence-locator github.com/MC-and-his-Agents/Loom/pull/1766 --apply; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1741 --apply; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking.
 - Recovery Boundary: WI-1741 owns ship validation profile selection, docs for the ship main path, and issue-scoped Loom carriers only; it does not implement repair chain, closeout e2e, or release behavior.
-- Current Lane: validation-profile
+- Current Lane: validation-profile-closeout
 
 ## Runtime Evidence
 
