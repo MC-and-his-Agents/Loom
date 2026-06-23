@@ -722,6 +722,84 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         module.emit = original_emit
 
 
+def assert_ship_infers_pr_bindings_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship inference regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+    inferred_branch = "work/1738-ship-inference"
+    inferred_head = "f" * 40
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if tuple(flow_args[:2]) in {("pr-metadata", "preflight"), ("pr-gate", "check"), ("controlled-merge", "check")}:
+            if "--branch" in flow_args and flow_args[flow_args.index("--branch") + 1] != inferred_branch:
+                raise AssertionError("ship did not pass inferred branch to delegated gate")
+            if "--head-sha" not in flow_args or flow_args[flow_args.index("--head-sha") + 1] != inferred_head:
+                raise AssertionError("ship did not pass inferred head SHA to delegated gate")
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "light",
+                            "change_class": "docs_governance",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+        raise AssertionError(f"ship inference delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def fake_ship_pr_payload(args: Any, target: Any) -> tuple[dict[str, Any], list[str]]:
+        return {"headRefName": inferred_branch, "headRefOid": inferred_head, "baseRefName": "main"}, []
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
+    original_git_branch = module.git_branch_for_target
+    original_git_head = module.git_head_sha_for_target
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    module.ship_pr_payload = fake_ship_pr_payload
+    module.git_branch_for_target = lambda target: "work/local-checkout"
+    module.git_head_sha_for_target = lambda target: "e" * 40
+    try:
+        status = module.handle_ship(["--item", "WI-1738", "--pr", "1748", "--json"])
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("ship dry-run did not pass with inferred PR bindings")
+        binding = emitted.get("binding_inference", {})
+        bindings = binding.get("bindings", {}) if isinstance(binding, dict) else {}
+        if bindings.get("branch") != inferred_branch or bindings.get("head_sha") != inferred_head or bindings.get("target_branch") != "main":
+            raise AssertionError("ship did not expose inferred branch/head/target_branch bindings")
+        inferred_fields = {entry.get("field") for entry in binding.get("inferences", []) if isinstance(entry, dict)}
+        if {"branch", "head_sha", "target_branch"} - inferred_fields:
+            raise AssertionError("ship inference did not record inferred binding fields")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
+        module.git_branch_for_target = original_git_branch
+        module.git_head_sha_for_target = original_git_head
+
+
 def assert_ship_apply_wrapper_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -795,8 +873,10 @@ def assert_ship_apply_wrapper_contract() -> None:
 
     original_flow_payload = module.flow_payload
     original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
     module.flow_payload = passing_flow_payload
     module.emit = fake_emit
+    module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
     try:
         status = module.handle_ship(
             [
@@ -902,6 +982,7 @@ def assert_ship_apply_wrapper_contract() -> None:
     finally:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
 
 
 def assert_ship_closeout_policy_admission_contract() -> None:
@@ -949,8 +1030,10 @@ def assert_ship_closeout_policy_admission_contract() -> None:
 
     original_flow_payload = module.flow_payload
     original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
+    module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
     try:
         status = module.handle_ship(
             [
@@ -982,6 +1065,7 @@ def assert_ship_closeout_policy_admission_contract() -> None:
     finally:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
 
 
 def assert_ship_docs_entry_contract() -> None:
@@ -8921,6 +9005,7 @@ def run_merge_wrapper_surface() -> None:
 
 def run_ship_wrapper_surface() -> None:
     assert_ship_dry_run_wrapper_contract()
+    assert_ship_infers_pr_bindings_contract()
     assert_ship_apply_wrapper_contract()
     assert_ship_closeout_policy_admission_contract()
     assert_ship_docs_entry_contract()

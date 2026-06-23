@@ -4745,8 +4745,8 @@ def payload_pr_string(payload: dict[str, Any], field: str) -> str | None:
     return None
 
 
-def ship_closeout_target_branch(args: argparse.Namespace, merge_payload: dict[str, Any]) -> str | None:
-    return payload_pr_string(merge_payload, "baseRefName") or args.target_branch
+def ship_closeout_target_branch(args: argparse.Namespace, merge_payload: dict[str, Any], *, inferred_target_branch: str | None = None) -> str | None:
+    return payload_pr_string(merge_payload, "baseRefName") or args.target_branch or inferred_target_branch
 
 
 def ship_apply_admission_block(
@@ -4785,8 +4785,143 @@ def ship_apply_admission_block(
     return emit(agent_safe_payload(payload, full_output=args.full_output))
 
 
-def ship_metadata_update_args(args: argparse.Namespace, target: Path) -> list[str] | None:
-    if args.issue is None or not args.branch or not args.head_sha:
+def git_branch_for_target(target: Path) -> str | None:
+    completed = subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "--abbrev-ref", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    branch = completed.stdout.strip()
+    return branch if branch and branch != "HEAD" else None
+
+
+def ship_pr_payload(args: argparse.Namespace, target: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if args.pr_payload_file:
+        payload_path = Path(args.pr_payload_file)
+        if not payload_path.is_absolute():
+            payload_path = target / payload_path
+        try:
+            payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            return None, [f"PR payload file is unreadable: {exc}"]
+        if not isinstance(payload, dict):
+            return None, ["PR payload file must contain a JSON object"]
+        return payload, []
+    if args.pr is None:
+        return None, []
+    completed = run_capture(
+        [
+            "gh",
+            "pr",
+            "view",
+            str(args.pr),
+            "--json",
+            "number,state,headRefName,headRefOid,baseRefName,body,url",
+        ],
+        cwd=target,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "gh pr view failed"
+        return None, [detail]
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return None, [f"invalid JSON from gh pr view: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, ["gh pr view did not return a JSON object"]
+    return payload, []
+
+
+def ship_payload_string(payload: dict[str, Any] | None, field: str) -> str | None:
+    if isinstance(payload, dict) and payload.get(field) is not None:
+        return str(payload[field])
+    return None
+
+
+def ship_binding_inference_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+    needs_pr_payload = bool(args.pr_payload_file or not args.branch or not args.head_sha or (args.apply and not args.target_branch))
+    pr_payload, pr_errors = ship_pr_payload(args, target) if needs_pr_payload else (None, [])
+    pr_branch = ship_payload_string(pr_payload, "headRefName")
+    pr_head = ship_payload_string(pr_payload, "headRefOid")
+    pr_base = ship_payload_string(pr_payload, "baseRefName")
+    git_branch = git_branch_for_target(target)
+    git_head = git_head_sha_for_target(target)
+
+    effective_branch = args.branch or pr_branch or git_branch
+    effective_head = args.head_sha or pr_head or git_head
+    effective_target_branch = args.target_branch or pr_base
+    missing_inputs: list[str] = []
+    conflicts: list[str] = []
+    inferences: list[dict[str, str]] = []
+
+    if pr_errors and (not args.branch or not args.head_sha or (args.apply and not args.target_branch)):
+        missing_inputs.extend(f"pr readback: {message}" for message in pr_errors)
+    if not effective_branch:
+        missing_inputs.append("branch")
+    if not effective_head:
+        missing_inputs.append("head_sha")
+    if args.apply and not effective_target_branch:
+        missing_inputs.append("target_branch")
+
+    if args.branch and pr_branch and args.branch != pr_branch:
+        conflicts.append(f"branch `{args.branch}` does not match PR headRefName `{pr_branch}`")
+    if args.head_sha and pr_head and args.head_sha != pr_head:
+        conflicts.append("head_sha does not match PR headRefOid")
+    if args.target_branch and pr_base and args.target_branch != pr_base:
+        conflicts.append(f"target_branch `{args.target_branch}` does not match PR baseRefName `{pr_base}`")
+    missing_inputs.extend(conflicts)
+
+    if not args.branch and effective_branch:
+        source = "pr_readback" if pr_branch == effective_branch else "current_checkout"
+        inferences.append({"field": "branch", "source": source, "value": effective_branch})
+    if not args.head_sha and effective_head:
+        source = "pr_readback" if pr_head == effective_head else "current_checkout"
+        inferences.append({"field": "head_sha", "source": source, "value": effective_head})
+    if not args.target_branch and effective_target_branch:
+        inferences.append({"field": "target_branch", "source": "pr_readback", "value": effective_target_branch})
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "command": "ship",
+        "operation": "binding-inference",
+        "schema_version": "loom-ship-binding-inference/v1",
+        "result": result,
+        "summary": (
+            "ship inferred branch, head SHA, and target branch bindings from explicit inputs, PR readback, and checkout state."
+            if result == "pass"
+            else "ship could not safely infer branch, head SHA, or target branch bindings."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "rerun loom ship with explicit --branch, --head-sha, or --target-branch",
+        "inputs": {
+            "branch": args.branch,
+            "head_sha": args.head_sha,
+            "target_branch": args.target_branch,
+            "pr": args.pr,
+            "pr_payload_file": args.pr_payload_file,
+        },
+        "bindings": {
+            "branch": effective_branch,
+            "head_sha": effective_head,
+            "target_branch": effective_target_branch,
+        },
+        "sources": {
+            "git_branch": git_branch,
+            "git_head_sha": git_head,
+            "pr_headRefName": pr_branch,
+            "pr_headRefOid": pr_head,
+            "pr_baseRefName": pr_base,
+        },
+        "inferences": inferences,
+        "conflicts": conflicts,
+    }
+
+
+def ship_metadata_update_args(args: argparse.Namespace, target: Path, *, branch: str | None, head_sha: str | None) -> list[str] | None:
+    if args.issue is None or not branch or not head_sha:
         return None
     flow_args = [
         "pr-metadata",
@@ -4802,9 +4937,9 @@ def ship_metadata_update_args(args: argparse.Namespace, target: Path) -> list[st
         "--issue",
         str(args.issue),
         "--branch",
-        args.branch,
+        branch,
         "--head-sha",
-        args.head_sha,
+        head_sha,
         "--apply",
     ]
     if args.intensity != "auto":
@@ -4883,14 +5018,51 @@ def handle_ship(argv: list[str]) -> int:
 
     common = ["--target", str(target)]
     steps: list[dict[str, Any]] = []
+    binding_inference = ship_binding_inference_payload(args, target)
+    effective_bindings = binding_inference.get("bindings") if isinstance(binding_inference.get("bindings"), dict) else {}
+    effective_branch = effective_bindings.get("branch") if isinstance(effective_bindings.get("branch"), str) else None
+    effective_head_sha = effective_bindings.get("head_sha") if isinstance(effective_bindings.get("head_sha"), str) else None
+    effective_target_branch = effective_bindings.get("target_branch") if isinstance(effective_bindings.get("target_branch"), str) else None
+    steps.append(ship_step("ship-binding-inference", binding_inference))
+    if binding_inference.get("result") != "pass":
+        closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
+        next_action = binding_inference.get("fallback_to") or "rerun loom ship with explicit host bindings"
+        return emit(
+            agent_safe_payload(
+                output(
+                    command,
+                    "block",
+                    schema_version="loom-ship/v1",
+                    summary="ship stopped before delivery gates because branch, head SHA, or target branch bindings could not be inferred safely.",
+                    mutates=False,
+                    dry_run=not args.apply,
+                    apply=args.apply,
+                    target=str(target),
+                    item={"id": args.item},
+                    issue={"number": args.issue},
+                    pr={"number": args.pr},
+                    intensity=args.intensity,
+                    effective_intensity=closeout_policy.get("governance_intensity"),
+                    merge_method=args.merge_method,
+                    closeout_policy=closeout_policy,
+                    binding_inference=binding_inference,
+                    steps=steps,
+                    first_blocker=steps[-1],
+                    missing_inputs=binding_inference.get("missing_inputs", []),
+                    fallback_to=next_action,
+                    next_action=next_action,
+                ),
+                full_output=args.full_output,
+            )
+        )
     if args.apply:
-        repair_args = ship_metadata_update_args(args, target)
+        repair_args = ship_metadata_update_args(args, target, branch=effective_branch, head_sha=effective_head_sha)
         if repair_args is None:
             steps.append(
                 ship_step(
                     "safe-metadata-repair",
-                    {"result": "skipped", "summary": "safe metadata repair requires explicit --issue, --branch, and --head-sha."},
-                    skipped_reason="not enough explicit binding inputs for safe PR metadata repair",
+                    {"result": "skipped", "summary": "safe metadata repair requires --issue plus inferred or explicit branch and head SHA."},
+                    skipped_reason="not enough binding inputs for safe PR metadata repair",
                 )
             )
         else:
@@ -4912,24 +5084,24 @@ def handle_ship(argv: list[str]) -> int:
     metadata_args = ["pr-metadata", "preflight", *common, "--surface", "merge_ready", "--pr", str(args.pr), "--item", args.item]
     if args.issue is not None:
         metadata_args.extend(["--issue", str(args.issue)])
-    if args.branch:
-        metadata_args.extend(["--branch", args.branch])
-    if args.head_sha:
-        metadata_args.extend(["--head-sha", args.head_sha])
+    if effective_branch:
+        metadata_args.extend(["--branch", effective_branch])
+    if effective_head_sha:
+        metadata_args.extend(["--head-sha", effective_head_sha])
     if args.pr_payload_file:
         metadata_args.extend(["--pr-payload-file", args.pr_payload_file])
     metadata = flow_payload(command, metadata_args, fallback_to=["loom pr metadata-update <pr> --item <id> --head-sha <sha> --apply --json"])
 
     pr_gate_args = ["pr-gate", "check", *common, "--pr", str(args.pr), "--item", args.item]
-    if args.head_sha:
-        pr_gate_args.extend(["--head-sha", args.head_sha])
+    if effective_head_sha:
+        pr_gate_args.extend(["--head-sha", effective_head_sha])
     if args.pr_payload_file:
         pr_gate_args.extend(["--pr-payload-file", args.pr_payload_file])
     pr_gate = flow_payload(command, pr_gate_args, fallback_to=["loom pr gate <pr> --work-item <id> --json"])
 
     merge_args = ["controlled-merge", "check", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method]
-    if args.head_sha:
-        merge_args.extend(["--head-sha", args.head_sha])
+    if effective_head_sha:
+        merge_args.extend(["--head-sha", effective_head_sha])
     for flag, value in (
         ("--pr-payload-file", args.pr_payload_file),
         ("--status-checks-file", args.status_checks_file),
@@ -4978,6 +5150,7 @@ def handle_ship(argv: list[str]) -> int:
                     effective_intensity=closeout_policy.get("governance_intensity"),
                     merge_method=args.merge_method,
                     closeout_policy=closeout_policy,
+                    binding_inference=binding_inference,
                     steps=steps,
                     first_blocker=blocker,
                     missing_inputs=blocker.get("missing_inputs", []),
@@ -5012,7 +5185,7 @@ def handle_ship(argv: list[str]) -> int:
             missing_inputs=[f"closeout policy `{policy}` is not eligible for default host-only closeout"],
             fallback_to=["loom closeout queue status --item <id> --issue <n> --pr <n> --json", "use explicit full closeout PR path when policy requires it"],
         )
-    closeout_branch = ship_closeout_target_branch(args, merge_check)
+    closeout_branch = ship_closeout_target_branch(args, merge_check, inferred_target_branch=effective_target_branch)
     if args.apply and not closeout_branch:
         steps.append(ship_step("ship-apply-admission", {"result": "block", "summary": "ship --apply could not infer target branch for closeout readback."}))
         return ship_apply_admission_block(
@@ -5027,8 +5200,8 @@ def handle_ship(argv: list[str]) -> int:
         )
     if args.apply:
         merge_apply_args = ["controlled-merge", "merge", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method, "--execute"]
-        if args.head_sha:
-            merge_apply_args.extend(["--head-sha", args.head_sha])
+        if effective_head_sha:
+            merge_apply_args.extend(["--head-sha", effective_head_sha])
         for flag, value in (
             ("--pr-payload-file", args.pr_payload_file),
             ("--status-checks-file", args.status_checks_file),
@@ -5059,6 +5232,7 @@ def handle_ship(argv: list[str]) -> int:
                         effective_intensity=closeout_policy.get("governance_intensity"),
                         merge_method=args.merge_method,
                         closeout_policy=closeout_policy,
+                        binding_inference=binding_inference,
                         steps=steps,
                         first_blocker=blocker,
                         missing_inputs=blocker.get("missing_inputs", []),
@@ -5069,7 +5243,7 @@ def handle_ship(argv: list[str]) -> int:
                 )
             )
 
-        closeout_branch = ship_closeout_target_branch(args, merge_apply) or closeout_branch
+        closeout_branch = ship_closeout_target_branch(args, merge_apply, inferred_target_branch=effective_target_branch) or closeout_branch
         closeout_args = ship_closeout_namespace(args, branch=closeout_branch)
         reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
         add_closeout_host_args(reconciliation_args, closeout_args, include_comment=True)
@@ -5103,6 +5277,7 @@ def handle_ship(argv: list[str]) -> int:
                     effective_intensity=closeout_policy.get("governance_intensity"),
                     merge_method=args.merge_method,
                     closeout_policy=closeout_policy,
+                    binding_inference=binding_inference,
                     closeout_mode="host_only",
                     creates_closeout_pr=False,
                     target_branch=closeout_branch,
@@ -5131,6 +5306,7 @@ def handle_ship(argv: list[str]) -> int:
         effective_intensity=closeout_policy.get("governance_intensity"),
         merge_method=args.merge_method,
         closeout_policy=closeout_policy,
+        binding_inference=binding_inference,
         steps=steps,
         skipped_steps=[step for step in steps if step.get("result") == "skipped"],
         upgrade_reasons=closeout_policy.get("upgrade_reasons", []),
