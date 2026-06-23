@@ -898,6 +898,120 @@ def assert_ship_changed_paths_readback_contract() -> None:
         module.infer_github_repo = original_infer_github_repo
 
 
+def assert_ship_status_preflight_contract(tmp: Path) -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship status regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    target = tmp / "repo"
+    (target / ".loom" / "status").mkdir(parents=True)
+    (target / ".loom" / "status" / "current.md").write_text(
+        "- Current Checkpoint: merge\n"
+        "- Current Stop: WI-1777 active\n"
+        "- Next Step: run ship preflight\n",
+        encoding="utf-8",
+    )
+    emitted: dict[str, Any] = {}
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "-C"] and args[3:] == ["rev-parse", "origin/main"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="b" * 40 + "\n", stderr="")
+        if args[:2] == ["git", "-C"] and args[3:] == ["status", "--short"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        if args[:2] == ["git", "-C"] and args[3:] == ["rev-list", "-n", "1", "v0.21.0"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="c" * 40 + "\n", stderr="")
+        if args[:3] == ["gh", "api", "repos/MC-and-his-Agents/Loom/issues/1777"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"number": 1777, "state": "closed", "closed_at": "2026-06-23T00:00:00Z", "title": "done"}), stderr="")
+        if args[:3] == ["gh", "api", "repos/MC-and-his-Agents/Loom/milestones/18"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"number": 18, "title": "v0.21.0", "state": "open", "open_issues": 4, "closed_issues": 1}), stderr="")
+        if args[:3] == ["gh", "api", "repos/MC-and-his-Agents/Loom/releases/tags/v0.21.0"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"tag_name": "v0.21.0", "name": "Loom CLI v0.21.0", "draft": False, "prerelease": False}), stderr="")
+        if args[:3] == ["npm", "view", "@mc-and-his-agents/loom@0.21.0"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"version": "0.21.0", "dist-tags": {"latest": "0.21.0"}}), stderr="")
+        raise AssertionError(f"unexpected ship status readback command: {args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_run_capture = module.run_capture
+    original_emit = module.emit
+    original_infer_repo = module.infer_github_repo
+    original_git_branch = module.git_branch_for_target
+    original_git_head = module.git_head_sha_for_target
+    module.run_capture = fake_run_capture
+    module.emit = fake_emit
+    module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
+    module.git_branch_for_target = lambda target: "work/1777-ship-preflight-status"
+    module.git_head_sha_for_target = lambda target: "a" * 40
+    try:
+        if module.resolve_command(["ship", "preflight", "--target", str(target)]) != ("ship preflight", ["--target", str(target)]):
+            raise AssertionError("ship preflight must resolve as a first-class command")
+        clean_result, clean_blockers, clean_fixed, clean_next = module.ship_status_diagnostic(
+            host={"issue": {"state": "open"}, "errors": []},
+            release={"tag": {"exists": False}, "github_release": {"exists": False}, "npm": {"exists": False}, "errors": []},
+            checkout={"stale_against_origin_main": False, "dirty": False, "errors": []},
+            carrier={"state": "terminal"},
+        )
+        if clean_result != "pass" or clean_blockers or clean_fixed or not clean_next:
+            raise AssertionError("ship status clean readback must pass without blockers")
+        if not module.ship_missing_readback("npm ERR! 404 No match found"):
+            raise AssertionError("ship status must treat missing release/package readback as absent, not as an error")
+        readback_errors: list[str] = []
+        malformed = module.ship_json_read(
+            subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="[1]", stderr=""),
+            label="malformed readback",
+            errors=readback_errors,
+        )
+        if malformed is not None or not readback_errors:
+            raise AssertionError("ship status must surface malformed host readback as a readback error")
+        dirty_result, _dirty_blockers, dirty_fixed, dirty_next = module.ship_status_diagnostic(
+            host={"errors": []},
+            release={"tag": {"exists": False}, "github_release": {"exists": False}, "npm": {"exists": False}, "errors": []},
+            checkout={"stale_against_origin_main": False, "dirty": True, "errors": []},
+            carrier={"state": "active"},
+        )
+        if dirty_result != "block" or not dirty_fixed or dirty_next != dirty_fixed[0]:
+            raise AssertionError("ship status dirty checkout must include a one-step fix")
+        status = module.handle_ship([
+            "status",
+            "--target",
+            str(target),
+            "--issue",
+            "1777",
+            "--milestone",
+            "18",
+            "--version",
+            "v0.21.0",
+            "--package",
+            "@mc-and-his-agents/loom",
+            "--json",
+            "--full-output",
+        ])
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError(f"ship status must block on stale checkout, active carrier, or existing release: {emitted}")
+        diagnostic = emitted.get("diagnostic", {})
+        if diagnostic.get("blocked") is not True or not diagnostic.get("next_action"):
+            raise AssertionError(f"ship status must expose blocked/fixed/next_action diagnostic: {diagnostic}")
+        if emitted.get("pr"):
+            raise AssertionError("ship status must not require or synthesize a PR binding")
+        if emitted.get("checkout", {}).get("stale_against_origin_main") is not True:
+            raise AssertionError("ship status must diagnose stale checkout against origin/main")
+        if emitted.get("carrier", {}).get("state") != "active":
+            raise AssertionError("ship status must read active carrier state")
+        if emitted.get("release", {}).get("npm", {}).get("exists") is not True:
+            raise AssertionError("ship status must read npm release existence")
+    finally:
+        module.run_capture = original_run_capture
+        module.emit = original_emit
+        module.infer_github_repo = original_infer_repo
+        module.git_branch_for_target = original_git_branch
+        module.git_head_sha_for_target = original_git_head
+
+
 def assert_ship_validation_profile_selection_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -9557,6 +9671,8 @@ def run_ship_wrapper_surface() -> None:
     assert_ship_infers_pr_bindings_contract()
     assert_ship_pr_readback_uses_api_contract()
     assert_ship_changed_paths_readback_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-ship-status-") as raw_tmp:
+        assert_ship_status_preflight_contract(Path(raw_tmp))
     assert_ship_validation_profile_selection_contract()
     assert_ship_apply_wrapper_contract()
     assert_ship_closeout_policy_admission_contract()

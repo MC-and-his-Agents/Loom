@@ -367,6 +367,20 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Dry-run the delivery path across PR metadata, PR gate, controlled merge, changed-path validation profile, and closeout policy.",
     },
     {
+        "command": "ship status",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read the ship control-plane status across host issue, release, checkout, and carrier surfaces without mutating state.",
+    },
+    {
+        "command": "ship preflight",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Alias for ship status; emits the short blocked/fixed/next_action diagnostic before delivery work starts.",
+    },
+    {
         "command": "reconcile",
         "domain": "host-control",
         "status": "implemented",
@@ -5160,7 +5174,204 @@ def ship_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argpars
     )
 
 
+def ship_git_read(target: Path, args: list[str]) -> tuple[str | None, str | None]:
+    completed = run_capture(["git", "-C", str(target), *args], cwd=target)
+    if completed.returncode == 0:
+        return completed.stdout.strip(), None
+    return None, completed.stderr.strip() or completed.stdout.strip() or f"git {' '.join(args)} failed"
+
+
+def ship_json_read(completed: subprocess.CompletedProcess[str], *, label: str, errors: list[str]) -> dict[str, Any] | None:
+    try:
+        decoded = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        errors.append(f"{label} returned invalid JSON: {exc.msg}")
+        return None
+    if not isinstance(decoded, dict):
+        errors.append(f"{label} returned non-object JSON")
+        return None
+    return decoded
+
+
+def ship_missing_readback(detail: str) -> bool:
+    lowered = detail.lower()
+    return any(marker in lowered for marker in ("404", "not found", "no match found", "e404"))
+
+
+def ship_status_surface(target: Path) -> dict[str, Any]:
+    path = target / ".loom" / "status" / "current.md"
+    if not path.exists():
+        return {"path": ".loom/status/current.md", "state": "missing", "current_checkpoint": None, "current_stop": None}
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"- (Current Checkpoint|Current Stop|Next Step|Blockers):\s*(.*)", line)
+        if match:
+            values[match.group(1)] = match.group(2).strip()
+    checkpoint = values.get("Current Checkpoint")
+    current_stop = values.get("Current Stop")
+    terminal = bool(
+        (checkpoint and checkpoint.lower() in {"complete", "completed", "terminal", "closed", "done"})
+        or (current_stop and any(word in current_stop.lower() for word in ("complete", "terminal", "closed")))
+        or values.get("Next Step", "").lower().startswith("none")
+    )
+    return {
+        "path": ".loom/status/current.md",
+        "state": "terminal" if terminal else "active",
+        "current_checkpoint": checkpoint,
+        "current_stop": current_stop,
+        "next_step": values.get("Next Step"),
+        "blockers": values.get("Blockers"),
+    }
+
+
+def ship_host_issue_status(target: Path, *, repo: str | None, issue: int | None, milestone: str | None) -> dict[str, Any]:
+    repo_slug = repo or infer_github_repo(target)
+    payload: dict[str, Any] = {"repo": repo_slug, "issue": None, "milestone": None, "errors": []}
+    if not repo_slug:
+        payload["errors"].append("unable to infer GitHub repository")
+        return payload
+    if issue is not None:
+        completed = run_capture(["gh", "api", f"repos/{repo_slug}/issues/{issue}", "--jq", "{number,state,closed_at,title}"], cwd=target)
+        if completed.returncode == 0:
+            payload["issue"] = ship_json_read(completed, label=f"GitHub issue #{issue}", errors=payload["errors"])
+        else:
+            payload["errors"].append(completed.stderr.strip() or completed.stdout.strip())
+    if milestone:
+        completed = run_capture(["gh", "api", f"repos/{repo_slug}/milestones/{milestone}", "--jq", "{number,title,state,open_issues,closed_issues}"], cwd=target)
+        if completed.returncode == 0:
+            payload["milestone"] = ship_json_read(completed, label=f"GitHub milestone {milestone}", errors=payload["errors"])
+        else:
+            payload["errors"].append(completed.stderr.strip() or completed.stdout.strip())
+    return payload
+
+
+def ship_release_presence(target: Path, *, repo: str | None, version: str | None, package_name: str | None) -> dict[str, Any]:
+    context = release_package_context(target, version=version, package_name=package_name)
+    tag = context["tag"]
+    npm_version = context["npm_version"]
+    package = context["npm_package"]
+    repo_slug = repo or infer_github_repo(target)
+    tag_sha, _tag_error = ship_git_read(target, ["rev-list", "-n", "1", tag])
+    release: dict[str, Any] = {"exists": False}
+    npm_package = {"exists": False}
+    errors: list[str] = []
+    if repo_slug:
+        completed = run_capture(["gh", "api", f"repos/{repo_slug}/releases/tags/{tag}", "--jq", "{tag_name,name,draft,prerelease,published_at,html_url}"], cwd=target)
+        if completed.returncode == 0:
+            decoded = ship_json_read(completed, label=f"GitHub release {tag}", errors=errors)
+            if decoded is not None:
+                release = {"exists": True, **decoded}
+        else:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            if detail and not ship_missing_readback(detail):
+                errors.append(detail)
+    if package:
+        completed = run_capture(["npm", "view", f"{package}@{npm_version}", "version", "dist-tags", "--json"], cwd=target)
+        if completed.returncode == 0:
+            decoded = ship_json_read(completed, label=f"npm package {package}@{npm_version}", errors=errors)
+            if decoded is not None:
+                npm_package = {"exists": True, "readback": decoded}
+        else:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            if detail and not ship_missing_readback(detail):
+                errors.append(detail)
+    return {
+        "version": context["version"],
+        "tag": {"name": tag, "exists": bool(tag_sha), "commit": tag_sha},
+        "github_release": release,
+        "npm": {"package": package, "version": npm_version, **npm_package},
+        "errors": errors,
+    }
+
+
+def ship_checkout_status(target: Path) -> dict[str, Any]:
+    branch = git_branch_for_target(target)
+    head = git_head_sha_for_target(target)
+    origin_main, origin_error = ship_git_read(target, ["rev-parse", "origin/main"])
+    dirty, dirty_error = ship_git_read(target, ["status", "--short"])
+    return {
+        "branch": branch,
+        "head_sha": head,
+        "origin_main": origin_main,
+        "stale_against_origin_main": bool(head and origin_main and head != origin_main),
+        "dirty": bool(dirty),
+        "dirty_paths": dirty.splitlines() if dirty else [],
+        "errors": [error for error in [origin_error, dirty_error] if error],
+    }
+
+
+def ship_status_diagnostic(*, host: dict[str, Any], release: dict[str, Any], checkout: dict[str, Any], carrier: dict[str, Any]) -> tuple[str, list[str], list[str], str]:
+    blockers: list[str] = []
+    fixed: list[str] = []
+    if checkout.get("stale_against_origin_main"):
+        blockers.append("checkout_stale_against_origin_main")
+    if checkout.get("dirty"):
+        blockers.append("checkout_has_uncommitted_changes")
+    issue = host.get("issue") if isinstance(host.get("issue"), dict) else None
+    if issue and issue.get("state") == "closed" and carrier.get("state") == "active":
+        blockers.append("host_closed_but_carrier_active")
+    if release.get("tag", {}).get("exists") or release.get("github_release", {}).get("exists") or release.get("npm", {}).get("exists"):
+        blockers.append("target_release_already_exists")
+    if host.get("errors") or release.get("errors") or checkout.get("errors"):
+        blockers.append("readback_errors")
+    if not blockers:
+        return "pass", blockers, fixed, "run loom ship --dry-run or loom ship --apply after PR bindings are ready"
+    if "checkout_stale_against_origin_main" in blockers:
+        fixed.append("fast-forward or recreate the issue worktree from origin/main")
+    if "checkout_has_uncommitted_changes" in blockers:
+        fixed.append("commit, stash, or discard local changes before shipping")
+    if "host_closed_but_carrier_active" in blockers:
+        fixed.append("run loom closeout sync or carrier closeout-sync before continuing")
+    if "target_release_already_exists" in blockers:
+        fixed.append("read back the existing release/tag/npm package before publishing")
+    return "block", blockers, fixed, fixed[0] if fixed else "resolve ship preflight blockers"
+
+
+def handle_ship_status(argv: list[str], *, mode: str) -> int:
+    parser = argparse.ArgumentParser(prog=f"loom ship {mode}")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
+    parser.add_argument("--issue", type=int)
+    parser.add_argument("--milestone")
+    parser.add_argument("--version")
+    parser.add_argument("--package")
+    parser.add_argument("--owner")
+    parser.add_argument("--repo", dest="repo_name")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else None
+    host = ship_host_issue_status(target, repo=repo_slug, issue=args.issue, milestone=args.milestone)
+    release = ship_release_presence(target, repo=repo_slug, version=args.version, package_name=args.package)
+    checkout = ship_checkout_status(target)
+    carrier = ship_status_surface(target)
+    result, blockers, fixed, next_action = ship_status_diagnostic(host=host, release=release, checkout=checkout, carrier=carrier)
+    payload = output(
+        f"ship {mode}",
+        result,
+        schema_version="loom-ship-status/v1",
+        summary="ship preflight found no blocking checkout, release, host, or carrier status drift." if result == "pass" else "ship preflight found blocking status drift before delivery.",
+        mutates=False,
+        target=str(target),
+        item={"id": args.item},
+        issue={"number": args.issue},
+        milestone={"number": args.milestone},
+        diagnostic={"blocked": result == "block", "blockers": blockers, "fixed": fixed, "next_action": next_action},
+        missing_inputs=blockers,
+        fallback_to=fixed or None,
+        host=host,
+        release=release,
+        checkout=checkout,
+        carrier=carrier,
+        next_action=next_action,
+    )
+    return emit(agent_safe_payload(payload, full_output=args.full_output))
+
+
 def handle_ship(argv: list[str]) -> int:
+    if argv and argv[0] in {"status", "preflight"}:
+        return handle_ship_status(argv[1:], mode=argv[0])
     parser = argparse.ArgumentParser(prog="loom ship")
     parser.add_argument("--target", default=".")
     parser.add_argument("--item", required=True)
@@ -9466,8 +9677,9 @@ def main(argv: list[str]) -> int:
     if command == "merge" or command.startswith("merge "):
         merge_args = command.split()[1:] + forwarded if command.startswith("merge ") else forwarded
         return handle_merge(merge_args)
-    if command == "ship":
-        return handle_ship(forwarded)
+    if command == "ship" or command.startswith("ship "):
+        ship_args = command.split()[1:] + forwarded if command.startswith("ship ") else forwarded
+        return handle_ship(ship_args)
     if command == "reconcile":
         return handle_reconcile(forwarded)
     if command == "carrier" or command.startswith("carrier "):
