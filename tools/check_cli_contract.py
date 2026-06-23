@@ -9909,12 +9909,15 @@ def run_release_readback_surface() -> None:
             raise AssertionError(f"{command} must be declared as an implemented delivery command")
 
     expected = {
-        "unpublished-release-required": ("release", "readback", "unpublished"),
-        "v0.14.2-manual-resume-published": ("release", "resume", "published"),
-        "partial-release-missing-github-release": ("release", "readback", "partial_published"),
+        "published": ("release", "resume", "published"),
+        "missing-tag": ("release", "readback", "missing"),
+        "npm-missing": ("release", "readback", "missing"),
+        "drifted-tag": ("release", "readback", "drifted"),
+        "blocked-workflow": ("release", "readback", "blocked"),
+        "multi-worktree-main-busy": ("release", "resume", "blocked"),
         "no-release-docs-only": ("release", "resume", "no_release"),
     }
-    for fixture, (domain, operation, classification) in expected.items():
+    for fixture, (domain, operation, verdict) in expected.items():
         args = [
             domain,
             operation,
@@ -9926,21 +9929,32 @@ def run_release_readback_surface() -> None:
             fixture,
             "--json",
         ]
-        if classification == "no_release":
+        if verdict == "no_release":
             args.extend(["--release-judgment", "no_release"])
         _, payload = run_json(args, expect=0)
         if payload.get("schema") != "loom-release-readback/v1" or payload.get("mutates") is not False:
             raise AssertionError(f"{fixture} release readback did not emit the non-mutating schema contract")
-        observed = payload.get("classification", {}).get("classification")
-        if observed != classification:
-            raise AssertionError(f"{fixture} classified as {observed}, expected {classification}")
+        observed = payload.get("classification", {}).get("verdict")
+        if observed != verdict:
+            raise AssertionError(f"{fixture} verdict was {observed}, expected {verdict}")
+        diagnostic = payload.get("diagnostic") if isinstance(payload.get("diagnostic"), dict) else {}
+        if diagnostic.get("verdict") != verdict:
+            raise AssertionError(f"{fixture} diagnostic verdict was {diagnostic.get('verdict')}, expected {verdict}")
+        if verdict == "blocked" and diagnostic.get("blocked") is not True:
+            raise AssertionError(f"{fixture} blocked verdict must set diagnostic.blocked")
+        if verdict != "blocked" and diagnostic.get("blocked") is True:
+            raise AssertionError(f"{fixture} non-blocked verdict must not set diagnostic.blocked")
+        if not payload.get("next_action"):
+            raise AssertionError(f"{fixture} did not expose a short next_action")
         target = payload.get("release_target", {})
         if not all(target.get(field) for field in ("version", "tag", "npm_version", "npm_package")):
             raise AssertionError(f"{fixture} did not expose target version/tag/npm package readback context")
         readbacks = payload.get("readbacks", {})
-        for surface in ("tag", "github_release", "npm_package", "workflow_run"):
+        for surface in ("tag", "github_release", "npm_package", "workflow_run", "package_surface", "carrier"):
             if surface not in readbacks:
                 raise AssertionError(f"{fixture} missing {surface} readback")
+        if fixture == "multi-worktree-main-busy" and "merge_fallback" not in readbacks:
+            raise AssertionError(f"{fixture} missing merge_fallback readback")
         if operation == "resume" and not isinstance(payload.get("resume_contract"), dict):
             raise AssertionError(f"{fixture} release resume did not expose the non-mutating resume contract")
 

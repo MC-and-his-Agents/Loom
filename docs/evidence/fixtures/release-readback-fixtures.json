@@ -2,9 +2,9 @@
   "schema_version": "loom-release-readback-fixtures/v1",
   "fixtures": [
     {
-      "name": "unpublished-release-required",
-      "story": "Release-required intent before any publish artifacts exist.",
-      "expected_classification": "unpublished",
+      "name": "published",
+      "story": "All release artifacts, workflow readback, package surface, and carrier terminal state agree.",
+      "expected_verdict": "published",
       "target": {
         "repo": "MC-and-his-Agents/Loom",
         "version": "v9.99.0",
@@ -18,74 +18,30 @@
         "tag": {
           "kind": "git_tag",
           "tag": "v9.99.0",
-          "exists": false
+          "exists": true,
+          "commit": "1111111111111111111111111111111111111111",
+          "target_commit": "1111111111111111111111111111111111111111",
+          "matches_target_commit": true
         },
         "github_release": {
           "kind": "github_release",
-          "tag": "v9.99.0",
+          "tagName": "v9.99.0",
+          "name": "Loom CLI v9.99.0",
           "repo": "MC-and-his-Agents/Loom",
-          "exists": false
+          "exists": true,
+          "isDraft": false,
+          "isPrerelease": false,
+          "publishedAt": "2026-06-23T00:00:00Z",
+          "url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.0"
         },
         "npm_package": {
           "kind": "npm_package",
           "package": "@mc-and-his-agents/loom",
           "version": "9.99.0",
-          "version_exists": false,
-          "latest": "0.14.2"
-        },
-        "workflow_run": {
-          "kind": "workflow_run",
-          "workflow": "loom-cli-release.yml",
-          "repo": "MC-and-his-Agents/Loom",
-          "exists": false,
-          "selected": null
-        }
-      }
-    },
-    {
-      "name": "v0.14.2-manual-resume-published",
-      "story": "v0.14.2 had a failed main push release run, then workflow_dispatch restored the GitHub Release and npm package readback.",
-      "expected_classification": "published",
-      "target": {
-        "repo": "MC-and-his-Agents/Loom",
-        "version": "v0.14.2",
-        "tag": "v0.14.2",
-        "npm_version": "0.14.2",
-        "npm_package": "@mc-and-his-agents/loom",
-        "package_json_version": "0.14.2",
-        "target_commit": "d16dd96f4ca9e086d1805c93db571edf0d96621e"
-      },
-      "readbacks": {
-        "tag": {
-          "kind": "git_tag",
-          "tag": "v0.14.2",
-          "exists": true,
-          "object": "979231565116c3b0e26f080c3f6f6262e0f2fb99",
-          "commit": "d16dd96f4ca9e086d1805c93db571edf0d96621e",
-          "target_commit": "d16dd96f4ca9e086d1805c93db571edf0d96621e",
-          "matches_target_commit": true
-        },
-        "github_release": {
-          "kind": "github_release",
-          "tagName": "v0.14.2",
-          "name": "Loom CLI v0.14.2",
-          "url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.14.2",
-          "isDraft": false,
-          "isPrerelease": false,
-          "createdAt": "2026-06-19T02:10:45Z",
-          "publishedAt": "2026-06-19T02:10:57Z",
-          "targetCommitish": "main",
-          "repo": "MC-and-his-Agents/Loom",
-          "exists": true
-        },
-        "npm_package": {
-          "kind": "npm_package",
-          "package": "@mc-and-his-agents/loom",
-          "version": "0.14.2",
-          "observed_version": "0.14.2",
+          "observed_version": "9.99.0",
           "version_exists": true,
           "dist_tags": {
-            "latest": "0.14.2"
+            "latest": "9.99.0"
           }
         },
         "workflow_run": {
@@ -93,37 +49,40 @@
           "workflow": "loom-cli-release.yml",
           "repo": "MC-and-his-Agents/Loom",
           "exists": true,
-          "target_commit": "d16dd96f4ca9e086d1805c93db571edf0d96621e",
-          "matching_target_commit_count": 2,
+          "target_commit": "1111111111111111111111111111111111111111",
+          "matching_target_commit_count": 1,
           "selected": {
-            "databaseId": 27801023376,
-            "displayTitle": "loom-cli-release",
+            "databaseId": 999900,
             "event": "workflow_dispatch",
             "headBranch": "main",
-            "headSha": "d16dd96f4ca9e086d1805c93db571edf0d96621e",
+            "headSha": "1111111111111111111111111111111111111111",
             "status": "completed",
             "conclusion": "success",
-            "createdAt": "2026-06-19T02:07:16Z",
-            "updatedAt": "2026-06-19T02:11:01Z",
-            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/27801023376"
-          },
-          "previous_failed_run": {
-            "databaseId": 27799974799,
-            "event": "push",
-            "headBranch": "main",
-            "headSha": "36018c6f48b8e5ed9b3017df6ae87bf6ecd4cd91",
-            "status": "completed",
-            "conclusion": "failure",
-            "createdAt": "2026-06-19T01:34:15Z",
-            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/27799974799"
+            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/999900"
           }
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.0",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.0",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "terminal",
+          "current_checkpoint": "closed_out",
+          "current_stop": "Release closeout consumed."
         }
       }
     },
     {
-      "name": "partial-release-missing-github-release",
-      "story": "A tag and npm package exist, but GitHub Release evidence is missing.",
-      "expected_classification": "partial_published",
+      "name": "missing-tag",
+      "story": "GitHub Release and npm package exist, but the release tag is missing.",
+      "expected_verdict": "missing",
       "target": {
         "repo": "MC-and-his-Agents/Loom",
         "version": "v9.99.1",
@@ -137,16 +96,14 @@
         "tag": {
           "kind": "git_tag",
           "tag": "v9.99.1",
-          "exists": true,
-          "commit": "2222222222222222222222222222222222222222",
-          "target_commit": "2222222222222222222222222222222222222222",
-          "matches_target_commit": true
+          "exists": false
         },
         "github_release": {
           "kind": "github_release",
-          "tag": "v9.99.1",
+          "tagName": "v9.99.1",
           "repo": "MC-and-his-Agents/Loom",
-          "exists": false
+          "exists": true,
+          "url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.1"
         },
         "npm_package": {
           "kind": "npm_package",
@@ -163,51 +120,282 @@
           "workflow": "loom-cli-release.yml",
           "repo": "MC-and-his-Agents/Loom",
           "exists": true,
+          "target_commit": "2222222222222222222222222222222222222222",
+          "matching_target_commit_count": 1,
           "selected": {
-            "databaseId": 99991,
+            "databaseId": 999901,
             "event": "workflow_dispatch",
             "headSha": "2222222222222222222222222222222222222222",
             "status": "completed",
             "conclusion": "success",
-            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/99991"
+            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/999901"
           }
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.1",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.1",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "active",
+          "current_checkpoint": "release",
+          "current_stop": "Release artifact readback incomplete."
         }
       }
     },
     {
-      "name": "no-release-docs-only",
-      "story": "A no-release closeout path where readback must not infer publish intent from VERSION.",
-      "expected_classification": "no_release",
+      "name": "npm-missing",
+      "story": "The tag, GitHub Release, and workflow exist, but npm does not have the requested package version.",
+      "expected_verdict": "missing",
       "target": {
         "repo": "MC-and-his-Agents/Loom",
-        "version": "v0.14.2",
-        "tag": "v0.14.2",
-        "npm_version": "0.14.2",
+        "version": "v9.99.2",
+        "tag": "v9.99.2",
+        "npm_version": "9.99.2",
         "npm_package": "@mc-and-his-agents/loom",
-        "package_json_version": "0.14.2",
+        "package_json_version": "9.99.2",
         "target_commit": "3333333333333333333333333333333333333333"
       },
       "readbacks": {
         "tag": {
           "kind": "git_tag",
-          "tag": "v0.14.2",
+          "tag": "v9.99.2",
           "exists": true,
-          "commit": "d16dd96f4ca9e086d1805c93db571edf0d96621e",
+          "commit": "3333333333333333333333333333333333333333",
           "target_commit": "3333333333333333333333333333333333333333",
-          "matches_target_commit": false
+          "matches_target_commit": true
         },
         "github_release": {
           "kind": "github_release",
-          "tagName": "v0.14.2",
+          "tagName": "v9.99.2",
           "repo": "MC-and-his-Agents/Loom",
-          "exists": true
+          "exists": true,
+          "url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.2"
         },
         "npm_package": {
           "kind": "npm_package",
           "package": "@mc-and-his-agents/loom",
-          "version": "0.14.2",
-          "observed_version": "0.14.2",
-          "version_exists": true
+          "version": "9.99.2",
+          "version_exists": false,
+          "latest": "9.99.1"
+        },
+        "workflow_run": {
+          "kind": "workflow_run",
+          "workflow": "loom-cli-release.yml",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": true,
+          "target_commit": "3333333333333333333333333333333333333333",
+          "matching_target_commit_count": 1,
+          "selected": {
+            "databaseId": 999902,
+            "event": "workflow_dispatch",
+            "headSha": "3333333333333333333333333333333333333333",
+            "status": "completed",
+            "conclusion": "success",
+            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/999902"
+          }
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.2",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.2",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "active",
+          "current_checkpoint": "release",
+          "current_stop": "Release artifact readback incomplete."
+        }
+      }
+    },
+    {
+      "name": "drifted-tag",
+      "story": "A release tag exists, but it points at a different commit than the requested release target.",
+      "expected_verdict": "drifted",
+      "target": {
+        "repo": "MC-and-his-Agents/Loom",
+        "version": "v9.99.3",
+        "tag": "v9.99.3",
+        "npm_version": "9.99.3",
+        "npm_package": "@mc-and-his-agents/loom",
+        "package_json_version": "9.99.3",
+        "target_commit": "4444444444444444444444444444444444444444"
+      },
+      "readbacks": {
+        "tag": {
+          "kind": "git_tag",
+          "tag": "v9.99.3",
+          "exists": true,
+          "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "target_commit": "4444444444444444444444444444444444444444",
+          "matches_target_commit": false
+        },
+        "github_release": {
+          "kind": "github_release",
+          "tagName": "v9.99.3",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": true,
+          "url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.3"
+        },
+        "npm_package": {
+          "kind": "npm_package",
+          "package": "@mc-and-his-agents/loom",
+          "version": "9.99.3",
+          "observed_version": "9.99.3",
+          "version_exists": true,
+          "dist_tags": {
+            "latest": "9.99.3"
+          }
+        },
+        "workflow_run": {
+          "kind": "workflow_run",
+          "workflow": "loom-cli-release.yml",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": true,
+          "target_commit": "4444444444444444444444444444444444444444",
+          "matching_target_commit_count": 1,
+          "selected": {
+            "databaseId": 999903,
+            "event": "workflow_dispatch",
+            "headSha": "4444444444444444444444444444444444444444",
+            "status": "completed",
+            "conclusion": "success",
+            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/999903"
+          }
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.3",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.3",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "active",
+          "current_checkpoint": "release",
+          "current_stop": "Release artifact drift detected."
+        }
+      }
+    },
+    {
+      "name": "blocked-workflow",
+      "story": "Release artifacts exist, but the selected release workflow failed.",
+      "expected_verdict": "blocked",
+      "target": {
+        "repo": "MC-and-his-Agents/Loom",
+        "version": "v9.99.4",
+        "tag": "v9.99.4",
+        "npm_version": "9.99.4",
+        "npm_package": "@mc-and-his-agents/loom",
+        "package_json_version": "9.99.4",
+        "target_commit": "5555555555555555555555555555555555555555"
+      },
+      "readbacks": {
+        "tag": {
+          "kind": "git_tag",
+          "tag": "v9.99.4",
+          "exists": true,
+          "commit": "5555555555555555555555555555555555555555",
+          "target_commit": "5555555555555555555555555555555555555555",
+          "matches_target_commit": true
+        },
+        "github_release": {
+          "kind": "github_release",
+          "tagName": "v9.99.4",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": true,
+          "url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.4"
+        },
+        "npm_package": {
+          "kind": "npm_package",
+          "package": "@mc-and-his-agents/loom",
+          "version": "9.99.4",
+          "observed_version": "9.99.4",
+          "version_exists": true,
+          "dist_tags": {
+            "latest": "9.99.4"
+          }
+        },
+        "workflow_run": {
+          "kind": "workflow_run",
+          "workflow": "loom-cli-release.yml",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": true,
+          "target_commit": "5555555555555555555555555555555555555555",
+          "matching_target_commit_count": 1,
+          "selected": {
+            "databaseId": 999904,
+            "event": "workflow_dispatch",
+            "headSha": "5555555555555555555555555555555555555555",
+            "status": "completed",
+            "conclusion": "failure",
+            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/999904"
+          }
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.4",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.4",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "active",
+          "current_checkpoint": "release",
+          "current_stop": "Release workflow failed."
+        }
+      }
+    },
+    {
+      "name": "multi-worktree-main-busy",
+      "story": "Controlled merge readback sees the same head SHA and passing gate, but the main worktree is busy.",
+      "expected_verdict": "blocked",
+      "target": {
+        "repo": "MC-and-his-Agents/Loom",
+        "version": "v9.99.5",
+        "tag": "v9.99.5",
+        "npm_version": "9.99.5",
+        "npm_package": "@mc-and-his-agents/loom",
+        "package_json_version": "9.99.5",
+        "target_commit": "6666666666666666666666666666666666666666"
+      },
+      "readbacks": {
+        "tag": {
+          "kind": "git_tag",
+          "tag": "v9.99.5",
+          "exists": false
+        },
+        "github_release": {
+          "kind": "github_release",
+          "tag": "v9.99.5",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": false
+        },
+        "npm_package": {
+          "kind": "npm_package",
+          "package": "@mc-and-his-agents/loom",
+          "version": "9.99.5",
+          "version_exists": false,
+          "latest": "9.99.4"
         },
         "workflow_run": {
           "kind": "workflow_run",
@@ -215,6 +403,86 @@
           "repo": "MC-and-his-Agents/Loom",
           "exists": false,
           "selected": null
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.5",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.5",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "active",
+          "current_checkpoint": "merge",
+          "current_stop": "Main worktree is busy."
+        },
+        "merge_fallback": {
+          "kind": "controlled_merge_fallback",
+          "main_worktree_busy": true,
+          "same_head_sha": true,
+          "gate_passed": true,
+          "host_api_action": "use host merge API for the same head SHA after gate readback"
+        }
+      }
+    },
+    {
+      "name": "no-release-docs-only",
+      "story": "A no-release closeout path where readback must not infer publish intent from VERSION.",
+      "expected_verdict": "no_release",
+      "target": {
+        "repo": "MC-and-his-Agents/Loom",
+        "version": "v9.99.6",
+        "tag": "v9.99.6",
+        "npm_version": "9.99.6",
+        "npm_package": "@mc-and-his-agents/loom",
+        "package_json_version": "9.99.6",
+        "target_commit": "7777777777777777777777777777777777777777"
+      },
+      "readbacks": {
+        "tag": {
+          "kind": "git_tag",
+          "tag": "v9.99.6",
+          "exists": false
+        },
+        "github_release": {
+          "kind": "github_release",
+          "tag": "v9.99.6",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": false
+        },
+        "npm_package": {
+          "kind": "npm_package",
+          "package": "@mc-and-his-agents/loom",
+          "version": "9.99.6",
+          "version_exists": false,
+          "latest": "9.99.4"
+        },
+        "workflow_run": {
+          "kind": "workflow_run",
+          "workflow": "loom-cli-release.yml",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": false,
+          "selected": null
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.6",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.6",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "active",
+          "current_checkpoint": "closed_out",
+          "current_stop": "No-release evidence consumed."
         }
       }
     }

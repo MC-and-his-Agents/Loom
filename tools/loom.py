@@ -316,7 +316,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "delivery",
         "status": "implemented",
         "json": True,
-        "summary": "Read target VERSION, git tag, GitHub Release, npm package, and loom-cli-release workflow state without publishing.",
+        "summary": "Read target package surface, tag, GitHub Release, npm, workflow, and carrier terminal state into a publish/missing/drifted/blocked verdict without publishing.",
     },
     {
         "command": "release resume",
@@ -761,6 +761,74 @@ def npm_package_readback(target: Path, *, package_name: str, npm_version: str) -
     }
 
 
+def release_package_surface_readback(target: Path, *, context: dict[str, Any]) -> dict[str, Any]:
+    version_path = target / "VERSION"
+    package_path = target / "package.json"
+    version_text = None
+    package_name = None
+    package_version = None
+    errors: list[str] = []
+    if version_path.exists():
+        try:
+            version_text = version_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            errors.append(f"VERSION unreadable: {exc}")
+    else:
+        errors.append("VERSION missing")
+    if package_path.exists():
+        try:
+            package_data = json.loads(package_path.read_text(encoding="utf-8"))
+            if isinstance(package_data, dict):
+                package_name = package_data.get("name")
+                package_version = package_data.get("version")
+            else:
+                errors.append("package.json is not an object")
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"package.json unreadable: {exc}")
+    else:
+        errors.append("package.json missing")
+    expected_tag = context.get("tag")
+    expected_npm_version = context.get("npm_version")
+    expected_package = context.get("npm_package")
+    version_matches = version_text == expected_tag
+    package_version_matches = package_version == expected_npm_version
+    package_name_matches = package_name == expected_package
+    gaps: list[str] = []
+    if not version_matches:
+        gaps.append("version_file_mismatch")
+    if not package_version_matches:
+        gaps.append("package_json_version_mismatch")
+    if not package_name_matches:
+        gaps.append("package_name_mismatch")
+    return {
+        "kind": "package_surface",
+        "exists": package_path.exists() and version_path.exists(),
+        "version_file": version_text,
+        "package_json_name": package_name,
+        "package_json_version": package_version,
+        "expected_tag": expected_tag,
+        "expected_npm_version": expected_npm_version,
+        "expected_package": expected_package,
+        "result": "pass" if not errors and not gaps else "block",
+        "gaps": gaps,
+        "errors": errors,
+        "source": "VERSION + package.json",
+    }
+
+
+def release_carrier_status_readback(target: Path) -> dict[str, Any]:
+    status = ship_status_surface(target)
+    return {
+        "kind": "carrier_status",
+        "path": status.get("path"),
+        "state": status.get("state"),
+        "current_checkpoint": status.get("current_checkpoint"),
+        "current_stop": status.get("current_stop"),
+        "next_step": status.get("next_step"),
+        "blockers": status.get("blockers"),
+    }
+
+
 def workflow_run_readback(target: Path, *, repo: str | None, workflow: str, target_commit: str | None) -> dict[str, Any]:
     if not repo:
         return {
@@ -841,20 +909,29 @@ def release_read_errors(readbacks: dict[str, Any]) -> list[dict[str, Any]]:
 def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any]) -> dict[str, Any]:
     if release_judgment == "no_release":
         return {
+            "verdict": "no_release",
             "classification": "no_release",
             "reason": "release judgment declares no release required",
             "gaps": [],
             "resume_action": "record no-release rationale evidence; do not publish",
+            "next_action": "record no-release rationale evidence; do not publish",
         }
 
     tag = readbacks.get("tag", {})
     release = readbacks.get("github_release", {})
     npm = readbacks.get("npm_package", {})
     workflow = readbacks.get("workflow_run", {})
+    package_surface = readbacks.get("package_surface", {})
+    carrier = readbacks.get("carrier", {})
+    merge_fallback = readbacks.get("merge_fallback", {})
     tag_exists = tag.get("exists") is True
     tag_matches = tag.get("matches_target_commit") is True
     release_exists = release.get("exists") is True
     npm_exists = npm.get("version_exists") is True
+    npm_latest = npm.get("dist_tags", {}).get("latest") if isinstance(npm.get("dist_tags"), dict) else npm.get("latest")
+    npm_latest_matches = not npm_exists or npm_latest in (None, npm.get("version"))
+    package_surface_pass = not isinstance(package_surface, dict) or package_surface.get("result") in (None, "pass")
+    carrier_terminal = not isinstance(carrier, dict) or carrier.get("state") in (None, "terminal")
     workflow_selected = workflow.get("selected") if isinstance(workflow.get("selected"), dict) else None
     workflow_target_commit = workflow.get("target_commit")
     workflow_matches_target = (
@@ -889,26 +966,94 @@ def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any
         gaps.append("workflow_run_target_commit_missing")
     elif not workflow_success:
         gaps.append("workflow_run_not_success")
+    if not npm_latest_matches:
+        gaps.append("npm_latest_dist_tag_mismatch")
+    if not package_surface_pass and isinstance(package_surface, dict):
+        gaps.extend(str(gap) for gap in package_surface.get("gaps", []) if gap)
+    if tag_exists and tag_matches and release_exists and npm_exists and workflow_success and not carrier_terminal:
+        gaps.append("carrier_not_terminal")
+
+    if isinstance(merge_fallback, dict) and merge_fallback.get("main_worktree_busy"):
+        same_head = merge_fallback.get("same_head_sha") is True
+        gate_passed = merge_fallback.get("gate_passed") is True
+        action = merge_fallback.get("host_api_action") or (
+            "use host merge API for the same head SHA after gate readback" if same_head and gate_passed else "free the main worktree, then rerun controlled merge"
+        )
+        return {
+            "verdict": "blocked",
+            "classification": "blocked",
+            "reason": "main worktree is busy during controlled merge readback",
+            "gaps": ["main_worktree_busy"],
+            "resume_action": action,
+            "next_action": action,
+        }
+
+    if not package_surface_pass:
+        return {
+            "verdict": "blocked",
+            "classification": "blocked",
+            "reason": "local package release surface does not match the requested release target",
+            "gaps": gaps,
+            "resume_action": "align VERSION and package.json with the release target before publishing",
+            "next_action": "align VERSION and package.json with the release target before publishing",
+        }
 
     if present_count == 0:
         return {
-            "classification": "unpublished",
+            "verdict": "missing",
+            "classification": "missing",
+            "legacy_classification": "unpublished",
             "reason": "release-required readback found no tag, GitHub Release, or npm version",
             "gaps": gaps,
             "resume_action": "publish path is still unoccupied; use the release workflow only after the release intent is authorized",
+            "next_action": "publish path is still unoccupied; use the release workflow only after the release intent is authorized",
         }
     if tag_exists and tag_matches and release_exists and npm_exists and workflow_success:
+        if not carrier_terminal:
+            return {
+                "verdict": "blocked",
+                "classification": "blocked",
+                "reason": "release artifacts are published but the repo carrier is not terminal",
+                "gaps": gaps,
+                "resume_action": "run loom closeout sync to consume the published release facts into terminal carrier state",
+                "next_action": "run loom closeout sync to consume the published release facts into terminal carrier state",
+            }
         return {
+            "verdict": "published",
             "classification": "published",
             "reason": "tag, GitHub Release, npm package, and workflow run read back consistently",
             "gaps": [],
             "resume_action": "consume release closeout evidence; do not republish",
+            "next_action": "consume release closeout evidence; do not republish",
+        }
+    if "workflow_run_not_success" in gaps:
+        return {
+            "verdict": "blocked",
+            "classification": "blocked",
+            "reason": "release workflow run exists but did not complete successfully",
+            "gaps": gaps,
+            "resume_action": "inspect the failed release workflow before repairing or rerunning publication",
+            "next_action": "inspect the failed release workflow before repairing or rerunning publication",
+        }
+    drift_gaps = {"tag_target_commit_mismatch", "workflow_run_target_commit_missing", "npm_latest_dist_tag_mismatch"}
+    if any(gap in drift_gaps for gap in gaps):
+        return {
+            "verdict": "drifted",
+            "classification": "drifted",
+            "legacy_classification": "partial_published",
+            "reason": "release evidence exists but at least one artifact is bound to a different target",
+            "gaps": gaps,
+            "resume_action": "repair release drift without overwriting existing tag, release, or npm version",
+            "next_action": "repair release drift without overwriting existing tag, release, or npm version",
         }
     return {
-        "classification": "partial_published",
+        "verdict": "missing",
+        "classification": "missing",
+        "legacy_classification": "partial_published",
         "reason": "at least one release artifact exists but the release evidence set is incomplete or mismatched",
         "gaps": gaps,
         "resume_action": "repair only the missing release evidence; do not overwrite existing tag, release, or npm version",
+        "next_action": "repair only the missing release evidence; do not overwrite existing tag, release, or npm version",
     }
 
 
@@ -986,13 +1131,24 @@ def release_readback_payload(
             "github_release": github_release_readback(target, repo=resolved_repo, tag=context["tag"]),
             "npm_package": npm_package_readback(target, package_name=context["npm_package"], npm_version=context["npm_version"]),
             "workflow_run": workflow_run_readback(target, repo=resolved_repo, workflow=workflow, target_commit=target_commit),
+            "package_surface": release_package_surface_readback(target, context=context),
+            "carrier": release_carrier_status_readback(target),
         }
 
     errors = release_read_errors(readbacks)
     classification = classify_release_readback(release_judgment=release_judgment, readbacks=readbacks)
+    if errors:
+        classification = {
+            "verdict": "blocked",
+            "classification": "blocked",
+            "reason": "one or more release readback surfaces are unreadable",
+            "gaps": [error["surface"] for error in errors],
+            "resume_action": "restore host/npm readback access before deciding release closeout state",
+            "next_action": "restore host/npm readback access before deciding release closeout state",
+        }
     result = "block" if errors else "pass"
     summary = (
-        f"Release readback classified {classification['classification']}."
+        f"Release readback verdict: {classification['verdict']}."
         if result == "pass"
         else "Release readback could not read one or more host surfaces."
     )
@@ -1015,6 +1171,13 @@ def release_readback_payload(
         classification=classification,
         readbacks=readbacks,
         read_errors=errors,
+        diagnostic={
+            "verdict": classification.get("verdict"),
+            "blocked": classification.get("verdict") == "blocked" or bool(errors),
+            "gaps": classification.get("gaps", []),
+            "next_action": classification.get("next_action") or classification.get("resume_action"),
+        },
+        next_action=classification.get("next_action") or classification.get("resume_action"),
         failed_layer="release-readback" if errors else None,
         fail_closed_reason="host_readback_unavailable" if errors else None,
         fallback_to=["resolve host readback/auth via #1597 before retrying"] if errors else None,
@@ -1046,6 +1209,7 @@ def handle_release(argv: list[str]) -> int:
     parser.add_argument("--fixture-file")
     parser.add_argument("--fixture")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv[1:])
     target = resolve_target(args.target)
     if not target.exists():

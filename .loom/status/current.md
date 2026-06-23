@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1775
-- Goal: 实现 `loom closeout status` / `loom closeout sync` 消费 merged PR 与 terminal carrier。
-- Scope: Issue #1775: add a closeout readback and sync surface that reads PR metadata, host closeout state, terminal carrier status, and cleanup state; it may apply PR metadata stabilization and existing closeout reconciliation when explicitly invoked with `--apply`. Ownership is limited to `tools/loom.py`, `tools/check_cli_contract.py`, WI-1775 carriers, `.loom/specs/WI-1775`, and `.loom/reviews/WI-1775.json`.
-- Execution Path: issue #1775 -> branch work/1775-closeout-sync -> PR pending -> controlled merge -> closeout.
+- Item ID: WI-1776
+- Goal: 实现 `loom release readback` / `loom release resume` 的发布读回 verdict 与短诊断。
+- Scope: Issue #1776: combine tag commit, GitHub Release, npm package/dist-tag, release workflow, package surface, carrier terminal state, and controlled-merge fallback readback into a release closeout verdict: `published`, `missing`, `drifted`, or `blocked`. Ownership is limited to `tools/loom.py`, `tools/check_cli_contract.py`, release-readback fixtures, WI-1776 carriers, `.loom/specs/WI-1776`, and `.loom/reviews/WI-1776*.json`.
+- Execution Path: issue #1776 -> branch work/1776-release-readback-verdict -> PR pending -> controlled merge -> closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1775.md
-- Review Entry: .loom/reviews/WI-1775.json
-- Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface closeout-wrapper`; closeout sync/status smoke.
-- Closing Condition: PR merged and issue #1775 closed with closeout sync evidence consumed by #1776.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1775 closed out by closeout run: PR #1781 merged at 2be1d62b314340c2e3a2aca49d669e858f23f34e, issue #1775 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1775 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1776.md
+- Review Entry: .loom/reviews/WI-1776.json
+- Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface release-readback`; live `loom release readback` v0.21.0 dry-run.
+- Closing Condition: PR merged and issue #1776 closed with release readback verdict evidence consumed by #1778.
+- Current Checkpoint: merge
+- Current Stop: WI-1776 implementation is locally validated and ready for PR metadata stabilization, hosted gate consumption, controlled merge, and closeout.
+- Next Step: Open PR for `work/1776-release-readback-verdict`, stabilize PR metadata against the current head SHA, consume hosted checks, merge, then let #1778 consume the release verdict behavior.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1775-closeout-sync`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface closeout-wrapper; python3 tools/loom.py suite validate --target . --item WI-1775 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1775 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1775 --json; python3 tools/loom.py fact-chain --target . --item WI-1775 --json; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py help --json | rg -n 'closeout status|closeout sync|closeout run|closeout"'; python3 tools/loom.py closeout status --target . --item WI-1777 --issue 1777 --pr 1779 --branch work/1777-ship-preflight-status --head-sha c16c3e93c915574bff17629df8bc90a3e7c903d4 --skip-metadata --json --full-output. 2026-06-23 readback without --skip-metadata on historical PR #1779 produced the expected metadata-readback blocker because #1779 predates closeout-surface machine metadata.
-- Recovery Boundary: WI-1775 owns closeout status/sync readback, PR metadata race stabilization before closeout consumption, terminal cleanup readback, its spec/review/status carriers, and targeted closeout-wrapper regression coverage only. It does not implement release readback verdicts, publishing, automatic branch deletion, worktree deletion, or new release closeout behavior.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, `workflow_run_target_commit_missing`, `version_file_mismatch`, and `package_json_version_mismatch`; next action: align VERSION and package.json with the release target before publishing.
+- Recovery Boundary: WI-1776 owns release readback verdict classification and fixture coverage only. It does not publish, tag, create GitHub Releases, bump versions for v0.21.0, mutate closeout carriers, or implement automatic host-safe worktree locator generation.
+- Current Lane: release-readback-verdict
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-23 WI-1775 implementation started in `/Users/mc/dev/Loom-WI-1775-closeout-sync` on branch `work/1775-closeout-sync`.
-- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1775.md`.
-- Diagnostics Entry: `loom closeout status` / `loom closeout sync` emit blocked/fixed/next_action diagnostics for closeout metadata, host closeout reconciliation, carrier sync, and terminal cleanup readback.
-- Verification Entry: py compile, closeout-wrapper contract, suite/fact-chain/shadow checks, diff check, and closeout status smoke passed.
-- Lane Entry: closeout-sync
+- Run Entry: 2026-06-23 WI-1776 implementation started in repo-relative workspace `.` on branch `work/1776-release-readback-verdict`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1776.md`.
+- Diagnostics Entry: `loom release readback` / `loom release resume` emit verdict, blocked, gaps, and next_action diagnostics for release closeout readback.
+- Verification Entry: py compile, release-readback contract, JSON fixture validation, live v0.21.0 dry-run readback, and diff check passed.
+- Lane Entry: release-readback-verdict
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1775.md
-- Dynamic Truth: .loom/progress/WI-1775.md
+- Static Truth: .loom/work-items/WI-1776.md
+- Dynamic Truth: .loom/progress/WI-1776.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
