@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1778",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1778 implementation review allows the v0.21.0 release candidate: VERSION/package.json are aligned to 0.21.0, plugin payload metadata/hash matches the candidate, release readiness evidence names the completed #1774 tree, and WI-1778 status/progress/shadow carriers are internally consistent. No product code behavior is changed in this release closeout PR beyond publishing already merged functionality.",
+  "reviewer": "codex-main-controller",
+  "authored_at": "2026-06-23T18:28:55Z",
+  "reviewed_head": "e6c158c4523e6fbcc7e077c8fbac2375a422cbae",
+  "reviewed_validation_summary": "2026-06-23 release candidate validation passed on branch `work/1778-v021-release-closeout`: git diff --check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; npm pack --dry-run --json --ignore-scripts; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --fixture-group ship-wrapper; python3 tools/loom.py suite validate/evidence/carrier --target . --item WI-1778 --json; python3 tools/loom.py fact-chain --target . --item WI-1778 --json; python3 tools/loom_flow.py state-check --target . --item WI-1778; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking. Live release readback for v0.21.0 returned verdict `missing` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_target_commit_missing`, confirming the publish path is still unoccupied while package surface is aligned.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1778.md",
+    "recovery_entry": ".loom/progress/WI-1778.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/default-codex-exec",
+    "engine_evidence": "docs/evidence/v0.21.0-release-readiness.md",
+    "normalized_findings": "docs/evidence/v0.21.0-release-readiness.md",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1778 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1778 --json",
+    "suite_evidence_map": ".loom/specs/WI-1778/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1778/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current release candidate head for merge checkpoint consumption."
+  }
+}

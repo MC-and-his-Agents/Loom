@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1776
-- Goal: 实现 `loom release readback` / `loom release resume` 的发布读回 verdict 与短诊断。
-- Scope: Issue #1776: combine tag commit, GitHub Release, npm package/dist-tag, release workflow, package surface, carrier terminal state, and controlled-merge fallback readback into a release closeout verdict: `published`, `missing`, `drifted`, or `blocked`. Ownership is limited to `tools/loom.py`, `tools/check_cli_contract.py`, release-readback fixtures, WI-1776 carriers, `.loom/specs/WI-1776`, and `.loom/reviews/WI-1776*.json`.
-- Execution Path: issue #1776 -> branch work/1776-release-readback-verdict -> PR pending -> controlled merge -> closeout.
+- Item ID: WI-1778
+- Goal: 执行 v0.21.0 closeout readback 主路径产品化能力的 release closeout。
+- Scope: bump root Loom CLI release authority to `v0.21.0`, align root npm package and Codex plugin payload release metadata, add v0.21.0 release readiness evidence, publish tag/GitHub Release/npm after merge, and close out #1778/#1774/milestone #18 after release readback. Ownership is limited to v0.21.0 release authority, plugin payload release metadata/hash, release readiness evidence, WI-1778 carriers, and current status/shadow readback. Do not bump plugin surface version, skills registry version, skill contract versions, or legacy `@mc-and-his-agents/loom-installer`.
+- Execution Path: issue #1778 -> branch work/1778-v021-release-closeout -> release readiness evidence -> release PR -> main push release workflow -> release readback -> #1778/#1774/milestone #18 closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1776.md
-- Review Entry: .loom/reviews/WI-1776.json
-- Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface release-readback`; live `loom release readback` v0.21.0 dry-run.
-- Closing Condition: PR merged and issue #1776 closed with release readback verdict evidence consumed by #1778.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1776 closed out by closeout run: PR #1783 merged at 2cb05e1ecd9f33bac024005e16caf3070cd1581a, issue #1776 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1776 implementation work remains.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, `workflow_run_target_commit_missing`, `version_file_mismatch`, and `package_json_version_mismatch`; next action: align VERSION and package.json with the release target before publishing.
-- Recovery Boundary: WI-1776 owns release readback verdict classification and fixture coverage only. It does not publish, tag, create GitHub Releases, bump versions for v0.21.0, mutate closeout carriers, or implement automatic host-safe worktree locator generation.
-- Current Lane: post-merge-closeout-run
+- Recovery Entry: .loom/progress/WI-1778.md
+- Review Entry: .loom/reviews/WI-1778.json
+- Validation Entry: release readback, release/package checks, closeout/readback regressions, npm package smoke, suite/fact-chain, hosted checks, and post-merge release readback.
+- Closing Condition: v0.21.0 tag, GitHub Release, npm `@mc-and-his-agents/loom@0.21.0`, plugin payload metadata/hash, #1778/#1774 closeout evidence, and milestone #18 readback are consistent.
+- Current Checkpoint: merge
+- Current Stop: v0.21.0 release closeout candidate is prepared on branch `work/1778-v021-release-closeout`: release authority, plugin payload metadata, release readiness evidence, and WI-1778 carriers are being validated before release PR review.
+- Next Step: Run release/package/local Loom validation, open the release PR, consume hosted checks and controlled merge, then read back tag/GitHub Release/npm before terminal closeout.
+- Blockers: none
+- Latest Validation Summary: 2026-06-23 release candidate validation passed on branch `work/1778-v021-release-closeout`: git diff --check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; npm pack --dry-run --json --ignore-scripts; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --fixture-group ship-wrapper; python3 tools/loom.py suite validate/evidence/carrier --target . --item WI-1778 --json; python3 tools/loom.py fact-chain --target . --item WI-1778 --json; python3 tools/loom_flow.py state-check --target . --item WI-1778; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking. Live release readback for v0.21.0 returned verdict `missing` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_target_commit_missing`, confirming the publish path is still unoccupied while package surface is aligned.
+- Recovery Boundary: WI-1778 owns v0.21.0 root release authority, plugin payload release metadata/hash, release readiness evidence, WI-1778 carriers, and current status/shadow readback. It does not add new closeout/readback product behavior beyond publishing the completed #1774 tree, does not publish a legacy installer version, and does not change plugin surface compatibility.
+- Current Lane: release-closeout
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-23 WI-1776 implementation started in repo-relative workspace `.` on branch `work/1776-release-readback-verdict`.
-- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1776.md`.
-- Diagnostics Entry: `loom release readback` / `loom release resume` emit verdict, blocked, gaps, and next_action diagnostics for release closeout readback.
-- Verification Entry: py compile, release-readback contract, JSON fixture validation, live v0.21.0 dry-run readback, and diff check passed.
-- Lane Entry: release-readback-verdict
+- Run Entry: 2026-06-23 WI-1778 release closeout started in repo-relative workspace `.` on branch `work/1778-v021-release-closeout`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1778.md`.
+- Diagnostics Entry: `loom release readback` / `loom release resume` must classify v0.21.0 publication state as `published`, `missing`, `drifted`, or `blocked`.
+- Verification Entry: Release/package checks, release-readback regression, ship-wrapper regression, npm smoke, npm pack dry-run, suite/fact-chain, PR metadata, hosted checks, controlled merge, and post-merge release readback are required before terminal closeout.
+- Lane Entry: release-closeout
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1776.md
-- Dynamic Truth: .loom/progress/WI-1776.md
+- Static Truth: .loom/work-items/WI-1778.md
+- Dynamic Truth: .loom/progress/WI-1778.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
