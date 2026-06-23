@@ -19,7 +19,7 @@
 
 ## Produces
 
-- Artifact inventory: `spec.md`, `plan.md`, `research.md`, `contracts.md`, `readiness-checklist.md`, `evidence-map.md`, `task-carrier.md`.
+- Artifact inventory: `spec.md`, `plan.md`, `implementation-contract.md`, `research.md`, `contracts.md`, `readiness-checklist.md`, `evidence-map.md`, `task-carrier.md`.
 - Path selection rationale: full suite required for ship wrapper behavior and validation command selection.
 - Story readiness consumed state: not required.
 - Story business confirmation consumed state: not required.
@@ -33,6 +33,7 @@
 | --- | --- | --- | --- | --- |
 | `spec.md` | .loom/specs/WI-1741/spec.md | required / present | `plan.md`, review, merge-ready, closeout | issue #1741 |
 | `plan.md` | .loom/specs/WI-1741/plan.md | required / present | implementation, review, merge-ready, closeout | issue #1741 and local validation |
+| `implementation-contract.md` | .loom/specs/WI-1741/implementation-contract.md | required / present | implementation, review, merge-ready, closeout | issue #1741 and local validation |
 | `research.md` | .loom/specs/WI-1741/research.md | conditional / present | plan and review | changed-path validation inventory |
 | `contracts.md` | .loom/specs/WI-1741/contracts.md | conditional / present | plan, review, CLI consumers | ship validation profile output contract |
 | `readiness-checklist.md` | .loom/specs/WI-1741/readiness-checklist.md | conditional / present | build / review readiness consumers | local validation |
