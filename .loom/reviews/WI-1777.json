@@ -1,0 +1,30 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1777",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1777 adds read-only `loom ship status` and `loom ship preflight` commands that report checkout, host issue, release, npm, and carrier state with a short blocked/fixed/next_action diagnostic. The diff stays scoped to the ship status surface, its contract regression, and issue-scoped Loom carriers.",
+  "reviewer": "Codex main controller",
+  "authored_at": "2026-06-23T14:54:36Z",
+  "reviewed_head": "61dfc782d92b82fc6fba31642b9d48a3a62a1343",
+  "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1777-ship-preflight-status`: git diff --check; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface ship-wrapper; python3 tools/loom.py suite validate --target . --item WI-1777 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1777 --json; python3 tools/loom.py fact-chain --target . --item WI-1777 --json; python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py help --json | rg -n 'ship status|ship preflight|ship\"'; python3 tools/loom.py ship preflight --target . --item WI-1777 --issue 1777 --milestone 18 --version v0.21.0 --package @mc-and-his-agents/loom --json --full-output.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1777.md",
+    "recovery_entry": ".loom/progress/WI-1777.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1777 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1777 --json",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1777/task-carrier.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
