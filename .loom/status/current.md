@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper
 - Closing Condition: PR merged and issue #1738 closed with ship binding inference evidence.
 - Current Checkpoint: merge
-- Current Stop: WI-1738 implementation, minimal suite, review records, and shadow refresh are ready for PR metadata readback and hosted checks.
-- Next Step: Push branch work/1738-ship-inference, open PR, verify PR metadata/head SHA/checks, then merge and close out issue #1738.
+- Current Stop: WI-1738 ship binding inference implementation, hosted workspace evidence, PR metadata readback, and GitHub API budget fix are ready for hosted checks.
+- Next Step: Push branch work/1738-ship-inference, verify PR metadata/head SHA/checks, then merge and close out issue #1738.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-23 local validation passed for git diff --check; python3 .loom/bin/loom_init.py fact-chain --target . confirmed workspace_entry=.loom/.. and no blocking failures; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1738 passed; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1738 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1738 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1738 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --item WI-1738 --apply returned remaining_refresh=[]; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py shadow-parity --target . --surface all --blocking.
+- Latest Validation Summary: 2026-06-23 local validation passed for git diff --check; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface ship-wrapper; rg confirmed github-api-budget forbidden gh view strings absent from tools and skills/shared/scripts; PR metadata preflight for #1762 passed at head 7a2af448e2b822b446e9d5380a972a07edf248bb before the budget fix; hosted loom-pr-merge-gate rerun passed after PR body readback; hosted loom-check failed on github-api-budget before replacing ship PR readback with gh api.
 - Recovery Boundary: WI-1738 owns `loom ship` binding inference behavior, its CLI contract regression, and WI-1738 fact-chain/review/shadow evidence only.
 - Current Lane: ship-inference
 

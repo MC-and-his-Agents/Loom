@@ -800,6 +800,48 @@ def assert_ship_infers_pr_bindings_contract() -> None:
         module.git_head_sha_for_target = original_git_head
 
 
+def assert_ship_pr_readback_uses_api_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship PR readback regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        payload = {
+            "number": 1762,
+            "state": "OPEN",
+            "headRefName": "work/1738-ship-inference",
+            "headRefOid": "a" * 40,
+            "baseRefName": "main",
+            "body": "PR body",
+            "url": "https://github.com/MC-and-his-Agents/Loom/pull/1762",
+        }
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps(payload), stderr="")
+
+    original_run_capture = module.run_capture
+    original_infer_github_repo = module.infer_github_repo
+    module.run_capture = fake_run_capture
+    module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
+    try:
+        args = argparse.Namespace(pr=1762, pr_payload_file=None, owner=None, repo_name=None)
+        payload, errors = module.ship_pr_payload(args, REPO_ROOT)
+        if errors or payload is None:
+            raise AssertionError(f"ship PR readback should pass with gh api payload, got errors={errors}")
+        if payload.get("headRefName") != "work/1738-ship-inference" or payload.get("headRefOid") != "a" * 40:
+            raise AssertionError("ship PR readback must preserve normalized branch/head fields")
+        if not calls or calls[0][:3] != ["gh", "api", "repos/MC-and-his-Agents/Loom/pulls/1762"]:
+            raise AssertionError(f"ship PR readback must use gh api pull request endpoint, got {calls}")
+        if any("pr" in part and "view" in part for part in calls[0]):
+            raise AssertionError("ship PR readback must not use the high-frequency PR view shortcut")
+    finally:
+        module.run_capture = original_run_capture
+        module.infer_github_repo = original_infer_github_repo
+
+
 def assert_ship_apply_wrapper_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -9006,6 +9048,7 @@ def run_merge_wrapper_surface() -> None:
 def run_ship_wrapper_surface() -> None:
     assert_ship_dry_run_wrapper_contract()
     assert_ship_infers_pr_bindings_contract()
+    assert_ship_pr_readback_uses_api_contract()
     assert_ship_apply_wrapper_contract()
     assert_ship_closeout_policy_admission_contract()
     assert_ship_docs_entry_contract()

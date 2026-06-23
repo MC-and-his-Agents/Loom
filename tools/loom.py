@@ -4812,26 +4812,33 @@ def ship_pr_payload(args: argparse.Namespace, target: Path) -> tuple[dict[str, A
         return payload, []
     if args.pr is None:
         return None, []
+    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else infer_github_repo(target)
+    if not repo_slug:
+        return None, ["unable to infer GitHub repository for PR readback; pass --owner and --repo"]
     completed = run_capture(
         [
             "gh",
-            "pr",
-            "view",
-            str(args.pr),
-            "--json",
-            "number,state,headRefName,headRefOid,baseRefName,body,url",
+            "api",
+            f"repos/{repo_slug}/pulls/{args.pr}",
+            "--jq",
+            (
+                "{number,state,body,url,"
+                "headRefName:.head.ref,"
+                "headRefOid:.head.sha,"
+                "baseRefName:.base.ref}"
+            ),
         ],
         cwd=target,
     )
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "gh pr view failed"
+        detail = completed.stderr.strip() or completed.stdout.strip() or "gh api pull request readback failed"
         return None, [detail]
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
-        return None, [f"invalid JSON from gh pr view: {exc.msg}"]
+        return None, [f"invalid JSON from gh api pull request readback: {exc.msg}"]
     if not isinstance(payload, dict):
-        return None, ["gh pr view did not return a JSON object"]
+        return None, ["gh api pull request readback did not return a JSON object"]
     return payload, []
 
 
