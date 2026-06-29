@@ -25,6 +25,7 @@ REQUIRED_FILES = {
     "package.json",
     "bin/loom.mjs",
     "tools/loom.py",
+    "tools/runtime_wrapper.py",
     "tools/loom_flow.py",
     "tools/loom_init.py",
     "tools/loom_check.py",

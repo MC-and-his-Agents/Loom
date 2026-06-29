@@ -2047,6 +2047,8 @@ def build_result(
     initial_artifact_list = initial_artifacts(target_root, install_pr_template, adoption_path, profile)
     result = {
         "schema_version": "loom-init-output/v1",
+        "result": "pass",
+        "summary": "Bootstrap analysis completed.",
         "generator": {
             "tool": RUNTIME_SOURCE,
             "tool_version": TOOL_VERSION,
