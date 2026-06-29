@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const repoVersion = readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 function runLoom(args) {
   return spawnSync(process.execPath, ["bin/loom.mjs", ...args], {
-    cwd: new URL("..", import.meta.url),
+    cwd: repoRoot,
     encoding: "utf8"
   });
 }
@@ -62,4 +66,38 @@ test("loom bin reports the root VERSION", () => {
   const payload = JSON.parse(completed.stdout);
   assert.equal(payload.result, "pass");
   assert.equal(payload.versions.repo_version, repoVersion);
+});
+
+test("packed npm payload runs init bootstrap without a missing skills tree", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "loom-npm-package-smoke-"));
+  try {
+    const packed = spawnSync("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", tmp], {
+      cwd: repoRoot,
+      encoding: "utf8"
+    });
+    assert.equal(packed.status, 0, packed.stderr || packed.stdout);
+    const packInfo = JSON.parse(packed.stdout);
+    const tarball = join(tmp, packInfo[0].filename);
+    const extractRoot = join(tmp, "extract");
+    mkdirSync(extractRoot);
+    const extracted = spawnSync("tar", ["-xzf", tarball, "-C", extractRoot], { encoding: "utf8" });
+    assert.equal(extracted.status, 0, extracted.stderr);
+
+    const fixtureRepo = join(tmp, "fixture-repo");
+    mkdirSync(fixtureRepo);
+    const initialized = spawnSync("git", ["init", "--quiet"], { cwd: fixtureRepo, encoding: "utf8" });
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const completed = spawnSync(
+      process.execPath,
+      [join(extractRoot, "package", "bin", "loom.mjs"), "init", "bootstrap", "--target", fixtureRepo, "--json"],
+      { cwd: tmp, encoding: "utf8" }
+    );
+    assert.equal(completed.status, 0, completed.stderr || completed.stdout);
+    assert.doesNotMatch(`${completed.stdout}\n${completed.stderr}`, /FileNotFoundError/);
+    const payload = JSON.parse(completed.stdout);
+    assert.equal(payload.result, "pass");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
