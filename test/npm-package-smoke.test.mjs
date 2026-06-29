@@ -88,9 +88,20 @@ test("packed npm payload runs init bootstrap without a missing skills tree", () 
     const initialized = spawnSync("git", ["init", "--quiet"], { cwd: fixtureRepo, encoding: "utf8" });
     assert.equal(initialized.status, 0, initialized.stderr);
 
+    const loomBin = join(extractRoot, "package", "bin", "loom.mjs");
+    const runtimeState = spawnSync(
+      process.execPath,
+      [loomBin, "init", "runtime-state", "--target", fixtureRepo, "--json"],
+      { cwd: tmp, encoding: "utf8" }
+    );
+    assert.equal(runtimeState.status, 0, runtimeState.stderr || runtimeState.stdout);
+    const runtimePayload = JSON.parse(runtimeState.stdout);
+    assert.equal(runtimePayload.runtime_state.scene, "installed-runtime");
+    assert.equal(runtimePayload.runtime_state.carrier, "installed-skills-root");
+
     const completed = spawnSync(
       process.execPath,
-      [join(extractRoot, "package", "bin", "loom.mjs"), "init", "bootstrap", "--target", fixtureRepo, "--json"],
+      [loomBin, "init", "bootstrap", "--target", fixtureRepo, "--json"],
       { cwd: tmp, encoding: "utf8" }
     );
     assert.equal(completed.status, 0, completed.stderr || completed.stdout);

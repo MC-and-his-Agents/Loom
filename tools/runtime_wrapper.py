@@ -54,7 +54,11 @@ def run_shared_script(script_name: str) -> None:
     sys.dont_write_bytecode = True
     skills_root = resolve_skills_root(script_name)
     os.environ["LOOM_INSTALLED_SKILLS_ROOT"] = str(skills_root)
-    os.environ.setdefault("LOOM_SOURCE_REPO_ROOT", str(REPO_ROOT))
-    os.environ["LOOM_RUNTIME_SCENE"] = "repo-local-demo"
+    if skills_root.resolve() == (REPO_ROOT / "skills").resolve():
+        os.environ["LOOM_SOURCE_REPO_ROOT"] = str(REPO_ROOT)
+        os.environ["LOOM_RUNTIME_SCENE"] = "repo-local-demo"
+    else:
+        os.environ.pop("LOOM_SOURCE_REPO_ROOT", None)
+        os.environ.pop("LOOM_RUNTIME_SCENE", None)
     sys.path.insert(0, str(skills_root / "shared" / "scripts"))
     runpy.run_path(skills_root / "shared" / "scripts" / script_name, run_name="__main__")
