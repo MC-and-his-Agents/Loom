@@ -3,11 +3,11 @@
   "item_id": "WI-1790",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Closeout carrier review allows WI-1790 at PR #1791 head 26e3ea9c: the diff is limited to terminal closeout metadata, goal-completion release/install/plugin-refresh evidence, status terminalization, and shadow hash refresh. No runtime or product code changed; release readback, closeout status, fact-chain, suite evidence/carrier validation, JSON validation, and diff whitespace checks passed.",
+  "summary": "Implementation review allows WI-1790 at carrier head 800b163e: the fix centralizes wrapper runtime resolution, preserves repo-local behavior, adds package bootstrap smoke coverage, aligns v0.21.1 package/plugin metadata, and refreshes demo bootstrap fixtures. Local source, package, suite, carrier, fact-chain, and shadow checks passed; no blocking findings remain.",
   "reviewer": "codex-main-controller",
-  "authored_at": "2026-06-29T10:22:00Z",
-  "reviewed_head": "26e3ea9c3a37e038890d9f70a39ed53e1866d9d3",
-  "reviewed_validation_summary": "2026-06-29 closeout validation on branch `work/WI-1790-closeout-sync` head `26e3ea9c3a37e038890d9f70a39ed53e1866d9d3`: `python3 tools/loom.py release readback --target . --version v0.21.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit 9668401faa7e334addc4dad6b42978656757b15e --release-judgment release_required --json`; `CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom.py closeout status --target . --item WI-1790 --issue 1790 --pr 1790 --pr-role release_pr --release-pr 1790 --branch main --owner MC-and-his-Agents --repo Loom --goal-completion .loom/progress/WI-1790-goal-completion.json --skip-metadata --skip-cleanup --json`; `python3 tools/loom.py fact-chain --target . --item WI-1790 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1790 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1790 --json`; `python3 -m json.tool .loom/progress/WI-1790-goal-completion.json >/dev/null`; `git diff --check HEAD~1..HEAD` passed.",
+  "authored_at": "2026-06-29T09:50:40Z",
+  "reviewed_head": "800b163e721d65536fa390ef177290c366a5d175",
+  "reviewed_validation_summary": "2026-06-29 local validation on branch `work/fix-init-bootstrap-entrypoint` head `2c75fd3551b1c0d65bca5f59a4b4fa89851069d6`: `python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/check_npm_package.py tools/check_release_surface.py tools/version_surface_check.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/skills_surface.py check --surface plugin-payload-metadata`; `python3 tools/check_npm_package.py`; `npm run test:package`; `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift`; `git diff --check` passed. PR #1790 hosted checks are still pending or blocked on carrier metadata at this checkpoint.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1790.md",
     "recovery_entry": ".loom/progress/WI-1790.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "terminal_closeout_carrier_review",
+    "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored closeout carrier review approved PR #1791 head for closeout carrier synchronization."
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
