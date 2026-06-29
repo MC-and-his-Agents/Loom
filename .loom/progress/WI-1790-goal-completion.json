@@ -1,0 +1,44 @@
+{
+  "schema_version": "loom-goal-completion/v1",
+  "work_item": {
+    "id": "WI-1790"
+  },
+  "terminal_state": "closed_out",
+  "issue": {
+    "number": 1790,
+    "state": "closed",
+    "closed_at": "2026-06-29T09:59:58Z",
+    "url": "https://github.com/MC-and-his-Agents/Loom/pull/1790"
+  },
+  "release_pr": {
+    "number": 1790,
+    "head_sha": "fbb9b79a9ecf156f856648289281bf3b757368d6",
+    "merged_at": "2026-06-29T09:59:58Z",
+    "merge_commit": "9668401faa7e334addc4dad6b42978656757b15e",
+    "url": "https://github.com/MC-and-his-Agents/Loom/pull/1790"
+  },
+  "release": {
+    "version": "v0.21.1",
+    "package": "@mc-and-his-agents/loom",
+    "npm_version": "0.21.1",
+    "npm_latest": "0.21.1",
+    "tag": "v0.21.1",
+    "target_commit": "9668401faa7e334addc4dad6b42978656757b15e",
+    "github_release_url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.21.1",
+    "github_release_published_at": "2026-06-29T10:04:35Z",
+    "workflow_run_id": 28363997583,
+    "workflow_run_url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/28363997583",
+    "workflow_conclusion": "success",
+    "workflow_head_sha": "9668401faa7e334addc4dad6b42978656757b15e"
+  },
+  "evidence": {
+    "release_readback_command": "python3 tools/loom.py release readback --target . --version v0.21.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit 9668401faa7e334addc4dad6b42978656757b15e --release-judgment release_required --json",
+    "release_readback_result": "blocked_until_carrier_terminal",
+    "installed_cli_smoke": "npm install -g @mc-and-his-agents/loom@0.21.1; loom version --json; loom host doctor --host codex --scope user --json; loom init bootstrap --target <fixture repo> --json; loom init runtime-state --target <fixture repo> --json all returned pass before closeout carrier sync",
+    "plugin_payload_refresh": "loom host install --host codex --scope user --apply --json and loom host register --host codex --scope user --apply --json refreshed source-payload and marketplace-source to 0.21.1; current Codex runtime cache remains host-owned and requires a new Codex session or Desktop restart to load 0.21.1"
+  },
+  "single_person_review_boundary": {
+    "non_author_github_reviewer_required": false,
+    "approval_truth": "authored Loom review record and hosted PR gates were consumed before merge; this post-merge file records release and installation closeout evidence"
+  }
+}
