@@ -4965,6 +4965,9 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
     intensity = intensity_override if intensity_override not in {None, "auto"} else fields.get("governance_intensity")
     change_class = fields.get("change_class")
     release_judgment = fields.get("release_judgment")
+    governance_mode = fields.get("governance_mode") or "host-enforced"
+    governance_assurance = fields.get("governance_assurance") or ("low" if governance_mode == "advisory/local-enforced" else "strong")
+    advisory_risk_label = fields.get("advisory_risk_label") if governance_mode == "advisory/local-enforced" else None
     triggers = [str(value) for value in fields.get("upgrade_triggers", []) if str(value)]
     lowered = " ".join([str(change_class or ""), *triggers]).lower()
     upgrade_reasons: list[str] = []
@@ -4986,6 +4989,10 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
         "result": "pass",
         "policy": policy,
         "governance_intensity": intensity,
+        "governance_mode": governance_mode,
+        "governance_assurance": governance_assurance,
+        "advisory_risk_label": advisory_risk_label,
+        "host_enforced": governance_mode == "host-enforced",
         "change_class": change_class,
         "release_judgment": release_judgment,
         "upgrade_reasons": upgrade_reasons,

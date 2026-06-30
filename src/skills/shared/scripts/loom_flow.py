@@ -17382,6 +17382,10 @@ def render_governance_intensity_metadata_body(
         "branch": branch_name,
         "head_sha": head_sha,
         "governance_intensity": governance_intensity,
+        "governance_mode": "host-enforced",
+        "governance_assurance": "strong",
+        "advisory_risk_label": None,
+        "host_enforcement_required": True,
         "change_class": change_class,
         "suite_path": suite_path,
         "suite_not_applicable": suite_not_applicable if suite_path == "not_applicable" else None,
@@ -22394,6 +22398,11 @@ def governance_profile_payload(target_root: Path, operation: str, *, host: str =
         if isinstance(github_control_plane, dict)
         else None
     )
+    host_governance_capability = (
+        github_control_plane.get("host_governance_capability")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
     api_snapshot = (
         github_control_plane.get("api_snapshot")
         if isinstance(github_control_plane, dict)
@@ -22440,6 +22449,7 @@ def governance_profile_payload(target_root: Path, operation: str, *, host: str =
         "gate_starter": gate_starter,
         "ci_check_presence": ci_check_presence,
         "host_enforcement": host_enforcement,
+        "host_governance_capability": host_governance_capability,
         "host_verification_status": host_verification_status,
         "gate_rollout": gate_rollout,
         "governance_control_plane": control_plane,

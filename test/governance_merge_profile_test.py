@@ -103,6 +103,48 @@ class GovernanceMergeProfileTest(unittest.TestCase):
         self.assertEqual(captured["command"], "governance-profile status")
         self.assertEqual(captured["flow_args"], ["governance-profile", "status", "--target", "."])
 
+    def test_pr_metadata_records_host_governance_mode(self) -> None:
+        body, envelope, missing = loom_flow.render_governance_intensity_metadata_body(
+            base_body="## Summary\n\nTest PR\n",
+            field={"id": "loom-governance-intensity", "machine_carrier": {"surface": "merge_ready"}},
+            requested_surface="merge_ready",
+            item_id="WI-1805",
+            branch_name="work/1805-host-governance-capability",
+            head_sha="a" * 40,
+            governance_intensity="standard",
+            change_class="metadata_schema",
+            suite_path="minimal",
+            review_requirement="current_head_review_required",
+            release_judgment="no_release",
+            upgrade_triggers=[],
+            suite_not_applicable=None,
+            issue_number=1805,
+        )
+
+        self.assertEqual(missing, [])
+        fields = envelope["fields"]
+        self.assertEqual(fields["governance_mode"], "host-enforced")
+        self.assertEqual(fields["governance_assurance"], "strong")
+        self.assertTrue(fields["host_enforcement_required"])
+        self.assertIn("governance_mode", body)
+
+    def test_closeout_policy_preserves_advisory_low_assurance_evidence(self) -> None:
+        policy = loom_cli.ship_closeout_policy(
+            {
+                "governance_intensity": "standard",
+                "governance_mode": "advisory/local-enforced",
+                "governance_assurance": "low",
+                "advisory_risk_label": "low_assurance",
+                "change_class": "metadata_schema",
+                "release_judgment": "no_release",
+                "upgrade_triggers": [],
+            }
+        )
+
+        self.assertEqual(policy["governance_mode"], "advisory/local-enforced")
+        self.assertEqual(policy["advisory_risk_label"], "low_assurance")
+        self.assertFalse(policy["host_enforced"])
+
 
 if __name__ == "__main__":
     unittest.main()
