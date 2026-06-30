@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1822.json
 - Validation Entry: python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/skills_surface.py check --surface generated-tree-drift --surface reference-integrity; python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py; git diff --check
 - Closing Condition: PR for #1822 merges, v0.22.1 is published/read back, and #1822 closeout consumes release evidence; ownership excludes #1800/#1802/v0.21.2 truth carriers and #1806 closeout rewrite.
-- Current Checkpoint: build
+- Current Checkpoint: merge
 - Current Stop: Implemented normalize_checkpoint closeout -> closed_out across source/generated/runtime copies and added governance-closeout contract coverage at head 06e80ad5caa2b23515ab27f279c9f5382f476830.
-- Next Step: Prepare PR metadata, review, merge, and v0.22.1 release after build readiness passes.
+- Next Step: Wait for hosted checks, satisfy PR gate, merge PR #1823, then prepare v0.22.1 release PR.
 - Blockers: None
 - Latest Validation Summary: Suite validate, suite carrier validate, suite evidence validate, runtime-copy-parity, generated-tree/reference-integrity, py-compile-clean, diff whitespace, and governance-closeout contract checks passed locally for WI-1822.
 - Recovery Boundary: Ownership limited to #1822 checkpoint alias normalization, focused validation, WI-1822 carriers, PR metadata, v0.22.1 release evidence, and #1822 closeout; excludes #1800/#1802/v0.21.2 truth carriers and #1806 closeout rewrite.
-- Current Lane: checkpoint-normalization-fix
+- Current Lane: merge-readiness
 
 ## Runtime Evidence
 
