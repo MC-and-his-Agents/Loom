@@ -204,6 +204,7 @@ COMMANDS: list[dict[str, Any]] = [
     },
     {"command": "init", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "adopt", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "adopt adversarial-test", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "route", "domain": "scenario", "status": "implemented", "json": True},
     {
         "command": "carrier closeout-sync",
@@ -310,6 +311,13 @@ COMMANDS: list[dict[str, Any]] = [
         "status": "implemented",
         "json": True,
         "summary": "Run the closeout gate over host readback, release/no-release evidence, and repo carrier consistency without performing host writes.",
+    },
+    {
+        "command": "gate repair-pr",
+        "domain": "gate",
+        "status": "implemented",
+        "json": True,
+        "summary": "Record and validate audited repair PR evidence under .loom/companion without mutating GitHub rulesets or replacing semantic review.",
     },
     {
         "command": "release readback",
@@ -2310,7 +2318,12 @@ def handle_help(argv: list[str]) -> int:
 
 
 def resolve_target(raw_target: str) -> Path:
-    return Path(raw_target).expanduser().resolve()
+    target = Path(raw_target).expanduser()
+    if target.is_absolute():
+        return target.resolve()
+    invocation_cwd = os.environ.get("LOOM_INVOCATION_CWD")
+    base = Path(invocation_cwd).expanduser() if invocation_cwd else Path.cwd()
+    return (base / target).resolve()
 
 
 def installed_state_path(target: Path) -> Path | None:
@@ -2782,8 +2795,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
         checks.append(suite_command_surface_check(state))
     has_codex_plugin_payload = (target / "plugins" / "loom" / ".codex-plugin" / "plugin.json").exists()
     declares_host_adapter = any(isinstance(layer, dict) and layer.get("layer_type") == "host-adapter-plugin" for layer in (state or {}).get("layers", [])) if isinstance(state, dict) else False
-    declares_user_provider = declares_metadata_only_mode(target)
-    if has_codex_plugin_payload or declares_host_adapter or declares_user_provider:
+    if has_codex_plugin_payload or declares_host_adapter:
         provider_source = global_codex_plugin_source()
         codex_registration = codex_workstation_registration_status(provider_source)
         checks.append(
@@ -4391,10 +4403,20 @@ def handle_project(argv: list[str]) -> int:
     return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Project status requires --issue for this CLI contract.", failed_layer="project-input", fail_closed_reason="missing --issue", fallback_to=["loom issue inspect <issue> --json"]))
 
 
+def pr_command_target(explicit_target: str | None) -> str:
+    if explicit_target:
+        return explicit_target
+    github_workspace = os.environ.get("GITHUB_WORKSPACE")
+    if github_workspace:
+        return github_workspace
+    return "."
+
+
 def handle_pr(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom pr")
     parser.add_argument("action", choices=("inspect", "metadata-render", "metadata-readback", "metadata-update", "metadata-preflight", "gate"))
     parser.add_argument("pr", nargs="?")
+    parser.add_argument("--target")
     parser.add_argument("--head-sha")
     parser.add_argument("--work-item")
     parser.add_argument("--surface", choices=("pre_review", "review", "merge_ready", "closeout"), default="merge_ready")
@@ -4425,19 +4447,20 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     command = f"pr {args.action}"
+    target = pr_command_target(args.target)
     if not args.pr and not (
         args.action in {"metadata-render", "metadata-readback", "metadata-update"}
         or args.action == "metadata-preflight" and args.body_file
     ):
         return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="PR command requires a PR number.", failed_layer="pr-input", fail_closed_reason="missing PR number", fallback_to=["loom help --json"]))
     if args.action == "inspect":
-        flow_args = ["host-binding", "inspect", "--target", ".", "--pr", args.pr]
+        flow_args = ["host-binding", "inspect", "--target", target, "--pr", args.pr]
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
         append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "manual-reconciliation"])
     if args.action == "metadata-render":
-        flow_args = ["pr-metadata", "render", "--target", ".", "--surface", args.surface]
+        flow_args = ["pr-metadata", "render", "--target", target, "--surface", args.surface]
         if args.item:
             flow_args.extend(["--item", args.item])
         if args.issue:
@@ -4475,7 +4498,7 @@ def handle_pr(argv: list[str]) -> int:
         append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
     if args.action == "metadata-readback":
-        flow_args = ["pr-metadata", "readback", "--target", ".", "--surface", args.surface]
+        flow_args = ["pr-metadata", "readback", "--target", target, "--surface", args.surface]
         if args.pr:
             flow_args.extend(["--pr", args.pr])
         if args.item:
@@ -4497,7 +4520,7 @@ def handle_pr(argv: list[str]) -> int:
         append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
     if args.action == "metadata-update":
-        flow_args = ["pr-metadata", "update", "--target", ".", "--surface", args.surface]
+        flow_args = ["pr-metadata", "update", "--target", target, "--surface", args.surface]
         if args.pr:
             flow_args.extend(["--pr", args.pr])
         if args.item:
@@ -4540,7 +4563,7 @@ def handle_pr(argv: list[str]) -> int:
         append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["loom pr metadata-render --surface merge_ready --json", "loom pr metadata-readback --surface merge_ready --pr <number> --json"])
     if args.action == "metadata-preflight":
-        flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", args.surface]
+        flow_args = ["pr-metadata", "preflight", "--target", target, "--surface", args.surface]
         if args.pr:
             flow_args.extend(["--pr", args.pr])
         if args.item:
@@ -4559,7 +4582,7 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--pr-payload-file", args.pr_payload_file])
         append_full_output_flag(flow_args, args)
         return emit_flow(command, flow_args, fallback_to=["update PR body", "loom pr inspect <pr> --json"])
-    flow_args = ["pr-gate", "check", "--target", ".", "--pr", args.pr]
+    flow_args = ["pr-gate", "check", "--target", target, "--pr", args.pr]
     if args.surface:
         flow_args.extend(["--surface", args.surface])
     if args.head_sha:
@@ -4582,6 +4605,7 @@ def handle_merge(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom merge")
     parser.add_argument("action", choices=("check", "run"))
     parser.add_argument("pr", metavar="pr-number", type=int)
+    parser.add_argument("--target")
     parser.add_argument("--head-sha")
     parser.add_argument("--work-item")
     parser.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="merge")
@@ -4618,11 +4642,12 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     command = f"merge {args.action}"
+    target = resolve_target(pr_command_target(args.target))
     flow_args = [
         "controlled-merge",
         "merge" if args.action == "run" else "check",
         "--target",
-        ".",
+        str(target),
         "--pr",
         str(args.pr),
         "--merge-method",
@@ -4634,6 +4659,10 @@ def handle_merge(argv: list[str]) -> int:
         flow_args.extend(["--head-sha", args.head_sha])
     if args.work_item:
         flow_args.extend(["--item", args.work_item])
+    if args.owner:
+        flow_args.extend(["--owner", args.owner])
+    if args.repo_name:
+        flow_args.extend(["--repo", args.repo_name])
     for option, value in (
         ("--pr-payload-file", args.pr_payload_file),
         ("--status-checks-file", args.status_checks_file),
@@ -4792,7 +4821,7 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
             fallback_to=[str(closeout_policy["next_action"])],
         )
 
-    target = resolve_target(".")
+    target = resolve_target(pr_command_target(args.target))
     steps: list[dict[str, Any]] = []
     merge_payload = flow_payload(command, forwarded_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])
     steps.append(merge_closeout_step("controlled-merge-apply", merge_payload, mutates=True))
@@ -7933,11 +7962,11 @@ def handle_init(argv: list[str]) -> int:
 
 def handle_adopt(argv: list[str]) -> int:
     if not argv:
-        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Adopt requires an operation.", failed_layer="adoption-input", fail_closed_reason="missing adopt operation", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom init bootstrap --target <repo> --json"]))
+        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Adopt requires an operation.", failed_layer="adoption-input", fail_closed_reason="missing adopt operation", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom adopt adversarial-test --target <repo> --record --json", "loom init bootstrap --target <repo> --json"]))
     operation = argv[0]
-    if operation != "verify":
-        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Only `loom adopt verify` is implemented for the CLI-first adoption contract.", failed_layer="adoption-input", fail_closed_reason=f"unsupported adopt operation: {operation}", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom init bootstrap --target <repo> --json"]))
-    return emit_flow("adopt", ["adopt", "verify", *strip_json_flag(argv[1:])], fallback_to=["loom init verify --target <repo> --json", "loom profile status --target <repo> --json"])
+    if operation not in {"verify", "adversarial-test"}:
+        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Unsupported adopt operation.", failed_layer="adoption-input", fail_closed_reason=f"unsupported adopt operation: {operation}", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom adopt adversarial-test --target <repo> --record --json", "loom init bootstrap --target <repo> --json"]))
+    return emit_flow("adopt", ["adopt", operation, *strip_json_flag(argv[1:])], fallback_to=["loom init verify --target <repo> --json", "loom profile status --target <repo> --json"])
 
 
 def handle_route(argv: list[str]) -> int:
@@ -8018,6 +8047,8 @@ def handle_gate(argv: list[str]) -> int:
         return emit_flow(f"gate freeze {operation}", ["gate-freeze", operation, *rest[1:]], fallback_to=["loom pr metadata-preflight --surface merge_ready --target <repo> --json", "loom shadow-parity --target <repo> --surface all --blocking --json"])
     if gate == "closeout":
         return emit_flow("gate closeout", ["closeout", "check", *rest], fallback_to=["loom merge check <pr> --json", "loom status --target <repo> --json"])
+    if gate == "repair-pr":
+        return emit_flow("gate repair-pr", ["gate-repair-pr", *rest], fallback_to=["loom gate pr --target <repo> --pr <number> --json", "loom merge check <pr> --json"])
     return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Unsupported gate name.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate name: {gate}", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
 
 
@@ -11071,8 +11102,9 @@ def main(argv: list[str]) -> int:
         return handle_suite(suite_args)
     if command == "init":
         return handle_init(forwarded)
-    if command == "adopt":
-        return handle_adopt(forwarded)
+    if command == "adopt" or command.startswith("adopt "):
+        adopt_args = command.split()[1:] + forwarded if command.startswith("adopt ") else forwarded
+        return handle_adopt(adopt_args)
     if command == "route":
         return handle_route(forwarded)
     if command == "status":

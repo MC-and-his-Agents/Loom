@@ -13,6 +13,8 @@ sys.dont_write_bytecode = True
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+\s*)?$")
 KEY_VALUE_BULLET_RE = re.compile(r"^- ([^:]+):\s*(.+?)\s*$")
 PLAIN_BULLET_RE = re.compile(r"^- (.+?)\s*$")
+DEFAULT_INIT_RESULT = ".loom/bootstrap/init-result.json"
+COMPANION_INIT_RESULT = ".loom/companion/init-result.json"
 
 STATIC_FACT_FIELDS = {
     "Item ID": "item_id",
@@ -256,6 +258,22 @@ def resolve_repo_relative_path(target_root: Path, relative: str, *, label: str) 
     except ValueError:
         return None, [f"{label} must stay within the target root and inside the target repository: {locator}"]
     return candidate, []
+
+
+def default_init_result_fallback(target_root: Path, output_relative: str) -> str:
+    if output_relative != DEFAULT_INIT_RESULT:
+        return output_relative
+    if (target_root / output_relative).exists():
+        return output_relative
+    if (target_root / COMPANION_INIT_RESULT).exists():
+        return COMPANION_INIT_RESULT
+    return output_relative
+
+
+def init_result_locator_matches(actual: object, expected: str) -> bool:
+    if actual == expected:
+        return True
+    return expected == COMPANION_INIT_RESULT and actual == DEFAULT_INIT_RESULT
 
 
 def path_boundary_missing_details(*, label: str, locator: object, errors: list[str]) -> list[dict[str, object]]:
@@ -793,6 +811,8 @@ def inspect_idle_fact_chain(
     }
     for source_key, expected_value in expected_sources.items():
         actual_value = status_sources.get(source_key)
+        if source_key == "init_result" and init_result_locator_matches(actual_value, expected_value):
+            continue
         if actual_value != expected_value:
             message = (
                 "idle status surface source mismatch for "
@@ -1043,9 +1063,10 @@ def build_fact_report(
 
 def inspect_fact_chain(
     target_root: Path,
-    output_relative: str = ".loom/bootstrap/init-result.json",
+    output_relative: str = DEFAULT_INIT_RESULT,
 ) -> tuple[dict[str, object], list[str]]:
     errors: list[str] = []
+    output_relative = default_init_result_fallback(target_root, output_relative)
     output_path, output_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
     if output_errors:
         return {}, output_errors
@@ -1269,6 +1290,8 @@ def inspect_fact_chain(
     }
     for source_key, expected_value in expected_sources.items():
         actual_value = status_sources.get(source_key)
+        if source_key == "init_result" and init_result_locator_matches(actual_value, expected_value):
+            continue
         if actual_value != expected_value:
             message = (
                 "status surface source mismatch for "

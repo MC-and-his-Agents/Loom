@@ -101,6 +101,7 @@ REQUIRED_COMMANDS = {
     "gate freeze check",
     "gate freeze write",
     "gate closeout",
+    "gate repair-pr",
     "release readback",
     "release resume",
     "closeout run",
@@ -377,6 +378,8 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
             args = [
                 action,
                 "1288",
+                "--target",
+                str(REPO_ROOT),
                 "--work-item",
                 "WI-1287",
                 "--head-sha",
@@ -396,6 +399,8 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
                 raise AssertionError(f"merge {action} wrapper did not delegate to controlled-merge")
             if flow_args[:2] != ["controlled-merge", runtime_action]:
                 raise AssertionError(f"merge {action} wrapper delegated to the wrong runtime operation")
+            if "--target" not in flow_args or Path(flow_args[flow_args.index("--target") + 1]) != REPO_ROOT:
+                raise AssertionError(f"merge {action} wrapper did not pass the resolved target to controlled-merge")
             try:
                 pr_index = flow_args.index("--pr")
             except ValueError as exc:
@@ -408,6 +413,29 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
                 raise AssertionError(f"merge {action} wrapper did not preserve merge method")
             if action == "run" and "--execute" not in flow_args:
                 raise AssertionError("merge run --apply did not delegate to controlled-merge --execute")
+        module.handle_merge([
+            "check",
+            "79",
+            "--target",
+            str(REPO_ROOT),
+            "--owner",
+            "HotCP",
+            "--repo",
+            "HotCP",
+            "--work-item",
+            "GH-78-LOOM-0211-CLEANUP",
+        ])
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list):
+            raise AssertionError("merge target/readback regression did not delegate to controlled-merge")
+        for option, expected in (
+            ("--target", str(REPO_ROOT)),
+            ("--owner", "HotCP"),
+            ("--repo", "HotCP"),
+            ("--item", "GH-78-LOOM-0211-CLEANUP"),
+        ):
+            if option not in flow_args or flow_args[flow_args.index(option) + 1] != expected:
+                raise AssertionError(f"merge wrapper did not pass {option} to controlled-merge")
         try:
             module.handle_merge(["check", "pr"])
         except SystemExit as exc:
@@ -417,6 +445,138 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
             raise AssertionError("merge wrapper accepted literal `pr` as a PR number")
     finally:
         module.emit_flow = original_emit_flow
+
+
+def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
+    target, fixture, _, fixture_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="merge-metadata-only",
+        branch_protection_contexts=[],
+        ruleset_required_contexts=["loom-pr-merge-gate"],
+        item="repo-native.release-0211",
+    )
+    checks_file = f".loom/fixtures/{fixture['item']}/checks.json"
+    branch_protection_file = f".loom/fixtures/{fixture['item']}/branch-protection.json"
+    ruleset_file = f".loom/fixtures/{fixture['item']}/ruleset.json"
+    companion = target / ".loom" / "companion"
+    companion.mkdir(parents=True, exist_ok=True)
+    bootstrap_init = target / ".loom" / "bootstrap" / "init-result.json"
+    companion_init = companion / "init-result.json"
+    companion_init.write_text(bootstrap_init.read_text(encoding="utf-8"), encoding="utf-8")
+    bootstrap_init.unlink()
+    subprocess.run(
+        ["git", "add", "-A", ".loom/bootstrap/init-result.json", ".loom/companion/init-result.json"],
+        cwd=target,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture metadata-only init-result"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    fixture["head_sha"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
+    _, payload = run_json(
+        [
+            "merge",
+            "check",
+            "1288",
+            "--target",
+            str(target),
+            "--owner",
+            "HotCP",
+            "--repo",
+            "HotCP",
+            "--work-item",
+            fixture["item"],
+            "--head-sha",
+            fixture["head_sha"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--status-checks-file",
+            checks_file,
+            "--branch-protection-file",
+            branch_protection_file,
+            "--ruleset-file",
+            ruleset_file,
+            "--json",
+        ],
+        expect=0,
+        env_overrides={"LOOM_SOURCE_REPO_ROOT": str(REPO_ROOT)},
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if payload.get("result") != "pass":
+        raise AssertionError(f"metadata-only merge check did not pass with companion init-result: {payload.get('missing_inputs')}")
+    missing_text = "\n".join(str(message) for message in payload.get("missing_inputs", []))
+    if "missing init-result" in missing_text or "not a git repository" in missing_text:
+        raise AssertionError("metadata-only merge check leaked bootstrap init-result or git cwd errors")
+
+    loom_flow = load_loom_flow_module()
+    metadata_fields = {
+        "loom_work_item": fixture["item"],
+        "branch": fixture["branch"],
+        "head_sha": fixture["head_sha"],
+        "governance_intensity": "standard",
+        "change_class": "contract",
+        "suite_path": "minimal",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "fact_chain_required": True,
+        "pr_gate_required": True,
+        "closeout_required": True,
+        "upgrade_triggers": [],
+    }
+    opaque_missing = loom_flow.validate_governance_intensity_metadata_fields(metadata_fields)
+    if "fields.loom_work_item" in opaque_missing:
+        raise AssertionError("PR metadata rejected a path-safe opaque Work Item id")
+    unsafe_fields = {**metadata_fields, "loom_work_item": "../escape"}
+    unsafe_missing = loom_flow.validate_governance_intensity_metadata_fields(unsafe_fields)
+    if "fields.loom_work_item" not in unsafe_missing:
+        raise AssertionError("PR metadata accepted a path-unsafe Work Item id")
+    calls: list[list[str]] = []
+    original_gh_json = loom_flow.gh_json
+    original_source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
+
+    def fake_gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
+        calls.append(args)
+        if args[:3] == ["pr", "view", "1288"]:
+            return {"statusCheckRollup": [{"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"}]}, []
+        return original_gh_json(root, args)
+
+    loom_flow.gh_json = fake_gh_json
+    os.environ["LOOM_SOURCE_REPO_ROOT"] = str(REPO_ROOT)
+    try:
+        payload = loom_flow.controlled_merge_payload(
+            target_root=target,
+            output_relative=".loom/bootstrap/init-result.json",
+            expected_item=fixture["item"],
+            owner="HotCP",
+            repo_name="HotCP",
+            pr_number=1288,
+            head_sha=fixture["head_sha"],
+            merge_method="squash",
+            delete_branch=False,
+            execute=False,
+            pr_payload_file=fixture["pr_file"],
+            status_checks_file=None,
+            branch_protection_file=branch_protection_file,
+            ruleset_file=ruleset_file,
+            pr_gate_result_file=None,
+            merge_gate_result_file=None,
+        )
+    finally:
+        loom_flow.gh_json = original_gh_json
+        if original_source_repo_root is None:
+            os.environ.pop("LOOM_SOURCE_REPO_ROOT", None)
+        else:
+            os.environ["LOOM_SOURCE_REPO_ROOT"] = original_source_repo_root
+    if payload.get("result") != "pass":
+        raise AssertionError(f"controlled merge failed metadata-only inline status readback: {payload.get('missing_inputs')}")
+    if not any("--repo" in call and call[call.index("--repo") + 1] == "HotCP/HotCP" for call in calls):
+        raise AssertionError("controlled merge statusCheckRollup readback did not pass --repo owner/repo")
 
 
 def assert_merge_closeout_run_wrapper_contract() -> None:
@@ -2537,6 +2697,84 @@ def assert_workspace_audit_wrapper_contract() -> None:
         module.flow_payload = original_flow_payload
 
 
+def assert_pr_gate_target_readback_contract(tmp: Path) -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for pr gate target/readback regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
+        return 0
+
+    original_emit_flow = module.emit_flow
+    old_workspace = os.environ.get("GITHUB_WORKSPACE")
+    checkout = tmp / "github-workspace"
+    checkout.mkdir()
+    explicit_target = tmp / "explicit-target"
+    explicit_target.mkdir()
+    module.emit_flow = fake_emit_flow
+    try:
+        os.environ["GITHUB_WORKSPACE"] = str(checkout)
+        status = module.handle_pr(["gate", "1803", "--head-sha", "a" * 40])
+        if status != 0:
+            raise AssertionError("pr gate wrapper did not complete with GITHUB_WORKSPACE")
+        flow_args = captured[-1]["flow_args"]
+        if flow_args[:2] != ["pr-gate", "check"]:
+            raise AssertionError("pr gate wrapper did not delegate to pr-gate check")
+        if flow_args[flow_args.index("--target") + 1] != str(checkout):
+            raise AssertionError("pr gate wrapper did not infer --target from GITHUB_WORKSPACE")
+
+        captured.clear()
+        status = module.handle_pr(["gate", "1803", "--target", str(explicit_target), "--head-sha", "b" * 40])
+        if status != 0:
+            raise AssertionError("pr gate wrapper did not complete with explicit --target")
+        flow_args = captured[-1]["flow_args"]
+        if flow_args[flow_args.index("--target") + 1] != str(explicit_target):
+            raise AssertionError("explicit pr gate --target must override GITHUB_WORKSPACE")
+    finally:
+        module.emit_flow = original_emit_flow
+        if old_workspace is None:
+            os.environ.pop("GITHUB_WORKSPACE", None)
+        else:
+            os.environ["GITHUB_WORKSPACE"] = old_workspace
+
+    loom_flow = load_loom_flow_module()
+    taxonomy = loom_flow.pr_gate_failure_taxonomy(
+        [
+            "pr: owner/repo",
+            "fact-chain: missing init-result: .loom/bootstrap/init-result.json",
+            "PR body is missing `Loom Work Item: <item>`",
+        ],
+        "block",
+    )
+    if "target_readback_failed" not in taxonomy:
+        raise AssertionError("pr gate target/readback failure was not classified")
+    if "review_missing" in taxonomy or "semantic_review_disposition_missing" in taxonomy:
+        raise AssertionError("target/readback failure must not be reported as a semantic review gap")
+
+    empty_target = tmp / "empty-target"
+    empty_target.mkdir()
+    payload = loom_flow.pr_gate_payload(
+        target_root=empty_target,
+        output_relative=".loom/bootstrap/init-result.json",
+        expected_item=None,
+        owner=None,
+        repo_name=None,
+        pr_number=1803,
+        head_sha="c" * 40,
+        branch_name=None,
+        pr_payload_file=None,
+    )
+    if payload.get("failed_layer") != "target-readback":
+        raise AssertionError("pr gate readback failure did not expose failed_layer=target-readback")
+    if "target checkout or hosted PR binding" not in str(payload.get("summary")):
+        raise AssertionError("pr gate readback failure summary did not prioritize target/readback")
+
+
 def retained_closeout_work_item_id() -> str | None:
     candidates: list[tuple[str, str, str]] = []
     for path in sorted((REPO_ROOT / ".loom" / "progress").glob("WI-*.md")):
@@ -3895,6 +4133,19 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     if validate.get("runtime_state") != "ready":
         raise AssertionError("metadata-only installed-state validate did not pass")
 
+    headless_home = tmp / "metadata-only-headless-codex-home"
+    headless_home.mkdir()
+    with isolated_codex_workstation(headless_home):
+        _, headless_doctor = run_json(["doctor", "--target", str(target), "--json"], expect=0)
+        if headless_doctor.get("result") != "pass":
+            raise AssertionError("metadata-only doctor required Codex Desktop runtime/cache state")
+        if any(check.get("name") == "codex-workstation-registration" for check in headless_doctor.get("checks", [])):
+            raise AssertionError("metadata-only doctor leaked Codex workstation registration into target diagnostics")
+        _, headless_verify = run_json(["verify", "--target", str(target), "--json"], expect=0)
+        if headless_verify.get("result") != "pass" or headless_verify.get("doctor", {}).get("result") != "pass":
+            raise AssertionError("metadata-only verify required Codex Desktop runtime/cache state")
+    assert_global_cli_metadata_only_bootstrap_contract(tmp)
+
     _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0)
     refresh_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "host-plugin-refresh-boundary"), None)
     if (
@@ -4008,6 +4259,36 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     help_text = help_result.stdout + help_result.stderr
     if help_result.returncode != 0 or "repo-local-wrapper repos keep declared .loom/bin carriers as valid wrappers" in help_text:
         raise AssertionError("loom --help still advertises repo-local-wrapper .loom/bin as current")
+
+
+def assert_adopt_adversarial_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for adopt wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    original_emit_flow = module.emit_flow
+    module.emit_flow = fake_emit_flow
+    try:
+        status = module.handle_adopt(["adversarial-test", "--target", "/tmp/adopted", "--record", "--json"])
+        if status != 0:
+            raise AssertionError("adopt adversarial-test wrapper did not complete")
+        if captured.get("command") != "adopt":
+            raise AssertionError("adopt adversarial-test wrapper did not preserve the adopt command label")
+        if captured.get("flow_args") != ["adopt", "adversarial-test", "--target", "/tmp/adopted", "--record"]:
+            raise AssertionError(f"adopt adversarial-test delegated unexpected args: {captured.get('flow_args')}")
+    finally:
+        module.emit_flow = original_emit_flow
 
 
 def assert_install_upgrade_host_boundary_docs() -> None:
@@ -4136,6 +4417,68 @@ def global_cli_state(target: Path) -> dict[str, Any]:
             "registration_authority": "workstation",
         },
     }
+
+
+def assert_no_repo_local_runtime_bootstrap(target: Path, payload: dict[str, Any]) -> None:
+    declared_paths = {
+        item.get("path")
+        for collection_name in ("initial_artifacts", "planned_writes")
+        for item in payload.get(collection_name, [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    forbidden_paths = {".loom/bootstrap/manifest.json", "Makefile"}
+    forbidden_paths.update(path for path in declared_paths if isinstance(path, str) and path.startswith(".loom/bin/"))
+    if forbidden_paths & declared_paths:
+        raise AssertionError(f"metadata-only bootstrap declared repo-local runtime artifacts: {sorted(forbidden_paths & declared_paths)}")
+    for unexpected in (".loom/bin", ".loom/bootstrap/manifest.json", "Makefile"):
+        if (target / unexpected).exists():
+            raise AssertionError(f"metadata-only bootstrap generated {unexpected}")
+
+    def strings(value: Any) -> list[str]:
+        if isinstance(value, dict):
+            result: list[str] = []
+            for child in value.values():
+                result.extend(strings(child))
+            return result
+        if isinstance(value, list):
+            result = []
+            for child in value:
+                result.extend(strings(child))
+            return result
+        return [value] if isinstance(value, str) else []
+
+    stale = sorted({value for value in strings(payload) if "python3 .loom/bin/" in value})
+    if stale:
+        raise AssertionError(f"metadata-only bootstrap left repo-local runtime locators: {stale[:3]}")
+    for path in target.rglob("*"):
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            if "python3 .loom/bin/" in text:
+                raise AssertionError(f"metadata-only bootstrap wrote repo-local runtime locator in {path.relative_to(target)}")
+
+
+def assert_global_cli_metadata_only_bootstrap_contract(tmp: Path) -> None:
+    target = tmp / "bootstrap-global-cli-metadata-only"
+    target.mkdir()
+    write_state(target, global_cli_state(target))
+    _, payload = run_json(
+        [
+            "init",
+            "bootstrap",
+            "--target",
+            str(target),
+            "--intent",
+            "execution-control",
+            "--write",
+            "--verify",
+            "--json",
+        ],
+        expect=0,
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if payload.get("verification", {}).get("ok") is not True:
+        raise AssertionError(f"metadata-only global-cli bootstrap did not verify: {payload.get('verification')}")
+    assert_no_repo_local_runtime_bootstrap(target, payload)
 
 
 def write_global_cli_fact_chain_fixture(target: Path) -> None:
@@ -4781,8 +5124,7 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
     }
 
 
-def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
-    item = "WI-1287"
+def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287") -> dict[str, str]:
     branch = "work/1287-1288-review-head-binding"
     validation_summary = "git diff --check; targeted pr-gate semantic review disposition fixtures passed."
     write_full_suite(target, item)
@@ -4808,7 +5150,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "## Static Facts\n\n"
         f"- Item ID: {item}\n"
         "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
-        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Scope: `fixture-change.txt`, `.loom/reviews/{item}.json`, and PR payload fixture only.\n"
         f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
         "- Workspace Entry: .\n"
         f"- Recovery Entry: .loom/progress/{item}.md\n"
@@ -4851,7 +5193,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "## Derived Fact Chain View\n\n"
         f"- Item ID: {item}\n"
         "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
-        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Scope: `fixture-change.txt`, `.loom/reviews/{item}.json`, and PR payload fixture only.\n"
         f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
         "- Workspace Entry: .\n"
         f"- Recovery Entry: .loom/progress/{item}.md\n"
@@ -7928,14 +8270,15 @@ def prepare_controlled_merge_fixture(
     fixture_name: str,
     branch_protection_contexts: list[str],
     ruleset_required_contexts: list[str] | None = None,
+    item: str = "WI-1287",
 ) -> tuple[Path, dict[str, Any], dict[str, Any], Path]:
     merge_target = tmp / fixture_name
     merge_target.mkdir()
-    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target)
+    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target, item=item)
     merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
     if merge_pass_payload.get("result") != "pass":
         raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
-    fixture_dir = merge_target / ".loom" / "fixtures" / "WI-1287"
+    fixture_dir = merge_target / ".loom" / "fixtures" / merge_fixture["item"]
     check_names = sorted({"loom-pr-merge-gate", *branch_protection_contexts, *(ruleset_required_contexts or [])})
     (fixture_dir / "checks.json").write_text(
         json.dumps(
@@ -8002,6 +8345,106 @@ def assert_controlled_merge_ruleset_trigger_fixture(tmp: Path) -> None:
         raise AssertionError("controlled-merge ruleset-trigger fixture incorrectly attributed host enforcement to branch protection")
     if payload.get("pr_gate", {}).get("result") != "pass" or payload.get("controlled_merge_consumption", {}).get("result") != "pass":
         raise AssertionError("controlled-merge ruleset-trigger fixture did not preserve pre-merge gate consumption")
+
+
+def assert_gate_repair_pr_evidence_contract(tmp: Path) -> None:
+    target, fixture, _, fixture_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="gate-repair-pr",
+        branch_protection_contexts=[],
+        ruleset_required_contexts=["loom-pr-merge-gate"],
+    )
+    common_args = [
+        "--target",
+        str(target),
+        "--record",
+        "--item",
+        fixture["item"],
+        "--pr",
+        "1288",
+        "--head-sha",
+        fixture["head_sha"],
+        "--pr-payload-file",
+        fixture["pr_file"],
+        "--status-checks-file",
+        ".loom/fixtures/WI-1287/checks.json",
+        "--branch-protection-file",
+        ".loom/fixtures/WI-1287/branch-protection.json",
+        "--ruleset-file",
+        ".loom/fixtures/WI-1287/ruleset.json",
+        "--reason",
+        "audit repaired missing loom-pr-merge-gate enforcement",
+    ]
+    status, missing_payload = run_flow_json(["gate-repair-pr", *common_args], expect=None)
+    if status == 0 or missing_payload.get("result") != "block":
+        raise AssertionError("gate-repair-pr did not block when required enforcement-before evidence was missing")
+    if "enforcement-before readback" not in missing_payload.get("missing_inputs", []):
+        raise AssertionError("gate-repair-pr missing-inputs did not identify enforcement-before evidence")
+    if (target / ".loom" / "companion" / "gate-repair-pr.json").exists():
+        raise AssertionError("gate-repair-pr wrote companion evidence despite missing required fields")
+
+    (fixture_dir / "enforcement-before.json").write_text(
+        json.dumps({"required_contexts": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    status, payload = run_json(
+        [
+            "gate",
+            "repair-pr",
+            *common_args,
+            "--enforcement-before-file",
+            ".loom/fixtures/WI-1287/enforcement-before.json",
+            "--json",
+        ],
+        expect=0,
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    record_path = target / ".loom" / "companion" / "gate-repair-pr.json"
+    if (
+        payload.get("schema_version") != "loom-gate-repair-pr/v1"
+        or payload.get("result") != "pass"
+        or payload.get("host_mutations") is not False
+        or payload.get("ruleset_mutation", {}).get("attempted") is not False
+        or payload.get("semantic_review", {}).get("skipped") is not False
+        or not record_path.is_file()
+    ):
+        raise AssertionError("gate repair-pr wrapper did not record non-host-mutating companion evidence")
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    if (
+        record.get("schema_version") != "loom-gate-repair-pr/v1"
+        or record.get("pr", {}).get("number") != 1288
+        or record.get("pr", {}).get("head_sha") != fixture["head_sha"]
+        or record.get("pr", {}).get("branch") != fixture["branch"]
+        or record.get("review_evidence_locator") != fixture["review_path"]
+        or record.get("restored_readback", {}).get("result") != "pass"
+    ):
+        raise AssertionError("gate repair-pr companion record is missing required audited fields")
+    for key in ("broken_gate_checks", "new_gate_checks", "still_required_checks"):
+        if not isinstance(record.get(key), list) or not record[key]:
+            raise AssertionError(f"gate repair-pr companion record missing {key}")
+    if "loom-pr-merge-gate" not in {entry.get("name") for entry in record["new_gate_checks"] if isinstance(entry, dict)}:
+        raise AssertionError("gate repair-pr did not record the newly enforced gate check")
+    if not isinstance(record.get("enforcement_before"), dict) or not isinstance(record.get("enforcement_after"), dict):
+        raise AssertionError("gate repair-pr did not retain enforcement before/after readbacks")
+
+    _, validate_payload = run_json(["gate", "repair-pr", "--target", str(target), "--json"], expect=0)
+    validate_payload = runtime_payload_from_agent_safe_output(validate_payload)
+    if validate_payload.get("result") != "pass" or validate_payload.get("operation") != "validate":
+        raise AssertionError("gate repair-pr validate mode did not consume the companion evidence record")
+    record["result"] = "block"
+    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    _, blocked_validate = run_json(["gate", "repair-pr", "--target", str(target), "--json"], expect=None)
+    blocked_validate = runtime_payload_from_agent_safe_output(blocked_validate)
+    if blocked_validate.get("result") != "block" or "result must be `pass`" not in blocked_validate.get("missing_inputs", []):
+        raise AssertionError("gate repair-pr validate mode accepted a saved block repair record")
+
+    source = (REPO_ROOT / "skills" / "shared" / "scripts" / "loom_flow.py").read_text(encoding="utf-8")
+    start = source.index("def gate_repair_pr_payload")
+    end = source.index("def handle_gate_repair_pr", start)
+    repair_source = source[start:end]
+    forbidden_mutation_tokens = ("run_process(", "gh pr merge", "gh api", "PATCH", "PUT", "DELETE", "/rulesets")
+    if any(token in repair_source for token in forbidden_mutation_tokens):
+        raise AssertionError("gate repair-pr implementation contains an automatic ruleset/host mutation path")
 
 
 def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
@@ -10122,6 +10565,7 @@ def run_adoption_host_metadata_surface() -> None:
         assert_codex_payload_readback_contract(tmp)
         assert_version_freshness_contract(tmp)
         assert_metadata_only_adoption_contract(tmp)
+        assert_adopt_adversarial_wrapper_contract()
     assert_install_upgrade_host_boundary_docs()
 
     print("adoption host metadata surface checks passed")
@@ -10245,12 +10689,27 @@ def run_pr_metadata_surface() -> None:
     print("pr metadata surface checks passed")
 
 
+def run_pr_gate_target_readback_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-pr-gate-target-readback-") as raw_tmp:
+        assert_pr_gate_target_readback_contract(Path(raw_tmp))
+
+    print("pr gate target/readback surface checks passed")
+
+
 def run_controlled_merge_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-controlled-merge-") as raw_tmp:
         tmp = Path(raw_tmp)
         assert_controlled_merge_ruleset_trigger_fixture(tmp)
+        assert_merge_metadata_only_target_readback_contract(tmp)
 
     print("controlled merge surface checks passed")
+
+
+def run_gate_repair_pr_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-gate-repair-pr-") as raw_tmp:
+        assert_gate_repair_pr_evidence_contract(Path(raw_tmp))
+
+    print("gate repair-pr surface checks passed")
 
 
 def run_aggregate_cli_contract() -> None:
@@ -10305,6 +10764,7 @@ def run_aggregate_cli_contract() -> None:
         "gate freeze check",
         "gate freeze write",
         "gate closeout",
+        "gate repair-pr",
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #890/#891")
@@ -11396,14 +11856,13 @@ def run_aggregate_cli_contract() -> None:
         global_cli_home = tmp / "global-cli-codex-home"
         global_cli_home.mkdir()
         with isolated_codex_workstation(global_cli_home):
-            register_fixture_codex_plugin()
             _, global_doctor = run_json(["doctor", "--target", str(global_cli_target), "--json"], expect=0)
             provider_check = next((check for check in global_doctor.get("checks", []) if check.get("name") == "global-cli-runtime-provider"), None)
             if global_doctor.get("result") != "pass" or not provider_check or provider_check.get("result") != "pass":
-                raise AssertionError("global-cli no-bin doctor did not pass provider diagnostics")
+                raise AssertionError("global-cli no-bin doctor required more than repo carriers and global CLI diagnostics")
             _, global_verify = run_json(["verify", "--target", str(global_cli_target), "--json"], expect=0)
             if global_verify.get("result") != "pass" or global_verify.get("doctor", {}).get("result") != "pass":
-                raise AssertionError("global-cli no-bin verify did not consume doctor success")
+                raise AssertionError("global-cli no-bin verify required more than repo carriers and global CLI diagnostics")
             command_mismatch_target = tmp / "global-cli-command-mismatch"
             command_mismatch_target.mkdir()
             command_mismatch_state = global_cli_state(command_mismatch_target)
@@ -12424,9 +12883,19 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             run=run_pr_metadata_surface,
         ),
         SurfaceCheck(
+            name="pr-gate-target-readback",
+            fixture_group="pr-gate-target-readback",
+            run=run_pr_gate_target_readback_surface,
+        ),
+        SurfaceCheck(
             name="controlled-merge",
             fixture_group="controlled-merge",
             run=run_controlled_merge_surface,
+        ),
+        SurfaceCheck(
+            name="gate-repair-pr",
+            fixture_group="gate-repair-pr",
+            run=run_gate_repair_pr_surface,
         ),
         SurfaceCheck(
             name="aggregate",

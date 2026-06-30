@@ -16459,6 +16459,15 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
 
     def prepare_strong_target(target: Path) -> str | None:
         shutil.copytree(example_target, target)
+        init_result_path = target / ".loom" / "bootstrap" / "init-result.json"
+        init_result = load_json_file(init_result_path)
+        if isinstance(init_result, dict):
+            run = init_result.get("run")
+            if not isinstance(run, dict):
+                run = {}
+                init_result["run"] = run
+            run["scenario_key"] = "complex-existing"
+            write_json(init_result_path, init_result)
         install_strong_companion(target)
         install_interop(target)
         reviewed_head = git_init(target)
@@ -16544,10 +16553,26 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                             {"name": "loom-check"},
                         ]
                     }, []
+                if endpoint == "repos/owner/repo/rulesets/42":
+                    return {
+                        "rules": [
+                            {
+                                "type": "required_status_checks",
+                                "parameters": {
+                                    "required_status_checks": [
+                                        {"context": "py-compile"},
+                                        {"context": "demo-bootstrap"},
+                                        {"context": "repo-local-cli"},
+                                        {"context": "loom-check"},
+                                    ]
+                                },
+                            }
+                        ]
+                    }, []
                 return {}, []
 
             governance_surface_module.gh_json = fake_control_plane_json
-            governance_surface_module.gh_json_list = lambda _root, _args: ([{"target": "branch", "enforcement": "active"}], [])
+            governance_surface_module.gh_json_list = lambda _root, _args: ([{"id": 42, "target": "branch", "enforcement": "active"}], [])
             surface, errors = governance_surface_module.detect_github_control_plane(base)
             if errors:
                 failures.append(Failure("adversarial-adoption", f"host control-plane verified fixture failed: {'; '.join(errors)}"))
@@ -16557,6 +16582,108 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 failures.append(Failure("adversarial-adoption", "required checks fixture must be host-enforced only when stable check names are configured"))
             elif surface.get("rulesets", {}).get("enforced") is not True:
                 failures.append(Failure("adversarial-adoption", "ruleset fixture must report active branch ruleset enforcement"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_ruleset_only_json(_root: Path, args: list[str]) -> tuple[dict[str, object], list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {"protected": False}, []
+                if endpoint == "repos/owner/repo/actions/workflows":
+                    return {"workflows": [{"path": ".github/workflows/loom-check.yml"}]}, []
+                if endpoint == "repos/owner/repo/commits/main/check-runs":
+                    return {
+                        "check_runs": [
+                            {"name": "py-compile"},
+                            {"name": "demo-bootstrap"},
+                            {"name": "repo-local-cli"},
+                            {"name": "loom-check"},
+                        ]
+                    }, []
+                if endpoint == "repos/owner/repo/rulesets/77":
+                    return {
+                        "rules": [
+                            {
+                                "type": "required_status_checks",
+                                "parameters": {
+                                    "required_status_checks": [
+                                        {"context": "py-compile"},
+                                        {"context": "demo-bootstrap"},
+                                        {"context": "repo-local-cli"},
+                                        {"context": "loom-check"},
+                                    ]
+                                },
+                            }
+                        ]
+                    }, []
+                return {}, []
+
+            governance_surface_module.gh_json = fake_ruleset_only_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([{"id": 77, "target": "branch", "enforcement": "active"}], [])
+            surface, errors = governance_surface_module.detect_github_control_plane(base)
+            if errors:
+                failures.append(Failure("adversarial-adoption", f"ruleset-only required checks fixture failed: {'; '.join(errors)}"))
+            elif surface.get("branch_protection") != "disabled":
+                failures.append(Failure("adversarial-adoption", "ruleset-only fixture must not require branch protection"))
+            elif surface.get("host_enforcement", {}).get("verification_status") != "verified":
+                failures.append(Failure("adversarial-adoption", "ruleset-only required checks must verify host enforcement"))
+            elif surface.get("host_enforcement", {}).get("required_checks") is not True:
+                failures.append(Failure("adversarial-adoption", "ruleset-only stable checks must satisfy required check enforcement"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_ruleset_failure_json(_root: Path, args: list[str]) -> tuple[dict[str, object] | None, list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {"protected": False}, []
+                if endpoint == "repos/owner/repo/actions/workflows":
+                    return {"workflows": [{"path": ".github/workflows/loom-check.yml"}]}, []
+                if endpoint == "repos/owner/repo/commits/main/check-runs":
+                    return {
+                        "check_runs": [
+                            {"name": "py-compile"},
+                            {"name": "demo-bootstrap"},
+                            {"name": "repo-local-cli"},
+                            {"name": "loom-check"},
+                        ]
+                    }, []
+                if endpoint == "repos/owner/repo/rulesets/88":
+                    return None, ["ruleset detail unavailable"]
+                return {}, []
+
+            governance_surface_module.gh_json = fake_ruleset_failure_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([{"id": 88, "target": "branch", "enforcement": "active"}], [])
+            surface, errors = governance_surface_module.detect_github_control_plane(base)
+            if errors:
+                failures.append(Failure("adversarial-adoption", f"ruleset detail read failure must not become missing inputs: {'; '.join(errors)}"))
+            elif surface.get("api_snapshot", {}).get("verification_status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "ruleset detail read failure must keep the API snapshot unverified"))
+            elif surface.get("host_enforcement", {}).get("verification_status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "ruleset detail read failure must fail closed for host enforcement"))
+            elif surface.get("rulesets", {}).get("status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "ruleset detail read failure must leave rulesets unverified"))
         finally:
             governance_surface_module.detect_github_repo = original_detect_repo
             governance_surface_module.gh_rest_json = original_rest_json
@@ -16804,6 +16931,127 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                     failures.append(Failure("adversarial-adoption", "hostless baseline must still prove repo companion and interop carriers are present"))
             else:
                 failures.append(Failure("adversarial-adoption", "baseline fixture must reach strong maturity when GitHub host signals are readable"))
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_profile_host_json(_root: Path, args: list[str]) -> tuple[dict[str, object], list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {
+                        "protected": True,
+                        "protection": {
+                            "required_status_checks": {
+                                "contexts": ["py-compile", "demo-bootstrap", "repo-local-cli", "loom-check"]
+                            },
+                            "required_pull_request_reviews": {},
+                        },
+                    }, []
+                if endpoint == "repos/owner/repo/actions/workflows":
+                    return {"workflows": [{"path": ".github/workflows/loom-check.yml"}]}, []
+                if endpoint == "repos/owner/repo/commits/main/check-runs":
+                    return {
+                        "check_runs": [
+                            {"name": "py-compile"},
+                            {"name": "demo-bootstrap"},
+                            {"name": "repo-local-cli"},
+                            {"name": "loom-check"},
+                        ]
+                    }, []
+                return {}, []
+
+            def adversarial_precondition(payload: dict[str, object]) -> dict[str, object]:
+                gate_rollout = payload.get("gate_rollout")
+                preconditions = gate_rollout.get("blocking_preconditions") if isinstance(gate_rollout, dict) else []
+                if isinstance(preconditions, list):
+                    for precondition in preconditions:
+                        if isinstance(precondition, dict) and precondition.get("id") == "adversarial_adoption_checks":
+                            return precondition
+                return {}
+
+            governance_surface_module.gh_json = fake_profile_host_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([], [])
+            record_target = base / "adversarial-record"
+            if not copy_baseline_fixture(record_target, "adversarial evidence record"):
+                return failures
+            evidence_path = record_target / ".loom" / "companion" / "adversarial-adoption.json"
+            if evidence_path.exists():
+                evidence_path.unlink()
+
+            missing_profile = loom_flow_module.governance_profile_payload(record_target, "status")
+            if adversarial_precondition(missing_profile).get("status") != "missing":
+                failures.append(Failure("adversarial-adoption", "governance profile must report missing adversarial adoption evidence"))
+
+            write_json(
+                evidence_path,
+                {
+                    "schema_version": governance_surface_module.ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA,
+                    "result": "pass",
+                    "head_sha": "0" * 40,
+                    "generated_at": "2026-01-01T00:00:00Z",
+                },
+            )
+            stale_profile = loom_flow_module.governance_profile_payload(record_target, "status")
+            if adversarial_precondition(stale_profile).get("status") != "stale":
+                failures.append(Failure("adversarial-adoption", "governance profile must report stale adversarial adoption evidence"))
+
+            evidence_payload = loom_flow_module.adversarial_adoption_evidence_payload(
+                record_target,
+                ".loom/bootstrap/init-result.json",
+                "INIT-0001",
+                record=True,
+            )
+            recorded = load_json_file(evidence_path)
+            current_record_head = loom_flow_module.git_head_sha(record_target)
+            if evidence_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "`adopt adversarial-test --record` fixture must pass for a strong baseline"))
+            elif not isinstance(recorded, dict) or recorded.get("schema_version") != governance_surface_module.ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA:
+                failures.append(Failure("adversarial-adoption", "recorded adversarial adoption evidence must use the v1 schema"))
+            elif recorded.get("head_sha") != current_record_head:
+                failures.append(Failure("adversarial-adoption", "recorded adversarial adoption evidence must bind to the current head"))
+            else:
+                dirty_profile = loom_flow_module.governance_profile_payload(record_target, "status")
+                dirty_precondition = adversarial_precondition(dirty_profile)
+                if dirty_precondition.get("status") == "pass":
+                    failures.append(Failure("adversarial-adoption", "uncommitted adversarial adoption evidence must not satisfy blocking rollout"))
+                result = run_command(root, ["git", "add", "-f", ".loom/companion/adversarial-adoption.json"], cwd=record_target, timeout_seconds=30)
+                if result.returncode == 0:
+                    result = run_command(root, ["git", "commit", "-m", "record adversarial adoption evidence"], cwd=record_target, timeout_seconds=30)
+                if result.returncode != 0:
+                    failures.append(Failure("adversarial-adoption", f"recorded adversarial adoption evidence commit failed: {result.stderr.strip() or result.stdout.strip()}"))
+
+            for operation in ("status", "upgrade-plan"):
+                profile = loom_flow_module.governance_profile_payload(record_target, operation)
+                precondition = adversarial_precondition(profile)
+                gate_rollout = profile.get("gate_rollout")
+                maturity = profile.get("maturity")
+                if precondition.get("status") != "pass":
+                    failures.append(Failure("adversarial-adoption", f"`governance-profile {operation}` must consume fresh adversarial adoption evidence"))
+                elif (
+                    isinstance(maturity, dict)
+                    and maturity.get("current") == "strong"
+                    and isinstance(gate_rollout, dict)
+                    and gate_rollout.get("blocking_allowed") is not True
+                ):
+                    failures.append(Failure("adversarial-adoption", f"`governance-profile {operation}` must allow blocking rollout after fresh pass evidence"))
+            resume_payload, resume_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(record_target), "--item", "INIT-0001"],
+            )
+            if resume_error:
+                failures.append(Failure("adversarial-adoption", f"`flow resume` recorded evidence fixture failed: {resume_error}"))
+            elif resume_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "`flow resume` must accept committed adversarial adoption evidence carrier-only drift"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
 
         baseline_checks = (
             ("runtime-parity", lambda target: ["python3", str(target / ".loom/bin/loom_flow.py"), "runtime-parity", "validate", "--target", str(target)], "pass"),
