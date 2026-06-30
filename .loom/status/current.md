@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1790
-- Goal: Fix installed Loom CLI `loom init bootstrap --target ... --json` so packaged npm installs no longer look for a missing top-level `skills/shared/scripts/loom_init.py`.
-- Scope: PR #1790 only: runtime wrapper entrypoint resolution, generated/runtime `loom_init.py` parity, npm package payload checks, package smoke coverage, v0.21.1 release metadata, demo bootstrap fixture sync, PR metadata, and Loom carriers for this repair. Ownership constraints are limited to `tools/runtime_wrapper.py`, wrapper entrypoints under `tools/`, `skills/shared/scripts/loom_init.py`, `src/skills/shared/scripts/loom_init.py`, `plugins/loom/skills/shared/scripts/loom_init.py`, `test/npm-package-smoke.test.mjs`, `tools/check_npm_package.py`, `VERSION`, `package.json`, `plugins/loom/.codex-plugin/plugin.json`, `examples/new-project/.loom/**`, `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/work-items/WI-1790.md`, `.loom/progress/WI-1790.md`, `.loom/reviews/WI-1790*.json`, and `.loom/specs/WI-1790/**`.
-- Execution Path: user-reported installed CLI bootstrap failure -> branch `work/fix-init-bootstrap-entrypoint` -> source/package fix -> PR #1790 -> release v0.21.1 -> installed CLI and Codex plugin payload readback.
+- Item ID: WI-1800
+- Goal: Close the #1800 global CLI and strong governance hardening tree, ship v0.21.2, and leave #1802/#1800 for post-merge release closeout.
+- Scope: #1800 PR scope: #1793-#1799, #1801, #1803, and #1804 fixes only. Includes target/context resolution, global-cli metadata-only bootstrap and CI verify, active-ruleset strong detector, adversarial adoption evidence, audited repair-pr evidence, runtime parity, release readiness for v0.21.2, merge wrapper target/readback behavior, and opaque path-safe Work Item ID compatibility. Excludes #1806 and #1807-#1810.
+- Execution Path: Issue tree #1800 -> branch work/1800-global-cli-strong-governance-hardening -> PR #1816 -> release v0.21.2 -> #1802 release evidence -> #1800 parent closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1790.md
-- Review Entry: .loom/reviews/WI-1790.json
-- Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/check_npm_package.py tools/check_release_surface.py tools/version_surface_check.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/skills_surface.py check --surface plugin-payload-metadata`; `python3 tools/check_npm_package.py`; `npm run test:package`; `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift`; `git diff --check`; hosted PR checks; post-release installed CLI smoke.
-- Closing Condition: PR #1790 merges, v0.21.1 is published to npm, Codex plugin payload metadata is refreshed, and installed `loom init bootstrap --target <fixture> --json` plus `loom init runtime-state --target <fixture> --json` pass from the released package.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1790 closed out by closeout run: PR #1790 merged at 9668401faa7e334addc4dad6b42978656757b15e, issue #1790 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1790 implementation work remains.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-06-29 closeout validation on branch `work/WI-1790-closeout-sync` head `26e3ea9c3a37e038890d9f70a39ed53e1866d9d3`: `python3 tools/loom.py release readback --target . --version v0.21.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit 9668401faa7e334addc4dad6b42978656757b15e --release-judgment release_required --json`; `CODEX_EXPORT_GH_TOKEN=1 python3 tools/loom.py closeout status --target . --item WI-1790 --issue 1790 --pr 1790 --pr-role release_pr --release-pr 1790 --branch main --owner MC-and-his-Agents --repo Loom --goal-completion .loom/progress/WI-1790-goal-completion.json --skip-metadata --skip-cleanup --json`; `python3 tools/loom.py fact-chain --target . --item WI-1790 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1790 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1790 --json`; `python3 -m json.tool .loom/progress/WI-1790-goal-completion.json >/dev/null`; `git diff --check HEAD~1..HEAD` passed.
-- Recovery Boundary: WI-1790 owns only the installed package init/bootstrap entrypoint repair, v0.21.1 package/payload metadata, focused package smoke coverage, demo fixture sync caused by the runtime change, and current PR carriers. It does not redesign Loom initialization, change plugin surface version, publish legacy installer packages, or close unrelated v0.21.0 release carriers.
-- Current Lane: post-merge-closeout-run
+- Recovery Entry: .loom/progress/WI-1800.md
+- Review Entry: .loom/reviews/WI-1800.json
+- Validation Entry: Focused unit/contract/runtime parity/package/release checks plus tools/loom_check.py --profile source . on the final PR head.
+- Closing Condition: PR #1816 merges to main; loom-cli-release publishes v0.21.2; release readback confirms tag, GitHub Release, npm package, workflow run, and installed/global CLI evidence; #1802 and #1800 closeout comments consume those facts.
+- Current Checkpoint: merge
+- Current Stop: Current-head spec and implementation reviews are recorded; WI-1800 is ready for PR metadata refresh, hosted check rerun, and merge-ready gate consumption.
+- Next Step: Refresh merge-ready/closeout shadow evidence, update PR #1816 metadata to the final head, push, rerun hosted checks, then perform release and closeout after merge.
+- Blockers: None
+- Latest Validation Summary: 2026-06-30 local convergence after PR #1816 hosted failure classification: suite validate/evidence/carrier pass for WI-1800; demo bootstrap fixture drift check pass; root loom_init verify pass; fact-chain pass for WI-1800; runtime-parity validate pass; governance-profile status pass; carrier refresh dry-run reports only merge-ready/closeout shadow refresh needed after status update.
+- Recovery Boundary: WI-1800 owns #1793-#1799, #1801, #1803, #1804, v0.21.2 release readiness, demo fixture sync caused by runtime changes, and current PR carriers. It excludes #1806 and #1807-#1810, and #1802/#1800 remain open until post-merge release evidence is consumed.
+- Current Lane: controller convergence
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1790.md
-- Dynamic Truth: .loom/progress/WI-1790.md
+- Static Truth: .loom/work-items/WI-1800.md
+- Dynamic Truth: .loom/progress/WI-1800.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

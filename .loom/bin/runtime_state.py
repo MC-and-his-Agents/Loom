@@ -6,8 +6,11 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.dont_write_bytecode = True
 
 from runtime_paths import (
     bootstrap_manifest_path,
@@ -36,6 +39,7 @@ EXPECTED_SHARED_RUNTIME_SCRIPTS = (
     "loom_flow.py",
     "loom_status.py",
     "loom_check.py",
+    "loom_story_carriers.py",
 )
 
 EXPECTED_BOOTSTRAP_RUNTIME_SOURCES = {
@@ -47,6 +51,7 @@ EXPECTED_BOOTSTRAP_RUNTIME_SOURCES = {
     ".loom/bin/runtime_paths.py": "skills/shared/scripts/runtime_paths.py",
     ".loom/bin/runtime_state.py": "skills/shared/scripts/runtime_state.py",
     ".loom/bin/loom_check.py": "skills/shared/scripts/loom_check.py",
+    ".loom/bin/loom_story_carriers.py": "skills/shared/scripts/loom_story_carriers.py",
 }
 
 
@@ -281,7 +286,11 @@ def _validate_referenced_resources(skills_root: Path) -> tuple[dict[str, Any], l
         "shared/references/harness/controlled-merge.md",
         "shared/references/harness/pr-merge-gate.md",
         "shared/references/harness/governance-failure-taxonomy.md",
+        "shared/references/harness/governance-lint-taxonomy.md",
+        "shared/references/harness/host-binding-inspector.md",
+        "shared/references/harness/native-dependency-contract.md",
         "shared/references/governance/governance-maturity-model.md",
+        "shared/references/governance/goal-schema.md",
         "shared/references/adoption/github-profile-upgrade.md",
     )
     for relative in required_resources:

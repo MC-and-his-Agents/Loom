@@ -702,10 +702,264 @@ ADOPTION_GATE_ROLLOUT_MODES = {
         "blocking": False,
     },
 }
+ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA = "loom-adversarial-adoption-evidence/v1"
+ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR = ".loom/companion/adversarial-adoption.json"
 
 
-def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
+def git_head_sha(root: Path) -> str | None:
+    result = run_process(["git", "rev-parse", "HEAD"], root)
+    if result.returncode != 0:
+        return None
+    head = result.stdout.strip()
+    return head or None
+
+
+def adversarial_evidence_carrier_state(root: Path) -> dict[str, Any]:
+    tracked = run_process(["git", "ls-files", "--error-unmatch", ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR], root)
+    status = run_process(["git", "status", "--porcelain", "--", ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR], root)
+    if tracked.returncode != 0:
+        return {
+            "status": "untracked",
+            "tracked": False,
+            "clean": False,
+            "porcelain": status.stdout.splitlines() if status.returncode == 0 else [],
+            "missing_inputs": [f"{ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR} is not version-controlled"],
+        }
+    if status.returncode != 0:
+        return {
+            "status": "unverified",
+            "tracked": True,
+            "clean": False,
+            "porcelain": [],
+            "missing_inputs": [f"{ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR} git status could not be read"],
+        }
+    porcelain = [line for line in status.stdout.splitlines() if line.strip()]
+    if porcelain:
+        return {
+            "status": "uncommitted",
+            "tracked": True,
+            "clean": False,
+            "porcelain": porcelain,
+            "missing_inputs": [f"{ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR} has uncommitted changes"],
+        }
+    return {
+        "status": "clean",
+        "tracked": True,
+        "clean": True,
+        "porcelain": [],
+        "missing_inputs": [],
+    }
+
+
+def adversarial_evidence_freshness(root: Path, *, evidence_head: object, current_head: str | None) -> dict[str, Any]:
+    carrier_state = adversarial_evidence_carrier_state(root)
+    if evidence_head == current_head:
+        if carrier_state["clean"] is not True:
+            return {
+                "status": carrier_state["status"],
+                "fresh": False,
+                "carrier_only": False,
+                "changed_paths": [],
+                "carrier_state": carrier_state,
+                "missing_inputs": carrier_state["missing_inputs"],
+            }
+        return {
+            "status": "pass",
+            "fresh": True,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": [],
+        }
+    if not isinstance(evidence_head, str) or not evidence_head or not isinstance(current_head, str) or not current_head:
+        return {
+            "status": "stale",
+            "fresh": False,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": ["adversarial adoption evidence is stale for the current head"],
+        }
+
+    ancestor = run_process(["git", "merge-base", "--is-ancestor", evidence_head, current_head], root)
+    if ancestor.returncode != 0:
+        return {
+            "status": "stale",
+            "fresh": False,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": ["adversarial adoption evidence is stale for the current head"],
+        }
+
+    diff = run_process(["git", "diff", "--name-only", "--no-renames", f"{evidence_head}..{current_head}"], root)
+    if diff.returncode != 0:
+        return {
+            "status": "unverified",
+            "fresh": False,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": ["adversarial adoption evidence head drift could not be read"],
+        }
+    changed_paths = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
+    if changed_paths and set(changed_paths) <= {ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR}:
+        if carrier_state["clean"] is not True:
+            return {
+                "status": carrier_state["status"],
+                "fresh": False,
+                "carrier_only": False,
+                "changed_paths": changed_paths,
+                "carrier_state": carrier_state,
+                "missing_inputs": carrier_state["missing_inputs"],
+            }
+        return {
+            "status": "carrier-only",
+            "fresh": True,
+            "carrier_only": True,
+            "changed_paths": changed_paths,
+            "carrier_state": carrier_state,
+            "missing_inputs": [],
+        }
+    return {
+        "status": "stale",
+        "fresh": False,
+        "carrier_only": False,
+        "changed_paths": changed_paths,
+        "carrier_state": carrier_state,
+        "missing_inputs": ["adversarial adoption evidence is stale for the current head"],
+    }
+
+
+def required_status_contexts_from_branch_rules(payload: Any) -> list[str]:
+    rules = payload
+    if isinstance(payload, dict):
+        rules = payload.get("rules") or payload.get("data")
+    if not isinstance(rules, list):
+        return []
+    contexts: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters") if isinstance(rule.get("parameters"), dict) else {}
+        checks = parameters.get("required_status_checks")
+        if isinstance(checks, list):
+            for check in checks:
+                if isinstance(check, dict) and isinstance(check.get("context"), str):
+                    contexts.append(check["context"])
+                elif isinstance(check, str):
+                    contexts.append(check)
+        for fallback_key in ("contexts", "required_contexts"):
+            fallback_contexts = parameters.get(fallback_key)
+            if isinstance(fallback_contexts, list):
+                contexts.extend(str(context) for context in fallback_contexts if isinstance(context, str) and context.strip())
+    return sorted(set(contexts))
+
+
+def active_ruleset_details(
+    root: Path,
+    *,
+    owner: str,
+    repo: str,
+    rulesets: list[dict[str, Any]],
+    requests: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    details: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for entry in rulesets:
+        if entry.get("target") not in {"branch", "push"} or entry.get("enforcement") != "active":
+            continue
+        if isinstance(entry.get("rules"), list):
+            details.append(entry)
+            continue
+        ruleset_id = entry.get("id") or entry.get("databaseId")
+        if ruleset_id in (None, ""):
+            errors.append(f"active ruleset `{entry.get('name', 'unknown')}` is missing an id")
+            continue
+        path = f"repos/{owner}/{repo}/rulesets/{ruleset_id}"
+        requests.append({"method": "GET", "path": path, "purpose": "active ruleset required checks"})
+        detail, detail_errors = gh_json(root, ["api", path])
+        if detail_errors or detail is None:
+            errors.extend(f"{path}: {message}" for message in detail_errors)
+            continue
+        details.append(detail)
+    return details, errors
+
+
+def adversarial_adoption_evidence_status(root: Path) -> dict[str, Any]:
+    current_head = git_head_sha(root)
+    evidence_path = root / ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR
+    base: dict[str, Any] = {
+        "schema_version": "loom-adversarial-adoption-evidence-consumption/v1",
+        "evidence_locator": ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+        "current_head": current_head,
+        "head_sha": None,
+        "generated_at": None,
+        "status": "missing",
+        "result": "block",
+        "fresh": False,
+        "missing_inputs": [ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR],
+        "recommended_action": "run `loom adopt adversarial-test --target <repo> --record --json`",
+    }
+    if not evidence_path.exists():
+        return base
+    payload = safe_read_json(evidence_path)
+    if payload is None:
+        return {
+            **base,
+            "status": "invalid",
+            "missing_inputs": [f"invalid evidence: {ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR}"],
+        }
+    base["head_sha"] = payload.get("head_sha")
+    base["generated_at"] = payload.get("generated_at")
+    if payload.get("schema_version") != ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA:
+        return {**base, "status": "invalid", "missing_inputs": [f"schema_version must be `{ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA}`"]}
+    if payload.get("result") != "pass":
+        return {**base, "status": "failing", "missing_inputs": ["adversarial adoption evidence result is not pass"]}
+    if not isinstance(current_head, str) or not current_head:
+        return {**base, "status": "unverified", "missing_inputs": ["current git head is unavailable"]}
+    freshness = adversarial_evidence_freshness(root, evidence_head=payload.get("head_sha"), current_head=current_head)
+    if freshness["fresh"] is not True:
+        return {
+            **base,
+            "status": freshness["status"],
+            "carrier_only": freshness["carrier_only"],
+            "head_binding": {
+                "status": freshness["status"],
+                "recorded_head": payload.get("head_sha"),
+                "current_head": current_head,
+                "carrier_only": freshness["carrier_only"],
+                "changed_paths": freshness["changed_paths"],
+                "carrier_state": freshness["carrier_state"],
+            },
+            "carrier_state": freshness["carrier_state"],
+            "changed_paths": freshness["changed_paths"],
+            "missing_inputs": freshness["missing_inputs"],
+        }
+    return {
+        **base,
+        "status": freshness["status"],
+        "result": "pass",
+        "fresh": True,
+        "carrier_only": freshness["carrier_only"],
+        "head_binding": {
+            "status": freshness["status"],
+            "recorded_head": payload.get("head_sha"),
+            "current_head": current_head,
+            "carrier_only": freshness["carrier_only"],
+            "changed_paths": freshness["changed_paths"],
+            "carrier_state": freshness["carrier_state"],
+        },
+        "carrier_state": freshness["carrier_state"],
+        "changed_paths": freshness["changed_paths"],
+        "missing_inputs": [],
+    }
+
+
+def adoption_gate_rollout_status(*, maturity_current: str, adversarial_evidence: dict[str, Any] | None = None) -> dict[str, Any]:
     strong_maturity_passed = maturity_current == "strong"
+    adversarial_evidence = adversarial_evidence if isinstance(adversarial_evidence, dict) else {}
+    adversarial_status = "pass" if adversarial_evidence.get("result") == "pass" and adversarial_evidence.get("fresh") is True else str(adversarial_evidence.get("status", "missing"))
     blocking_preconditions = [
         {
             "id": "strong_maturity",
@@ -717,10 +971,10 @@ def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
         },
         {
             "id": "adversarial_adoption_checks",
-            "status": "missing",
+            "status": adversarial_status,
             "layer": "core",
-            "evidence_locator": None,
-            "version_controlled": False,
+            "evidence_locator": adversarial_evidence.get("evidence_locator") or ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+            "version_controlled": adversarial_status == "pass",
             "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence",
         },
         {
@@ -3290,11 +3544,13 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
         "default_branch": "unknown",
         "branch_protection": "unknown",
         "required_checks": "unknown",
+        "branch_protection_required_checks": [],
         "pr_reviews": "unknown",
         "rulesets": {
             "status": "unknown",
             "enforced": "unknown",
             "count": "unknown",
+            "required_checks": "unknown",
         },
         "ci_check_presence": ci_presence,
         "host_enforcement": {
@@ -3340,28 +3596,22 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     protected = branch_payload.get("protected")
     if isinstance(protected, bool):
         surface["branch_protection"] = "enabled" if protected else "disabled"
+    branch_required_checks: list[str] = []
     protection = branch_payload.get("protection")
     if isinstance(protection, dict):
         required_status = protection.get("required_status_checks")
         if isinstance(required_status, dict):
             contexts = required_status.get("contexts")
             if isinstance(contexts, list) and all(isinstance(item, str) for item in contexts):
-                surface["required_checks"] = contexts
+                branch_required_checks = contexts
             else:
-                surface["required_checks"] = []
+                branch_required_checks = []
         pull_request_reviews = protection.get("required_pull_request_reviews")
         if isinstance(pull_request_reviews, dict):
             surface["pr_reviews"] = "required"
         elif surface["branch_protection"] == "enabled":
             surface["pr_reviews"] = "not_required"
-    required_checks = surface["required_checks"]
-    if isinstance(required_checks, list):
-        ci_presence["required_checks_configured"] = all(name in required_checks for name in GITHUB_STABLE_CHECK_NAMES)
-    ci_presence["host_enforcement_status"] = (
-        "verified"
-        if surface["branch_protection"] == "enabled" and ci_presence["required_checks_configured"] is True
-        else "unverified"
-    )
+    surface["branch_protection_required_checks"] = branch_required_checks
 
     requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/actions/workflows", "purpose": "workflow presence"})
     workflows_payload, workflow_errors = gh_json(root, ["api", f"repos/{owner}/{repo}/actions/workflows"])
@@ -3399,8 +3649,9 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
 
     requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/rulesets", "purpose": "branch ruleset enforcement"})
     rulesets, ruleset_errors = gh_json_list(root, ["api", f"repos/{owner}/{repo}/rulesets"])
+    ruleset_required_checks: list[str] = []
     if ruleset_errors:
-        surface["rulesets"] = {"status": "unverified", "enforced": "unknown", "count": "unknown"}
+        surface["rulesets"] = {"status": "unverified", "enforced": "unknown", "count": "unknown", "required_checks": "unknown"}
         snapshot_errors.extend(f"github rulesets read: {message}" for message in ruleset_errors)
     else:
         enforced_rulesets = [
@@ -3408,11 +3659,38 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
             for entry in rulesets
             if entry.get("target") in {"branch", "push"} and entry.get("enforcement") == "active"
         ]
+        ruleset_details, ruleset_detail_errors = active_ruleset_details(
+            root,
+            owner=owner,
+            repo=repo,
+            rulesets=rulesets,
+            requests=requests,
+        )
+        if ruleset_detail_errors:
+            snapshot_errors.extend(f"github ruleset detail read: {message}" for message in ruleset_detail_errors)
+        else:
+            for detail in ruleset_details:
+                ruleset_required_checks.extend(required_status_contexts_from_branch_rules(detail))
+            ruleset_required_checks = sorted(set(ruleset_required_checks))
         surface["rulesets"] = {
-            "status": "verified",
+            "status": "unverified" if ruleset_detail_errors else "verified",
             "enforced": bool(enforced_rulesets),
             "count": len(rulesets),
+            "active_count": len(enforced_rulesets),
+            "required_checks": "unknown" if ruleset_detail_errors else ruleset_required_checks,
+            "details_read": False if ruleset_detail_errors else bool(enforced_rulesets),
         }
+
+    combined_required_checks = sorted(set(branch_required_checks + ruleset_required_checks))
+    surface["required_checks"] = combined_required_checks
+    ci_presence["required_checks_configured"] = all(name in combined_required_checks for name in GITHUB_STABLE_CHECK_NAMES)
+    ci_presence["host_enforcement_status"] = (
+        "verified"
+        if (surface["branch_protection"] == "enabled" or surface["rulesets"].get("enforced") is True)
+        and ci_presence["required_checks_configured"] is True
+        and not snapshot_errors
+        else "unverified"
+    )
 
     branch_or_ruleset = surface["branch_protection"] == "enabled" or surface["rulesets"].get("enforced") is True
     required_checks_configured = ci_presence.get("required_checks_configured") is True
@@ -3523,6 +3801,7 @@ def maturity_status(
     repo_interop: dict[str, Any],
     github_control_plane: dict[str, Any],
     host_binding: dict[str, Any],
+    adversarial_adoption_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     carrier_present = {
         key: value.get("status") == "present"
@@ -3634,7 +3913,10 @@ def maturity_status(
             "max_default_maturity": "light",
             "applied": repository_mode == "new",
         },
-        "gate_rollout": adoption_gate_rollout_status(maturity_current=current),
+        "gate_rollout": adoption_gate_rollout_status(
+            maturity_current=current,
+            adversarial_evidence=adversarial_adoption_evidence,
+        ),
     }
 
 
@@ -3649,6 +3931,7 @@ def governance_control_plane(
     host_binding: dict[str, Any],
     workspace_profile: dict[str, Any],
     gate_starter: dict[str, Any],
+    adversarial_adoption_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "schema_version": GOVERNANCE_CONTROL_VERSION,
@@ -3659,6 +3942,7 @@ def governance_control_plane(
         },
         "workspace_profile": workspace_profile,
         "gate_starter": gate_starter,
+        "adversarial_adoption_evidence": adversarial_adoption_evidence,
         "host_binding": host_binding,
         "taxonomy": GATE_FAILURE_TAXONOMY,
         "gate_chain": GATE_CHAIN,
@@ -3670,6 +3954,7 @@ def governance_control_plane(
             repo_interop=repo_interop,
             github_control_plane=github_control_plane,
             host_binding=host_binding,
+            adversarial_adoption_evidence=adversarial_adoption_evidence,
         ),
     }
 
@@ -3702,6 +3987,7 @@ def build_governance_surface(
     )
     workspace_profile = detect_workspace_profile(root, host_binding=host_binding)
     gate_starter = detect_gate_starter(root)
+    adversarial_adoption_evidence = adversarial_adoption_evidence_status(root)
     control_plane = governance_control_plane(
         repository_mode=repository_mode,
         carrier_summary=carrier_summary,
@@ -3712,6 +3998,7 @@ def build_governance_surface(
         host_binding=host_binding,
         workspace_profile=workspace_profile,
         gate_starter=gate_starter,
+        adversarial_adoption_evidence=adversarial_adoption_evidence,
     )
 
     missing_inputs: list[str] = []

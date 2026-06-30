@@ -21,6 +21,15 @@ from governance_surface import build_governance_surface, workspace_lifecycle_exp
 from runtime_paths import registry_path, shared_asset
 from runtime_state import detect_runtime_state
 
+
+def resolve_target_arg(raw_target: str) -> Path:
+    target = Path(raw_target).expanduser()
+    if target.is_absolute():
+        return target.resolve()
+    invocation_cwd = os.environ.get("LOOM_INVOCATION_CWD")
+    base = Path(invocation_cwd).expanduser() if invocation_cwd else Path.cwd()
+    return (base / target).resolve()
+
 RUNTIME_SOURCE = "skills/shared/scripts/loom_init.py"
 FLOW_RUNTIME_SOURCE = "skills/shared/scripts/loom_flow.py"
 STATUS_RUNTIME_SOURCE = "skills/shared/scripts/loom_status.py"
@@ -1473,12 +1482,86 @@ def upgrade_triggers(deferred: list[dict[str, str]], profile: str) -> list[dict[
     ]
 
 
-def profile_common_artifacts() -> list[dict[str, str]]:
+def target_uses_global_cli_metadata_only(target_root: Path) -> bool:
+    state_path = target_root / ".loom" / "installed-state.json"
+    if not state_path.exists():
+        return False
+    try:
+        state = read_json(state_path)
+    except (OSError, json.JSONDecodeError):
+        return False
+    repo_payload = state.get("repo_payload") if isinstance(state, dict) else None
+    return (
+        isinstance(state, dict)
+        and state.get("runtime_provider") == "global-cli"
+        and isinstance(repo_payload, dict)
+        and repo_payload.get("mode") == "metadata-only"
+    )
+
+
+GLOBAL_CLI_LOCATOR_REPLACEMENTS = {
+    "python3 .loom/bin/loom_init.py bootstrap --target . --write --repair-gitignore": "loom init bootstrap --target . --write --repair-gitignore --json",
+    "python3 .loom/bin/loom_init.py verify --target .": "loom verify --target . --json",
+    "python3 .loom/bin/loom_init.py fact-chain --target .": "loom fact-chain --target . --json",
+    "python3 .loom/bin/loom_init.py runtime-state --target .": "loom init runtime-state --target . --json",
+    "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001": "loom resume --target . --item INIT-0001 --json",
+    "python3 .loom/bin/loom_status.py --target . --item INIT-0001": "loom status --target . --item INIT-0001 --json",
+    "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item INIT-0001": "loom merge-ready --target . --item INIT-0001 --json",
+    "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001": "loom checkpoint merge --target . --item INIT-0001 --json",
+    "python3 .loom/bin/loom_flow.py closeout check --target .": "loom closeout --target . --json",
+    "python3 .loom/bin/loom_flow.py reconciliation audit --target .": "loom reconcile --json",
+    "python3 .loom/bin/loom_flow.py adopt verify --target .": "loom adopt verify --target . --json",
+    "python3 .loom/bin/loom_flow.py governance-profile upgrade --target . --to standard --dry-run": "loom profile upgrade --target . --to standard --dry-run --json",
+    "python3 .loom/bin/loom_flow.py governance-profile status --target .": "loom profile status --target . --json",
+    "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target .": "loom profile upgrade-plan --target . --json",
+}
+
+
+def rewrite_global_cli_locators(value: object) -> object:
+    if isinstance(value, dict):
+        return {key: rewrite_global_cli_locators(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [rewrite_global_cli_locators(child) for child in value]
+    if not isinstance(value, str):
+        return value
+    rewritten = value
+    for old, new in GLOBAL_CLI_LOCATOR_REPLACEMENTS.items():
+        rewritten = rewritten.replace(old, new)
+    return re.sub(
+        r"python3 \.loom/bin/loom_flow\.py governance-profile upgrade --target \. --to ([^\s]+) --dry-run",
+        r"loom profile upgrade --target . --to \1 --dry-run --json",
+        rewritten,
+    )
+
+
+def string_values(value: object) -> list[str]:
+    if isinstance(value, dict):
+        values: list[str] = []
+        for child in value.values():
+            values.extend(string_values(child))
+        return values
+    if isinstance(value, list):
+        values = []
+        for child in value:
+            values.extend(string_values(child))
+        return values
+    return [value] if isinstance(value, str) else []
+
+
+def bootstrap_uses_global_cli_runtime(result: dict[str, object]) -> bool:
+    runtime = result.get("runtime_provider")
+    return isinstance(runtime, dict) and runtime.get("runtime_provider") == "global-cli" and runtime.get("repo_payload_mode") == "metadata-only"
+
+
+def validation_entry_for_runtime(global_cli_metadata_only: bool) -> str:
+    return "loom verify --target . --json" if global_cli_metadata_only else "python3 .loom/bin/loom_init.py verify --target ."
+
+
+def profile_common_artifacts(global_cli_metadata_only: bool = False) -> list[dict[str, str]]:
     artifacts: list[dict[str, str]] = [
         {"path": ".loom/README.md", "kind": "rule-entry", "source": "generated"},
         {"path": ".loom/bootstrap/intake.snapshot.json", "kind": "intake", "source": "generated"},
         {"path": ".loom/bootstrap/init-result.json", "kind": "init-result", "source": "generated"},
-        {"path": ".loom/bootstrap/manifest.json", "kind": "manifest", "source": "generated"},
         {"path": ".loom/bootstrap/capability-map.md", "kind": "capability-map", "source": "generated"},
         {"path": ".loom/companion/README.md", "kind": "repo-companion-entry", "source": "generated"},
         {"path": ".loom/companion/manifest.json", "kind": "repo-companion-manifest", "source": "generated"},
@@ -1497,16 +1580,23 @@ def profile_common_artifacts() -> list[dict[str, str]]:
         {"path": ".loom/shadow/closeout-loom.json", "kind": "shadow-parity-surface", "source": "generated"},
         {"path": ".loom/shadow/closeout-repo.json", "kind": "shadow-parity-surface", "source": "generated"},
         {"path": ".gitignore", "kind": "gitignore", "source": "generated"},
-        runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/loom_flow.py", "loom-tool", FLOW_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/loom_status.py", "loom-tool", STATUS_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/runtime_paths.py", "loom-tool-support", "skills/shared/scripts/runtime_paths.py"),
-        runtime_artifact(".loom/bin/runtime_state.py", "loom-tool-support", "skills/shared/scripts/runtime_state.py"),
-        runtime_artifact(".loom/bin/loom_check.py", "loom-tool", CHECK_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/loom_story_carriers.py", "loom-tool", STORY_CARRIERS_RUNTIME_SOURCE),
     ]
+    if global_cli_metadata_only:
+        return artifacts
+    artifacts.extend(
+        [
+            {"path": ".loom/bootstrap/manifest.json", "kind": "manifest", "source": "generated"},
+            runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/loom_flow.py", "loom-tool", FLOW_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/loom_status.py", "loom-tool", STATUS_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/runtime_paths.py", "loom-tool-support", "skills/shared/scripts/runtime_paths.py"),
+            runtime_artifact(".loom/bin/runtime_state.py", "loom-tool-support", "skills/shared/scripts/runtime_state.py"),
+            runtime_artifact(".loom/bin/loom_check.py", "loom-tool", CHECK_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/loom_story_carriers.py", "loom-tool", STORY_CARRIERS_RUNTIME_SOURCE),
+        ]
+    )
     return artifacts
 
 
@@ -1547,27 +1637,32 @@ def artifact_paths(artifacts: list[dict[str, str]]) -> list[str]:
     return [artifact["path"] for artifact in artifacts]
 
 
-def attach_only_artifact_paths(target_root: Path, install_pr_template: bool) -> list[str]:
+def attach_only_artifact_paths(target_root: Path, install_pr_template: bool, global_cli_metadata_only: bool = False) -> list[str]:
     artifacts = [
         ".loom/README.md",
         ".loom/bootstrap/intake.snapshot.json",
         ".loom/bootstrap/init-result.json",
-        ".loom/bootstrap/manifest.json",
         ".loom/bootstrap/capability-map.md",
         ".loom/companion/README.md",
         ".loom/companion/checkpoints.md",
         ".loom/companion/review.md",
         ".loom/companion/merge-ready.md",
         ".loom/companion/closeout.md",
-        ".loom/bin/loom_init.py",
-        ".loom/bin/fact_chain_support.py",
-        ".loom/bin/governance_surface.py",
-        ".loom/bin/loom_flow.py",
-        ".loom/bin/runtime_paths.py",
-        ".loom/bin/runtime_state.py",
-        ".loom/bin/loom_check.py",
-        ".loom/bin/loom_story_carriers.py",
     ]
+    if not global_cli_metadata_only:
+        artifacts.extend(
+            [
+                ".loom/bootstrap/manifest.json",
+                ".loom/bin/loom_init.py",
+                ".loom/bin/fact_chain_support.py",
+                ".loom/bin/governance_surface.py",
+                ".loom/bin/loom_flow.py",
+                ".loom/bin/runtime_paths.py",
+                ".loom/bin/runtime_state.py",
+                ".loom/bin/loom_check.py",
+                ".loom/bin/loom_story_carriers.py",
+            ]
+        )
     if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
         artifacts.append(".github/PULL_REQUEST_TEMPLATE.md")
     return artifacts
@@ -1579,7 +1674,9 @@ def initial_work_items(
     adoption_path: str,
     install_pr_template: bool,
     profile: str,
+    global_cli_metadata_only: bool = False,
 ) -> list[dict[str, object]]:
+    validation_entry = validation_entry_for_runtime(global_cli_metadata_only)
     if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
         return []
     if uses_attach_only_path(adoption_path):
@@ -1592,14 +1689,14 @@ def initial_work_items(
                 "workspace_entry": ".",
                 "recovery_entry": "existing root rules and repo-native carriers",
                 "review_entry": ".loom/companion/review.md",
-                "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
-                "artifacts": attach_only_artifact_paths(target_root, install_pr_template),
+                "validation_entry": validation_entry,
+                "artifacts": attach_only_artifact_paths(target_root, install_pr_template, global_cli_metadata_only),
                 "closing_condition": "The attach metadata, companion entry, and repo-local validation path are readable without generated Loom-owned recovery/status carriers",
                 "post_build_continuation": "Extend the attached repo companion and interop surfaces without rewriting the retained host stack",
                 "owner_for_checkpoint_lite": "repository owner or current attach operator",
             }
         ]
-    artifacts = artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile))
+    artifacts = artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile, global_cli_metadata_only))
     if profile == "light-governance":
         return [
             {
@@ -1610,7 +1707,7 @@ def initial_work_items(
                 "workspace_entry": ".",
                 "recovery_entry": "checkpoint-lite issue or PR notes",
                 "review_entry": ".loom/reviews/INIT-0001.json",
-                "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+                "validation_entry": validation_entry,
                 "artifacts": artifacts,
                 "closing_condition": "The companion entry, review guidance, PR template, and bootstrap metadata are readable without generated work/progress/status/spec carriers",
                 "post_build_continuation": "Upgrade to execution-control only when the repo needs Loom-owned work item, recovery, status, or spec carriers",
@@ -1626,7 +1723,7 @@ def initial_work_items(
             "workspace_entry": ".",
             "recovery_entry": ".loom/progress/INIT-0001.md",
             "review_entry": ".loom/reviews/INIT-0001.json",
-            "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+            "validation_entry": validation_entry,
             "artifacts": artifacts,
             "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
             "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
@@ -1635,11 +1732,17 @@ def initial_work_items(
     ]
 
 
-def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_path: str, profile: str) -> list[dict[str, str]]:
+def initial_artifacts(
+    target_root: Path,
+    install_pr_template: bool,
+    adoption_path: str,
+    profile: str,
+    global_cli_metadata_only: bool = False,
+) -> list[dict[str, str]]:
     if not profile_writes_artifacts(profile):
         return []
 
-    artifacts = profile_common_artifacts()
+    artifacts = profile_common_artifacts(global_cli_metadata_only)
     if profile == "light-governance":
         artifacts.extend(profile_light_artifacts(target_root))
     elif profile in {"execution-control", "strong-governance"}:
@@ -1652,7 +1755,7 @@ def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_pat
                 "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md",
             }
         )
-    if not (target_root / "Makefile").exists():
+    if not global_cli_metadata_only and not (target_root / "Makefile").exists():
         artifacts.append({"path": "Makefile", "kind": "repo-local-gate", "source": "generated"})
     return artifacts
 
@@ -1851,13 +1954,14 @@ def candidate_intent_options(
     signal_default: str,
 ) -> list[dict[str, object]]:
     options: list[dict[str, object]] = []
+    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root)
     for intent in reasonable_candidate_intents(scenario, intake):
         option_intake = dict(intake)
         option_intake["adoption_intent"] = intent
         option_intake["adoption_intent_source"] = "decision_prompt"
         path = recommended_adoption_path(scenario, option_intake)
         profile = scaffold_profile_key(path, option_intake)
-        artifacts = initial_artifacts(target_root, install_pr_template, path, profile)
+        artifacts = initial_artifacts(target_root, install_pr_template, path, profile, global_cli_metadata_only)
         planned = planned_write_targets({"initial_artifacts": artifacts}, path)
         heavy = any(isinstance(item.get("requires_intent"), str) for item in planned)
         options.append(
@@ -1871,7 +1975,7 @@ def candidate_intent_options(
                     "repo_owned_truth": "preserved" if uses_attach_only_path(path) else ("loom-authored execution carriers" if heavy else "light governance carriers"),
                 },
                 "write_targets": [item.get("path") for item in planned if isinstance(item, dict) and isinstance(item.get("path"), str)],
-                "verification_commands": ["python3 .loom/bin/loom_init.py verify --target ."],
+                "verification_commands": [validation_entry_for_runtime(global_cli_metadata_only)],
             }
         )
     return options
@@ -1900,10 +2004,15 @@ def decision_prompt_payload(
         return None
 
     validation_entry = intake.get("repository_level_validation_entry")
-    verification_commands = [
-        "python3 .loom/bin/loom_init.py verify --target .",
-        "python3 .loom/bin/loom_flow.py adopt verify --target .",
-    ]
+    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root)
+    verification_commands = (
+        ["loom verify --target . --json", "loom adopt verify --target . --json"]
+        if global_cli_metadata_only
+        else [
+            "python3 .loom/bin/loom_init.py verify --target .",
+            "python3 .loom/bin/loom_flow.py adopt verify --target .",
+        ]
+    )
     planned_paths = [item.get("path") for item in planned if isinstance(item, dict) and isinstance(item.get("path"), str)]
     prompt = {
         "schema_version": "loom-adoption-decision-prompt/v1",
@@ -2017,6 +2126,7 @@ def build_result(
     attach_only = uses_attach_only_path(adoption_path)
     read_only_adoption = adoption_path in NON_WRITABLE_ADOPTION_PATHS
     has_work_item_carriers = profile_has_work_item_carriers(profile)
+    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root)
     main_problem = {
         "new": "the repository has no controlled Loom entry yet",
         "pre-execution-existing": "the repo has established document truth but no formed execution surface yet",
@@ -2044,7 +2154,7 @@ def build_result(
         bootstrap_mode=True,
         scenario_override=scenario,
     )
-    initial_artifact_list = initial_artifacts(target_root, install_pr_template, adoption_path, profile)
+    initial_artifact_list = initial_artifacts(target_root, install_pr_template, adoption_path, profile, global_cli_metadata_only)
     result = {
         "schema_version": "loom-init-output/v1",
         "result": "pass",
@@ -2088,6 +2198,11 @@ def build_result(
                 "strong-governance": "execution-control surface prepared for host gates, required checks, merge, and closeout consumption",
             }[profile],
         },
+        "runtime_provider": {
+            "runtime_provider": "global-cli" if global_cli_metadata_only else "repo-local-wrapper",
+            "repo_payload_mode": "metadata-only" if global_cli_metadata_only else "repo-local-runtime",
+            "source": ".loom/installed-state.json" if global_cli_metadata_only else "bootstrap-default",
+        },
         "deferred_capabilities": deferred_capabilities(scenario, adoption_path, profile),
         "fact_chain": (
             {
@@ -2125,7 +2240,9 @@ def build_result(
             if not has_work_item_carriers
             else {
                 "mode": "work-item + recovery-entry + derived status-surface",
-                "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+                "read_entry": "loom fact-chain --target . --json"
+                if global_cli_metadata_only
+                else "python3 .loom/bin/loom_init.py fact-chain --target .",
                 "entry_points": {
                     "current_item_id": WORK_ITEM_ID,
                     "work_item": ".loom/work-items/INIT-0001.md",
@@ -2135,9 +2252,16 @@ def build_result(
             }
         ),
         "initial_artifacts": initial_artifact_list,
-        "initial_work_items": initial_work_items(scenario, target_root, adoption_path, install_pr_template, profile),
+        "initial_work_items": initial_work_items(
+            scenario,
+            target_root,
+            adoption_path,
+            install_pr_template,
+            profile,
+            global_cli_metadata_only,
+        ),
         "validation_and_closing": {
-            "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+            "validation_entry": validation_entry_for_runtime(global_cli_metadata_only),
             "checkpoint_relationship": (
                 [
                     "admission checkpoint confirms the attached companion entry and bootstrap metadata are readable",
@@ -2221,6 +2345,9 @@ def build_result(
     if prompt is not None:
         result["decision_prompt"] = prompt
         result["adoption_decisions"] = adoption_decisions_from_prompt(prompt)
+    if global_cli_metadata_only:
+        result = rewrite_global_cli_locators(result)
+        assert isinstance(result, dict)
     result.pop("install_pr_template", None)
     return result
 
@@ -2348,6 +2475,7 @@ def render_loom_readme(result: dict[str, object]) -> str:
     run = result["run"]
     profile = result.get("scaffold_profile")
     profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
+    global_cli_metadata_only = bootstrap_uses_global_cli_runtime(result)
     if profile_name == "attach-only":
         path_lines = (
             "- Repo companion entry: `.loom/companion/README.md`\n"
@@ -2366,6 +2494,26 @@ def render_loom_readme(result: dict[str, object]) -> str:
             "- Progress carrier: `.loom/progress/INIT-0001.md`\n"
             "- Status surface: `.loom/status/current.md`\n"
         )
+    entry_points = (
+        "- Bootstrap result: `.loom/bootstrap/init-result.json`\n"
+        "- Runtime-state entry: `loom init runtime-state --target . --json`\n"
+        "- Daily execution CLI: `loom ... --target . --json`\n"
+        "- Unified status CLI: `loom status --target . --json`\n"
+        "- Carrier verification: `loom verify --target . --json`\n"
+        "- Consumer validation chain: `loom verify -> profile status -> runtime-parity validate -> shadow-parity`\n"
+        "- Profile-aware check: `loom check --profile consumer . --json` validates consumer runtime/adoption surfaces; it is not the Loom source/distribution self-check.\n"
+        if global_cli_metadata_only
+        else (
+            "- Bootstrap manifest: `.loom/bootstrap/manifest.json`\n"
+            "- Bootstrap result: `.loom/bootstrap/init-result.json`\n"
+            "- Runtime-state entry: `.loom/bin/loom_init.py runtime-state --target .`\n"
+            "- Daily execution CLI: `.loom/bin/loom_flow.py`\n"
+            "- Unified status CLI: `.loom/bin/loom_status.py --target .`\n"
+            "- Carrier verification: `.loom/bin/loom_init.py verify --target .`\n"
+            "- Consumer validation chain: `loom_init verify -> governance-profile status -> runtime-parity validate -> shadow-parity`\n"
+            "- Profile-aware check: `.loom/bin/loom_check.py --profile consumer .` validates consumer runtime/adoption surfaces; it is not the Loom source/distribution self-check.\n"
+        )
+    )
     return (
         "# Loom Bootstrap\n\n"
         f"This directory was generated by `{RUNTIME_SOURCE}`.\n\n"
@@ -2375,15 +2523,8 @@ def render_loom_readme(result: dict[str, object]) -> str:
         f"- Integration mode: {run['integration_mode']}\n"
         f"- Recovery mode: {run['recovery_mode']}\n\n"
         "## Main Entry Points\n\n"
-        "- Bootstrap manifest: `.loom/bootstrap/manifest.json`\n"
-        "- Bootstrap result: `.loom/bootstrap/init-result.json`\n"
         f"{path_lines}"
-        "- Runtime-state entry: `.loom/bin/loom_init.py runtime-state --target .`\n"
-        "- Daily execution CLI: `.loom/bin/loom_flow.py`\n"
-        "- Unified status CLI: `.loom/bin/loom_status.py --target .`\n"
-        "- Carrier verification: `.loom/bin/loom_init.py verify --target .`\n"
-        "- Consumer validation chain: `loom_init verify -> governance-profile status -> runtime-parity validate -> shadow-parity`\n"
-        "- Profile-aware check: `.loom/bin/loom_check.py --profile consumer .` validates consumer runtime/adoption surfaces; it is not the Loom source/distribution self-check.\n"
+        f"{entry_points}"
     )
 
 
@@ -2577,6 +2718,7 @@ def render_makefile() -> str:
 
 
 def render_progress(result: dict[str, object]) -> str:
+    item = result["initial_work_items"][0]
     checkpoint = "admission" if result["run"]["scenario_key"] != "complex-existing" else "build"
     return (
         f"# {WORK_ITEM_ID} Progress\n\n"
@@ -2593,7 +2735,7 @@ def render_progress(result: dict[str, object]) -> str:
         "- Ledger Binding: recovery_entry\n"
         "- Plan Locator: .loom/specs/INIT-0001/plan.md\n"
         "- Acceptance Locator: .loom/specs/INIT-0001/spec.md\n"
-        "- Validation Evidence Locator: python3 .loom/bin/loom_init.py verify --target .\n"
+        f"- Validation Evidence Locator: {item['validation_entry']}\n"
         "- Handoff Notes Locator: not_applicable\n"
         "- Evidence Freshness: current\n"
     )
@@ -2787,6 +2929,7 @@ def scaffold_target(
     touched: list[str] = []
     profile = result.get("scaffold_profile")
     profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
+    global_cli_metadata_only = bootstrap_uses_global_cli_runtime(result)
     writes_light_loop = profile_name in {"light-governance", "execution-control", "strong-governance"}
     writes_work_item_carriers = profile_has_work_item_carriers(profile_name)
     writes_formal_spec_suite = writes_work_item_carriers
@@ -2798,12 +2941,13 @@ def scaffold_target(
         written += 1
         touched.append(".gitignore")
     result["gitignore_policy"] = gitignore_policy_payload(target_root)
+    if global_cli_metadata_only:
+        result["gitignore_policy"] = rewrite_global_cli_locators(result["gitignore_policy"])
 
     writes: list[tuple[Path, str | dict[str, object], str]] = [
         (target_root / ".loom/README.md", render_loom_readme(result), "text"),
         (target_root / ".loom/bootstrap/intake.snapshot.json", result["intake"], "json"),
         (output_path, result, "json"),
-        (target_root / ".loom/bootstrap/manifest.json", manifest_payload(result), "json"),
         (target_root / ".loom/bootstrap/capability-map.md", render_capability_map(result), "text"),
         (target_root / ".loom/companion/README.md", render_companion_readme(result), "text"),
         (target_root / ".loom/companion/manifest.json", companion_manifest_payload(), "json"),
@@ -2814,6 +2958,8 @@ def scaffold_target(
         (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
         (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
     ]
+    if not global_cli_metadata_only:
+        writes.insert(3, (target_root / ".loom/bootstrap/manifest.json", manifest_payload(result), "json"))
     if writes_light_loop:
         writes.extend(
             [
@@ -2837,7 +2983,7 @@ def scaffold_target(
             touched.append(str(path.relative_to(target_root)))
 
     makefile_target = target_root / "Makefile"
-    if not makefile_target.exists():
+    if not global_cli_metadata_only and not makefile_target.exists():
         if write_text(makefile_target, render_makefile(), force=force):
             written += 1
             touched.append("Makefile")
@@ -2855,20 +3001,21 @@ def scaffold_target(
                 written += 1
                 touched.append(relative)
 
-    for source, destination in (
-        (Path(__file__), target_root / ".loom/bin/loom_init.py"),
-        (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),
-        (Path(__file__).with_name("governance_surface.py"), target_root / ".loom/bin/governance_surface.py"),
-        (Path(__file__).with_name("loom_flow.py"), target_root / ".loom/bin/loom_flow.py"),
-        (Path(__file__).with_name("loom_status.py"), target_root / ".loom/bin/loom_status.py"),
-        (Path(__file__).with_name("runtime_paths.py"), target_root / ".loom/bin/runtime_paths.py"),
-        (Path(__file__).with_name("runtime_state.py"), target_root / ".loom/bin/runtime_state.py"),
-        (Path(__file__).with_name("loom_check.py"), target_root / ".loom/bin/loom_check.py"),
-        (Path(__file__).with_name("loom_story_carriers.py"), target_root / ".loom/bin/loom_story_carriers.py"),
-    ):
-        if copy_file(source, destination, force=force):
-            written += 1
-            touched.append(str(destination.relative_to(target_root)))
+    if not global_cli_metadata_only:
+        for source, destination in (
+            (Path(__file__), target_root / ".loom/bin/loom_init.py"),
+            (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),
+            (Path(__file__).with_name("governance_surface.py"), target_root / ".loom/bin/governance_surface.py"),
+            (Path(__file__).with_name("loom_flow.py"), target_root / ".loom/bin/loom_flow.py"),
+            (Path(__file__).with_name("loom_status.py"), target_root / ".loom/bin/loom_status.py"),
+            (Path(__file__).with_name("runtime_paths.py"), target_root / ".loom/bin/runtime_paths.py"),
+            (Path(__file__).with_name("runtime_state.py"), target_root / ".loom/bin/runtime_state.py"),
+            (Path(__file__).with_name("loom_check.py"), target_root / ".loom/bin/loom_check.py"),
+            (Path(__file__).with_name("loom_story_carriers.py"), target_root / ".loom/bin/loom_story_carriers.py"),
+        ):
+            if copy_file(source, destination, force=force):
+                written += 1
+                touched.append(str(destination.relative_to(target_root)))
     if writes_formal_spec_suite:
         for source, destination in (
             (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
@@ -2920,6 +3067,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         profile_name = str(scaffold_profile.get("name")) if isinstance(scaffold_profile, dict) else (
             "attach-only" if attach_only else "execution-control"
         )
+        global_cli_metadata_only = bootstrap_uses_global_cli_runtime(result) or target_uses_global_cli_metadata_only(target_root)
         initial_artifact_list = result.get("initial_artifacts")
         planned_writes = result.get("planned_writes")
         if isinstance(initial_artifact_list, list):
@@ -3065,6 +3213,27 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             ):
                 if (target_root / path).exists():
                     errors.append(f"light-governance bootstrap must not leave execution-control carrier on disk: {path}")
+        if global_cli_metadata_only:
+            declared_paths = {
+                item.get("path")
+                for collection in (result.get("initial_artifacts"), result.get("planned_writes"))
+                if isinstance(collection, list)
+                for item in collection
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            }
+            for forbidden in (".loom/bootstrap/manifest.json", "Makefile"):
+                if forbidden in declared_paths:
+                    errors.append(f"global-cli metadata-only bootstrap must not declare repo-local runtime artifact `{forbidden}`")
+                if forbidden != "Makefile" and (target_root / forbidden).exists():
+                    errors.append(f"global-cli metadata-only bootstrap must not leave repo-local runtime artifact on disk: {forbidden}")
+            for path in declared_paths:
+                if isinstance(path, str) and path.startswith(".loom/bin/"):
+                    errors.append(f"global-cli metadata-only bootstrap must not declare repo-local runtime artifact `{path}`")
+            if (target_root / ".loom/bin").exists():
+                errors.append("global-cli metadata-only bootstrap must not leave `.loom/bin` on disk")
+            stale_locators = sorted({value for value in string_values(result) if "python3 .loom/bin/" in value})
+            if stale_locators:
+                errors.append("global-cli metadata-only bootstrap must not contain repo-local runtime locators: " + "; ".join(stale_locators[:3]))
 
     for relative in required_paths:
         if not (target_root / relative).exists():
@@ -3266,7 +3435,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
 
 
 def bootstrap(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     if not target_root.exists():
         print(f"loom-init: target does not exist: {target_root}", file=sys.stderr)
         return 2
@@ -3338,6 +3507,9 @@ def bootstrap(args: argparse.Namespace) -> int:
             bootstrap_mode=True,
             scenario_override=scenario,
         )
+        if bootstrap_uses_global_cli_runtime(result):
+            result = rewrite_global_cli_locators(result)
+            assert isinstance(result, dict)
         if args.verify:
             errors = verify_target(target_root, output_path)
             result["verification"] = {"ok": not errors, "errors": errors}
@@ -3354,7 +3526,7 @@ def bootstrap(args: argparse.Namespace) -> int:
 
 
 def verify(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     try:
         output_path = resolve_output_path(target_root, args.output)
     except RuntimeError as exc:
@@ -3390,7 +3562,7 @@ def verify(args: argparse.Namespace) -> int:
 
 
 def fact_chain(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     try:
         output_path = resolve_output_path(target_root, args.output)
     except RuntimeError as exc:
@@ -3424,7 +3596,7 @@ def fact_chain(args: argparse.Namespace) -> int:
 
 
 def runtime_state(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     payload = runtime_state_payload(target_root)
     print(
         json.dumps(
@@ -3444,7 +3616,7 @@ def runtime_state(args: argparse.Namespace) -> int:
 
 
 def route(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     if not target_root.exists():
         print(f"loom-init: target does not exist: {target_root}", file=sys.stderr)
         return 2

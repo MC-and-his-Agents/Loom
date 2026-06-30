@@ -31,6 +31,9 @@ class CheckpointCanonicalizationTest(unittest.TestCase):
         self.assertEqual(loom_flow.normalize_checkpoint("admission checkpoint"), "admission")
         self.assertEqual(loom_flow.normalize_checkpoint("build checkpoint"), "build")
         self.assertEqual(loom_flow.normalize_checkpoint("merge checkpoint"), "merge")
+        self.assertEqual(loom_flow.normalize_checkpoint("merge gate"), "merge")
+        self.assertEqual(loom_flow.normalize_checkpoint("merge-gate"), "merge")
+        self.assertEqual(loom_flow.normalize_checkpoint("merge_gate"), "merge")
         self.assertEqual(loom_flow.normalize_checkpoint("closed"), "closed_out")
         self.assertEqual(loom_flow.normalize_checkpoint("done"), "closed_out")
 

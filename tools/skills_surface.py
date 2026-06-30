@@ -303,6 +303,22 @@ def compare_source_install_runtime_parity(source_root: Path, package_root: Path)
     return errors
 
 
+def validate_reference_copy_parity(source_root: Path, package_root: Path, runtime_root: Path) -> list[str]:
+    _ = package_root
+    errors: list[str] = []
+    for required in RUNTIME_COPY_PARITY_FILES:
+        source_path = source_root / required
+        runtime_path = runtime_root / required
+        if not source_path.is_file():
+            continue
+        if not runtime_path.is_file():
+            errors.append(f"missing runtime parity asset: {required}")
+            continue
+        if not filecmp.cmp(source_path, runtime_path, shallow=False):
+            errors.append(f"runtime parity drift for {required}")
+    return errors
+
+
 def check_reference_integrity_surface() -> None:
     errors: list[str] = []
     errors.extend(compare_source_install_runtime_parity(SOURCE_ROOT, TARGET_ROOT))
