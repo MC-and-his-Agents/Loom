@@ -7,7 +7,7 @@
   "reviewer": "codex-main-thread",
   "authored_at": "2026-06-30T13:40:20Z",
   "reviewed_head": "ebf48ea2be626f7c3f24d395909c8c855e7f74a6",
-  "reviewed_validation_summary": "Suite validate, suite carrier validate, suite evidence validate, runtime-copy-parity, generated-tree/reference-integrity, py-compile-clean, diff whitespace, and governance-closeout contract checks passed locally for WI-1822.",
+  "reviewed_validation_summary": "Suite validate, suite carrier validate, suite evidence validate, runtime-copy-parity, generated-tree/reference-integrity, py-compile-clean, diff whitespace, governance-closeout contract checks, hosted PR gates, controlled merges for #1823/#1824, main release workflow 28449859413, npm/GitHub release readback, and closeout sync passed for WI-1822.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
