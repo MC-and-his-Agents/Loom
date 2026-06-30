@@ -4,7 +4,7 @@
 
 - Item ID: WI-1806
 - Goal: Provide shared PR intent profiles and easier governance carrier commands for docs/governance-only, closeout-only, release-only, carrier-sync-only, and fixture-only PRs.
-- Scope: #1806 parent plus #1807-#1814 implementation and verification. Owned files are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `docs/methodology/harness/cli-command-matrix.md`, and WI-1806 Loom carriers. #1815 release readiness is tracked, but publishing `v0.22.0` is blocked until #1800 / `v0.21.2` releases or explicitly frees the release line.
+- Scope: #1806 parent plus #1807-#1814 implementation and verification. Owned files are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `docs/methodology/harness/cli-command-matrix.md`, `.loom/reviews/WI-1806.spec.json`, `.loom/reviews/WI-1806.json`, and WI-1806 Loom carriers. #1815 release readiness is tracked, but publishing `v0.22.0` is blocked until #1800 / `v0.21.2` releases or explicitly frees the release line.
 - Execution Path: issue tree #1806 -> branch `work/1806-pr-intent-carrier-ergonomics` -> shared `pr-intent prepare/check` implementation -> focused CLI contract fixtures -> PR readiness -> release wait for #1800 / `v0.21.2`.
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1806.md
