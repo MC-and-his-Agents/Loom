@@ -426,6 +426,9 @@ REVIEW_PROMPT_DIFF_PATHS = (
 )
 PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
 CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
+GOVERNANCE_CAPABILITY_PROFILE_SCHEMA = "loom-governance-capability-profile/v1"
+GOVERNANCE_CAPABILITY_MODES = ("host-enforced", "advisory/local-enforced")
+HIGH_RISK_GOVERNANCE_CHANGE_CLASSES = {"release", "security", "payment", "data_migration", "data-migration"}
 GATE_REPAIR_PR_SCHEMA = "loom-gate-repair-pr/v1"
 PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
 HOST_MERGEABILITY_HARD_BLOCK_STATUSES = {"DIRTY", "DRAFT"}
@@ -941,6 +944,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
     controlled_merge.add_argument("--pr-gate-result-file", help="Optional repo-relative retained pr-gate result JSON")
     controlled_merge.add_argument("--merge-gate-result-file", help="Optional repo-relative retained merge-gate or merge-ready result JSON")
+    controlled_merge.add_argument("--governance-mode", choices=GOVERNANCE_CAPABILITY_MODES, default="host-enforced")
+    controlled_merge.add_argument("--allow-advisory-local-enforced", action="store_true")
+    controlled_merge.add_argument("--allow-high-risk-advisory", action="store_true")
+    controlled_merge.add_argument("--change-class", help="Optional change class used to block high-risk advisory fallback")
 
     gate_repair_pr = subparsers.add_parser("gate-repair-pr", help="Record audited repair PR gate evidence without mutating host rulesets")
     gate_repair_pr.add_argument("--target", required=True, help="Target repository root")
@@ -17375,6 +17382,10 @@ def render_governance_intensity_metadata_body(
         "branch": branch_name,
         "head_sha": head_sha,
         "governance_intensity": governance_intensity,
+        "governance_mode": "host-enforced",
+        "governance_assurance": "strong",
+        "advisory_risk_label": None,
+        "host_enforcement_required": True,
         "change_class": change_class,
         "suite_path": suite_path,
         "suite_not_applicable": suite_not_applicable if suite_path == "not_applicable" else None,
@@ -21475,6 +21486,81 @@ def host_mergeability_readback(mergeability: Any) -> dict[str, Any]:
     }
 
 
+def governance_capability_profile_payload(
+    *,
+    mode: str,
+    host_enforcement: dict[str, Any],
+    allow_advisory: bool,
+    allow_high_risk_advisory: bool,
+    change_class: str | None,
+) -> dict[str, Any]:
+    normalized_change_class = str(change_class or "").strip().lower().replace("-", "_")
+    missing_inputs: list[str] = []
+    host_required = host_enforcement.get("required") is True
+    host_readable = (
+        host_enforcement.get("branch_protection_readable") is True
+        or host_enforcement.get("ruleset_readable") is True
+    )
+
+    if mode == "host-enforced":
+        if not host_required:
+            missing_inputs.append(f"required check `{PR_MERGE_GATE_CHECK_NAME}` is not host-enforced")
+        if not host_readable:
+            missing_inputs.append("branch protection or ruleset readback is unavailable")
+        return {
+            "schema_version": GOVERNANCE_CAPABILITY_PROFILE_SCHEMA,
+            "mode": "host-enforced",
+            "result": "pass" if not missing_inputs else "block",
+            "assurance": "strong",
+            "risk_label": None,
+            "host_enforcement_status": "host_enforced" if not missing_inputs else "unverified",
+            "explicit_opt_in": False,
+            "change_class": normalized_change_class or None,
+            "summary": (
+                "host-enforced governance is proven by host required checks."
+                if not missing_inputs
+                else "host-enforced governance cannot be proven from host readback."
+            ),
+            "missing_inputs": missing_inputs,
+        }
+
+    if mode != "advisory/local-enforced":
+        return {
+            "schema_version": GOVERNANCE_CAPABILITY_PROFILE_SCHEMA,
+            "mode": mode,
+            "result": "block",
+            "assurance": "unknown",
+            "risk_label": "invalid",
+            "host_enforcement_status": "unknown",
+            "explicit_opt_in": allow_advisory,
+            "change_class": normalized_change_class or None,
+            "summary": "unknown governance capability profile.",
+            "missing_inputs": [f"unknown governance mode: {mode}"],
+        }
+
+    if not allow_advisory:
+        missing_inputs.append("advisory/local-enforced requires --allow-advisory-local-enforced")
+    if normalized_change_class in HIGH_RISK_GOVERNANCE_CHANGE_CLASSES and not allow_high_risk_advisory:
+        missing_inputs.append(f"high-risk change class `{normalized_change_class}` cannot use advisory/local-enforced without explicit approval")
+    return {
+        "schema_version": GOVERNANCE_CAPABILITY_PROFILE_SCHEMA,
+        "mode": "advisory/local-enforced",
+        "result": "pass" if not missing_inputs else "block",
+        "assurance": "low",
+        "risk_label": "low_assurance",
+        "host_enforcement_status": "not_host_enforced" if not host_required else "host_enforced_but_advisory_selected",
+        "explicit_opt_in": allow_advisory,
+        "high_risk_approval": allow_high_risk_advisory,
+        "change_class": normalized_change_class or None,
+        "summary": (
+            "advisory/local-enforced governance is explicitly selected; normal review, PR gate, CI rollup, and head drift checks still apply."
+            if not missing_inputs
+            else "advisory/local-enforced governance is blocked until explicit approval evidence is supplied."
+        ),
+        "missing_inputs": missing_inputs,
+    }
+
+
 def controlled_merge_payload(
     *,
     target_root: Path,
@@ -21493,6 +21579,10 @@ def controlled_merge_payload(
     ruleset_file: str | None,
     pr_gate_result_file: str | None,
     merge_gate_result_file: str | None,
+    governance_mode: str = "host-enforced",
+    allow_advisory_local_enforced: bool = False,
+    allow_high_risk_advisory: bool = False,
+    change_class: str | None = None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
@@ -21673,10 +21763,6 @@ def controlled_merge_payload(
     triggered_check_rollup = triggered_check_rollup_payload(
         status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
     )
-    if protection_payload is None and ruleset_payload is None:
-        missing_inputs.append("branch protection or ruleset readback is unavailable")
-    if PR_MERGE_GATE_CHECK_NAME not in required_contexts:
-        missing_inputs.append(f"required check `{PR_MERGE_GATE_CHECK_NAME}` is not enforced")
     if required_checks["result"] != "pass":
         labels = {"missing": "missing", "pending": "pending", "failing": "failing"}
         for key in ("missing", "pending", "failing"):
@@ -21693,6 +21779,18 @@ def controlled_merge_payload(
         "ruleset_readable": ruleset_payload is not None,
         "ruleset_required_contexts": ruleset_contexts,
     }
+    governance_capability_profile = governance_capability_profile_payload(
+        mode=governance_mode,
+        host_enforcement=host_enforcement,
+        allow_advisory=allow_advisory_local_enforced,
+        allow_high_risk_advisory=allow_high_risk_advisory,
+        change_class=change_class,
+    )
+    if governance_capability_profile["result"] != "pass":
+        missing_inputs.extend(
+            f"governance capability profile: {message}"
+            for message in governance_capability_profile.get("missing_inputs", [])
+        )
     mergeability = host_mergeability_readback(pr_payload.get("mergeStateStatus") if isinstance(pr_payload, dict) else None)
     if mergeability["result"] == "block":
         missing_inputs.append(str(mergeability["summary"]))
@@ -21729,6 +21827,8 @@ def controlled_merge_payload(
         merge_ready_consumption_missing.append("required checks readback")
     if triggered_check_rollup["result"] != "pass":
         merge_ready_consumption_missing.append("triggered checks readback")
+    if governance_capability_profile["result"] != "pass":
+        merge_ready_consumption_missing.append("governance capability profile")
     pr_head = (
         pr_payload.get("headRefOid") or pr_payload.get("headRefName")
         if isinstance(pr_payload, dict)
@@ -21811,6 +21911,7 @@ def controlled_merge_payload(
         "triggered_check_rollup": triggered_check_rollup,
         "triggered_checks": triggered_check_rollup.get("triggered_checks", []),
         "host_enforcement": host_enforcement,
+        "governance_capability_profile": governance_capability_profile,
         "controlled_merge_consumption": controlled_merge_consumption,
         "merge": merge_result,
     }
@@ -21836,6 +21937,10 @@ def handle_controlled_merge(args: argparse.Namespace) -> int:
             ruleset_file=args.ruleset_file,
             pr_gate_result_file=args.pr_gate_result_file,
             merge_gate_result_file=args.merge_gate_result_file,
+            governance_mode=args.governance_mode,
+            allow_advisory_local_enforced=args.allow_advisory_local_enforced,
+            allow_high_risk_advisory=args.allow_high_risk_advisory,
+            change_class=args.change_class,
         )
     )
 
@@ -22293,6 +22398,11 @@ def governance_profile_payload(target_root: Path, operation: str, *, host: str =
         if isinstance(github_control_plane, dict)
         else None
     )
+    host_governance_capability = (
+        github_control_plane.get("host_governance_capability")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
     api_snapshot = (
         github_control_plane.get("api_snapshot")
         if isinstance(github_control_plane, dict)
@@ -22339,6 +22449,7 @@ def governance_profile_payload(target_root: Path, operation: str, *, host: str =
         "gate_starter": gate_starter,
         "ci_check_presence": ci_check_presence,
         "host_enforcement": host_enforcement,
+        "host_governance_capability": host_governance_capability,
         "host_verification_status": host_verification_status,
         "gate_rollout": gate_rollout,
         "governance_control_plane": control_plane,

@@ -6,7 +6,7 @@
 - Goal: Complete the v0.23.0 Host Governance Capability milestone by adding host governance diagnosis, explicit governance capability profiles, merge runtime consumption, governance mode evidence, and release convergence.
 - Scope: Parent issue #1805 plus milestone children #1826-#1830. Implementation covers GitHub host governance capability diagnosis, `host-enforced` and `advisory/local-enforced` profile contracts, merge check/run profile enforcement, governance mode metadata/evidence/readback, v0.23.0 version/package/plugin metadata, release readiness evidence, tests, and Loom carriers for this work. Advisory/local-enforced remains a low-assurance fallback and must not be represented as strong governance.
 - Execution Path: issue tree #1805 -> branch `work/1805-host-governance-capability` -> diagnosis/profile lanes #1826/#1827 -> merge runtime #1828 -> evidence/readback #1829 -> release convergence #1830 -> PR -> merge -> v0.23.0 publish/readback -> issue and milestone closeout.
-- Workspace Entry: /Users/mc/dev/Loom.worktrees/1805-host-governance-capability
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1805.md
 - Review Entry: .loom/reviews/WI-1805.json
 - Validation Entry: `python3 -m unittest test.host_governance_capability_test test.governance_capability_profiles_test test.governance_merge_profile_test test.output_envelope_test test.plugin_payload_hash_test`; `node --test test/npm-package-smoke.test.mjs`; `python3 tools/check_npm_package.py`; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`

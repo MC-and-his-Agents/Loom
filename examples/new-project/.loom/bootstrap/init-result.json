@@ -433,13 +433,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "5d8d2e117050d8412c046bcf3fc95d553a7adb6fb4c4269dcd33f6fee33c4963"
+      "sha256": "3ffef95371a12a5c5b7cf8178c2ee6f053268c686fa710ad4e90812850847345"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "50eba925f3f12442c877d0da158eb1dd5c046c823b0068eec928e7ad008df8ed"
+      "sha256": "c0716215f899f0f27c181b2b557580638d6079edc931610be7914840f0b43caf"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -803,6 +803,20 @@
             "source": "github_host"
           },
           "adapter_evidence_locator": ""
+        }
+      },
+      "host_governance_capability": {
+        "schema_version": "loom-host-governance-capability-diagnosis/v1",
+        "status": "host_enforced",
+        "reason": "host_enforced",
+        "setup_guidance": "keep branch protection or rulesets requiring Loom stable checks enabled",
+        "signals": {
+          "repository": "MC-and-his-Agents/Loom",
+          "default_branch": "main",
+          "branch_protection": "enabled",
+          "rulesets_enforced": false,
+          "required_checks": true,
+          "pr_reviews": "not_required"
         }
       }
     },
@@ -1225,7 +1239,7 @@
       "adversarial_adoption_evidence": {
         "schema_version": "loom-adversarial-adoption-evidence-consumption/v1",
         "evidence_locator": ".loom/companion/adversarial-adoption.json",
-        "current_head": "295ee5674d986440eb3fd9add288613e59d28301",
+        "current_head": "b2270e5a76d177e0924def6cf592aa3c15c81626",
         "head_sha": null,
         "generated_at": null,
         "status": "missing",
