@@ -31,8 +31,11 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback path
 sys.dont_write_bytecode = True
 
 from fact_chain_support import (
+    COMPANION_INIT_RESULT,
+    DEFAULT_INIT_RESULT,
     STATUS_FIELDS,
     STATUS_SOURCE_FIELDS,
+    default_init_result_fallback,
     inspect_fact_chain,
     load_json_file,
     markdown_sections,
@@ -43,16 +46,34 @@ from fact_chain_support import (
     resolve_repo_relative_path,
 )
 from governance_surface import (
+    ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+    ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA,
     build_governance_surface,
     derive_execution_budget_risk,
     EXTERNAL_ORCHESTRATOR_OPERATIONS,
     empty_hook_extension_profile,
     empty_target_release_status,
     empty_tool_availability,
+    required_status_contexts_from_branch_rules as governance_required_status_contexts_from_branch_rules,
     workspace_lifecycle_expectations,
 )
 from runtime_paths import shared_asset, shared_script
 from runtime_state import detect_runtime_state
+
+
+def resolve_target_arg(raw_target: str) -> Path:
+    target = Path(raw_target).expanduser()
+    if target.is_absolute():
+        return target.resolve()
+    invocation_cwd = os.environ.get("LOOM_INVOCATION_CWD")
+    base = Path(invocation_cwd).expanduser() if invocation_cwd else Path.cwd()
+    return (base / target).resolve()
+
+
+def init_result_locator_matches(actual: object, expected: str) -> bool:
+    if actual == expected:
+        return True
+    return expected == COMPANION_INIT_RESULT and actual == DEFAULT_INIT_RESULT
 
 PR_TEMPLATE_SECTIONS = (
     "## Summary",
@@ -224,9 +245,9 @@ FAILURE_CLASSIFIER_NEXT_ACTIONS = {
     "carrier_refresh_needed": "refresh Loom carriers, then rerun gate freeze.",
     "shadow_stale": "refresh or restore shadow evidence, then rerun shadow parity and gate freeze.",
     "review_stale": "rerun authored Loom review for the current head, then rerun gate freeze.",
-    "host_api_unreadable": "bridge an explicit GH_TOKEN/GITHUB_TOKEN for this command or retry after host API access recovers.",
+    "host_api_unreadable": "rerun the same command as `CODEX_EXPORT_GH_TOKEN=1 <same loom command>` so the wrapper can bridge the local gh keyring token into GH_TOKEN for this process only; do not export GH_TOKEN/GITHUB_TOKEN globally.",
     "ci_environment": "fix the CI/runtime environment and rerun the check.",
-    "permission": "fix host permissions or bridge an explicit token for this command.",
+    "permission": "fix host permissions or rerun the same command as `CODEX_EXPORT_GH_TOKEN=1 <same loom command>` so the wrapper can bridge the local gh keyring token into GH_TOKEN for this process only.",
     "external_service_flake": "wait for the external service to recover, then rerun once.",
     "suite_evidence_contract_invalid": "fix suite evidence contract fields, then rerun suite evidence validation.",
     "task_carrier_contract_invalid": "fix Work Item/task carrier fields, then rerun suite carrier validation.",
@@ -236,6 +257,8 @@ FAILURE_CLASSIFIER_NEXT_ACTIONS = {
     "hosted_snapshot_mismatch": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
     "release_evidence_phase_error": "record release/no-release evidence in the correct phase, then rerun gate freeze.",
 }
+HOST_API_TOKEN_BRIDGE_COMMAND = "CODEX_EXPORT_GH_TOKEN=1 <same loom command>"
+HOST_API_TOKEN_BRIDGE_NEXT_ACTION = FAILURE_CLASSIFIER_NEXT_ACTIONS["host_api_unreadable"]
 GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID = "loom-governance-intensity"
 GOVERNANCE_INTENSITY_VALUES = {"light", "standard", "reinforced"}
 GOVERNANCE_CHANGE_CLASS_VALUES = {
@@ -245,6 +268,10 @@ GOVERNANCE_CHANGE_CLASS_VALUES = {
     "runtime",
     "fixture",
     "release",
+    "workflow",
+    "metadata_schema",
+    "host_write",
+    "permissions",
     "external_action",
     "mixed",
 }
@@ -258,10 +285,41 @@ GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS = (
     "scope_proof",
     "review_requirement",
 )
-GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "fixture", "release", "external_action", "mixed"}
-GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS = "docs_governance"
+PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES = {
+    "parser_version": list(PR_METADATA_SUPPORTED_PARSER_VERSIONS),
+    "fields.governance_intensity": sorted(GOVERNANCE_INTENSITY_VALUES),
+    "fields.change_class": sorted(GOVERNANCE_CHANGE_CLASS_VALUES),
+    "fields.suite_path": sorted(GOVERNANCE_SUITE_PATH_VALUES),
+    "fields.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
+    "fields.release_judgment": sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES),
+    "fields.suite_not_applicable.review_requirement": sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES),
+}
+GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {
+    "runtime",
+    "release",
+    "workflow",
+    "metadata_schema",
+    "host_write",
+    "permissions",
+    "external_action",
+    "mixed",
+}
+GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES = {"docs_only", "docs_governance", "fixture"}
+GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES = {"docs_only", "docs_governance"}
+GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES = {"fixture"}
+GOVERNANCE_DOCS_LITE_CHANGE_CLASS = "docs_governance"
 GOVERNANCE_LITE_ALLOWED_SUITE_PATH = "not_applicable"
 GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT = "no_release"
+GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES = [
+    "fact_chain",
+    "current_head_review",
+    "pr_metadata_readback",
+    "hosted_checks",
+    "pr_gate",
+    "release_judgment",
+    "controlled_merge",
+    "post_merge_closeout",
+]
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -368,9 +426,13 @@ REVIEW_PROMPT_DIFF_PATHS = (
 )
 PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
 CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
+GATE_REPAIR_PR_SCHEMA = "loom-gate-repair-pr/v1"
 PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
 HOST_MERGEABILITY_HARD_BLOCK_STATUSES = {"DIRTY", "DRAFT"}
 HOST_MERGEABILITY_DELEGATED_STATUSES = {"BLOCKED"}
+TRIGGERED_CHECK_ALLOWED_CONCLUSIONS = {"SUCCESS", "SKIPPED", "NEUTRAL"}
+TRIGGERED_CHECK_BLOCKING_CONCLUSIONS = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
+TRIGGERED_CHECK_PENDING_STATUSES = {"QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "PENDING"}
 MERGE_GATE_RESULT_SCHEMAS = {"loom-flow-merge-ready/v1", "loom-merge-gate/v1"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
@@ -665,7 +727,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     adopt = subparsers.add_parser("adopt", help="Validate Loom downstream adoption contracts")
-    adopt.add_argument("operation", choices=("verify",))
+    adopt.add_argument("operation", choices=("verify", "adversarial-test"))
     adopt.add_argument("--target", required=True, help="Target repository root")
     adopt.add_argument("--item", help="Expected current item id")
     adopt.add_argument(
@@ -673,6 +735,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=".loom/bootstrap/init-result.json",
         help="Init-result path relative to the target root",
     )
+    adopt.add_argument("--record", action="store_true", help="Write adversarial adoption evidence under .loom/companion")
 
     carrier = subparsers.add_parser("carrier", help="Refresh Loom-owned carrier metadata")
     carrier.add_argument("operation", choices=("refresh", "closeout-sync"))
@@ -791,6 +854,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     pr_metadata.add_argument("--item", help="Expected Loom Work Item id for render, update, or readback binding")
+    pr_metadata.add_argument("--issue", type=int, help="Expected GitHub Work Item issue number for safe PR body backlink repair")
     pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
     pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
     pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
@@ -811,6 +875,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--suite-na-recheck-condition")
     pr_metadata.add_argument("--suite-na-scope-proof")
     pr_metadata.add_argument("--suite-na-review-requirement")
+    pr_metadata.add_argument("--dry-run", action="store_true", default=True, help="Preview metadata update/rendered preflight without writing the host PR body; this is the default")
+    pr_metadata.add_argument("--apply", dest="dry_run", action="store_false", help="Write the rendered body to the host PR, then read it back and rerun metadata preflight")
 
     gate_freeze = subparsers.add_parser("gate-freeze", help="Generate or validate hosted gate input freeze snapshots")
     gate_freeze.add_argument("operation", choices=("check", "write"))
@@ -875,6 +941,29 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
     controlled_merge.add_argument("--pr-gate-result-file", help="Optional repo-relative retained pr-gate result JSON")
     controlled_merge.add_argument("--merge-gate-result-file", help="Optional repo-relative retained merge-gate or merge-ready result JSON")
+
+    gate_repair_pr = subparsers.add_parser("gate-repair-pr", help="Record audited repair PR gate evidence without mutating host rulesets")
+    gate_repair_pr.add_argument("--target", required=True, help="Target repository root")
+    gate_repair_pr.add_argument("--record", action="store_true", help="Write .loom/companion/gate-repair-pr.json after validation passes")
+    gate_repair_pr.add_argument("--item", help="Expected Loom Work Item id")
+    gate_repair_pr.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    gate_repair_pr.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    gate_repair_pr.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    gate_repair_pr.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    gate_repair_pr.add_argument("--head-sha", help="Expected PR head SHA")
+    gate_repair_pr.add_argument("--branch", help="Expected repair PR branch")
+    gate_repair_pr.add_argument("--reason", help="Audited reason for the repair PR evidence record")
+    gate_repair_pr.add_argument("--enforcement-before-file", help="Repo-relative JSON readback proving the broken enforcement state before repair")
+    gate_repair_pr.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    gate_repair_pr.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
+    gate_repair_pr.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
+    gate_repair_pr.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
+    gate_repair_pr.add_argument("--pr-gate-result-file", help="Optional repo-relative retained pr-gate result JSON")
+    gate_repair_pr.add_argument("--merge-gate-result-file", help="Optional repo-relative retained merge-gate or merge-ready result JSON")
 
     state = subparsers.add_parser(
         "state-check",
@@ -1395,15 +1484,10 @@ def live_smoke_release_interpretation(status: str) -> str:
 
 def current_host_adapter_version() -> str | None:
     source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
-    candidates: list[tuple[Path, str]] = []
+    candidates: list[Path] = []
     if source_repo_root:
-        candidates.append((Path(source_repo_root).expanduser().resolve() / "plugins/loom/.codex-plugin/plugin.json", "plugin"))
-    installed_skills_root = os.environ.get("LOOM_INSTALLED_SKILLS_ROOT")
-    if installed_skills_root:
-        installed_root = Path(installed_skills_root).expanduser().resolve()
-        candidates.append((installed_root / "loom-init" / "loom-package.json", "package"))
-        candidates.append((installed_root / "loom-adopt" / "loom-package.json", "package"))
-    for path, source in candidates:
+        candidates.append(Path(source_repo_root).expanduser().resolve() / "plugins/loom/.codex-plugin/plugin.json")
+    for path in candidates:
         if not path.exists():
             continue
         try:
@@ -1412,11 +1496,8 @@ def current_host_adapter_version() -> str | None:
             continue
         if not isinstance(payload, dict):
             continue
-        if source == "plugin":
-            x_loom = payload.get("x-loom")
-            version = x_loom.get("host_adapter_version") if isinstance(x_loom, dict) else None
-        else:
-            version = payload.get("host_adapter_version")
+        x_loom = payload.get("x-loom")
+        version = x_loom.get("host_adapter_version") if isinstance(x_loom, dict) else None
         if isinstance(version, str) and version.strip():
             return version.strip()
     return None
@@ -4351,7 +4432,7 @@ def undeclared_shadow_evidence_errors(target_root: Path, interop_payload: dict[s
     declared = declared_shadow_locators(interop_payload)
     errors: list[str] = []
     for path in sorted(shadow_root.glob("*.json")):
-        relative = path.relative_to(target_root).as_posix()
+        relative = relative_to_root(path, target_root)
         if relative == ".loom/shadow/shadow-parity.json":
             continue
         if relative not in declared:
@@ -4594,8 +4675,10 @@ def normalize_checkpoint(raw: str) -> str:
         return "admission"
     if "build checkpoint" in lowered:
         return "build"
-    if "merge checkpoint" in lowered:
+    if "merge checkpoint" in lowered or lowered in {"merge gate", "merge-gate", "merge_gate"}:
         return "merge"
+    if lowered in {"closed", "done", "closed_out", "closed-out", "closed out", "closed checkpoint", "done checkpoint"}:
+        return "closed_out"
     if "retired" in lowered:
         return "retired"
     return lowered.replace(" checkpoint", "").strip()
@@ -4640,6 +4723,48 @@ def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = N
         env=env,
         timeout=timeout_seconds,
     )
+
+
+def host_api_env_token_present() -> bool:
+    return bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+
+
+def host_api_gh_logged_in(root: Path) -> bool:
+    try:
+        result = run_process(["gh", "auth", "status"], root, timeout_seconds=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def host_api_failure_classifier(messages: list[str]) -> str:
+    text = " ".join(str(message) for message in messages).lower()
+    if any(token in text for token in ("rate limit", "api rate limit exceeded", "secondary rate limit")):
+        return "host_api_unreadable"
+    if any(token in text for token in ("resource not accessible", "permission", "forbidden", "403")):
+        return "permission"
+    return "host_api_unreadable"
+
+
+def host_api_diagnostic_message(subject: str, messages: list[str]) -> str:
+    classifier = host_api_failure_classifier(messages)
+    detail = "; ".join(str(message).strip() for message in messages if str(message).strip()) or "host API read failed"
+    next_action = FAILURE_CLASSIFIER_NEXT_ACTIONS[classifier]
+    return f"{subject} failed (classifier={classifier}; next_action={next_action}): {detail}"
+
+
+def host_api_anonymous_fallback_blocked(root: Path, path: str, gh_errors: list[str]) -> list[str]:
+    if host_api_env_token_present() or not host_api_gh_logged_in(root):
+        return []
+    return [
+        host_api_diagnostic_message(
+            f"gh api {path}",
+            [
+                *gh_errors,
+                "refusing anonymous public REST fallback because local gh auth is available but GH_TOKEN/GITHUB_TOKEN is not present in this process",
+            ],
+        )
+    ]
 
 
 def suite_validation_command_payload(
@@ -5094,7 +5219,8 @@ def closeout_required_status_subcheck(
         label="branch rules/ruleset fixture",
     )
     if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
-        ruleset_payload, ruleset_errors = github_public_rest_list(
+        ruleset_payload, ruleset_errors = gh_rest_list(
+            target_root,
             f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
         )
     missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
@@ -6103,7 +6229,7 @@ def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
     shutil.rmtree(scratch_dir, ignore_errors=True)
     for candidate in (scratch_dir.parent, scratch_dir.parent.parent):
         try:
-            candidate.relative_to(target_root)
+            candidate.resolve().relative_to(target_root.resolve())
         except ValueError:
             continue
         try:
@@ -6116,11 +6242,13 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
     try:
         result = run_process(["gh", *args], root, timeout_seconds=20)
     except FileNotFoundError:
-        return None, ["gh command is unavailable in PATH"]
+        return None, [host_api_diagnostic_message(f"gh {' '.join(args)}", ["gh command is unavailable in PATH"])]
     except subprocess.TimeoutExpired:
-        return None, [f"gh {' '.join(args)} timed out after 20s"]
+        return None, [host_api_diagnostic_message(f"gh {' '.join(args)}", [f"gh {' '.join(args)} timed out after 20s"])]
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
+        if args and args[0] in {"api", "pr", "project"}:
+            detail = host_api_diagnostic_message(f"gh {' '.join(args)}", [detail])
         return None, [detail]
     try:
         payload = json.loads(result.stdout)
@@ -6135,6 +6263,9 @@ def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str
     payload, errors = gh_json(root, ["api", path])
     if payload is not None or not errors:
         return payload, errors
+    blocked_errors = host_api_anonymous_fallback_blocked(root, path, errors)
+    if blocked_errors:
+        return None, blocked_errors
     fallback_payload, fallback_errors = github_public_rest_json(path)
     if fallback_payload is not None:
         return fallback_payload, []
@@ -6145,7 +6276,21 @@ def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]
     raw_payload, errors = gh_json(root, ["api", path])
     if raw_payload is not None:
         return [], [f"gh api {path} returned an object where a list was expected"]
-    result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    try:
+        result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    except FileNotFoundError:
+        result = None
+        detail = "gh command is unavailable in PATH"
+    except subprocess.TimeoutExpired:
+        result = None
+        detail = f"gh api {path} timed out after 20s"
+    else:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
+    if result is None:
+        fallback_payload, fallback_errors = github_public_rest_list(path)
+        if fallback_payload:
+            return fallback_payload, []
+        return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
     if result.returncode == 0:
         try:
             payload = json.loads(result.stdout)
@@ -6154,11 +6299,13 @@ def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]
         if not isinstance(payload, list):
             return [], [f"gh api {path} did not return a list"]
         return [entry for entry in payload if isinstance(entry, dict)], []
+    blocked_errors = host_api_anonymous_fallback_blocked(root, path, [detail])
+    if blocked_errors:
+        return [], blocked_errors
     fallback_payload, fallback_errors = github_public_rest_list(path)
     if fallback_payload:
         return fallback_payload, []
-    detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
-    return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+    return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
 
 
 def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -6176,11 +6323,11 @@ def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]
             text = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace").strip()
-        return None, [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"HTTP {exc.code} {exc.reason}: {detail or url}"])]
     except URLError as exc:
-        return None, [f"REST request failed: {exc.reason}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc.reason}"])]
     except OSError as exc:
-        return None, [f"REST request failed: {exc}"]
+        return None, [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc}"])]
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -6205,11 +6352,11 @@ def github_public_rest_list(path: str) -> tuple[list[dict[str, Any]], list[str]]
             text = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace").strip()
-        return [], [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"HTTP {exc.code} {exc.reason}: {detail or url}"])]
     except URLError as exc:
-        return [], [f"REST request failed: {exc.reason}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc.reason}"])]
     except OSError as exc:
-        return [], [f"REST request failed: {exc}"]
+        return [], [host_api_diagnostic_message(f"public REST {path}", [f"REST request failed: {exc}"])]
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -6537,18 +6684,95 @@ def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, is
     }
 
 
+ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER = "loom:issue-dependencies"
+ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA = "loom-issue-dependencies/v1"
+
+
+def issue_dependency_html_comment_blocks(body: str) -> list[str]:
+    pattern = re.compile(
+        rf"<!--\s*{re.escape(ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER)}\s*(.*?)\s*-->",
+        flags=re.DOTALL,
+    )
+    return [match.group(1).strip() for match in pattern.finditer(body)]
+
+
+def normalize_issue_reference(value: Any) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str):
+        match = re.fullmatch(r"\s*#?(\d+)\s*", value)
+        if match:
+            return int(match.group(1))
+    if isinstance(value, dict):
+        number = value.get("number")
+        if isinstance(number, int) and number > 0:
+            return number
+    return None
+
+
+def normalize_issue_reference_list(value: Any) -> list[int]:
+    values = value if isinstance(value, list) else [value]
+    normalized: list[int] = []
+    for entry in values:
+        issue_number = normalize_issue_reference(entry)
+        if issue_number is not None:
+            normalized.append(issue_number)
+    return normalized
+
+
+def issue_dependency_machine_block_payloads(issue_body: str) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    for raw in issue_dependency_html_comment_blocks(issue_body):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        schema_version = payload.get("schema_version")
+        if schema_version not in (None, ISSUE_DEPENDENCY_MACHINE_BLOCK_SCHEMA):
+            continue
+        payloads.append(payload)
+    return payloads
+
+
 def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -> list[dict[str, Any]]:
     if not isinstance(issue_body, str) or issue_number is None:
         return []
     edges: list[dict[str, Any]] = []
     seen: set[tuple[int, int, str]] = set()
-    patterns = (
-        ("blocked_by", r"(?im)(?:blocked\s+by|blocked_by|depends\s+on|dependency|依赖|前置)[^\n#]*(?:#)(\d+)"),
-        ("blocking", r"(?im)(?:blocks|blocking|阻塞)[^\n#]*(?:#)(\d+)"),
-    )
-    for relation, pattern in patterns:
-        for match in re.finditer(pattern, issue_body):
-            other = int(match.group(1))
+    for block_index, payload in enumerate(issue_dependency_machine_block_payloads(issue_body), start=1):
+        dependency_payload = payload.get("dependencies") if isinstance(payload.get("dependencies"), dict) else payload
+        relation_values: list[tuple[str, int]] = []
+        for relation, field_names in (
+            ("blocked_by", ("blocked_by", "blockedBy", "depends_on", "dependsOn")),
+            ("blocking", ("blocks", "blocking")),
+        ):
+            for field_name in field_names:
+                if field_name not in dependency_payload:
+                    continue
+                for other in normalize_issue_reference_list(dependency_payload.get(field_name)):
+                    relation_values.append((relation, other))
+                break
+        raw_edges = dependency_payload.get("edges")
+        if isinstance(raw_edges, list):
+            for raw_edge in raw_edges:
+                if not isinstance(raw_edge, dict):
+                    continue
+                direction = raw_edge.get("direction")
+                if direction == "blocked_by":
+                    other = normalize_issue_reference(
+                        raw_edge.get("blocking_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                elif direction == "blocking":
+                    other = normalize_issue_reference(
+                        raw_edge.get("source_issue", raw_edge.get("issue", raw_edge.get("number")))
+                    )
+                else:
+                    continue
+                if other is not None:
+                    relation_values.append((direction, other))
+        for relation, other in relation_values:
             source = issue_number if relation == "blocked_by" else other
             blocker = other if relation == "blocked_by" else issue_number
             key = (source, blocker, relation)
@@ -6561,13 +6785,15 @@ def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -
                     "blocking_issue": blocker,
                     "direction": relation,
                     "blocker_state": "unknown",
-                    "source_of_truth": "issue_body_dependency_section",
+                    "source_of_truth": "issue_body_machine_block",
                     "host_mirror_status": "requires_native_compare",
                     "native": "unknown",
                     "provenance": {
                         "source_layer": "authored_truth",
-                        "source_owner": "github_issue_body",
-                        "source_locator": f"issue #{issue_number}",
+                        "source_owner": "github_issue_machine_block",
+                        "source_locator": (
+                            f"issue #{issue_number} {ISSUE_DEPENDENCY_MACHINE_BLOCK_MARKER} block {block_index}"
+                        ),
                         "freshness": "fresh",
                     },
                 }
@@ -6794,7 +7020,7 @@ def replace_markdown_section(path: Path, section_name: str, new_lines: list[str]
 
 def render_status_surface(report: dict[str, Any], runtime_evidence: dict[str, dict[str, Any]]) -> str:
     facts = report["facts"]
-    status_path = report["fact_chain"]["entry_points"]["status_surface"]
+    current_checkpoint = normalize_checkpoint(str(facts["current_checkpoint"]["value"]))
     return (
         "# Current Status\n\n"
         "## Derived Fact Chain View\n\n"
@@ -6807,7 +7033,7 @@ def render_status_surface(report: dict[str, Any], runtime_evidence: dict[str, di
         f"- Review Entry: {facts['review_entry']['value']}\n"
         f"- Validation Entry: {facts['validation_entry']['value']}\n"
         f"- Closing Condition: {facts['closing_condition']['value']}\n"
-        f"- Current Checkpoint: {facts['current_checkpoint']['value']}\n"
+        f"- Current Checkpoint: {current_checkpoint}\n"
         f"- Current Stop: {facts['current_stop']['value']}\n"
         f"- Next Step: {facts['next_step']['value']}\n"
         f"- Blockers: {facts['blockers']['value']}\n"
@@ -6945,7 +7171,7 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 
     evidence_paths: set[str] = set()
     for evidence_path in sorted(shadow_root.glob("*.json")):
-        relative = evidence_path.relative_to(target_root).as_posix()
+        relative = relative_to_root(evidence_path, target_root)
         if relative == ".loom/shadow/shadow-parity.json":
             continue
         try:
@@ -6984,13 +7210,13 @@ def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: st
             except (OSError, ValueError, json.JSONDecodeError):
                 continue
             if isinstance(payload, dict):
-                allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
+                allowed.add(relative_to_root(evidence_path, context["target_root"]))
     if isinstance(item_id, str) and item_id.strip():
         for runtime_root in OWNED_RUNTIME_EVIDENCE_ROOTS:
             item_runtime_root = context["target_root"] / runtime_root / item_id
             if item_runtime_root.exists():
                 for evidence_path in sorted(path for path in item_runtime_root.rglob("*") if path.is_file()):
-                    allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
+                    allowed.add(relative_to_root(evidence_path, context["target_root"]))
     return allowed
 
 
@@ -7220,74 +7446,141 @@ def governance_metadata_fields_from_preflight(pr_metadata_preflight: dict[str, A
     return fields if isinstance(fields, dict) else {}
 
 
-def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+def governance_intensity_authority_boundary() -> dict[str, Any]:
+    return {
+        "role": "classification_and_formal_suite_boundary",
+        "does_not_replace": list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES),
+    }
+
+
+def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
     fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
     missing_inputs: list[str] = []
+    upgrade_reasons: list[str] = []
     marker_present, suite_values = suite_path_decision_presence(context)
+    authority_boundary = governance_intensity_authority_boundary()
 
     if not fields:
         return {
-            "schema_version": "loom-docs-governance-lite-gate/v1",
+            "schema_version": "loom-governance-intensity-gate/v1",
             "result": "not_applicable",
-            "summary": "docs-governance lite gate is not applicable because no governance intensity metadata carrier was declared for this PR.",
+            "summary": "governance intensity gate is not applicable because no governance intensity metadata carrier was declared for this PR.",
             "missing_inputs": [],
             "fallback_to": None,
             "metadata_fields": {},
+            "declared_governance_intensity": None,
+            "effective_governance_intensity": None,
+            "effective_suite_path": None,
+            "upgrade_reasons": [],
+            "non_skippable_gates": list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES),
+            "consumed_locators": {
+                "metadata_carrier": False,
+                "suite_path_decision": marker_present,
+            },
             "suite_path_decision": {
                 "marker_present": marker_present,
                 "values": sorted(suite_values),
             },
-            "authority_boundary": {
-                "role": "formal_suite_bypass_only",
-                "does_not_replace": [
-                    "fact_chain",
-                    "current_head_review",
-                    "pr_metadata_readback",
-                    "hosted_checks",
-                    "pr_gate",
-                    "release_judgment",
-                    "controlled_merge",
-                    "post_merge_closeout",
-                ],
-            },
+            "authority_boundary": authority_boundary,
         }
+
+    declared_intensity = fields.get("governance_intensity")
+    change_class = fields.get("change_class")
+    suite_path = fields.get("suite_path")
+
     if fields.get("governance_intensity") == "light":
-        if fields.get("change_class") != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
-            missing_inputs.append("docs-governance lite requires change_class docs_governance")
-        if fields.get("suite_path") != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
-            missing_inputs.append("docs-governance lite requires suite_path not_applicable")
+        if change_class in GOVERNANCE_HIGH_RISK_CHANGE_CLASSES:
+            upgrade_reasons.append(f"change_class_requires_upgrade:{change_class}")
+            missing_inputs.append(f"light governance requires standard or reinforced intensity for change_class {change_class}")
+        elif change_class not in GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES:
+            upgrade_reasons.append(f"change_class_not_light_eligible:{change_class}")
+            missing_inputs.append(f"light governance does not support change_class {change_class}")
+
+        if change_class in GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES:
+            if suite_path != "not_applicable":
+                missing_inputs.append(f"light governance requires suite_path not_applicable for change_class {change_class}")
+        elif change_class in GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES:
+            if suite_path != "minimal":
+                missing_inputs.append(f"light governance requires suite_path minimal for change_class {change_class}")
+
         if fields.get("review_requirement") != "current_head_review_required":
-            missing_inputs.append("docs-governance lite requires current-head review")
+            missing_inputs.append("light governance requires current-head review")
         if fields.get("release_judgment") != GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT:
-            missing_inputs.append("docs-governance lite requires no_release judgment")
+            missing_inputs.append("light governance requires no_release judgment")
         for required_bool in ("fact_chain_required", "pr_gate_required", "closeout_required"):
             if fields.get(required_bool) is not True:
-                missing_inputs.append(f"docs-governance lite requires {required_bool}")
+                missing_inputs.append(f"light governance requires {required_bool}")
     if fields.get("suite_path") == "not_applicable":
         if not marker_present:
             missing_inputs.append("repo suite path decision is missing")
         elif suite_values != {"not_applicable"}:
             missing_inputs.append("repo suite path decision does not match metadata suite_path not_applicable")
-    if (
-        fields.get("governance_intensity") == "light"
-        and fields.get("change_class") == GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS
-        and fields.get("suite_path") == GOVERNANCE_LITE_ALLOWED_SUITE_PATH
-        and marker_present
-        and suite_values == {"not_applicable"}
-    ):
-        result = "pass" if not missing_inputs else "block"
+
+    if missing_inputs:
+        result = "block"
+        summary = "governance intensity metadata or suite decision is incomplete, mismatched, or requires an intensity upgrade."
+    elif declared_intensity in GOVERNANCE_INTENSITY_VALUES:
+        result = "pass"
         summary = (
-            "docs-governance lite metadata and suite not_applicable decision are aligned; non-suite gates remain required."
-            if result == "pass"
-            else "docs-governance lite metadata or suite decision is incomplete or mismatched."
+            "governance intensity metadata and suite decision are aligned; non-skippable gates remain required."
         )
     else:
-        result = "not_applicable" if not missing_inputs else "block"
-        summary = (
-            "docs-governance lite gate is not applicable for this governance metadata."
-            if result == "not_applicable"
-            else "governance metadata and suite decision are incomplete or mismatched."
-        )
+        result = "not_applicable"
+        summary = "governance intensity gate is not applicable for this governance metadata."
+
+    effective_intensity = declared_intensity
+    if declared_intensity == "light" and upgrade_reasons:
+        effective_intensity = "standard"
+
+    return {
+        "schema_version": "loom-governance-intensity-gate/v1",
+        "result": result,
+        "summary": summary,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": None if result in {"pass", "not_applicable"} else "update_pr_body",
+        "metadata_fields": fields,
+        "declared_governance_intensity": declared_intensity,
+        "effective_governance_intensity": effective_intensity,
+        "effective_suite_path": suite_path if suite_path in GOVERNANCE_SUITE_PATH_VALUES else None,
+        "upgrade_reasons": dedupe_strings(upgrade_reasons),
+        "non_skippable_gates": list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES),
+        "consumed_locators": {
+            "metadata_carrier": True,
+            "suite_path_decision": marker_present,
+        },
+        "suite_path_decision": {
+            "marker_present": marker_present,
+            "values": sorted(suite_values),
+        },
+        "authority_boundary": authority_boundary,
+    }
+
+
+def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+    fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+    marker_present, suite_values = suite_path_decision_presence(context)
+    if not fields or fields.get("governance_intensity") != "light" or fields.get("change_class") != GOVERNANCE_DOCS_LITE_CHANGE_CLASS:
+        return {
+            "schema_version": "loom-docs-governance-lite-gate/v1",
+            "result": "not_applicable",
+            "summary": "docs-governance lite gate is not applicable for this governance metadata.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "metadata_fields": fields,
+            "suite_path_decision": {
+                "marker_present": marker_present,
+                "values": sorted(suite_values),
+            },
+            "authority_boundary": governance_intensity_authority_boundary(),
+        }
+
+    general_gate = governance_intensity_gate_payload(context, pr_metadata_preflight)
+    result = general_gate.get("result")
+    missing_inputs = [str(message).replace("light governance", "docs-governance lite") for message in general_gate.get("missing_inputs", [])]
+    if result == "pass":
+        summary = "docs-governance lite metadata and suite not_applicable decision are aligned; non-suite gates remain required."
+    else:
+        summary = "docs-governance lite metadata or suite decision is incomplete or mismatched."
     return {
         "schema_version": "loom-docs-governance-lite-gate/v1",
         "result": result,
@@ -7295,23 +7588,8 @@ def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_prefl
         "missing_inputs": dedupe_strings(missing_inputs),
         "fallback_to": None if result in {"pass", "not_applicable"} else "update_pr_body",
         "metadata_fields": fields,
-        "suite_path_decision": {
-            "marker_present": marker_present,
-            "values": sorted(suite_values),
-        },
-        "authority_boundary": {
-            "role": "formal_suite_bypass_only",
-            "does_not_replace": [
-                "fact_chain",
-                "current_head_review",
-                "pr_metadata_readback",
-                "hosted_checks",
-                "pr_gate",
-                "release_judgment",
-                "controlled_merge",
-                "post_merge_closeout",
-            ],
-        },
+        "suite_path_decision": general_gate.get("suite_path_decision"),
+        "authority_boundary": general_gate.get("authority_boundary"),
     }
 
 
@@ -7427,7 +7705,7 @@ def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
                 "failed_layer": "suite",
                 "source_locator": "tools/loom.py",
                 "consumer_impact": "scenario skills cannot decide suite readiness without the canonical CLI JSON envelope",
-                "remediation_direction": "Run or install the repo-local `loom suite validate --target <repo> --item <item> --json` surface.",
+                "remediation_direction": "Run the global `loom suite validate --target <repo> --item <item> --json` surface.",
                 "fallback_to": "loom suite validate --target <repo> --item <item> --json",
                 "binding": "scenario-skill-suite-cli-consumption",
             }
@@ -9079,11 +9357,12 @@ def render_work_item(data: dict[str, Any]) -> str:
 
 
 def render_recovery_entry(item_id: str, values: dict[str, str]) -> str:
+    current_checkpoint = normalize_checkpoint(values["current_checkpoint"])
     return (
         f"# {item_id} Progress\n\n"
         "## Dynamic Facts\n\n"
         f"- Item ID: {item_id}\n"
-        f"- Current Checkpoint: {values['current_checkpoint']}\n"
+        f"- Current Checkpoint: {current_checkpoint}\n"
         f"- Current Stop: {values['current_stop']}\n"
         f"- Next Step: {values['next_step']}\n"
         f"- Blockers: {values['blockers']}\n"
@@ -9806,7 +10085,7 @@ def declared_current_item_dirty_paths(context: dict[str, Any]) -> set[str]:
         )
         if errors or path is None:
             continue
-        declared.add(path.relative_to(target_root).as_posix())
+        declared.add(relative_to_root(path, target_root))
     return declared
 
 
@@ -12497,6 +12776,7 @@ def load_fact_chain_report(target_root: Path, output_relative: str) -> tuple[dic
 
 def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
+    output_relative = default_init_result_fallback(target_root, output_relative)
     output_path, output_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
     if output_errors:
         return {}, output_errors
@@ -12556,7 +12836,7 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
         ("status_surface", status_path),
     ):
         if not path.exists():
-            errors.append(f"declared fact-chain carrier is missing on disk: {label} -> {path.relative_to(target_root)}")
+            errors.append(f"declared fact-chain carrier is missing on disk: {label} -> {relative_to_root(path, target_root)}")
     if errors:
         return {}, errors
 
@@ -12567,13 +12847,13 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
         status_sections,
         "Derived Fact Chain View",
         STATUS_FIELDS,
-        str(status_path.relative_to(target_root)),
+        relative_to_root(status_path, target_root),
     )
     status_sources, source_errors = parse_key_value_section(
         status_sections,
         "Sources",
         STATUS_SOURCE_FIELDS,
-        str(status_path.relative_to(target_root)),
+        relative_to_root(status_path, target_root),
     )
     errors.extend(work_item_errors)
     errors.extend(recovery_errors)
@@ -12608,7 +12888,7 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
         "review_entry": str(work_item["review_entry"]),
         "validation_entry": str(work_item["validation_entry"]),
         "closing_condition": str(work_item["closing_condition"]),
-        "current_checkpoint": recovery_entry["current_checkpoint"],
+        "current_checkpoint": normalize_checkpoint(str(recovery_entry["current_checkpoint"])),
         "current_stop": recovery_entry["current_stop"],
         "next_step": recovery_entry["next_step"],
         "blockers": recovery_entry["blockers"],
@@ -12618,6 +12898,8 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
     }
     for field_name, expected_value in expected_status.items():
         actual_value = status_values.get(field_name)
+        if field_name == "current_checkpoint":
+            actual_value = normalize_checkpoint(str(actual_value or ""))
         if actual_value != expected_value:
             errors.append(
                 "status surface mismatch for "
@@ -12632,6 +12914,8 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
     }
     for source_key, expected_value in expected_sources.items():
         actual_value = status_sources.get(source_key)
+        if source_key == "init_result" and init_result_locator_matches(actual_value, expected_value):
+            continue
         if actual_value != expected_value:
             errors.append(
                 "status surface source mismatch for "
@@ -13029,7 +13313,7 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
         },
         "recovery": {
             "path": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
-            "current_checkpoint": context["current_checkpoint_raw"],
+            "current_checkpoint": context["current_checkpoint"],
             "current_stop": context["current_stop"],
             "next_step": context["next_step"],
             "latest_validation_summary": context["latest_validation_summary"],
@@ -13059,8 +13343,8 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_checkpoint(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
-    context, errors = load_context(target_root, args.output, args.item)
+    target_root = resolve_target_arg(args.target)
+    context, errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
     if errors:
         return emit(
             {
@@ -13076,7 +13360,7 @@ def handle_checkpoint(args: argparse.Namespace) -> int:
 
 
 def handle_workspace(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -13137,7 +13421,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
             workspace_path.mkdir(parents=True, exist_ok=True)
             created = True
 
-        refreshed, refresh_errors = load_context(target_root, args.output, args.item)
+        refreshed, refresh_errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
         if refresh_errors:
             payload["result"] = "block"
             payload["summary"] = "workspace path was created, but the fact chain could not be reloaded."
@@ -13236,7 +13520,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
 
 
 def handle_purity(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -13246,7 +13530,7 @@ def handle_purity(args: argparse.Namespace) -> int:
                 summary="purity-check is blocked because the Loom runtime state is inconsistent.",
             )
         )
-    context, errors = load_context(target_root, args.output, args.item)
+    context, errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
     if errors:
         payload = {
             "command": "purity-check",
@@ -13455,12 +13739,12 @@ def work_item_audit_payload(target_root: Path, output_relative: str, expected_it
 
 
 def handle_work_item_audit(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     return emit(work_item_audit_payload(target_root, args.output, args.item))
 
 
 def handle_fact_chain(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     report, errors = load_fact_chain_report(target_root, args.output)
     if errors:
         return emit(
@@ -13804,7 +14088,7 @@ def fact_chain_error_contract(
 
 
 def handle_runtime_evidence(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -13946,7 +14230,7 @@ def state_check_payload(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_state_check(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -13977,7 +14261,7 @@ def handle_state_check(args: argparse.Namespace) -> int:
 
 
 def handle_runtime_state(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     return emit(
         {
@@ -14148,8 +14432,128 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
     }
 
 
+def adversarial_check_summary(check_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    raw_result = payload.get("result")
+    result = raw_result if raw_result in {"pass", "block", "warn", "not_applicable"} else "block"
+    missing_inputs = payload.get("missing_inputs")
+    return {
+        "id": check_id,
+        "result": result,
+        "schema_version": payload.get("schema_version"),
+        "operation": payload.get("operation"),
+        "summary": str(payload.get("summary") or f"{check_id} returned {result}"),
+        "missing_inputs": [str(message) for message in missing_inputs] if isinstance(missing_inputs, list) else [],
+        "fallback_to": payload.get("fallback_to"),
+    }
+
+
+def adversarial_adoption_evidence_payload(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    *,
+    record: bool,
+) -> dict[str, Any]:
+    head_sha = git_head_sha(target_root)
+    governance_surface = build_governance_surface(target_root)
+    control_plane = governance_surface.get("governance_control_plane")
+    maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else {}
+    current_maturity = maturity.get("current") if isinstance(maturity, dict) else None
+    adoption = adoption_verify_payload(target_root, output_relative, expected_item)
+    runtime_parity = runtime_parity_payload(
+        target_root=target_root,
+        output_relative=output_relative,
+        expected_item=expected_item,
+    )
+    checks = [
+        adversarial_check_summary("adopt_verify", adoption),
+        adversarial_check_summary("runtime_parity", runtime_parity),
+        {
+            "id": "strong_maturity",
+            "result": "pass" if current_maturity == "strong" else "block",
+            "schema_version": "loom-governance-maturity/v1",
+            "operation": "status",
+            "summary": (
+                "governance profile is at strong maturity."
+                if current_maturity == "strong"
+                else "governance profile must reach strong maturity before blocking rollout."
+            ),
+            "missing_inputs": [] if current_maturity == "strong" else [f"current governance maturity is `{current_maturity or 'unknown'}`"],
+            "fallback_to": None if current_maturity == "strong" else "adoption",
+            "evidence": {"current": current_maturity},
+        },
+    ]
+    missing_inputs = [
+        str(message)
+        for check in checks
+        if check.get("result") != "pass"
+        for message in (check.get("missing_inputs") if isinstance(check.get("missing_inputs"), list) else [])
+    ]
+    if not head_sha:
+        missing_inputs.append("current git head is unavailable")
+
+    result = "pass" if not missing_inputs else "block"
+    payload: dict[str, Any] = {
+        "command": "adopt",
+        "operation": "adversarial-test",
+        "schema_version": ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA,
+        "result": result,
+        "summary": (
+            "adversarial adoption evidence is fresh and satisfies strong-governance rollout checks."
+            if result == "pass"
+            else "adversarial adoption evidence is blocked by missing or failing strong-governance checks."
+        ),
+        "target": str(target_root),
+        "branch": git_branch(target_root),
+        "head_sha": head_sha,
+        "generated_at": current_iso_timestamp(),
+        "evidence_locator": ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+        "record": {
+            "requested": record,
+            "written": False,
+            "locator": ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+        },
+        "checks": checks,
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": None if result == "pass" else "adoption",
+    }
+    if not record:
+        return payload
+
+    evidence_path, path_errors = resolve_repo_relative_path(
+        target_root,
+        ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+        label="adversarial adoption evidence locator",
+    )
+    if path_errors or evidence_path is None:
+        payload["result"] = "block"
+        payload["summary"] = "adversarial adoption evidence could not be written safely."
+        payload["missing_inputs"] = list(dict.fromkeys([*payload["missing_inputs"], *path_errors]))
+        payload["fallback_to"] = "adoption"
+        return payload
+    try:
+        payload["record"]["written"] = True
+        write_json_file(evidence_path, payload)
+    except OSError as exc:
+        payload["result"] = "block"
+        payload["summary"] = "adversarial adoption evidence could not be written."
+        payload["record"]["written"] = False
+        payload["missing_inputs"] = list(dict.fromkeys([*payload["missing_inputs"], f"failed to write {ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR}: {exc.strerror or exc}"]))
+        payload["fallback_to"] = "adoption"
+    return payload
+
+
 def handle_adopt(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
+    if args.operation == "adversarial-test":
+        return emit(
+            adversarial_adoption_evidence_payload(
+                target_root,
+                args.output,
+                args.item,
+                record=args.record,
+            )
+        )
     return emit(adoption_verify_payload(target_root, args.output, args.item))
 
 
@@ -14216,7 +14620,7 @@ def refresh_shadow_evidence_actions(target_root: Path) -> list[dict[str, Any]]:
     if not shadow_root.exists():
         return actions
     for path in sorted(shadow_root.glob("*.json")):
-        relative = path.relative_to(target_root).as_posix()
+        relative = relative_to_root(path, target_root)
         if relative == ".loom/shadow/shadow-parity.json":
             actions.append(
                 {
@@ -14377,6 +14781,7 @@ def carrier_refresh_payload(
                 review_status["status"] = "current"
 
     if not dry_run and not missing_inputs:
+        fixed = [action for action in actions if action.get("status") == "refresh-needed"]
         if manifest_path is not None:
             apply_runtime_artifact_updates(manifest_payload, actions, source="manifest")
             write_json_file(manifest_path, manifest_payload)
@@ -14384,6 +14789,27 @@ def carrier_refresh_payload(
             apply_runtime_artifact_updates(init_payload, actions, source="init-result")
             write_json_file(init_path, init_payload)
         apply_shadow_evidence_actions(target_root, actions)
+        readback_payload = carrier_refresh_payload(
+            target_root,
+            output_relative,
+            expected_item,
+            dry_run=True,
+            surface=surface,
+        )
+        readback_result = "pass" if readback_payload.get("result") == "pass" and not readback_payload.get("refresh_needed") else "block"
+        return {
+            **readback_payload,
+            "result": readback_result,
+            "summary": (
+                "carrier refresh completed and readback found no remaining updates."
+                if readback_result == "pass"
+                else "carrier refresh applied updates but readback still found pending or blocking drift."
+            ),
+            "dry_run": False,
+            "fallback_to": None if readback_result == "pass" else "adoption",
+            "fixed": fixed,
+            "remaining_refresh": readback_payload.get("refresh_needed", []),
+        }
 
     refresh_needed = [action for action in actions if action.get("status") == "refresh-needed"]
     result = "block" if missing_inputs else "pass"
@@ -14410,7 +14836,7 @@ def carrier_refresh_payload(
 
 def terminal_state_from_checkpoint(checkpoint: str) -> str | None:
     normalized = normalize_checkpoint(checkpoint)
-    if normalized in {"closed", "done"}:
+    if normalized == "closed_out":
         return "closed_out"
     if normalized == "merged":
         return "merged"
@@ -15322,7 +15748,7 @@ def closeout_queue_status_payload(
 
 
 def handle_closeout_queue(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     payload = closeout_queue_status_payload(
         target_root=target_root,
         output_relative=args.output,
@@ -15334,7 +15760,7 @@ def handle_closeout_queue(args: argparse.Namespace) -> int:
 
 
 def handle_repair(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     return emit(
         carrier_repair_payload(
             target_root,
@@ -15348,7 +15774,7 @@ def handle_repair(args: argparse.Namespace) -> int:
 
 
 def handle_carrier(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     if args.operation == "closeout-sync":
         return emit(carrier_closeout_sync_payload(target_root, args.output, args.item, args))
     return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run, surface=args.surface))
@@ -15368,10 +15794,13 @@ def github_commit_pulls(root: Path, owner: str, repo_name: str, head_sha: str) -
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh api commit pulls failed"
+        blocked_errors = host_api_anonymous_fallback_blocked(root, path, [detail])
+        if blocked_errors:
+            return [], blocked_errors
         pulls, fallback_errors = github_public_rest_list(path)
         if pulls:
             return pulls, []
-        return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+        return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -15722,7 +16151,7 @@ def host_binding_inspection_payload(
 
 
 def handle_host_binding(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     if args.operation == "inspect":
         return emit(
             host_binding_inspection_payload(
@@ -15754,7 +16183,7 @@ def handle_host_binding(args: argparse.Namespace) -> int:
 
 
 def handle_goal(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     return emit(
         goal_payload(
             target_root=target_root,
@@ -15803,7 +16232,7 @@ def load_optional_text_fixture(target_root: Path, fixture: str | None, *, label:
 def pr_metadata_replace_or_insert_binding_line(body: str, *, label: str, value: str, insert_after: str | None = None) -> str:
     pattern = re.compile(rf"(?im)^([ \t]*[-*]?[ \t]*{re.escape(label)}[ \t]*:[ \t]*)(`?[^`\n]*`?)[ \t]*$")
     if pattern.search(body):
-        return pattern.sub(lambda match: f"{match.group(1)}{value}", body, count=1)
+        return pattern.sub(lambda match: f"{match.group(1).rstrip()} {value}", body, count=1)
 
     lines = body.splitlines()
     insert_at: int | None = None
@@ -15841,6 +16270,65 @@ def pr_metadata_replace_machine_block(body: str, *, marker: str, rendered_block:
     else:
         updated = body.rstrip() + "\n\n" + rendered_block.rstrip() + "\n"
     return updated if updated.endswith("\n") else updated + "\n"
+
+
+def pr_metadata_issue_reference(issue_number: int | None) -> str | None:
+    if issue_number is None:
+        return None
+    return f"#{issue_number}"
+
+
+def pr_metadata_body_mentions_issue(body: object, issue_number: int | None) -> bool:
+    if issue_number is None:
+        return True
+    return text_mentions_issue(body, issue_number)
+
+
+def pr_metadata_issue_backlink_repair_action(
+    *,
+    issue_number: int,
+    pr_number: int | None,
+    surface: str,
+    body_file: str | None,
+    compare_body_file: str | None,
+    contract_results: list[dict[str, Any]],
+    host_readback_available: bool,
+) -> dict[str, Any] | None:
+    machine_carrier_passed = bool(contract_results) and all(
+        contract_result.get("result") == "pass" for contract_result in contract_results
+    )
+    if not machine_carrier_passed or not host_readback_available:
+        return None
+    command_parts = [
+        "loom",
+        "pr",
+        "metadata-update",
+        str(pr_number or "<pr>"),
+        "--surface",
+        surface,
+        "--issue",
+        str(issue_number),
+        "--apply",
+        "--json",
+    ]
+    if body_file:
+        command_parts.extend(["--base-body-file", body_file])
+    return {
+        "kind": "missing_human_backlink",
+        "action": "update_pr_body_issue_backlink",
+        "target": "pr_body",
+        "issue": issue_number,
+        "pr": pr_number,
+        "body_line": f"- Issue: #{issue_number}",
+        "mode": "safe_repair",
+        "allowed_when": "cli --issue, PR metadata machine carrier, and host PR body readback agree on Work Item, branch, and head SHA.",
+        "required_readback": "update PR body, read back the host body, then rerun metadata preflight.",
+        "next_command": shlex.join(command_parts),
+        "body_artifacts": {
+            "rendered_body_file": body_file,
+            "readback_body_file": compare_body_file,
+        },
+    }
 
 
 def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
@@ -16180,6 +16668,65 @@ def pr_metadata_body_artifact_payload(
     }
 
 
+def pr_metadata_allowed_values(missing_fields: list[str] | None) -> dict[str, list[str]]:
+    allowed_values: dict[str, list[str]] = {}
+    for field in missing_fields or []:
+        values = PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES.get(field)
+        if values:
+            allowed_values[field] = values
+    return allowed_values
+
+
+def pr_metadata_diagnostic_classifier(
+    *,
+    reason: str,
+    missing_fields: list[str] | None,
+    parse_error: str | None,
+) -> str:
+    fields = set(missing_fields or [])
+    if parse_error:
+        return "parse_error"
+    if {"metadata_contract_id", "surface"} & fields:
+        return "surface_drift"
+    if "fields.head_sha" in fields or "head" in reason.lower():
+        return "head_sha_drift"
+    if "fields.branch" in fields or "branch" in reason.lower():
+        return "branch_drift"
+    if any(field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES for field in fields):
+        return "enum_violation"
+    if "metadata_block" in fields or "pr.body" in fields:
+        return "missing_machine_block"
+    return "contract_violation"
+
+
+def pr_metadata_diagnostic_next_action(
+    *,
+    classifier: str,
+    fallback_to: str,
+    expected_surface: str | None,
+    missing_fields: list[str] | None,
+) -> str:
+    fields = set(missing_fields or [])
+    if classifier == "surface_drift":
+        surface = expected_surface or "the requested surface"
+        return f"rerender the PR metadata machine block for surface `{surface}` and replace the stale carrier before rerunning preflight."
+    if classifier == "head_sha_drift":
+        return "refresh `Head SHA` in both the PR body bindings and machine block from the current PR head, or rerun with `--head-sha <40-hex>`, then rerun preflight."
+    if classifier == "branch_drift":
+        return "refresh `Branch` in both the PR body bindings and machine block from the current `work/...` branch, or rerun with `--branch <work/...>`, then rerun preflight."
+    if classifier == "enum_violation":
+        invalid_fields = sorted(field for field in fields if field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES)
+        field_list = ", ".join(invalid_fields) if invalid_fields else "the governance enum fields"
+        return f"rewrite {field_list} to one of the allowed values, then rerun preflight."
+    if classifier == "parse_error":
+        return "rerender or rewrite the PR metadata HTML comment JSON block so it decodes cleanly, then rerun preflight."
+    if classifier == "missing_machine_block":
+        return "render or restore the declared PR metadata machine block before rerunning preflight."
+    if fallback_to == "update_pr_body":
+        return "regenerate or update the PR body machine carrier, then rerun preflight."
+    return "repair the declared PR metadata carrier inputs, then rerun preflight."
+
+
 def pr_metadata_diagnostic(
     *,
     contract_id: str,
@@ -16193,19 +16740,35 @@ def pr_metadata_diagnostic(
     block_locator: dict[str, Any] | None = None,
     parse_error: str | None = None,
     missing_fields: list[str] | None = None,
+    expected_surface: str | None = None,
 ) -> dict[str, Any]:
+    normalized_missing_fields = missing_fields or []
+    classifier = pr_metadata_diagnostic_classifier(
+        reason=reason,
+        missing_fields=normalized_missing_fields,
+        parse_error=parse_error,
+    )
     return {
+        "classifier": classifier,
         "metadata_contract_id": contract_id,
         "block_locator": block_locator,
         "source_locator": source_locator,
         "source_range_or_hash": source_range_or_hash,
         "parse_error": parse_error,
-        "missing_fields": missing_fields or [],
+        "missing_fields": normalized_missing_fields,
         "expected_schema": expected_schema or PR_METADATA_MACHINE_SCHEMA,
+        "expected_surface": expected_surface,
         "expected_parser_version": expected_parser_version or PR_METADATA_PARSER_VERSION,
+        "allowed_values": pr_metadata_allowed_values(normalized_missing_fields),
         "expected_format": pr_metadata_expected_format(marker),
         "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
         "fallback_to": fallback_to,
+        "next_action": pr_metadata_diagnostic_next_action(
+            classifier=classifier,
+            fallback_to=fallback_to,
+            expected_surface=expected_surface,
+            missing_fields=normalized_missing_fields,
+        ),
         "reason": reason,
     }
 
@@ -16283,9 +16846,11 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
         missing_fields.append("fields.change_class")
         missing_fields.append("fields.governance_intensity")
     if governance_intensity == "light":
-        if change_class != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
+        if change_class not in GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES:
             missing_fields.append("fields.change_class")
-        if suite_path != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+        if change_class in GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES and suite_path != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+            missing_fields.append("fields.suite_path")
+        if change_class in GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES and suite_path != "minimal":
             missing_fields.append("fields.suite_path")
         if review_requirement != "current_head_review_required":
             missing_fields.append("fields.review_requirement")
@@ -16329,6 +16894,7 @@ def validate_pr_metadata_envelope(
                 expected_schema=expected_schema,
                 block_locator=block_locator,
                 parse_error="decoded JSON is not an object",
+                expected_surface=surface,
             )
         )
         return None, diagnostics
@@ -16376,6 +16942,7 @@ def validate_pr_metadata_envelope(
                 expected_schema=expected_schema,
                 block_locator=block_locator,
                 missing_fields=missing_fields,
+                expected_surface=surface,
             )
         )
         return None, diagnostics
@@ -16445,6 +17012,7 @@ def pr_metadata_contract_preflight(
             source_range_or_hash=source_range_or_hash,
             expected_schema=expected_schema,
             missing_fields=["pr.body"],
+            expected_surface=effective_surface,
         )
         result = "block" if migration_mode == "required" else "pass"
         return {
@@ -16471,6 +17039,7 @@ def pr_metadata_contract_preflight(
             source_range_or_hash=source_range_or_hash,
             expected_schema=expected_schema,
             missing_fields=["metadata_block"],
+            expected_surface=effective_surface,
         )
         result = "block" if migration_mode == "required" else "pass"
         return {
@@ -16493,17 +17062,18 @@ def pr_metadata_contract_preflight(
             envelope = json.loads(block["raw"])
         except json.JSONDecodeError as exc:
             diagnostics.append(
-                pr_metadata_diagnostic(
-                    contract_id=contract_id,
-                    marker=marker,
-                    reason="metadata machine block JSON is malformed",
-                    source_locator=authority_locator,
-                    source_range_or_hash=source_range_or_hash,
-                    expected_schema=expected_schema,
-                    block_locator=block["locator"],
-                    parse_error=exc.msg,
+                    pr_metadata_diagnostic(
+                        contract_id=contract_id,
+                        marker=marker,
+                        reason="metadata machine block JSON is malformed",
+                        source_locator=authority_locator,
+                        source_range_or_hash=source_range_or_hash,
+                        expected_schema=expected_schema,
+                        block_locator=block["locator"],
+                        parse_error=exc.msg,
+                        expected_surface=effective_surface,
+                    )
                 )
-            )
             continue
         normalized = None
         envelope_diagnostics: list[dict[str, Any]] = []
@@ -16558,6 +17128,7 @@ def pr_metadata_contract_preflight(
                             expected_schema=expected_schema,
                             block_locator=block["locator"],
                             missing_fields=dedupe_strings(binding_missing),
+                            expected_surface=matched_surface,
                         )
                     )
                     return {
@@ -16601,6 +17172,7 @@ def pr_metadata_contract_preflight(
         source_range_or_hash=source_range_or_hash,
         expected_schema=expected_schema,
         missing_fields=["metadata_contract_id", "surface"],
+        expected_surface=effective_surface,
     )
     result = "block" if migration_mode == "required" else "pass"
     return {
@@ -16636,6 +17208,7 @@ def pr_metadata_preflight_payload(
     expected_item: str | None = None,
     expected_head_sha: str | None = None,
     expected_branch: str | None = None,
+    issue_number: int | None = None,
 ) -> dict[str, Any]:
     governance_surface = governance_surface or build_governance_surface(target_root)
     fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
@@ -16657,7 +17230,8 @@ def pr_metadata_preflight_payload(
 
     pr_errors: list[str] = []
     inferences: list[dict[str, Any]] = []
-    if applicable_contracts and pr_payload is None and body_artifact is None and compare_body_artifact is None and not contract_errors:
+    needs_pr_payload_for_body = body_artifact is None and compare_body_artifact is None
+    if applicable_contracts and pr_payload is None and not contract_errors and (needs_pr_payload_for_body or pr_payload_file is not None):
         detected_owner, detected_repo = detect_github_repo(target_root)
         pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
             target_root=target_root,
@@ -16703,6 +17277,22 @@ def pr_metadata_preflight_payload(
             for message in contract_result.get("missing_inputs", []):
                 if message not in missing_inputs:
                     missing_inputs.append(str(message))
+
+    safe_repair_actions: list[dict[str, Any]] = []
+    if issue_number is not None and isinstance(body, str) and not pr_metadata_body_mentions_issue(body, issue_number):
+        issue_reference = pr_metadata_issue_reference(issue_number)
+        missing_inputs.append(f"PR body is missing Issue backlink: {issue_reference}")
+        repair_action = pr_metadata_issue_backlink_repair_action(
+            issue_number=issue_number,
+            pr_number=effective_pr or pr_number,
+            surface=surface,
+            body_file=body_file,
+            compare_body_file=compare_body_file,
+            contract_results=contract_results,
+            host_readback_available=isinstance(pr_payload, dict) or compare_body_artifact is not None,
+        )
+        if repair_action is not None:
+            safe_repair_actions.append(repair_action)
 
     result = "pass" if not missing_inputs else "block"
     if contract_errors:
@@ -16750,6 +17340,8 @@ def pr_metadata_preflight_payload(
         },
         "body_artifact": body_artifact_result,
         "inferences": inferences,
+        "safe_repair_actions": safe_repair_actions,
+        "repair_plan": safe_repair_actions,
     }
 
 
@@ -16768,6 +17360,7 @@ def render_governance_intensity_metadata_body(
     release_judgment: str,
     upgrade_triggers: list[str],
     suite_not_applicable: dict[str, str] | None,
+    issue_number: int | None,
 ) -> tuple[str, dict[str, Any], list[str]]:
     contract_id = str(field.get("id") or GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID)
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
@@ -16801,6 +17394,9 @@ def render_governance_intensity_metadata_body(
     }
     rendered_block = "<!-- " + marker + "\n" + json.dumps(envelope, indent=2, ensure_ascii=False) + "\n-->\n"
     updated = pr_metadata_replace_or_insert_binding_line(base_body, label="Loom Work Item", value=item_id)
+    issue_reference = pr_metadata_issue_reference(issue_number)
+    if issue_reference:
+        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Issue", value=issue_reference, insert_after="Loom Work Item")
     updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
     updated = pr_metadata_replace_or_insert_binding_line(updated, label="Head SHA", value=head_sha, insert_after="Branch")
     updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
@@ -16814,6 +17410,7 @@ def pr_metadata_render_payload(
     output_file: str,
     base_body_file: str,
     item_id: str | None,
+    issue_number: int | None,
     head_sha: str | None,
     branch_name: str | None,
     governance_intensity: str,
@@ -16900,6 +17497,7 @@ def pr_metadata_render_payload(
         release_judgment=release_judgment,
         upgrade_triggers=[entry for entry in upgrade_triggers if isinstance(entry, str) and entry.strip()],
         suite_not_applicable=suite_not_applicable,
+        issue_number=issue_number,
     )
     if render_errors:
         return {
@@ -16924,6 +17522,7 @@ def pr_metadata_render_payload(
         expected_head_sha=current_head,
         expected_branch=current_branch,
         governance_surface=governance_surface,
+        issue_number=issue_number,
     )
     result = "pass" if preflight.get("result") == "pass" else "block"
     return {
@@ -16956,7 +17555,7 @@ def pr_metadata_render_payload(
         "preflight": preflight,
         "next_actions": [
             f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(relative_output)} --json",
-            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --json",
+            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --apply --json",
         ],
     }
 
@@ -17001,6 +17600,7 @@ def pr_metadata_readback_payload(
     compare_body_file: str | None = None,
     readback_file: str | None = None,
     expected_item: str | None = None,
+    issue_number: int | None = None,
 ) -> dict[str, Any]:
     governance_surface = build_governance_surface(target_root)
     effective_body_file = body_file
@@ -17054,6 +17654,7 @@ def pr_metadata_readback_payload(
         expected_item=expected_item,
         expected_head_sha=head_sha,
         expected_branch=branch_name,
+        issue_number=issue_number,
     )
     body = source_body
     if effective_compare_file:
@@ -17102,10 +17703,12 @@ def pr_metadata_update_payload(
     pr_number: int | None,
     head_sha: str | None,
     branch_name: str | None,
+    pr_payload_file: str | None,
     output_file: str,
     readback_file: str,
     base_body_file: str,
     item_id: str | None,
+    issue_number: int | None,
     governance_intensity: str,
     change_class: str,
     suite_path: str,
@@ -17117,6 +17720,7 @@ def pr_metadata_update_payload(
     suite_na_recheck_condition: str | None,
     suite_na_scope_proof: str | None,
     suite_na_review_requirement: str | None,
+    dry_run: bool,
 ) -> dict[str, Any]:
     render_payload = pr_metadata_render_payload(
         target_root=target_root,
@@ -17124,6 +17728,7 @@ def pr_metadata_update_payload(
         output_file=output_file,
         base_body_file=base_body_file,
         item_id=item_id,
+        issue_number=issue_number,
         head_sha=head_sha,
         branch_name=branch_name,
         governance_intensity=governance_intensity,
@@ -17151,6 +17756,43 @@ def pr_metadata_update_payload(
             "render": render_payload,
         }
 
+    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
+    if not isinstance(rendered_relative, str) or not rendered_relative:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "PR metadata update could not locate the rendered body artifact after local preflight.",
+            "missing_inputs": ["render output path is unavailable"],
+            "fallback_to": "manual_pr_metadata_inputs",
+            "render": render_payload,
+            "dry_run": dry_run,
+            "host_mutations": False,
+        }
+    if dry_run:
+        return {
+            "command": "pr-metadata",
+            "operation": "update",
+            "schema_version": PR_METADATA_UPDATE_SCHEMA,
+            "surface": surface,
+            "result": "pass",
+            "summary": "PR metadata update dry-run rendered the body artifact and passed local preflight without mutating the host PR.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "dry_run": True,
+            "host_mutations": False,
+            "apply_required": True,
+            "pr": pr_number,
+            "render": render_payload,
+            "readback": None,
+            "next_actions": [
+                f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(rendered_relative)} --json",
+                f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(rendered_relative)} --apply --json",
+            ],
+        }
+
     detected_owner, detected_repo = detect_github_repo(target_root)
     pr_payload, effective_pr, payload_errors, inferences = load_pr_payload_for_gate(
         target_root=target_root,
@@ -17159,18 +17801,14 @@ def pr_metadata_update_payload(
         pr_number=pr_number,
         head_sha=head_sha,
         branch_name=branch_name,
-        pr_payload_file=None,
+        pr_payload_file=pr_payload_file,
     )
     missing_inputs = [str(message) for message in payload_errors]
     if effective_pr is None:
         missing_inputs.append("unable to determine target PR for metadata update")
-    rendered_relative = render_payload.get("rendered_body", {}).get("body_file")
     rendered_path = None
-    if isinstance(rendered_relative, str):
-        rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
-        missing_inputs.extend(rendered_errors)
-    else:
-        missing_inputs.append("render output path is unavailable")
+    rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
+    missing_inputs.extend(rendered_errors)
     if missing_inputs:
         return {
             "command": "pr-metadata",
@@ -17183,6 +17821,8 @@ def pr_metadata_update_payload(
             "fallback_to": "manual_pr_metadata_inputs",
             "render": render_payload,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": False,
         }
 
     assert rendered_path is not None
@@ -17200,6 +17840,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
 
     host_body, view_errors = gh_pr_view_body(target_root, effective_pr)
@@ -17216,6 +17858,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
     readback_path, readback_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
     if readback_errors:
@@ -17231,6 +17875,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "pr": effective_pr,
             "inferences": inferences,
+            "dry_run": False,
+            "host_mutations": True,
         }
     assert readback_path is not None
     write_runtime_text_artifact(readback_path, host_body)
@@ -17249,6 +17895,7 @@ def pr_metadata_update_payload(
         compare_body_file=readback_relative,
         readback_file=readback_relative,
         expected_item=item_id,
+        issue_number=issue_number,
     )
     result = "pass" if readback_payload.get("result") == "pass" else "block"
     return {
@@ -17264,6 +17911,8 @@ def pr_metadata_update_payload(
         ),
         "missing_inputs": readback_payload.get("missing_inputs", []),
         "fallback_to": readback_payload.get("fallback_to"),
+        "dry_run": False,
+        "host_mutations": True,
         "pr": effective_pr,
         "render": render_payload,
         "readback": readback_payload,
@@ -18285,7 +18934,7 @@ def closeout_freeze_allowed_paths_binding(
 
 
 def closeout_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str, Any]:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = args.owner or detected_owner
     repo_name = args.repo_name or detected_repo
@@ -18584,7 +19233,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
     if getattr(args, "profile", "hosted") == "closeout":
         return closeout_freeze_payload(args, operation=operation)
 
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return {
@@ -18659,9 +19308,9 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
     suite_validation = spec_suite_validation_payload(context)
     suite_evidence_validation = suite_validation_command_payload(context, domain="evidence")
     suite_carrier_validation = suite_validation_command_payload(context, domain="carrier")
-    work_item_binding = gate_freeze_file_binding(target_root, str(context["work_item_path"].relative_to(target_root)), label="work item")
-    progress_binding = gate_freeze_file_binding(target_root, str(context["recovery_path"].relative_to(target_root)), label="progress carrier")
-    status_binding = gate_freeze_file_binding(target_root, str(context["status_path"].relative_to(target_root)), label="status surface")
+    work_item_binding = gate_freeze_file_binding(target_root, relative_to_root(context["work_item_path"], target_root), label="work item")
+    progress_binding = gate_freeze_file_binding(target_root, relative_to_root(context["recovery_path"], target_root), label="progress carrier")
+    status_binding = gate_freeze_file_binding(target_root, relative_to_root(context["status_path"], target_root), label="status surface")
 
     input_bindings: dict[str, Any] = {
         "fact_chain": {
@@ -18948,7 +19597,7 @@ def hosted_freeze_admission_payload(
 def handle_gate_freeze(args: argparse.Namespace) -> int:
     payload = gate_freeze_payload(args, operation=args.operation)
     if args.operation == "write":
-        target_root = Path(args.target).expanduser().resolve()
+        target_root = resolve_target_arg(args.target)
         item_id = (
             payload.get("snapshot_subject", {}).get("item_id")
             if isinstance(payload.get("snapshot_subject"), dict)
@@ -19298,6 +19947,13 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
     categories: set[str] = set()
     for message in missing_inputs:
         lowered = str(message).lower()
+        if (
+            lowered in {"owner/repo", "pr: owner/repo"}
+            or "target is unavailable" in lowered
+            or "not a git repository" in lowered
+            or ("fact-chain" in lowered and "missing init-result" in lowered)
+        ):
+            categories.add("target_readback_failed")
         if "pr" in lowered and ("unreadable" in lowered or "payload" in lowered or "head_sha" in lowered):
             categories.add("pr_unreadable")
         if "work item" in lowered or "current item mismatch" in lowered:
@@ -20044,6 +20700,23 @@ def pr_gate_payload(
             "pr_metadata_preflight": pr_metadata_preflight,
         }
     )
+    governance_intensity_gate = governance_intensity_gate_payload(context, pr_metadata_preflight) if context else None
+    if isinstance(governance_intensity_gate, dict):
+        if governance_intensity_gate.get("result") == "block":
+            missing_inputs.extend(
+                f"governance-intensity: {message}"
+                for message in governance_intensity_gate.get("missing_inputs", [])
+            )
+        steps.append(
+            {
+                "name": "governance-intensity-gate",
+                "result": governance_intensity_gate["result"],
+                "summary": governance_intensity_gate["summary"],
+                "missing_inputs": governance_intensity_gate["missing_inputs"],
+                "fallback_to": governance_intensity_gate["fallback_to"],
+                "governance_intensity_gate": governance_intensity_gate,
+            }
+        )
     docs_governance_lite_gate = docs_governance_lite_gate_payload(context, pr_metadata_preflight) if context else None
     if isinstance(docs_governance_lite_gate, dict):
         if docs_governance_lite_gate.get("result") == "block":
@@ -20202,19 +20875,27 @@ def pr_gate_payload(
             ),
             source="pr-gate",
         )
+    failure_taxonomy = sorted(failure_taxonomy)
+    target_readback_failed = "target_readback_failed" in failure_taxonomy
+    summary = (
+        "PR gate could not read the target checkout or hosted PR binding."
+        if result != "pass" and target_readback_failed
+        else
+        "PR merge gate consumed terminal closeout carrier drift with retained implementation review evidence."
+        if result == "pass" and terminal_closeout_consumption.get("result") == "pass"
+        else
+        "PR merge gate found fresh authored semantic review approval for the current PR head."
+        if result == "pass"
+        else "PR merge gate is blocked or falling back before host merge."
+    )
+    failed_layer = "target-readback" if result != "pass" and target_readback_failed else "pr-merge-gate" if result != "pass" else None
     return {
         "command": "pr-gate",
         "operation": "check",
         "schema_version": PR_MERGE_GATE_SCHEMA,
         "result": result,
-        "summary": (
-            "PR merge gate consumed terminal closeout carrier drift with retained implementation review evidence."
-            if result == "pass" and terminal_closeout_consumption.get("result") == "pass"
-            else
-            "PR merge gate found fresh authored semantic review approval for the current PR head."
-            if result == "pass"
-            else "PR merge gate is blocked or falling back before host merge."
-        ),
+        "summary": summary,
+        "failed_layer": failed_layer,
         "missing_inputs": sorted(set(missing_inputs)),
         "fallback_to": fallback_to,
         "repository": {"owner": owner, "name": repo_name},
@@ -20239,6 +20920,7 @@ def pr_gate_payload(
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
         "pr_metadata_preflight": pr_metadata_preflight,
+        "governance_intensity_gate": governance_intensity_gate,
         "docs_governance_lite_gate": docs_governance_lite_gate,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
         "terminal_closeout_consumption": terminal_closeout_consumption,
@@ -20251,14 +20933,14 @@ def pr_gate_payload(
             "reason": "pr-gate check proves PR-local semantic approval; controlled-merge checks host required status.",
         },
         "approval_boundary": approval_boundary,
-        "failure_taxonomy": sorted(failure_taxonomy),
+        "failure_taxonomy": failure_taxonomy,
         "steps": steps,
         "inferences": inferences,
     }
 
 
 def handle_pr_gate(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     return emit(
         pr_gate_payload(
             target_root=target_root,
@@ -20279,7 +20961,7 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
 
 
 def handle_pr_metadata(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     if args.operation == "render":
         return emit(
             pr_metadata_render_payload(
@@ -20288,6 +20970,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 output_file=args.output_file,
                 base_body_file=args.base_body_file,
                 item_id=args.item,
+                issue_number=args.issue,
                 head_sha=args.head_sha,
                 branch_name=args.branch,
                 governance_intensity=args.governance_intensity,
@@ -20313,10 +20996,12 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 pr_number=args.pr,
                 head_sha=args.head_sha,
                 branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
                 output_file=args.output_file,
                 readback_file=args.readback_file,
                 base_body_file=args.base_body_file,
                 item_id=args.item,
+                issue_number=args.issue,
                 governance_intensity=args.governance_intensity,
                 change_class=args.change_class,
                 suite_path=args.suite_path,
@@ -20328,6 +21013,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 suite_na_recheck_condition=args.suite_na_recheck_condition,
                 suite_na_scope_proof=args.suite_na_scope_proof,
                 suite_na_review_requirement=args.suite_na_review_requirement,
+                dry_run=args.dry_run,
             )
         )
     if args.operation == "readback":
@@ -20345,6 +21031,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 compare_body_file=args.compare_body_file,
                 readback_file=args.readback_file,
                 expected_item=args.item,
+                issue_number=args.issue,
             )
         )
     return emit(
@@ -20362,6 +21049,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
             expected_item=args.item,
             expected_head_sha=args.head_sha,
             expected_branch=args.branch,
+            issue_number=args.issue,
         )
     )
 
@@ -20382,28 +21070,7 @@ def required_status_contexts_from_protection(payload: Any) -> list[str]:
 
 
 def required_status_contexts_from_branch_rules(payload: Any) -> list[str]:
-    rules = payload
-    if isinstance(payload, dict):
-        rules = payload.get("rules") or payload.get("data")
-    if not isinstance(rules, list):
-        return []
-    contexts: list[str] = []
-    for rule in rules:
-        if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
-            continue
-        parameters = rule.get("parameters") if isinstance(rule.get("parameters"), dict) else {}
-        checks = parameters.get("required_status_checks")
-        if isinstance(checks, list):
-            for check in checks:
-                if isinstance(check, dict) and isinstance(check.get("context"), str):
-                    contexts.append(check["context"])
-                elif isinstance(check, str):
-                    contexts.append(check)
-        for fallback_key in ("contexts", "required_contexts"):
-            fallback_contexts = parameters.get(fallback_key)
-            if isinstance(fallback_contexts, list):
-                contexts.extend(str(context) for context in fallback_contexts if isinstance(context, str) and context.strip())
-    return sorted(set(contexts))
+    return governance_required_status_contexts_from_branch_rules(payload)
 
 
 def required_check_status_payload(status_rollup: Any, required_contexts: list[str]) -> dict[str, Any]:
@@ -20415,6 +21082,15 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
         name = run.get("name") or run.get("context")
         if isinstance(name, str):
             by_name.setdefault(name, []).append(run)
+
+    def is_success(entry: dict[str, Any]) -> bool:
+        return entry.get("conclusion") == "SUCCESS" or entry.get("state") == "SUCCESS"
+
+    def is_pending(entry: dict[str, Any]) -> bool:
+        status = entry.get("status")
+        state = entry.get("state")
+        return status not in {None, "COMPLETED"} or state in {"EXPECTED", "PENDING"}
+
     missing: list[str] = []
     pending: list[str] = []
     failing: list[str] = []
@@ -20423,12 +21099,13 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
         if not entries:
             missing.append(context)
             continue
-        if any(entry.get("conclusion") == "SUCCESS" or entry.get("state") == "SUCCESS" for entry in entries):
+        if any(is_success(entry) for entry in entries):
             continue
-        if any(entry.get("status") not in {None, "COMPLETED"} for entry in entries):
+        if any(is_pending(entry) for entry in entries):
             pending.append(context)
         else:
             failing.append(context)
+
     result = "pass" if not missing and not pending and not failing else "block"
     return {
         "result": result,
@@ -20436,6 +21113,93 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
         "missing": missing,
         "pending": pending,
         "failing": failing,
+    }
+
+
+def triggered_check_name(run: dict[str, Any]) -> str | None:
+    name = run.get("name") or run.get("context")
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def triggered_check_workflow(run: dict[str, Any]) -> str | None:
+    workflow = run.get("workflowName") or run.get("workflow")
+    if isinstance(workflow, str) and workflow.strip():
+        return workflow
+    if isinstance(workflow, dict) and isinstance(workflow.get("name"), str):
+        return workflow["name"]
+    return None
+
+
+def triggered_check_rollup_payload(status_rollup: Any) -> dict[str, Any]:
+    if not isinstance(status_rollup, list):
+        return {
+            "result": "block",
+            "summary": "triggered check rollup is unreadable.",
+            "triggered_checks": [],
+            "blocking": [],
+            "pending": [],
+            "allowed": [],
+            "unknown": [],
+            "missing_inputs": ["triggered check rollup unreadable"],
+        }
+    triggered_checks: list[dict[str, Any]] = []
+    blocking: list[str] = []
+    pending: list[str] = []
+    allowed: list[str] = []
+    unknown: list[str] = []
+    for index, run in enumerate(status_rollup, start=1):
+        if not isinstance(run, dict):
+            unknown.append(f"check[{index}]")
+            triggered_checks.append(
+                {
+                    "name": f"check[{index}]",
+                    "workflow": None,
+                    "status": None,
+                    "conclusion": None,
+                    "classification": "unknown",
+                    "details_url": None,
+                }
+            )
+            continue
+        name = triggered_check_name(run) or f"check[{index}]"
+        status = str(run.get("status")).upper() if isinstance(run.get("status"), str) and run.get("status") else None
+        conclusion = str(run.get("conclusion")).upper() if isinstance(run.get("conclusion"), str) and run.get("conclusion") else None
+        state = str(run.get("state")).upper() if isinstance(run.get("state"), str) and run.get("state") else None
+        if status in TRIGGERED_CHECK_PENDING_STATUSES or (status is not None and status != "COMPLETED"):
+            classification = "pending"
+            pending.append(name)
+        elif conclusion in TRIGGERED_CHECK_BLOCKING_CONCLUSIONS or state in TRIGGERED_CHECK_BLOCKING_CONCLUSIONS:
+            classification = "failed"
+            blocking.append(name)
+        elif conclusion in TRIGGERED_CHECK_ALLOWED_CONCLUSIONS or state == "SUCCESS":
+            classification = "allowed"
+            allowed.append(name)
+        else:
+            classification = "unknown"
+            unknown.append(name)
+        triggered_checks.append(
+            {
+                "name": name,
+                "workflow": triggered_check_workflow(run),
+                "status": status,
+                "conclusion": conclusion or state,
+                "classification": classification,
+                "details_url": run.get("detailsUrl") or run.get("details_url") or run.get("targetUrl"),
+            }
+        )
+    missing_inputs = [f"triggered check `{name}` failed" for name in blocking]
+    missing_inputs.extend(f"triggered check `{name}` is pending" for name in pending)
+    missing_inputs.extend(f"triggered check `{name}` has unknown conclusion" for name in unknown)
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "result": result,
+        "summary": "triggered checks are allowed." if result == "pass" else "triggered checks include blocking or unreadable states.",
+        "triggered_checks": triggered_checks,
+        "blocking": blocking,
+        "pending": pending,
+        "allowed": allowed,
+        "unknown": unknown,
+        "missing_inputs": missing_inputs,
     }
 
 
@@ -20643,6 +21407,7 @@ def current_pr_drift_readback(
     pr_gate_consumption: dict[str, Any],
     merge_gate_consumption: dict[str, Any] | None,
     required_checks: dict[str, Any],
+    triggered_check_rollup: dict[str, Any],
     host_enforcement: dict[str, Any],
 ) -> dict[str, Any]:
     head_sha = current_pr.get("headRefOid")
@@ -20660,6 +21425,7 @@ def current_pr_drift_readback(
             "retained_pr_gate": pr_gate_consumption,
             "retained_merge_gate": merge_gate_consumption,
             "required_checks": required_checks,
+            "triggered_check_rollup": triggered_check_rollup,
             "host_enforcement": host_enforcement,
             "mergeability": mergeability,
             "merge_method": {
@@ -20870,7 +21636,8 @@ def controlled_merge_payload(
         label="branch rules/ruleset fixture",
     )
     if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
-        ruleset_payload, ruleset_errors = github_public_rest_list(
+        ruleset_payload, ruleset_errors = gh_rest_list(
+            target_root,
             f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
         )
     if ruleset_errors:
@@ -20882,9 +21649,12 @@ def controlled_merge_payload(
         label="status checks fixture",
     )
     if status_payload is None and not status_errors:
+        pr_view_args = ["pr", "view", str(pr_number), "--json", "statusCheckRollup"]
+        if owner and repo_name:
+            pr_view_args.extend(["--repo", f"{owner}/{repo_name}"])
         status_payload, status_errors = gh_json(
             target_root,
-            ["pr", "view", str(pr_number), "--json", "statusCheckRollup"],
+            pr_view_args,
         )
     if status_errors:
         missing_inputs.extend(f"status checks: {message}" for message in status_errors)
@@ -20896,6 +21666,9 @@ def controlled_merge_payload(
         status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
         required_contexts,
     )
+    triggered_check_rollup = triggered_check_rollup_payload(
+        status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
+    )
     if protection_payload is None and ruleset_payload is None:
         missing_inputs.append("branch protection or ruleset readback is unavailable")
     if PR_MERGE_GATE_CHECK_NAME not in required_contexts:
@@ -20905,6 +21678,8 @@ def controlled_merge_payload(
         for key in ("missing", "pending", "failing"):
             for context in required_checks[key]:
                 missing_inputs.append(f"required check `{context}` is {labels[key]}")
+    if triggered_check_rollup["result"] != "pass":
+        missing_inputs.extend(str(message) for message in triggered_check_rollup.get("missing_inputs", []))
     host_enforcement = {
         "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
         "required_contexts": required_contexts,
@@ -20936,6 +21711,7 @@ def controlled_merge_payload(
         pr_gate_consumption=retained_results["pr_gate"]["consumption"],
         merge_gate_consumption=merge_gate_consumption,
         required_checks=required_checks,
+        triggered_check_rollup=triggered_check_rollup,
         host_enforcement=host_enforcement,
     )
 
@@ -20947,6 +21723,8 @@ def controlled_merge_payload(
         merge_ready_consumption_missing.append("fresh retained PR gate consumption")
     if required_checks["result"] != "pass":
         merge_ready_consumption_missing.append("required checks readback")
+    if triggered_check_rollup["result"] != "pass":
+        merge_ready_consumption_missing.append("triggered checks readback")
     pr_head = (
         pr_payload.get("headRefOid") or pr_payload.get("headRefName")
         if isinstance(pr_payload, dict)
@@ -20973,11 +21751,13 @@ def controlled_merge_payload(
         "observed_pr_head": pr_head,
         "merge_method": merge_method,
         "required_checks_snapshot": required_checks,
+        "triggered_check_rollup": triggered_check_rollup,
         "fail_closed_conditions": [
             "missing-allow-result",
             "stale-head",
             "target-mismatch",
             "required-checks-drift",
+            "triggered-checks-drift",
             "malformed-merge-ready-result",
         ],
     }
@@ -21024,6 +21804,8 @@ def controlled_merge_payload(
         "retained_results": retained_results,
         "drift_readback": drift_readback,
         "required_checks": required_checks,
+        "triggered_check_rollup": triggered_check_rollup,
+        "triggered_checks": triggered_check_rollup.get("triggered_checks", []),
         "host_enforcement": host_enforcement,
         "controlled_merge_consumption": controlled_merge_consumption,
         "merge": merge_result,
@@ -21031,7 +21813,7 @@ def controlled_merge_payload(
 
 
 def handle_controlled_merge(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     return emit(
         controlled_merge_payload(
             target_root=target_root,
@@ -21052,6 +21834,364 @@ def handle_controlled_merge(args: argparse.Namespace) -> int:
             merge_gate_result_file=args.merge_gate_result_file,
         )
     )
+
+
+GATE_REPAIR_PR_LOCATOR = ".loom/companion/gate-repair-pr.json"
+
+
+def gate_repair_pr_value(record: dict[str, Any], dotted_path: str) -> Any:
+    value: Any = record
+    for part in dotted_path.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def gate_repair_pr_record_missing_inputs(record: Any) -> list[str]:
+    if not isinstance(record, dict):
+        return ["gate repair PR evidence must be a JSON object"]
+    missing: list[str] = []
+    if record.get("schema_version") != GATE_REPAIR_PR_SCHEMA:
+        missing.append(f"schema_version must be `{GATE_REPAIR_PR_SCHEMA}`")
+    if record.get("result") != "pass":
+        missing.append("result must be `pass`")
+    for path in ("reason", "review_evidence_locator"):
+        value = gate_repair_pr_value(record, path)
+        if not isinstance(value, str) or not value.strip():
+            missing.append(path)
+    pr_number = gate_repair_pr_value(record, "pr.number")
+    if not isinstance(pr_number, int) or isinstance(pr_number, bool):
+        missing.append("pr.number")
+    for path in ("pr.head_sha", "pr.branch"):
+        value = gate_repair_pr_value(record, path)
+        if not isinstance(value, str) or not value.strip():
+            missing.append(path)
+    for path in ("broken_gate_checks", "new_gate_checks", "still_required_checks"):
+        value = gate_repair_pr_value(record, path)
+        if not isinstance(value, list) or not value:
+            missing.append(path)
+    for path in ("enforcement_before", "enforcement_after", "restored_readback"):
+        value = gate_repair_pr_value(record, path)
+        if not isinstance(value, dict) or not value:
+            missing.append(path)
+    restored_readback = gate_repair_pr_value(record, "restored_readback")
+    if isinstance(restored_readback, dict):
+        if restored_readback.get("result") != "pass":
+            missing.append("restored_readback.result must be `pass`")
+        restored_missing = restored_readback.get("missing_inputs")
+        if isinstance(restored_missing, list) and restored_missing:
+            missing.append("restored_readback.missing_inputs must be empty")
+    still_required_checks = gate_repair_pr_value(record, "still_required_checks")
+    if isinstance(still_required_checks, list):
+        for index, check in enumerate(still_required_checks):
+            if not isinstance(check, dict):
+                missing.append(f"still_required_checks[{index}] must be an object")
+                continue
+            if check.get("status") != "pass":
+                missing.append(f"still_required_checks[{index}].status must be `pass`")
+    review_evidence = gate_repair_pr_value(record, "review_evidence")
+    if isinstance(review_evidence, dict):
+        if review_evidence.get("pr_gate_result") != "pass":
+            missing.append("review_evidence.pr_gate_result must be `pass`")
+        if review_evidence.get("approval_status") != "approved":
+            missing.append("review_evidence.approval_status must be `approved`")
+    return dedupe_strings(missing)
+
+
+def gate_repair_pr_enforcement_payload(payload: Any, *, locator: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {
+            "schema_version": "loom-gate-repair-pr-enforcement-readback/v1",
+            "source_locator": locator,
+            "required_contexts": [],
+            "missing_inputs": ["enforcement readback must be a JSON object"],
+        }
+    if isinstance(payload.get("enforcement_before"), dict):
+        payload = payload["enforcement_before"]
+    elif isinstance(payload.get("enforcement_after"), dict):
+        payload = payload["enforcement_after"]
+
+    direct_contexts = payload.get("required_contexts")
+    contexts = [str(context) for context in direct_contexts if isinstance(context, str) and context.strip()] if isinstance(direct_contexts, list) else []
+    branch_protection_payload = payload.get("branch_protection") if isinstance(payload.get("branch_protection"), dict) else payload
+    ruleset_payload = payload.get("ruleset") if "ruleset" in payload else payload
+    protection_contexts = required_status_contexts_from_protection(branch_protection_payload)
+    ruleset_contexts = required_status_contexts_from_branch_rules(ruleset_payload)
+    required_contexts = sorted(set(contexts + protection_contexts + ruleset_contexts))
+    return {
+        "schema_version": "loom-gate-repair-pr-enforcement-readback/v1",
+        "source_locator": locator,
+        "required_contexts": required_contexts,
+        "branch_protection_required_contexts": protection_contexts,
+        "ruleset_required_contexts": ruleset_contexts,
+        "raw_schema_version": payload.get("schema_version"),
+        "missing_inputs": [],
+    }
+
+
+def gate_repair_pr_still_required_checks(
+    *,
+    required_contexts: list[str],
+    required_checks: dict[str, Any],
+    pr_gate: dict[str, Any],
+    review_locator: str | None,
+) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    missing = set(required_checks.get("missing", [])) if isinstance(required_checks.get("missing"), list) else set()
+    pending = set(required_checks.get("pending", [])) if isinstance(required_checks.get("pending"), list) else set()
+    failing = set(required_checks.get("failing", [])) if isinstance(required_checks.get("failing"), list) else set()
+    for context in required_contexts:
+        status = "missing" if context in missing else "pending" if context in pending else "failing" if context in failing else "pass"
+        checks.append({"name": context, "source": "host_enforcement", "status": status})
+    review_approval = pr_gate.get("review_approval") if isinstance(pr_gate.get("review_approval"), dict) else {}
+    checks.append(
+        {
+            "name": "semantic_review",
+            "source": review_locator,
+            "status": "pass" if pr_gate.get("result") == "pass" and review_approval.get("status") == "approved" else "block",
+        }
+    )
+    return checks
+
+
+def gate_repair_pr_existing_record(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if not path.exists():
+        return None, [f"{GATE_REPAIR_PR_LOCATOR} is missing"]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"invalid {GATE_REPAIR_PR_LOCATOR}: {exc}"]
+    if not isinstance(payload, dict):
+        return None, [f"{GATE_REPAIR_PR_LOCATOR} must be a JSON object"]
+    return payload, []
+
+
+def gate_repair_pr_payload(args: argparse.Namespace) -> dict[str, Any]:
+    target_root = resolve_target_arg(args.target)
+    record_path = target_root / GATE_REPAIR_PR_LOCATOR
+    existing_record, existing_errors = gate_repair_pr_existing_record(record_path)
+    if not args.record:
+        missing_inputs = existing_errors if existing_record is None else gate_repair_pr_record_missing_inputs(existing_record)
+        result = "pass" if not missing_inputs else "block"
+        return {
+            "command": "gate-repair-pr",
+            "operation": "validate",
+            "schema_version": GATE_REPAIR_PR_SCHEMA,
+            "result": result,
+            "summary": "gate repair PR evidence is valid." if result == "pass" else "gate repair PR evidence is missing or incomplete.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": None if result == "pass" else "loom gate repair-pr --target <repo> --record --json",
+            "target": str(target_root),
+            "record_locator": GATE_REPAIR_PR_LOCATOR,
+            "record_validation": {"result": result, "missing_inputs": missing_inputs},
+            "mutates": False,
+            "host_mutations": False,
+            "ruleset_mutation": {"attempted": False, "commands": []},
+        }
+
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = args.owner or detected_owner
+    repo_name = args.repo_name or detected_repo
+    current_head = args.head_sha or git_head_sha(target_root)
+    current_branch = args.branch or git_branch(target_root)
+    pr_payload_raw, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=args.pr,
+        head_sha=current_head,
+        branch_name=current_branch,
+        pr_payload_file=args.pr_payload_file,
+    )
+    pr_payload = pr_payload_raw if isinstance(pr_payload_raw, dict) else {}
+    head_sha = args.head_sha or pr_payload.get("headRefOid") or current_head
+    branch = args.branch or pr_payload.get("headRefName") or current_branch
+    missing_inputs = [f"pr readback: {message}" for message in pr_errors]
+    if effective_pr is None:
+        missing_inputs.append("pr.number")
+    if not isinstance(head_sha, str) or not head_sha.strip():
+        missing_inputs.append("pr.head_sha")
+    if not isinstance(branch, str) or not branch.strip():
+        missing_inputs.append("pr.branch")
+
+    if args.enforcement_before_file:
+        before_raw, before_errors = load_optional_json_fixture(target_root, args.enforcement_before_file, label="enforcement-before readback")
+        missing_inputs.extend(f"enforcement-before: {message}" for message in before_errors)
+        enforcement_before = gate_repair_pr_enforcement_payload(before_raw, locator=args.enforcement_before_file)
+    elif existing_record is not None:
+        enforcement_before = gate_repair_pr_enforcement_payload(existing_record, locator=f"{GATE_REPAIR_PR_LOCATOR}:enforcement_before")
+    else:
+        enforcement_before = {
+            "schema_version": "loom-gate-repair-pr-enforcement-readback/v1",
+            "source_locator": None,
+            "required_contexts": [],
+            "missing_inputs": ["enforcement-before readback"],
+        }
+        missing_inputs.append("enforcement-before readback")
+
+    if effective_pr is None:
+        controlled: dict[str, Any] = {
+            "result": "block",
+            "missing_inputs": ["pr.number"],
+            "host_enforcement": {},
+            "required_checks": {},
+            "triggered_check_rollup": {},
+            "controlled_merge_consumption": {},
+            "pr_gate": {},
+        }
+    else:
+        controlled = controlled_merge_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=effective_pr,
+            head_sha=head_sha if isinstance(head_sha, str) else None,
+            merge_method="squash",
+            delete_branch=False,
+            execute=False,
+            pr_payload_file=args.pr_payload_file,
+            status_checks_file=args.status_checks_file,
+            branch_protection_file=args.branch_protection_file,
+            ruleset_file=args.ruleset_file,
+            pr_gate_result_file=args.pr_gate_result_file,
+            merge_gate_result_file=args.merge_gate_result_file,
+        )
+
+    host_enforcement = controlled.get("host_enforcement") if isinstance(controlled.get("host_enforcement"), dict) else {}
+    required_contexts = [str(context) for context in host_enforcement.get("required_contexts", []) if isinstance(context, str)]
+    enforcement_after = {
+        "schema_version": "loom-gate-repair-pr-enforcement-readback/v1",
+        "source_locator": "controlled-merge.host_enforcement",
+        "required_contexts": required_contexts,
+        "branch_protection_required_contexts": host_enforcement.get("branch_protection_required_contexts", []),
+        "ruleset_required_contexts": host_enforcement.get("ruleset_required_contexts", []),
+        "branch_protection_readable": host_enforcement.get("branch_protection_readable"),
+        "ruleset_readable": host_enforcement.get("ruleset_readable"),
+    }
+    before_contexts = set(enforcement_before.get("required_contexts", []))
+    new_contexts = sorted(set(required_contexts) - before_contexts)
+    broken_gate_checks = [
+        {"name": context, "before": "not_required", "after": "required", "source": "enforcement-before/after readback"}
+        for context in new_contexts
+    ]
+    new_gate_checks = [
+        {"name": context, "source": "host_enforcement", "status": "newly_required"}
+        for context in new_contexts
+    ]
+    pr_gate = controlled.get("pr_gate") if isinstance(controlled.get("pr_gate"), dict) else {}
+    work_item = pr_gate.get("work_item") if isinstance(pr_gate.get("work_item"), dict) else {}
+    review_locator = work_item.get("review_entry") if isinstance(work_item.get("review_entry"), str) else None
+    required_checks = controlled.get("required_checks") if isinstance(controlled.get("required_checks"), dict) else {}
+    still_required_checks = gate_repair_pr_still_required_checks(
+        required_contexts=required_contexts,
+        required_checks=required_checks,
+        pr_gate=pr_gate,
+        review_locator=review_locator,
+    )
+    restored_readback = {
+        "schema_version": "loom-gate-repair-pr-restored-readback/v1",
+        "result": "pass" if controlled.get("result") == "pass" else "block",
+        "source": "controlled-merge",
+        "missing_inputs": controlled.get("missing_inputs", []),
+        "required_checks": required_checks,
+        "triggered_check_rollup": controlled.get("triggered_check_rollup", {}),
+        "controlled_merge_consumption": controlled.get("controlled_merge_consumption", {}),
+    }
+    reason = (
+        args.reason
+        or (existing_record or {}).get("reason")
+        or "repair PR records restored gate enforcement evidence without mutating GitHub rulesets"
+    )
+    record = {
+        "schema_version": GATE_REPAIR_PR_SCHEMA,
+        "command": "gate-repair-pr",
+        "result": "pass" if controlled.get("result") == "pass" else "block",
+        "recorded_at": utc_now_iso(),
+        "target": str(target_root),
+        "repository": {"owner": owner, "name": repo_name},
+        "pr": {"number": effective_pr, "head_sha": head_sha, "branch": branch},
+        "reason": reason,
+        "broken_gate_checks": broken_gate_checks,
+        "new_gate_checks": new_gate_checks,
+        "still_required_checks": still_required_checks,
+        "review_evidence_locator": review_locator,
+        "review_evidence": {
+            "locator": review_locator,
+            "pr_gate_result": pr_gate.get("result"),
+            "semantic_review_skipped": False,
+            "approval_status": pr_gate.get("review_approval", {}).get("status") if isinstance(pr_gate.get("review_approval"), dict) else None,
+        },
+        "enforcement_before": enforcement_before,
+        "enforcement_after": enforcement_after,
+        "restored_readback": restored_readback,
+        "bypass_policy": {
+            "evidence_only": True,
+            "does_not_skip_semantic_review": True,
+            "does_not_mutate_github_rulesets": True,
+            "does_not_replace": ["semantic_review", "pr_gate", "controlled_merge", "host_required_checks"],
+        },
+        "host_mutations": False,
+        "ruleset_mutation": {"attempted": False, "commands": []},
+    }
+    record_missing = gate_repair_pr_record_missing_inputs(record)
+    if controlled.get("result") != "pass":
+        missing_inputs.extend(f"restored readback: {message}" for message in controlled.get("missing_inputs", []))
+    missing_inputs.extend(record_missing)
+    missing_inputs = dedupe_strings([str(message) for message in missing_inputs if str(message).strip()])
+    result = "pass" if not missing_inputs else "block"
+    record_artifact: dict[str, Any] = {"result": "not_written", "locator": GATE_REPAIR_PR_LOCATOR}
+    readback_validation = {"result": result, "missing_inputs": record_missing}
+    if result == "pass":
+        write_json_file(record_path, record)
+        readback, readback_errors = gate_repair_pr_existing_record(record_path)
+        readback_missing = readback_errors if readback is None else gate_repair_pr_record_missing_inputs(readback)
+        readback_validation = {"result": "pass" if not readback_missing else "block", "missing_inputs": readback_missing}
+        if readback_missing:
+            result = "block"
+            missing_inputs.extend(readback_missing)
+        record_artifact = {
+            "result": "pass" if not readback_missing else "block",
+            "locator": GATE_REPAIR_PR_LOCATOR,
+            "mutates": "repo-local-companion-evidence-only",
+            "sha256": hashlib.sha256(record_path.read_bytes()).hexdigest() if record_path.exists() else None,
+        }
+
+    return {
+        "command": "gate-repair-pr",
+        "operation": "record",
+        "schema_version": GATE_REPAIR_PR_SCHEMA,
+        "result": result,
+        "summary": (
+            "gate repair PR evidence was recorded and validated."
+            if result == "pass"
+            else "gate repair PR evidence is missing required audit inputs."
+        ),
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": None if result == "pass" else "refresh_gate_repair_pr_evidence",
+        "target": str(target_root),
+        "record_locator": GATE_REPAIR_PR_LOCATOR,
+        "record": record,
+        "record_validation": readback_validation,
+        "record_artifact": record_artifact,
+        "controlled_merge": controlled,
+        "inferences": inferences,
+        "mutates": result == "pass",
+        "host_mutations": False,
+        "ruleset_mutation": {"attempted": False, "commands": []},
+        "semantic_review": {
+            "skipped": False,
+            "required": True,
+            "evidence_locator": review_locator,
+            "pr_gate_result": pr_gate.get("result"),
+        },
+    }
+
+
+def handle_gate_repair_pr(args: argparse.Namespace) -> int:
+    return emit(gate_repair_pr_payload(args))
 
 
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
@@ -21632,7 +22772,7 @@ def github_binding_payload(
 
 
 def handle_governance_profile(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     if args.operation == "upgrade":
         payload = governance_profile_upgrade_payload(
             target_root=target_root,
@@ -21676,7 +22816,7 @@ def handle_governance_profile(args: argparse.Namespace) -> int:
 
 
 def handle_host_lifecycle(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
         return emit(
@@ -22740,7 +23880,7 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any], *, include_closeout_
             edge_proof = edge.get("provenance") if isinstance(edge.get("provenance"), dict) else {}
             proof_owner = edge_proof.get("source_owner")
             proof_locator = edge_proof.get("source_locator")
-            proof_is_mechanical = proof_owner in {"github_issue_body", "repo_authored_dependency"}
+            proof_is_mechanical = proof_owner in {"github_issue_machine_block", "repo_authored_dependency"}
             if kind == "stale_native_edge":
                 proof_is_mechanical = edge.get("source_of_truth") == "github_native_edge" and edge.get("blocker_state") == "closed"
                 proof_locator = proof_locator or f"issue #{blocking_issue}"
@@ -23524,7 +24664,7 @@ def github_intake_payload(
 
 
 def handle_github_intake(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -24217,7 +25357,7 @@ def closeout_payload(
 
 
 def handle_closeout(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -24404,7 +25544,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
 
 
 def handle_reconciliation(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -24707,7 +25847,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
 
 
 def handle_review(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     context, errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
     if errors:
         return emit(
@@ -25161,7 +26301,7 @@ def handle_review(args: argparse.Namespace) -> int:
 
 
 def handle_recovery(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
         return emit(
@@ -25214,7 +26354,7 @@ def handle_recovery(args: argparse.Namespace) -> int:
 
     for field_name, value in provided.items():
         if field_name == "current_checkpoint":
-            value = normalize_checkpoint(value) if value.strip().lower() == "retired" else value
+            value = normalize_checkpoint(value)
         update_markdown_bullet(context["recovery_path"], RECOVERY_FIELD_LABELS[field_name], value)
 
     refreshed, refresh_errors = sync_status_surface(target_root, args.output, runtime_evidence)
@@ -25307,7 +26447,7 @@ def validate_work_item_payload_locators(
 
 
 def handle_work_item(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     output_path, output_errors = resolve_repo_relative_path(target_root, args.output, label="init-result locator")
     if output_errors:
         return emit(
@@ -25491,7 +26631,7 @@ def handle_work_item(args: argparse.Namespace) -> int:
                 render_recovery_entry(
                     args.item,
                     {
-                        "current_checkpoint": "admission checkpoint",
+                        "current_checkpoint": "admission",
                         "current_stop": "Work item scaffolded and waiting for the first execution pass.",
                         "next_step": "Write the first recovery update for this work item.",
                         "blockers": "None recorded.",
@@ -25906,7 +27046,7 @@ def build_execution_payload(context: dict[str, Any], evidence_relative: str | No
 
 
 def handle_flow(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     steps: list[dict[str, Any]] = [
         {
@@ -26816,7 +27956,7 @@ def handle_flow(args: argparse.Namespace) -> int:
 
 
 def handle_shadow_parity(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -26925,7 +28065,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
             )
         return emit(
             live_smoke_run_payload(
-                Path(args.target).expanduser().resolve(),
+                resolve_target_arg(args.target),
                 item=args.item,
                 dry_run=args.dry_run,
                 include_blocking_shadow=args.include_blocking_shadow,
@@ -26954,7 +28094,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                     },
                 }
             )
-        return emit(host_adapter_live_drift_payload(Path(args.target).expanduser().resolve()))
+        return emit(host_adapter_live_drift_payload(resolve_target_arg(args.target)))
     if args.operation == "dynamic-tool-availability":
         if not args.target:
             return emit(
@@ -26980,7 +28120,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
             )
         return emit(
             dynamic_tool_live_availability_payload(
-                Path(args.target).expanduser().resolve(),
+                resolve_target_arg(args.target),
                 surface=args.surface,
             )
         )
@@ -27009,7 +28149,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                 }
             )
         if not args.envelope:
-            target_root = Path(args.target).expanduser().resolve()
+            target_root = resolve_target_arg(args.target)
             return emit(
                 {
                     "command": "live-smoke",
@@ -27034,7 +28174,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
             )
         return emit(
             hook_envelope_payload(
-                Path(args.target).expanduser().resolve(),
+                resolve_target_arg(args.target),
                 envelope=args.envelope,
                 requirement=args.requirement,
             )
@@ -27063,7 +28203,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                     },
                 }
             )
-        return emit(hooks_extension_payload(Path(args.target).expanduser().resolve()))
+        return emit(hooks_extension_payload(resolve_target_arg(args.target)))
     if args.operation == "external-orchestrator-interop":
         if not args.target:
             return emit(
@@ -27088,7 +28228,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                     },
                 }
             )
-        return emit(external_orchestrator_conformance_payload(Path(args.target).expanduser().resolve()))
+        return emit(external_orchestrator_conformance_payload(resolve_target_arg(args.target)))
 
     repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
     runtime_state = runtime_state_payload(repo_root)
@@ -27116,7 +28256,7 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
 
 
 def handle_runtime_parity(args: argparse.Namespace) -> int:
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     return emit(
         runtime_parity_payload(
             target_root=target_root,
@@ -27152,6 +28292,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_gate_freeze(args)
     if args.command == "controlled-merge":
         return handle_controlled_merge(args)
+    if args.command == "gate-repair-pr":
+        return handle_gate_repair_pr(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":

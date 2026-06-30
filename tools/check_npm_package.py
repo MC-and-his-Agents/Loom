@@ -90,6 +90,7 @@ SURFACE_AGGREGATE = "aggregate"
 SURFACE_MANIFEST = "npm-package-manifest"
 SURFACE_PAYLOAD = "npm-pack-payload"
 SURFACE_PLUGIN_PAYLOAD_HASH = "plugin-payload-hash"
+SURFACE_RUNTIME_COPY_PARITY = "runtime-copy-parity"
 PLUGIN_PAYLOAD_IGNORE_NAMES = {".DS_Store", "__pycache__"}
 PLUGIN_PAYLOAD_IGNORE_SUFFIXES = {".pyc"}
 PLUGIN_PAYLOAD_HASH_FIELD_RE = re.compile(
@@ -111,14 +112,14 @@ SURFACES: dict[str, SurfaceDefinition] = {
     SURFACE_AGGREGATE: SurfaceDefinition(
         name=SURFACE_AGGREGATE,
         command="python3 tools/check_npm_package.py",
-        description="Aggregate npm package validation; runs manifest and packed payload checks.",
+        description="Aggregate npm package validation; runs manifest, packed payload, plugin hash, and runtime copy parity checks.",
         evidence_locators=(
             "package.json",
             "VERSION",
             "npm pack --dry-run --json --ignore-scripts",
             "plugins/loom",
         ),
-        evidence_labels=(SURFACE_MANIFEST, SURFACE_PAYLOAD, SURFACE_PLUGIN_PAYLOAD_HASH),
+        evidence_labels=(SURFACE_MANIFEST, SURFACE_PAYLOAD, SURFACE_PLUGIN_PAYLOAD_HASH, SURFACE_RUNTIME_COPY_PARITY),
         failure_label="npm-package-validation-failed",
     ),
     SURFACE_MANIFEST: SurfaceDefinition(
@@ -148,6 +149,14 @@ SURFACES: dict[str, SurfaceDefinition] = {
         evidence_labels=(SURFACE_PLUGIN_PAYLOAD_HASH,),
         failure_label="plugin-payload-hash-failed",
     ),
+    SURFACE_RUNTIME_COPY_PARITY: SurfaceDefinition(
+        name=SURFACE_RUNTIME_COPY_PARITY,
+        command=f"python3 tools/check_npm_package.py --surface {SURFACE_RUNTIME_COPY_PARITY}",
+        description="Exact parity check for shared runtime copies across source, generated skills, plugin payload, and repo-local .loom/bin.",
+        evidence_locators=("skills/shared/scripts", "src/skills/shared/scripts", "plugins/loom/skills/shared/scripts", ".loom/bin"),
+        evidence_labels=(SURFACE_RUNTIME_COPY_PARITY,),
+        failure_label="runtime-copy-parity-failed",
+    ),
 }
 SURFACE_ALIASES = {
     SURFACE_AGGREGATE: SURFACE_AGGREGATE,
@@ -158,6 +167,8 @@ SURFACE_ALIASES = {
     SURFACE_PAYLOAD: SURFACE_PAYLOAD,
     "plugin-hash": SURFACE_PLUGIN_PAYLOAD_HASH,
     SURFACE_PLUGIN_PAYLOAD_HASH: SURFACE_PLUGIN_PAYLOAD_HASH,
+    "runtime-parity": SURFACE_RUNTIME_COPY_PARITY,
+    SURFACE_RUNTIME_COPY_PARITY: SURFACE_RUNTIME_COPY_PARITY,
 }
 
 
@@ -465,6 +476,59 @@ def validate_plugin_payload_hash() -> dict[str, Any]:
     return computed
 
 
+RUNTIME_COPY_ROOTS = (
+    "skills/shared/scripts",
+    "src/skills/shared/scripts",
+    "plugins/loom/skills/shared/scripts",
+    ".loom/bin",
+)
+RUNTIME_COPY_FILES = (
+    "loom_init.py",
+    "fact_chain_support.py",
+    "governance_surface.py",
+    "loom_flow.py",
+    "loom_status.py",
+    "runtime_paths.py",
+    "runtime_state.py",
+    "loom_check.py",
+    "loom_story_carriers.py",
+)
+RUNTIME_COPY_PAIRS = tuple(
+    (f"{left}/{name}", f"{right}/{name}")
+    for name in RUNTIME_COPY_FILES
+    for left, right in zip(RUNTIME_COPY_ROOTS, RUNTIME_COPY_ROOTS[1:])
+)
+
+
+def validate_runtime_copy_parity() -> dict[str, Any]:
+    drifted: list[str] = []
+    missing: list[str] = []
+    for source, copy in RUNTIME_COPY_PAIRS:
+        source_path = REPO_ROOT / source
+        copy_path = REPO_ROOT / copy
+        if not source_path.exists() or not copy_path.exists():
+            missing.append(f"{source} -> {copy}")
+            continue
+        if source_path.read_bytes() != copy_path.read_bytes():
+            drifted.append(f"{source} -> {copy}")
+    if missing or drifted:
+        details = []
+        if missing:
+            details.append("missing runtime copy pairs: " + ", ".join(missing))
+        if drifted:
+            details.append("drifted runtime copy pairs: " + ", ".join(drifted))
+        fail(
+            SURFACE_RUNTIME_COPY_PARITY,
+            "; ".join(details),
+            evidence_locators=RUNTIME_COPY_ROOTS,
+            fallback_to=("sync shared runtime copies across skills, src/skills, plugin payload, and .loom/bin",),
+        )
+    return {
+        "pair_count": len(RUNTIME_COPY_PAIRS),
+        "pairs": [{"source": source, "copy": copy} for source, copy in RUNTIME_COPY_PAIRS],
+    }
+
+
 def surface_pass(surface: str, *, payload_file_count: int | None = None) -> dict[str, Any]:
     definition = SURFACES[surface]
     payload: dict[str, Any] = {
@@ -528,7 +592,19 @@ def emit_plugin_payload_hash_pass(hash_payload: dict[str, Any]) -> None:
     }, indent=2))
 
 
-def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str], hash_payload: dict[str, Any]) -> None:
+def emit_runtime_copy_parity_pass(parity_payload: dict[str, Any]) -> None:
+    print(json.dumps({
+        "schema_version": "loom-npm-package-check/v1",
+        "result": "pass",
+        "surface": SURFACE_RUNTIME_COPY_PARITY,
+        "pair_count": parity_payload["pair_count"],
+        "pairs": parity_payload["pairs"],
+        "evidence_label": SURFACE_RUNTIME_COPY_PARITY,
+        "evidence_locators": list(SURFACES[SURFACE_RUNTIME_COPY_PARITY].evidence_locators),
+    }, indent=2))
+
+
+def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str], hash_payload: dict[str, Any], parity_payload: dict[str, Any]) -> None:
     print(json.dumps({
         "schema_version": "loom-npm-package-check/v1",
         "result": "pass",
@@ -543,7 +619,8 @@ def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str], hash_payl
         "required_manifest_files": sorted(REQUIRED_MANIFEST_FILES),
         "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
         "forbidden_path_parts": list(FORBIDDEN_PATH_PARTS),
-        "evidence_labels": [SURFACE_MANIFEST, SURFACE_PAYLOAD, SURFACE_PLUGIN_PAYLOAD_HASH],
+        "runtime_copy_pair_count": parity_payload["pair_count"],
+        "evidence_labels": [SURFACE_MANIFEST, SURFACE_PAYLOAD, SURFACE_PLUGIN_PAYLOAD_HASH, SURFACE_RUNTIME_COPY_PARITY],
         "evidence_locators": list(SURFACES[SURFACE_AGGREGATE].evidence_locators),
         "surfaces": [
             surface_pass(SURFACE_MANIFEST),
@@ -554,6 +631,10 @@ def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str], hash_payl
                 "plugin_payload_file_count": hash_payload["file_count"],
                 "declared_hash_status": hash_payload["declared_hash_status"],
                 "normalized_self_references": hash_payload["normalized_self_references"],
+            },
+            {
+                **surface_pass(SURFACE_RUNTIME_COPY_PARITY),
+                "runtime_copy_pair_count": parity_payload["pair_count"],
             },
         ],
     }, indent=2))
@@ -585,7 +666,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=SURFACE_AGGREGATE,
         help=(
             "Validation surface to run. Stable surfaces: aggregate, "
-            f"{SURFACE_MANIFEST}, {SURFACE_PAYLOAD}, {SURFACE_PLUGIN_PAYLOAD_HASH}."
+            f"{SURFACE_MANIFEST}, {SURFACE_PAYLOAD}, {SURFACE_PLUGIN_PAYLOAD_HASH}, {SURFACE_RUNTIME_COPY_PARITY}."
         ),
     )
     parser.add_argument(
@@ -612,11 +693,15 @@ def main(argv: list[str] | None = None) -> int:
     if surface == SURFACE_PLUGIN_PAYLOAD_HASH:
         emit_plugin_payload_hash_pass(validate_plugin_payload_hash())
         return 0
+    if surface == SURFACE_RUNTIME_COPY_PARITY:
+        emit_runtime_copy_parity_pass(validate_runtime_copy_parity())
+        return 0
 
     package = validate_manifest()
     pack_files = validate_payload()
     hash_payload = validate_plugin_payload_hash()
-    emit_aggregate_pass(package, pack_files, hash_payload)
+    parity_payload = validate_runtime_copy_parity()
+    emit_aggregate_pass(package, pack_files, hash_payload, parity_payload)
     return 0
 
 

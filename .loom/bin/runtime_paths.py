@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 
 def caller_path(caller_file: str) -> Path:
@@ -21,6 +24,11 @@ def installed_skills_root(caller_file: str) -> Path | None:
         return path.parents[2]
     if path.parent.name == "scripts" and path.parents[2].name == "skills":
         return path.parents[2]
+    if path.parent.name == "bin" and path.parent.parent.name == ".loom":
+        repo_root = path.parents[2]
+        skills_root = repo_root / "skills"
+        if (skills_root / "shared").is_dir():
+            return skills_root
     return None
 
 

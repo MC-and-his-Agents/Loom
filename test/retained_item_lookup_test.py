@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,76 @@ assert spec is not None
 loom_flow = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(loom_flow)
+
+
+def write_idle_status(root: Path, *, init_result: str) -> None:
+    (root / ".loom/status").mkdir(parents=True, exist_ok=True)
+    labels = {
+        "item_id": "Item ID",
+        "goal": "Goal",
+        "scope": "Scope",
+        "execution_path": "Execution Path",
+        "workspace_entry": "Workspace Entry",
+        "recovery_entry": "Recovery Entry",
+        "review_entry": "Review Entry",
+        "validation_entry": "Validation Entry",
+        "closing_condition": "Closing Condition",
+        "current_checkpoint": "Current Checkpoint",
+        "current_stop": "Current Stop",
+        "next_step": "Next Step",
+        "blockers": "Blockers",
+        "latest_validation_summary": "Latest Validation Summary",
+        "recovery_boundary": "Recovery Boundary",
+        "current_lane": "Current Lane",
+    }
+    lines = ["# Status", "", "## Derived Fact Chain View", ""]
+    for key, label in labels.items():
+        value = "no_active_item" if key == "item_id" else "not_applicable"
+        lines.append(f"- {label}: {value}")
+    lines.extend(
+        [
+            "",
+            "## Runtime Evidence",
+            "",
+            "- Run Entry: not_applicable",
+            "- Logs Entry: not_applicable",
+            "- Diagnostics Entry: not_applicable",
+            "- Verification Entry: not_applicable",
+            "- Lane Entry: not_applicable",
+            "",
+            "## Sources",
+            "",
+            "- Static Truth: not_applicable",
+            "- Dynamic Truth: not_applicable",
+            f"- Locator Truth: {init_result}",
+            "- Fact Chain CLI: loom fact-chain --target . --json",
+            "",
+        ]
+    )
+    (root / ".loom/status/current.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_idle_companion_init_result(root: Path) -> None:
+    relative = ".loom/companion/init-result.json"
+    (root / ".loom/companion").mkdir(parents=True, exist_ok=True)
+    write_idle_status(root, init_result=relative)
+    (root / relative).write_text(
+        json.dumps(
+            {
+                "fact_chain": {
+                    "mode": "idle",
+                    "read_entry": "loom fact-chain --target . --json",
+                    "entry_points": {
+                        "current_item_id": "no_active_item",
+                        "work_item": "not_applicable",
+                        "recovery_entry": "not_applicable",
+                        "status_surface": ".loom/status/current.md",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def write_work_item(
@@ -97,6 +168,36 @@ def write_work_item(
 
 
 class RetainedItemLookupTest(unittest.TestCase):
+    def test_fact_chain_reads_companion_init_result_when_bootstrap_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            write_idle_companion_init_result(root)
+
+            report, errors = loom_flow.load_fact_chain_report(root, ".loom/bootstrap/init-result.json")
+
+            self.assertEqual(errors, [])
+            self.assertEqual(report["fact_chain"]["mode"], "idle")
+            self.assertEqual(
+                report["derived_status_surface"]["sources"]["init_result"],
+                ".loom/companion/init-result.json",
+            )
+
+    def test_idle_context_falls_back_to_retained_item_when_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            write_idle_companion_init_result(root)
+            write_work_item(root, "GH-78-LOOM-0211-CLEANUP", issue=78)
+
+            context, errors = loom_flow.load_context_with_retained_idle_fallback(
+                root,
+                ".loom/bootstrap/init-result.json",
+                "GH-78-LOOM-0211-CLEANUP",
+            )
+
+            self.assertEqual(errors, [])
+            self.assertEqual(context["item_id"], "GH-78-LOOM-0211-CLEANUP")
+            self.assertTrue(context["retained_item_context"])
+
     def test_preserves_wi_issue_number_lookup(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
