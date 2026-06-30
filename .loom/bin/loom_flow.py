@@ -4677,7 +4677,7 @@ def normalize_checkpoint(raw: str) -> str:
         return "build"
     if "merge checkpoint" in lowered or lowered in {"merge gate", "merge-gate", "merge_gate"}:
         return "merge"
-    if lowered in {"closed", "done", "closed_out", "closed-out", "closed out", "closed checkpoint", "done checkpoint"}:
+    if lowered in {"closed", "done", "closeout", "closed_out", "closed-out", "closed out", "closed checkpoint", "done checkpoint"}:
         return "closed_out"
     if "retired" in lowered:
         return "retired"
