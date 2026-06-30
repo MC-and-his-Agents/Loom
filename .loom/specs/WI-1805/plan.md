@@ -19,12 +19,12 @@
 
 ## Acceptance Mapping
 
-- A1 -> `governance_surface.py` runtime copies and `test/host_governance_capability_test.py`.
-- A2 -> `docs/adoption/github-profile.md`, `docs/methodology/governance/governance-maturity-model.md`, and `test/governance_capability_profiles_test.py`.
-- A3 -> `loom_flow.py`, `tools/loom.py`, and `test/governance_merge_profile_test.py`.
-- A4 -> `test/governance_merge_profile_test.py` advisory and fail-closed cases.
-- A5 -> PR metadata renderer, closeout policy output, docs/evidence fixtures, and release readiness evidence.
-- A6 -> PR #1831 readback, review record, PR gate/hosted checks, merge commit, GitHub Release/npm readback, and terminal closeout evidence.
+- A1 -> test evidence: `test/host_governance_capability_test.py`; structural check: runtime-copy parity for `governance_surface.py` copies.
+- A2 -> test evidence: `test/governance_capability_profiles_test.py`; manual evidence: `docs/adoption/github-profile.md` and `docs/methodology/governance/governance-maturity-model.md`.
+- A3 -> test evidence: `test/governance_merge_profile_test.py`; structural check: runtime-copy parity for `loom_flow.py` copies and `tools/loom.py` command wiring.
+- A4 -> test evidence: `test/governance_merge_profile_test.py` advisory and fail-closed cases.
+- A5 -> test evidence: `test/governance_merge_profile_test.py`; manual evidence: PR metadata renderer output, closeout policy output, docs/evidence fixtures, and release readiness evidence.
+- A6 -> manual evidence: PR #1831 readback, review record, PR gate/hosted checks, merge commit, GitHub Release/npm readback, and terminal closeout evidence.
 
 ## Validation
 
