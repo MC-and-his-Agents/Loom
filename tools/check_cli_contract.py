@@ -449,7 +449,11 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
         fixture_name="merge-metadata-only",
         branch_protection_contexts=[],
         ruleset_required_contexts=["loom-pr-merge-gate"],
+        item="repo-native.release-0211",
     )
+    checks_file = f".loom/fixtures/{fixture['item']}/checks.json"
+    branch_protection_file = f".loom/fixtures/{fixture['item']}/branch-protection.json"
+    ruleset_file = f".loom/fixtures/{fixture['item']}/ruleset.json"
     companion = target / ".loom" / "companion"
     companion.mkdir(parents=True, exist_ok=True)
     bootstrap_init = target / ".loom" / "bootstrap" / "init-result.json"
@@ -489,11 +493,11 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             "--pr-payload-file",
             fixture["pr_file"],
             "--status-checks-file",
-            ".loom/fixtures/WI-1287/checks.json",
+            checks_file,
             "--branch-protection-file",
-            ".loom/fixtures/WI-1287/branch-protection.json",
+            branch_protection_file,
             "--ruleset-file",
-            ".loom/fixtures/WI-1287/ruleset.json",
+            ruleset_file,
             "--json",
         ],
         expect=0,
@@ -507,6 +511,27 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
         raise AssertionError("metadata-only merge check leaked bootstrap init-result or git cwd errors")
 
     loom_flow = load_loom_flow_module()
+    metadata_fields = {
+        "loom_work_item": fixture["item"],
+        "branch": fixture["branch"],
+        "head_sha": fixture["head_sha"],
+        "governance_intensity": "standard",
+        "change_class": "contract",
+        "suite_path": "minimal",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "fact_chain_required": True,
+        "pr_gate_required": True,
+        "closeout_required": True,
+        "upgrade_triggers": [],
+    }
+    opaque_missing = loom_flow.validate_governance_intensity_metadata_fields(metadata_fields)
+    if "fields.loom_work_item" in opaque_missing:
+        raise AssertionError("PR metadata rejected a path-safe opaque Work Item id")
+    unsafe_fields = {**metadata_fields, "loom_work_item": "../escape"}
+    unsafe_missing = loom_flow.validate_governance_intensity_metadata_fields(unsafe_fields)
+    if "fields.loom_work_item" not in unsafe_missing:
+        raise AssertionError("PR metadata accepted a path-unsafe Work Item id")
     calls: list[list[str]] = []
     original_gh_json = loom_flow.gh_json
     original_source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
@@ -533,8 +558,8 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             execute=False,
             pr_payload_file=fixture["pr_file"],
             status_checks_file=None,
-            branch_protection_file=".loom/fixtures/WI-1287/branch-protection.json",
-            ruleset_file=".loom/fixtures/WI-1287/ruleset.json",
+            branch_protection_file=branch_protection_file,
+            ruleset_file=ruleset_file,
             pr_gate_result_file=None,
             merge_gate_result_file=None,
         )
@@ -5095,8 +5120,7 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
     }
 
 
-def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
-    item = "WI-1287"
+def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287") -> dict[str, str]:
     branch = "work/1287-1288-review-head-binding"
     validation_summary = "git diff --check; targeted pr-gate semantic review disposition fixtures passed."
     write_full_suite(target, item)
@@ -5122,7 +5146,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "## Static Facts\n\n"
         f"- Item ID: {item}\n"
         "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
-        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Scope: `fixture-change.txt`, `.loom/reviews/{item}.json`, and PR payload fixture only.\n"
         f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
         "- Workspace Entry: .\n"
         f"- Recovery Entry: .loom/progress/{item}.md\n"
@@ -5165,7 +5189,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "## Derived Fact Chain View\n\n"
         f"- Item ID: {item}\n"
         "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
-        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Scope: `fixture-change.txt`, `.loom/reviews/{item}.json`, and PR payload fixture only.\n"
         f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
         "- Workspace Entry: .\n"
         f"- Recovery Entry: .loom/progress/{item}.md\n"
@@ -7973,14 +7997,15 @@ def prepare_controlled_merge_fixture(
     fixture_name: str,
     branch_protection_contexts: list[str],
     ruleset_required_contexts: list[str] | None = None,
+    item: str = "WI-1287",
 ) -> tuple[Path, dict[str, Any], dict[str, Any], Path]:
     merge_target = tmp / fixture_name
     merge_target.mkdir()
-    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target)
+    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target, item=item)
     merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
     if merge_pass_payload.get("result") != "pass":
         raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
-    fixture_dir = merge_target / ".loom" / "fixtures" / "WI-1287"
+    fixture_dir = merge_target / ".loom" / "fixtures" / merge_fixture["item"]
     check_names = sorted({"loom-pr-merge-gate", *branch_protection_contexts, *(ruleset_required_contexts or [])})
     (fixture_dir / "checks.json").write_text(
         json.dumps(

@@ -16789,6 +16789,10 @@ def governance_metadata_bool_field(fields: dict[str, Any], name: str, missing_fi
     return True
 
 
+def path_safe_work_item_id(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value))
+
+
 def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> list[str]:
     missing_fields: list[str] = []
     work_item = governance_metadata_string_field(fields, "loom_work_item", missing_fields)
@@ -16803,7 +16807,7 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     governance_metadata_bool_field(fields, "pr_gate_required", missing_fields)
     governance_metadata_bool_field(fields, "closeout_required", missing_fields)
 
-    if work_item and not re.fullmatch(r"(?:WI-|INIT-)[A-Z0-9-]+", work_item):
+    if work_item and not path_safe_work_item_id(work_item):
         missing_fields.append("fields.loom_work_item")
     if branch and not branch.startswith("work/"):
         missing_fields.append("fields.branch")
@@ -17431,7 +17435,7 @@ def pr_metadata_render_payload(
     current_branch = branch_name or git_branch(target_root)
     effective_item = item_id
     if not effective_item:
-        init_result = target_root / ".loom" / "bootstrap" / "init-result.json"
+        init_result = target_root / default_init_result_fallback(target_root, DEFAULT_INIT_RESULT)
         if init_result.exists():
             try:
                 payload = load_json_file(init_result)
@@ -17445,7 +17449,7 @@ def pr_metadata_render_payload(
 
     missing_inputs = list(base_errors) + list(output_errors)
     if not effective_item:
-        missing_inputs.append("pass --item <WI-...> or provide a readable current Loom Work Item carrier")
+        missing_inputs.append("pass --item <path-safe-work-item-id> or provide a readable current Loom Work Item carrier")
     if not current_branch:
         missing_inputs.append("branch is unavailable; pass --branch <work/...>")
     if not current_head:
