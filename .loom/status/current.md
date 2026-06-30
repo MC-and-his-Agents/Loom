@@ -6,7 +6,7 @@
 - Goal: Provide shared PR intent profiles and easier governance carrier commands for docs/governance-only, closeout-only, release-only, carrier-sync-only, and fixture-only PRs.
 - Scope: #1806 parent plus #1807-#1814 implementation and verification. Owned files are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `docs/methodology/harness/cli-command-matrix.md`, and WI-1806 Loom carriers. #1815 release readiness is tracked, but publishing `v0.22.0` is blocked until #1800 / `v0.21.2` releases or explicitly frees the release line.
 - Execution Path: issue tree #1806 -> branch `work/1806-pr-intent-carrier-ergonomics` -> shared `pr-intent prepare/check` implementation -> focused CLI contract fixtures -> PR readiness -> release wait for #1800 / `v0.21.2`.
-- Workspace Entry: /Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1806.md
 - Review Entry: .loom/reviews/WI-1806.json
 - Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/check_cli_contract.py --surface suite-contract`; `python3 tools/check_cli_contract.py --surface aggregate`; `git diff --check`.
@@ -21,7 +21,7 @@
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-30 WI-1806 started in formal worktree `/Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics` on branch `work/1806-pr-intent-carrier-ergonomics`.
+- Run Entry: 2026-06-30 WI-1806 started in repo-relative workspace `.` on branch `work/1806-pr-intent-carrier-ergonomics`; local formal worktree locator is `/Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics`.
 - Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1806.md`.
 - Diagnostics Entry: #1806 has no existing branch/PR at start; GitHub issue native dependencies were empty; release boundary is external to #1806 and tied to #1800 / `v0.21.2`.
 - Verification Entry: Focused local checks passed before PR metadata/readback; review, hosted checks, merge-ready, and release readback remain pending.
