@@ -7554,6 +7554,36 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
         ):
             raise AssertionError(f"{intent} check did not reuse shared suite/evidence/carrier consistency: {check_payload.get('missing_inputs')}")
 
+        if intent == "release-only":
+            _, release_carrier_check = run_json(
+                [
+                    "pr-intent",
+                    "check",
+                    "--intent",
+                    intent,
+                    "--target",
+                    str(target),
+                    "--item",
+                    item,
+                    "--issue",
+                    item.removeprefix("WI-"),
+                    "--head-sha",
+                    head_sha,
+                    "--branch",
+                    "work/1806-pr-intent",
+                    "--body-file",
+                    body_file,
+                    "--changed-path",
+                    changed_path,
+                    "--changed-path",
+                    f".loom/progress/{item}.md",
+                    "--json",
+                ],
+                expect=0,
+            )
+            if release_carrier_check.get("result") != "pass":
+                raise AssertionError("release-only check did not allow the current Work Item carrier group")
+
 
 def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
     pr_path = target / fixture["pr_file"]

@@ -5136,6 +5136,7 @@ PR_INTENT_RELEASE_EXACT = (
     "README.md",
     "README.zh-CN.md",
 )
+PR_INTENT_RELEASE_ALLOWED_PREFIXES = PR_INTENT_RELEASE_PREFIXES + PR_INTENT_CARRIER_PREFIXES
 PR_INTENT_FIXTURE_PREFIXES = (
     "test/",
     "docs/evidence/fixtures/",
@@ -5186,7 +5187,7 @@ PR_INTENT_PROFILES: dict[str, dict[str, Any]] = {
         "review_requirement": "current_head_review_required",
         "release_judgment": "release_required",
         "upgrade_triggers": ("release_or_version_closeout",),
-        "allowed_prefixes": PR_INTENT_RELEASE_PREFIXES,
+        "allowed_prefixes": PR_INTENT_RELEASE_ALLOWED_PREFIXES,
         "allowed_exact": PR_INTENT_RELEASE_EXACT,
         "default_rationale": None,
         "default_consumer_boundary": None,
