@@ -1,0 +1,51 @@
+{
+  "command": "adopt",
+  "operation": "adversarial-test",
+  "schema_version": "loom-adversarial-adoption-evidence/v1",
+  "result": "pass",
+  "summary": "adversarial adoption evidence is fresh and satisfies strong-governance rollout checks.",
+  "target": "/Users/mc/dev/Loom",
+  "branch": "work/1800-global-cli-strong-governance-hardening",
+  "head_sha": "b596e80e9ec2dd06aefa7eb5d605e851f37bf60e",
+  "generated_at": "2026-06-30T07:22:21Z",
+  "evidence_locator": ".loom/companion/adversarial-adoption.json",
+  "record": {
+    "requested": true,
+    "written": true,
+    "locator": ".loom/companion/adversarial-adoption.json"
+  },
+  "checks": [
+    {
+      "id": "adopt_verify",
+      "result": "pass",
+      "schema_version": "loom-adoption-verify/v1",
+      "operation": "verify",
+      "summary": "downstream adoption producer/consumer round-trip is valid.",
+      "missing_inputs": [],
+      "fallback_to": null
+    },
+    {
+      "id": "runtime_parity",
+      "result": "pass",
+      "schema_version": "loom-runtime-parity/v1",
+      "operation": "validate",
+      "summary": "Loom core runtime parity is machine-readable across Work Item, status, gates, controlled merge, closeout, and shadow boundary.",
+      "missing_inputs": [],
+      "fallback_to": null
+    },
+    {
+      "id": "strong_maturity",
+      "result": "pass",
+      "schema_version": "loom-governance-maturity/v1",
+      "operation": "status",
+      "summary": "governance profile is at strong maturity.",
+      "missing_inputs": [],
+      "fallback_to": null,
+      "evidence": {
+        "current": "strong"
+      }
+    }
+  ],
+  "missing_inputs": [],
+  "fallback_to": null
+}
