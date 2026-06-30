@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1800.json
 - Validation Entry: Focused unit/contract/runtime parity/package/release checks plus tools/loom_check.py --profile source . on the final PR head.
 - Closing Condition: PR #1816 merges to main; loom-cli-release publishes v0.21.2; release readback confirms tag, GitHub Release, npm package, workflow run, and installed/global CLI evidence; #1802 and #1800 closeout comments consume those facts.
-- Current Checkpoint: merge
-- Current Stop: Current-head spec and implementation reviews are recorded; WI-1800 is ready for PR metadata refresh, hosted check rerun, and merge-ready gate consumption.
-- Next Step: Refresh merge-ready/closeout shadow evidence, update PR #1816 metadata to the final head, push, rerun hosted checks, then perform release and closeout after merge.
-- Blockers: None
+- Current Checkpoint: closed_out
+- Current Stop: WI-1800 closed out by closeout run: PR #1816 merged at f0594b3f900504b574c8f52af602ac9130e38476, issue #1800 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1800 implementation work remains.
+- Blockers: None recorded.
 - Latest Validation Summary: 2026-06-30 local convergence after PR #1816 hosted failure classification: suite validate/evidence/carrier pass for WI-1800; demo bootstrap fixture drift check pass; root loom_init verify pass; fact-chain pass for WI-1800; runtime-parity validate pass; governance-profile status pass; carrier refresh dry-run reports only merge-ready/closeout shadow refresh needed after status update.
 - Recovery Boundary: WI-1800 owns #1793-#1799, #1801, #1803, #1804, v0.21.2 release readiness, demo fixture sync caused by runtime changes, and current PR carriers. It excludes #1806 and #1807-#1810, and #1802/#1800 remain open until post-merge release evidence is consumed.
-- Current Lane: controller convergence
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
