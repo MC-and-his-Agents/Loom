@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-goal-completion/v1",
+  "work_item": {
+    "id": "WI-1822"
+  },
+  "terminal_state": "closed_out",
+  "issue": {
+    "number": 1822,
+    "state": "closed",
+    "closed_at": "2026-06-30T14:22:38Z",
+    "url": "https://github.com/MC-and-his-Agents/Loom/issues/1822"
+  },
+  "implementation_pr": {
+    "number": 1823,
+    "head_sha": "31abfaa65d221655e1dc0a11ebadb9caba6b15e4",
+    "merged_at": "2026-06-30T13:31:45Z",
+    "merge_commit": "82d9e1867fdb5454b567e0217fcae6d9978db5e6",
+    "url": "https://github.com/MC-and-his-Agents/Loom/pull/1823"
+  },
+  "release_pr": {
+    "number": 1824,
+    "head_sha": "ea68a3e85292c403bd93b3b9767861877221feb3",
+    "merged_at": "2026-06-30T13:56:48Z",
+    "merge_commit": "a274c09bb4aeb47d0ce07aca2c290e7965030a75",
+    "url": "https://github.com/MC-and-his-Agents/Loom/pull/1824"
+  },
+  "release": {
+    "version": "v0.22.1",
+    "package": "@mc-and-his-agents/loom",
+    "npm_version": "0.22.1",
+    "npm_latest": "0.22.1",
+    "tag": "v0.22.1",
+    "target_commit": "a274c09bb4aeb47d0ce07aca2c290e7965030a75",
+    "github_release_url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.22.1",
+    "github_release_published_at": "2026-06-30T14:01:14Z",
+    "workflow_run_id": 28449859413,
+    "workflow_run_url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/28449859413",
+    "workflow_conclusion": "success",
+    "workflow_head_sha": "a274c09bb4aeb47d0ce07aca2c290e7965030a75"
+  },
+  "evidence": {
+    "release_readback_command": "python3 tools/loom.py release readback --target . --version v0.22.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit a274c09bb4aeb47d0ce07aca2c290e7965030a75 --release-judgment release_required --json --full-output",
+    "release_readback_result": "published",
+    "release_readback_generated_at": "2026-06-30T14:02:33Z",
+    "host_closeout_comment": "https://github.com/MC-and-his-Agents/Loom/issues/1822#issuecomment-4844507855",
+    "boundary": "Closes only #1822 checkpoint normalization bug; does not modify #1800/#1802/v0.21.2 truth carriers."
+  },
+  "single_person_review_boundary": {
+    "non_author_github_reviewer_required": false,
+    "approval_truth": "authored Loom review record, hosted PR gates, controlled merge, release workflow, and release readback were consumed before terminal closeout sync"
+  }
+}
