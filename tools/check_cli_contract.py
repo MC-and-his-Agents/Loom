@@ -10532,6 +10532,12 @@ def assert_governance_closeout_help_contract() -> None:
         raise AssertionError("carrier closeout-sync must be declared as a harness command for #1231")
 
 
+def assert_closeout_checkpoint_normalization_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    if loom_flow.normalize_checkpoint("closeout") != "closed_out":
+        raise AssertionError("closeout checkpoint must normalize to closed_out")
+
+
 def assert_active_closeout_contract(active_item: str) -> None:
     status, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
     closeout_payload = runtime_payload_from_agent_safe_output(closeout_payload)
@@ -10568,6 +10574,7 @@ def assert_idle_root_self_governance_direct_contract() -> None:
 
 def run_governance_closeout_contract() -> None:
     assert_governance_closeout_help_contract()
+    assert_closeout_checkpoint_normalization_contract()
     assert_closeout_wrapper_argument_contract()
     assert_repo_local_closeout_runtime_argument_contract()
     assert_closeout_mode_docs_skill_protocol_contract()

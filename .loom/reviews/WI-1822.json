@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1822",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for PR #1823 at head 71be28771e2ccf65ec70395ba3530d5be3bdff63: closeout checkpoint alias normalization is scoped to normalize_checkpoint(), runtime copies are synchronized, focused governance-closeout contract covers closeout -> closed_out, demo bootstrap fixture and plugin payload hash drift are resolved, suite/build/package evidence passed, and no blocking findings remain.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-30T13:23:00Z",
+  "reviewed_head": "71be28771e2ccf65ec70395ba3530d5be3bdff63",
+  "reviewed_validation_summary": "Suite validate, suite carrier validate, suite evidence validate, runtime-copy-parity, generated-tree/reference-integrity, py-compile-clean, diff whitespace, and governance-closeout contract checks passed locally for WI-1822.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1822.md",
+    "recovery_entry": ".loom/progress/WI-1822.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/default-codex-exec",
+    "engine_evidence": ".loom/tmp/pr/WI-1822-pr-readback.json",
+    "normalized_findings": ".loom/tmp/output-artifacts/WI-1822-build-evidence.json",
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1822 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1822 --json",
+    "suite_evidence_map": ".loom/specs/WI-1822/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1822/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
