@@ -74,6 +74,29 @@ loom merge run <pr> --head-sha <head-sha> --work-item <WI> --merge-method merge 
 
 `loom pr gate` consumes the authored Loom semantic review record for the current PR head. `loom merge check` consumes the retained PR gate, required checks, triggered check rollup, branch protection or ruleset readback, and mergeability without mutating host state. `loom merge run --apply` delegates the host merge only after those inputs pass.
 
+#1806 adds shared PR intent profile helpers for PR types whose carrier set is
+known before review:
+
+```text
+loom pr-intent prepare --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only
+loom pr-intent check --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only
+loom docs-pr prepare
+loom docs-pr check
+```
+
+`prepare` is dry-run by default and writes only under `--apply`. It uses the
+shared suite scaffold / not_applicable decision plus PR metadata render path to
+produce a complete carrier set bound to the current branch and head SHA.
+`check` is read-only. It consumes suite validation, evidence/carrier validation
+where applicable, PR metadata preflight, changed-path scope proof, and
+cross-surface consistency. Partial, stale, manual drift, head SHA mismatch, or
+scope mismatch fails closed. A suite `not_applicable` result is a successful
+formal-suite decision for docs/governance-only, closeout-only, and
+carrier-sync-only profiles; it does not bypass review, PR gate, merge-ready,
+release/no-release readback, host reconciliation, or closeout evidence.
+`loom docs-pr prepare|check` is only the short path for
+`docs-governance-only`.
+
 #894 implements the host adapter command family:
 
 ```text

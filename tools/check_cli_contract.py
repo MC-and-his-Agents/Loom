@@ -126,6 +126,10 @@ REQUIRED_COMMANDS = {
     "pr metadata-readback",
     "pr metadata-update",
     "pr metadata-preflight",
+    "pr-intent prepare",
+    "pr-intent check",
+    "docs-pr prepare",
+    "docs-pr check",
     "pr gate",
     "merge check",
     "merge run",
@@ -6940,6 +6944,275 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
         raise AssertionError("PR body readback drift did not expose body_artifact block evidence")
 
 
+def assert_pr_intent_profile_fixture(tmp: Path) -> None:
+    target = tmp / "pr-intent-profiles"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "checkout", "-b", "work/1806-pr-intent"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.com"], cwd=target, check=True)
+    (target / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+
+    docs_body = ".loom/runtime/pr/WI-1806-docs.md"
+    _, docs_prepare = run_json(
+        [
+            "docs-pr",
+            "prepare",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--output-file",
+            docs_body,
+            "--apply",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        docs_prepare.get("result") != "pass"
+        or docs_prepare.get("profile", {}).get("intent") != "docs-governance-only"
+        or docs_prepare.get("profile", {}).get("suite_path") != "not_applicable"
+        or not (target / ".loom/specs/WI-1806/spec.md").exists()
+        or not (target / docs_body).exists()
+    ):
+        raise AssertionError(f"docs-pr prepare did not produce the docs-governance carrier set: {docs_prepare.get('missing_inputs')}")
+
+    _, docs_check = run_json(
+        [
+            "docs-pr",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            docs_body,
+            "--changed-path",
+            "docs/methodology/harness/pr-intent-profile.md",
+            "--json",
+        ],
+        expect=0,
+    )
+    validations = docs_check.get("validations", {})
+    if (
+        docs_check.get("result") != "pass"
+        or validations.get("suite", {}).get("result") != "not_applicable"
+        or validations.get("metadata", {}).get("result") != "pass"
+        or validations.get("scope", {}).get("result") != "pass"
+        or validations.get("consistency", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"docs-pr check did not consume the shared carrier set: {docs_check.get('missing_inputs')}")
+
+    _, docs_scope_block = run_json(
+        [
+            "docs-pr",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            docs_body,
+            "--changed-path",
+            "tools/loom.py",
+            "--json",
+        ],
+        expect=1,
+    )
+    if (
+        docs_scope_block.get("result") != "block"
+        or "scope path outside intent: tools/loom.py" not in docs_scope_block.get("missing_inputs", [])
+    ):
+        raise AssertionError("docs-pr check did not fail closed on scope drift")
+
+    stale_body = target / ".loom/runtime/pr/WI-1806-docs-stale.md"
+    stale_body.write_text((target / docs_body).read_text(encoding="utf-8").replace(head_sha, "0" * 40), encoding="utf-8")
+    _, stale_check = run_json(
+        [
+            "docs-pr",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            ".loom/runtime/pr/WI-1806-docs-stale.md",
+            "--changed-path",
+            "docs/methodology/harness/pr-intent-profile.md",
+            "--json",
+        ],
+        expect=1,
+    )
+    stale_missing = "\n".join(str(entry) for entry in stale_check.get("missing_inputs", []))
+    if stale_check.get("result") != "block" or "head_sha" not in stale_missing:
+        raise AssertionError("docs-pr check did not fail closed on stale head binding")
+
+    for intent, item, body_file in (
+        ("closeout-only", "WI-1809", ".loom/runtime/pr/WI-1809-closeout.md"),
+        ("carrier-sync-only", "WI-1813", ".loom/runtime/pr/WI-1813-carrier-sync.md"),
+    ):
+        _, prepare_payload = run_json(
+            [
+                "pr-intent",
+                "prepare",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--output-file",
+                body_file,
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            prepare_payload.get("result") != "pass"
+            or prepare_payload.get("profile", {}).get("intent") != intent
+            or prepare_payload.get("profile", {}).get("suite_path") != "not_applicable"
+            or not (target / body_file).exists()
+        ):
+            raise AssertionError(f"{intent} prepare did not produce the shared not_applicable carrier set")
+        _, check_payload = run_json(
+            [
+                "pr-intent",
+                "check",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--body-file",
+                body_file,
+                "--changed-path",
+                f".loom/progress/{item}.md",
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            check_payload.get("result") != "pass"
+            or check_payload.get("validations", {}).get("suite", {}).get("result") != "not_applicable"
+            or check_payload.get("validations", {}).get("consistency", {}).get("result") != "pass"
+        ):
+            raise AssertionError(f"{intent} check did not consume shared not_applicable consistency")
+
+    for intent, item, changed_path, expected_release in (
+        ("release-only", "WI-1812", "VERSION", "release_required"),
+        ("fixture-only", "WI-1814", "test/pr-intent-profile.test", "no_release"),
+    ):
+        write_minimal_suite(target, item)
+        body_file = f".loom/runtime/pr/{item}-{intent}.md"
+        _, prepare_payload = run_json(
+            [
+                "pr-intent",
+                "prepare",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--output-file",
+                body_file,
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            prepare_payload.get("result") != "pass"
+            or prepare_payload.get("profile", {}).get("intent") != intent
+            or prepare_payload.get("profile", {}).get("suite_path") != "minimal"
+            or prepare_payload.get("profile", {}).get("release_judgment") != expected_release
+            or not (target / body_file).exists()
+        ):
+            raise AssertionError(f"{intent} prepare did not preserve the minimal suite carrier set")
+        _, check_payload = run_json(
+            [
+                "pr-intent",
+                "check",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--body-file",
+                body_file,
+                "--changed-path",
+                changed_path,
+                "--json",
+            ],
+            expect=0,
+        )
+        validations = check_payload.get("validations", {})
+        if (
+            check_payload.get("result") != "pass"
+            or validations.get("suite", {}).get("result") != "pass"
+            or validations.get("evidence", {}).get("result") != "pass"
+            or validations.get("carrier", {}).get("result") != "pass"
+            or validations.get("consistency", {}).get("result") != "pass"
+        ):
+            raise AssertionError(f"{intent} check did not reuse shared suite/evidence/carrier consistency: {check_payload.get('missing_inputs')}")
+
+
 def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
     pr_path = target / fixture["pr_file"]
     payload = json.loads(pr_path.read_text(encoding="utf-8"))
@@ -7105,7 +7378,7 @@ def assert_governance_intensity_pr_gate_positive_variants(tmp: Path) -> None:
             },
         },
     )
-    docs_suite_payload = run_suite_validate_fixture(docs_target, docs_fixture["item"], expect=1)
+    docs_suite_payload = run_suite_validate_fixture(docs_target, docs_fixture["item"])
     if docs_suite_payload.get("result") != "not_applicable":
         raise AssertionError("light docs-only suite validate fixture did not return not_applicable")
     docs_payload = semantic_pr_gate_fixture_payload(docs_target, docs_fixture)
@@ -7202,7 +7475,7 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             },
         },
     )
-    suite_payload = run_suite_validate_fixture(target, fixture["item"], expect=1)
+    suite_payload = run_suite_validate_fixture(target, fixture["item"])
     if suite_payload.get("result") != "not_applicable":
         raise AssertionError("docs-governance lite suite validate fixture did not return not_applicable")
     pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
@@ -9967,6 +10240,7 @@ def run_pr_metadata_surface() -> None:
         tmp = Path(raw_tmp)
         assert_governance_metadata_render_readback_fixture(tmp)
         assert_governance_intensity_metadata_preflight_fixture(tmp)
+        assert_pr_intent_profile_fixture(tmp)
 
     print("pr metadata surface checks passed")
 
@@ -10517,7 +10791,7 @@ def run_aggregate_cli_contract() -> None:
             or not_applicable_payload.get("missing_inputs")
         ):
             raise AssertionError("suite inspect not_applicable payload drifted")
-        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable", expect=1)
+        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable")
         if (
             suite_not_applicable_validate.get("result") != "not_applicable"
             or suite_not_applicable_validate.get("payload", {}).get("suite_path") != "not_applicable"
@@ -11707,7 +11981,7 @@ def run_suite_contract_surface() -> None:
             or not_applicable_payload.get("missing_inputs")
         ):
             raise AssertionError("suite inspect not_applicable payload drifted")
-        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable", expect=1)
+        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable")
         if (
             suite_not_applicable_validate.get("result") != "not_applicable"
             or suite_not_applicable_validate.get("payload", {}).get("suite_path") != "not_applicable"
