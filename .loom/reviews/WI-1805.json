@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1805",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Semantic review allows PR #1831 head bbd4f09676839ca94ff25ad654bc01ad2c870c0d for merge-gate consumption after workspace-entry and demo fixture repair: host governance diagnosis, profile contract, merge runtime enforcement, governance mode evidence, v0.23.0 metadata, WI-1805 fact-chain, minimal suite, spec review, and examples/new-project fixture sync are scoped to #1805/#1826-#1830; advisory/local-enforced remains explicit low-assurance fallback and is not represented as strong governance; targeted tests, npm smoke, package/release/version checks, py_compile_clean, diff whitespace, demo fixture check, suite evidence/carrier validate, fact-chain, carrier refresh, PR metadata preflight/readback, and full CLI contract passed or were previously recorded. Remaining gates are hosted checks, merge, v0.23.0 publish/readback, and closeout.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-30T17:46:54Z",
+  "reviewed_head": "bbd4f09676839ca94ff25ad654bc01ad2c870c0d",
+  "reviewed_validation_summary": "Targeted unittest suite, npm package smoke, package/release/version checks, full CLI contract, suite evidence/carrier validate, fact-chain readback, carrier refresh, PR metadata preflight/readback for PR #1831, spec review, and semantic review passed for WI-1805.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1805.md",
+    "recovery_entry": ".loom/progress/WI-1805.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1805-host-governance-capability/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1805-host-governance-capability --item WI-1805 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1805-host-governance-capability/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1805-host-governance-capability --item WI-1805 --json",
+    "suite_evidence_map": ".loom/specs/WI-1805/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1805/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

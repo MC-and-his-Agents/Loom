@@ -74,9 +74,9 @@
     "mode": "active",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1822",
-      "work_item": ".loom/work-items/WI-1822.md",
-      "recovery_entry": ".loom/progress/WI-1822.md",
+      "current_item_id": "WI-1805",
+      "work_item": ".loom/work-items/WI-1805.md",
+      "recovery_entry": ".loom/progress/WI-1805.md",
       "status_surface": ".loom/status/current.md"
     }
   },
@@ -122,13 +122,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "5d8d2e117050d8412c046bcf3fc95d553a7adb6fb4c4269dcd33f6fee33c4963"
+      "sha256": "3ffef95371a12a5c5b7cf8178c2ee6f053268c686fa710ad4e90812850847345"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "50eba925f3f12442c877d0da158eb1dd5c046c823b0068eec928e7ad008df8ed"
+      "sha256": "c0716215f899f0f27c181b2b557580638d6079edc931610be7914840f0b43caf"
     },
     {
       "path": ".loom/bin/loom_status.py",

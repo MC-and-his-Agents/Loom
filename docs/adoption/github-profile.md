@@ -142,6 +142,17 @@ GitHub host 下的 strong governance 默认要求：
 - 若仓库声明了目标 `release / version`，closeout 必须能区分 `merged but unreleased`、`released but unreconciled` 与 release evidence gap
 - merge 默认走受控 PR 合入，默认方法为 `squash`
 
+### Capability enforcement
+
+GitHub profile 中的 governance capability 只能用两种 enforcement profile 表达：
+
+- `host-enforced`：GitHub branch protection、ruleset、required checks、PR merge policy 或等价宿主控制面已被 verified host read 证明正在强制执行。
+- `advisory/local-enforced`：本地脚本、repo-local alias、非 required workflow、人工约定、shadow parity 或报告型检查。该 profile 必须带 `risk_label: low_assurance`，并声明 fallback / rollback；它不能计入 strong governance maturity。
+
+`release`、`security`、`payment`、`data_migration` capability 默认必须保持 `host-enforced`。降级到 `advisory/local-enforced` 需要显式批准和版本控制内证据，并且只作为临时 rollout 状态，不作为 strong maturity 证据。
+
+PR metadata、merge evidence、release evidence 与 closeout evidence 必须记录 governance mode。`advisory/local-enforced` 记录必须同时写出 `low_assurance` 风险标签和未宿主强制状态；readback/status 不得把该状态渲染成 `host-enforced` 或 strong governance。若 release / security / payment / data migration 事项缺少显式降级批准，gate 必须 fail closed。
+
 ### Semantic review 与 checks 边界
 
 GitHub required checks、非 required triggered checks、guardian、integration、advisory verdict、GitHub review comment 和 CI-only signal 都不能替代 Loom semantic review。strong governance 的合并放行必须消费同一 PR head 上的 authored Loom review record、`pr gate`、`merge check` 和 host readback；checks 只能证明执行/宿主状态，不能自行成为 approval truth。

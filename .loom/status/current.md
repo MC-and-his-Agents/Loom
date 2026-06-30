@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1822
-- Goal: Fix loom resume checkpoint normalization for closeout terminal carriers.
-- Scope: #1822 bug fix: normalize closeout checkpoint to closed_out across Loom runtime copies and contract test; ownership is limited to checkpoint alias normalization, focused validation, WI-1822 carriers, PR metadata, v0.22.1 release evidence, and #1822 closeout.
-- Execution Path: issue #1822 -> branch work/1822-normalize-closeout-checkpoint -> normalize_checkpoint fix -> focused contract/runtime validation -> PR -> v0.22.1 patch release.
+- Item ID: WI-1805
+- Goal: Complete the v0.23.0 Host Governance Capability milestone by adding host governance diagnosis, explicit governance capability profiles, merge runtime consumption, governance mode evidence, and release convergence.
+- Scope: Parent issue #1805 plus milestone children #1826-#1830. Implementation covers GitHub host governance capability diagnosis, `host-enforced` and `advisory/local-enforced` profile contracts, merge check/run profile enforcement, governance mode metadata/evidence/readback, v0.23.0 version/package/plugin metadata, release readiness evidence, tests, and Loom carriers for this work. Advisory/local-enforced remains a low-assurance fallback and must not be represented as strong governance.
+- Execution Path: issue tree #1805 -> branch `work/1805-host-governance-capability` -> diagnosis/profile lanes #1826/#1827 -> merge runtime #1828 -> evidence/readback #1829 -> release convergence #1830 -> PR -> merge -> v0.23.0 publish/readback -> issue and milestone closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1822.md
-- Review Entry: .loom/reviews/WI-1822.json
-- Validation Entry: python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/skills_surface.py check --surface generated-tree-drift --surface reference-integrity; python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py; git diff --check
-- Closing Condition: PR for #1822 merges, v0.22.1 is published/read back, and #1822 closeout consumes release evidence; ownership excludes #1800/#1802/v0.21.2 truth carriers and #1806 closeout rewrite.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1822 closed out by closeout run: PR #1824 merged at a274c09bb4aeb47d0ce07aca2c290e7965030a75, issue #1822 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1822 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1805.md
+- Review Entry: .loom/reviews/WI-1805.json
+- Validation Entry: `python3 -m unittest test.host_governance_capability_test test.governance_capability_profiles_test test.governance_merge_profile_test test.output_envelope_test test.plugin_payload_hash_test`; `node --test test/npm-package-smoke.test.mjs`; `python3 tools/check_npm_package.py`; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`
+- Closing Condition: PR for #1805 merges to `main`, v0.23.0 is published to GitHub Release and npm with package/plugin readback, #1826-#1830 and #1805 are closed, the milestone is closed, and repo-local Loom carrier closeout consumes the release facts.
+- Current Checkpoint: merge
+- Current Stop: PR #1831 has machine-readable PR metadata and current-head semantic review recorded; hosted PR gate/checks, merge, publish, readback, and closeout remain.
+- Next Step: Run PR gate and hosted checks for PR #1831, merge after gates pass, then execute #1830 v0.23.0 release/readback and closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: Suite validate, suite carrier validate, suite evidence validate, runtime-copy-parity, generated-tree/reference-integrity, py-compile-clean, diff whitespace, governance-closeout contract checks, hosted PR gates, controlled merges for #1823/#1824, main release workflow 28449859413, npm/GitHub release readback, and closeout sync passed for WI-1822.
-- Recovery Boundary: Ownership limited to #1822 checkpoint alias normalization, focused validation, WI-1822 carriers, PR metadata, v0.22.1 release evidence, and #1822 closeout; excludes #1800/#1802/v0.21.2 truth carriers and #1806 closeout rewrite.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: Targeted unittest suite, npm package smoke, package/release/version checks, full CLI contract, suite evidence/carrier validate, fact-chain readback, carrier refresh, PR metadata preflight/readback for PR #1831, spec review, and semantic review passed for WI-1805.
+- Recovery Boundary: WI-1805 owns #1826-#1830 implementation, v0.23.0 release readiness and release closeout only. It must not represent advisory/local-enforced as strong governance, must not bypass review/PR gate/head binding/CI rollup/release readback/closeout evidence, and must not expand into unrelated milestones or HotCP-specific core behavior.
+- Current Lane: pr-gate-readiness
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-30 WI-1822 checkpoint normalization fix resumed in repo-relative workspace `.` on branch `work/1822-normalize-closeout-checkpoint`.
-- Logs Entry: Focused validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1822.md`.
-- Diagnostics Entry: `loom resume` no longer reports `unknown checkpoint value: closeout`; the input normalizes to terminal `closed_out`.
-- Verification Entry: Focused governance-closeout, runtime-copy-parity, generated-tree/reference-integrity, py-compile-clean, diff whitespace, hosted gates, controlled merge, v0.22.1 release readback, issue closeout readback, and terminal carrier sync passed.
-- Lane Entry: post-merge-closeout-run
+- Run Entry: 2026-07-01 WI-1805 host governance capability work resumed in `/Users/mc/dev/Loom.worktrees/1805-host-governance-capability` on branch `work/1805-host-governance-capability`.
+- Logs Entry: Lane summaries and validation output are retained in this Codex thread and summarized in `.loom/progress/WI-1805.md`.
+- Diagnostics Entry: Runtime carrier hash drift was refreshed in `.loom/bootstrap/manifest.json` and `.loom/bootstrap/init-result.json`; `carrier refresh` now reports no refresh-needed actions and only correctly blocks on the expected pre-review stale-review state.
+- Verification Entry: Targeted unittest suite, npm smoke, npm package check, release surface check, version surface check, full CLI contract, suite evidence/carrier validate, PR metadata preflight/readback, spec review, and semantic review passed before PR gate.
+- Lane Entry: pr-gate-readiness
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1822.md
-- Dynamic Truth: .loom/progress/WI-1822.md
+- Static Truth: .loom/work-items/WI-1805.md
+- Dynamic Truth: .loom/progress/WI-1805.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

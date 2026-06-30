@@ -69,6 +69,20 @@ Fresh adoption 默认最高只能到 `light`。即使 bootstrap 生成了 repo-l
 - 可验证的 GitHub profile upgrade 路径
 - parity validation 证据
 
+## 4.1 Capability enforcement profile
+
+governance capability 必须声明 enforcement profile：
+
+- `host-enforced`
+  - 由宿主强制控制面执行，例如 branch protection、ruleset、required checks、受控 PR merge path 或等价宿主策略。
+  - 只有 verified host read 证明宿主正在强制执行时，才能计入 strong governance maturity。
+- `advisory/local-enforced`
+  - 由本地脚本、repo-local alias、非 required workflow、人工约定、shadow parity 或报告型检查执行。
+  - 必须带 `low_assurance` 风险标签，并声明 fallback / rollback 条件。
+  - 可以作为 adoption、diagnostic 或 rollout evidence，但不得计入 strong governance maturity。
+
+`release`、`security`、`payment`、`data_migration` 能力默认不可从 `host-enforced` 降级为 `advisory/local-enforced`。只有明确批准、版本控制内证据、降级范围、有效期和恢复条件同时存在时，才能临时降级；该降级仍不能计入 strong governance maturity。
+
 ## 5. 升级条件
 
 ### 5.1 `light -> standard`

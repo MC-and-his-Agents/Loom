@@ -333,6 +333,8 @@ def workspace_lifecycle_expectations(workspace_profile: dict[str, object] | None
     }
 GITHUB_STABLE_CHECK_NAMES = ("py-compile", "demo-bootstrap", "repo-local-cli", "loom-check")
 _GITHUB_API_CACHE: dict[tuple[str, ...], Any] = {}
+HOST_GOVERNANCE_CAPABILITY_SCHEMA = "loom-host-governance-capability-diagnosis/v1"
+HOST_GOVERNANCE_CAPABILITY_STATUSES = {"host_enforced", "unconfigured", "unavailable", "unreadable"}
 REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
 REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
 REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
@@ -3534,6 +3536,63 @@ def local_workflow_presence(root: Path) -> dict[str, Any]:
     }
 
 
+def classify_github_control_plane_error(message: str) -> str:
+    normalized = message.lower()
+    if "403" in normalized or "forbidden" in normalized or "resource not accessible" in normalized:
+        if "ruleset" in normalized or "rulesets" in normalized:
+            return "ruleset_permission_denied"
+        return "permission_denied"
+    if "private" in normalized and ("not found" in normalized or "404" in normalized or "access" in normalized):
+        return "private_repository_unreadable"
+    if "upgrade" in normalized or "plan" in normalized or "advanced security" in normalized:
+        return "plan_unavailable"
+    if "not found" in normalized or "404" in normalized:
+        return "private_repository_unreadable"
+    return "host_api_unavailable"
+
+
+def host_governance_capability_diagnosis(surface: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    reasons = sorted({classify_github_control_plane_error(message) for message in errors})
+    host_enforcement = surface.get("host_enforcement") if isinstance(surface.get("host_enforcement"), dict) else {}
+    rulesets = surface.get("rulesets") if isinstance(surface.get("rulesets"), dict) else {}
+    api_snapshot = surface.get("api_snapshot") if isinstance(surface.get("api_snapshot"), dict) else {}
+    api_errors = api_snapshot.get("errors") if isinstance(api_snapshot.get("errors"), list) else []
+    reasons.extend(
+        reason
+        for reason in sorted({classify_github_control_plane_error(str(message)) for message in api_errors})
+        if reason not in reasons
+    )
+
+    if reasons and any(reason != "host_api_unavailable" for reason in reasons):
+        status = "unreadable"
+        guidance = "grant the token read access to repository branch protection/rulesets or run from an account that can read private repository governance settings"
+    elif reasons:
+        status = "unavailable"
+        guidance = "install and authenticate gh, then retry the GitHub governance readback"
+    elif host_enforcement.get("branch_protection_or_ruleset") is True and host_enforcement.get("required_checks") is True:
+        status = "host_enforced"
+        guidance = "keep branch protection or rulesets requiring Loom stable checks enabled"
+    else:
+        status = "unconfigured"
+        guidance = "enable branch protection or an active ruleset and require Loom stable checks"
+    status = status if status in HOST_GOVERNANCE_CAPABILITY_STATUSES else "unavailable"
+
+    return {
+        "schema_version": HOST_GOVERNANCE_CAPABILITY_SCHEMA,
+        "status": status,
+        "reason": reasons[0] if reasons else ("host_enforced" if status == "host_enforced" else "missing_host_enforcement"),
+        "setup_guidance": guidance,
+        "signals": {
+            "repository": surface.get("repository", "unknown"),
+            "default_branch": surface.get("default_branch", "unknown"),
+            "branch_protection": surface.get("branch_protection", "unknown"),
+            "rulesets_enforced": rulesets.get("enforced", "unknown"),
+            "required_checks": host_enforcement.get("required_checks", "unknown"),
+            "pr_reviews": surface.get("pr_reviews", "unknown"),
+        },
+    }
+
+
 def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     owner, repo = detect_github_repo(root)
     requests: list[dict[str, Any]] = []
@@ -3559,12 +3618,14 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
             "verification_status": "unverified",
         },
         "api_snapshot": host_api_snapshot(requests=requests, errors=["not read yet"]),
+        "host_governance_capability": {},
     }
     missing_inputs: list[str] = []
 
     if not owner or not repo:
         missing_inputs.append("cannot resolve GitHub repository from git origin")
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     requests.append({"method": "GET", "path": f"repos/{owner}/{repo}", "purpose": "repository default branch"})
@@ -3572,6 +3633,7 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     if repo_errors or repo_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in repo_errors)
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     full_name = repo_payload.get("full_name")
@@ -3583,6 +3645,7 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     if surface["default_branch"] == "unknown":
         missing_inputs.append("github control plane: default branch is unavailable")
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     encoded_branch = quote(str(surface["default_branch"]), safe="")
@@ -3591,6 +3654,7 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     if branch_errors or branch_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in branch_errors)
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     protected = branch_payload.get("protected")
@@ -3702,6 +3766,7 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
         "verification_status": "verified" if not snapshot_errors else "unverified",
     }
     surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=snapshot_errors)
+    surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, snapshot_errors)
     return surface, missing_inputs
 
 
