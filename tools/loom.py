@@ -225,6 +225,10 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "profile status", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade", "domain": "profile", "status": "implemented", "json": True},
+    {"command": "governance-profile status", "domain": "profile", "status": "implemented", "json": True},
+    {"command": "governance-profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
+    {"command": "governance-profile upgrade", "domain": "profile", "status": "implemented", "json": True},
+    {"command": "governance-profile binding", "domain": "profile", "status": "implemented", "json": True},
     {"command": "story", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "spec", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "plan", "domain": "scenario", "status": "implemented", "json": True},
@@ -4638,6 +4642,10 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--ruleset-file")
     parser.add_argument("--pr-gate-result-file")
     parser.add_argument("--merge-gate-result-file")
+    parser.add_argument("--governance-mode", choices=("host-enforced", "advisory/local-enforced"), default="host-enforced")
+    parser.add_argument("--allow-advisory-local-enforced", action="store_true")
+    parser.add_argument("--allow-high-risk-advisory", action="store_true")
+    parser.add_argument("--change-class")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
@@ -4670,9 +4678,15 @@ def handle_merge(argv: list[str]) -> int:
         ("--ruleset-file", args.ruleset_file),
         ("--pr-gate-result-file", args.pr_gate_result_file),
         ("--merge-gate-result-file", args.merge_gate_result_file),
+        ("--governance-mode", args.governance_mode),
+        ("--change-class", args.change_class),
     ):
         if value:
             flow_args.extend([option, value])
+    if args.allow_advisory_local_enforced:
+        flow_args.append("--allow-advisory-local-enforced")
+    if args.allow_high_risk_advisory:
+        flow_args.append("--allow-high-risk-advisory")
     if args.action == "run" and args.apply:
         flow_args.append("--execute")
     append_full_output_flag(flow_args, args)
@@ -8019,6 +8033,15 @@ def handle_profile(argv: list[str]) -> int:
     return emit_flow(f"profile {operation}", ["governance-profile", operation, *strip_json_flag(argv[1:])], fallback_to=["loom profile status --target <repo> --json", "docs/adoption/github-profile-upgrade.md"])
 
 
+def handle_governance_profile(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("governance-profile", "block", schema=PROFILE_SCHEMA, summary="Governance profile requires an operation.", failed_layer="profile-input", fail_closed_reason="missing governance-profile operation", fallback_to=["loom governance-profile status --target <repo> --json", "loom profile status --target <repo> --json"]))
+    operation = argv[0]
+    if operation not in {"status", "upgrade-plan", "upgrade", "binding"}:
+        return emit(output("governance-profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported governance-profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported governance-profile operation: {operation}", fallback_to=["loom governance-profile status --target <repo> --json", "loom profile status --target <repo> --json"]))
+    return emit_flow(f"governance-profile {operation}", ["governance-profile", operation, *strip_json_flag(argv[1:])], fallback_to=["loom governance-profile status --target <repo> --json", "docs/adoption/github-profile-upgrade.md"])
+
+
 def handle_checkpoint(argv: list[str]) -> int:
     if not argv:
         return emit(output("checkpoint", "block", schema=GATE_SCHEMA, summary="Checkpoint requires a stage.", failed_layer="checkpoint-input", fail_closed_reason="missing checkpoint stage", fallback_to=["loom checkpoint admission --target <repo> --json", "loom checkpoint build --target <repo> --json", "loom checkpoint merge --target <repo> --json"]))
@@ -11117,6 +11140,9 @@ def main(argv: list[str]) -> int:
     if command == "profile" or command.startswith("profile "):
         profile_args = command.split()[1:] + forwarded if command.startswith("profile ") else forwarded
         return handle_profile(profile_args)
+    if command == "governance-profile" or command.startswith("governance-profile "):
+        profile_args = command.split()[1:] + forwarded if command.startswith("governance-profile ") else forwarded
+        return handle_governance_profile(profile_args)
     if command == "checkpoint" or command.startswith("checkpoint "):
         checkpoint_args = command.split()[1:] + forwarded if command.startswith("checkpoint ") else forwarded
         return handle_checkpoint(checkpoint_args)
