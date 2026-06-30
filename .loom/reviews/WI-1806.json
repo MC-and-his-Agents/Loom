@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1806",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "当前 head 已合入 #1800 closed_out main 基线；#1806 实现范围仍限于 PR intent/carrier prepare-check 与对应 CLI 契约，未接管 #1800/#1802/v0.21.2 truth；focused validation 与 fact-chain/purity readback 支持继续进入 PR metadata、hosted checks 与 merge-ready。",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-30T10:04:24Z",
+  "reviewed_head": "57e2307e024969c683a4f5b45adf6be758392f82",
+  "reviewed_validation_summary": "2026-06-30 local validation passed for WI-1806 after merging `origin/main` at `f0594b3f` (`v0.21.2`) into head `33c7adfe`: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/skills_surface.py`; `python3 tools/check_cli_contract.py --surface pr-metadata` passed in 38.02s; `python3 tools/check_cli_contract.py --surface suite-contract` passed in 14.49s; `python3 tools/check_npm_package.py --surface runtime-copy-parity`; `python3 tools/loom.py fact-chain --target . --item WI-1806 --json`; `python3 tools/loom.py shadow-parity --target . --surface all --blocking --json`; `git diff --check`. PR #1817 metadata readback/preflight and PR gate must be rerun after the next head-changing review/status commit.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1806.md",
+    "recovery_entry": ".loom/progress/WI-1806.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics --item WI-1806 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics --item WI-1806 --json",
+    "suite_evidence_map": ".loom/specs/WI-1806/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1806/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

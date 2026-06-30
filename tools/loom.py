@@ -361,6 +361,34 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "pr metadata-update", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "pr metadata-preflight", "domain": "host-control", "status": "implemented", "json": True},
     {
+        "command": "pr-intent prepare",
+        "domain": "host-control",
+        "status": "implemented",
+        "json": True,
+        "summary": "Prepare the minimal carrier set for a declared PR intent profile without replacing review or gate truth.",
+    },
+    {
+        "command": "pr-intent check",
+        "domain": "host-control",
+        "status": "implemented",
+        "json": True,
+        "summary": "Check suite, metadata, head binding, scope proof, and carrier-set consistency for a declared PR intent profile.",
+    },
+    {
+        "command": "docs-pr prepare",
+        "domain": "host-control",
+        "status": "implemented",
+        "json": True,
+        "summary": "Shortcut for `pr-intent prepare --intent docs-governance-only`.",
+    },
+    {
+        "command": "docs-pr check",
+        "domain": "host-control",
+        "status": "implemented",
+        "json": True,
+        "summary": "Shortcut for `pr-intent check --intent docs-governance-only`.",
+    },
+    {
         "command": "pr gate",
         "domain": "host-control",
         "status": "implemented",
@@ -1483,7 +1511,7 @@ def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
     if stream is None:
         stream = sys.stdout
     stream.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
-    return 0 if payload.get("result") == "pass" else 1
+    return 0 if payload.get("result") in {"pass", "not_applicable"} else 1
 
 
 def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
@@ -4968,6 +4996,18 @@ def normalize_changed_path(path: object) -> str | None:
     return text or None
 
 
+def dedupe_strings(values: list[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
 def ship_pr_changed_paths(args: argparse.Namespace, target: Path) -> tuple[list[str], list[str]]:
     if args.pr is None:
         return [], ["PR number is required for changed path readback"]
@@ -5045,6 +5085,841 @@ def ship_changed_paths_payload(args: argparse.Namespace, target: Path, *, target
 
 def path_matches_any(path: str, prefixes: tuple[str, ...], exact: tuple[str, ...] = ()) -> bool:
     return path in exact or any(path.startswith(prefix) for prefix in prefixes)
+
+
+PR_INTENT_PROFILE_SCHEMA = "loom-pr-intent-profile/v1"
+PR_INTENT_PREPARE_SCHEMA = "loom-pr-intent-prepare/v1"
+PR_INTENT_CHECK_SCHEMA = "loom-pr-intent-check/v1"
+
+PR_INTENT_SHARED_CONTRACTS = (
+    "docs/methodology/harness/cli-command-matrix.md",
+    "docs/methodology/harness/full-spec-suite-cli-surface.md",
+    "docs/methodology/harness/task-carrier-contract.md",
+    ".loom/companion/repo-interface.json",
+)
+
+PR_INTENT_DOC_PREFIXES = (
+    "docs/",
+    ".loom/specs/",
+    ".loom/work-items/",
+    ".loom/progress/",
+    ".loom/status/",
+    ".loom/reviews/",
+    ".loom/shadow/",
+)
+PR_INTENT_DOC_EXACT = (
+    "README.md",
+    "README.zh-CN.md",
+    "VISION.md",
+    "AGENTS.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+)
+PR_INTENT_CARRIER_PREFIXES = (
+    ".loom/bootstrap/",
+    ".loom/work-items/",
+    ".loom/progress/",
+    ".loom/status/",
+    ".loom/reviews/",
+    ".loom/shadow/",
+    ".loom/runtime/",
+)
+PR_INTENT_RELEASE_PREFIXES = (
+    "docs/evidence/",
+    "plugins/loom/",
+    "packages/",
+    ".github/workflows/",
+)
+PR_INTENT_RELEASE_EXACT = (
+    "VERSION",
+    "package.json",
+    "package-lock.json",
+    "README.md",
+    "README.zh-CN.md",
+)
+PR_INTENT_FIXTURE_PREFIXES = (
+    "test/",
+    "docs/evidence/fixtures/",
+    "examples/new-project/",
+    ".loom/specs/",
+)
+
+PR_INTENT_PROFILES: dict[str, dict[str, Any]] = {
+    "docs-governance-only": {
+        "aliases": ("docs", "docs-only", "governance-only", "docs-pr"),
+        "summary": "Docs/governance-only PR carrier set.",
+        "surface": "merge_ready",
+        "governance_intensity": "light",
+        "change_class": "docs_governance",
+        "suite_path": "not_applicable",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "upgrade_triggers": (),
+        "allowed_prefixes": PR_INTENT_DOC_PREFIXES,
+        "allowed_exact": PR_INTENT_DOC_EXACT,
+        "default_rationale": "docs/governance-only PR intent does not require a formal behavior suite",
+        "default_consumer_boundary": "suite validate, review, PR gate, merge-ready, and closeout may consume this only as formal suite non-applicability; Work Item truth, current-head review, CI, no-release judgment, and closeout evidence remain required",
+        "default_recheck_condition": "scope expands beyond docs/governance-only carrier or contract text",
+    },
+    "closeout-only": {
+        "aliases": ("closeout", "final-closeout-only"),
+        "summary": "Terminal closeout-only PR carrier set.",
+        "surface": "closeout",
+        "governance_intensity": "standard",
+        "change_class": "metadata_schema",
+        "suite_path": "not_applicable",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "upgrade_triggers": ("closeout_only",),
+        "allowed_prefixes": PR_INTENT_CARRIER_PREFIXES,
+        "allowed_exact": (),
+        "default_rationale": "closeout-only PR intent only consumes already completed implementation facts",
+        "default_consumer_boundary": "closeout, PR gate, and merge-ready may consume this only as formal suite non-applicability; retained review, PR metadata, host reconciliation, and terminal carrier evidence remain required",
+        "default_recheck_condition": "diff touches implementation/runtime paths or non-terminal carriers",
+    },
+    "release-only": {
+        "aliases": ("release", "release-prep-only"),
+        "summary": "Release-only PR carrier set.",
+        "surface": "merge_ready",
+        "governance_intensity": "standard",
+        "change_class": "release",
+        "suite_path": "minimal",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "release_required",
+        "upgrade_triggers": ("release_or_version_closeout",),
+        "allowed_prefixes": PR_INTENT_RELEASE_PREFIXES,
+        "allowed_exact": PR_INTENT_RELEASE_EXACT,
+        "default_rationale": None,
+        "default_consumer_boundary": None,
+        "default_recheck_condition": None,
+    },
+    "carrier-sync-only": {
+        "aliases": ("carrier-sync", "carrier-only"),
+        "summary": "Carrier-sync-only PR carrier set.",
+        "surface": "closeout",
+        "governance_intensity": "standard",
+        "change_class": "metadata_schema",
+        "suite_path": "not_applicable",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "upgrade_triggers": ("carrier_sync_only",),
+        "allowed_prefixes": PR_INTENT_CARRIER_PREFIXES,
+        "allowed_exact": (),
+        "default_rationale": "carrier-sync-only PR intent synchronizes derived Loom carriers from existing facts",
+        "default_consumer_boundary": "review, PR gate, merge-ready, and closeout may consume this only as carrier synchronization non-applicability; implementation review, host readback, and closeout evidence remain required",
+        "default_recheck_condition": "carrier sync introduces new implementation scope or a non-consumed fact",
+    },
+    "fixture-only": {
+        "aliases": ("fixture", "fixtures-only"),
+        "summary": "Fixture-only PR carrier set.",
+        "surface": "merge_ready",
+        "governance_intensity": "light",
+        "change_class": "fixture",
+        "suite_path": "minimal",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "upgrade_triggers": (),
+        "allowed_prefixes": PR_INTENT_FIXTURE_PREFIXES,
+        "allowed_exact": (),
+        "default_rationale": None,
+        "default_consumer_boundary": None,
+        "default_recheck_condition": None,
+    },
+}
+
+PR_INTENT_ALIAS_INDEX: dict[str, str] = {
+    alias: profile_id
+    for profile_id, profile in PR_INTENT_PROFILES.items()
+    for alias in (profile_id, *profile["aliases"])
+}
+
+
+def pr_intent_profile(raw_intent: str | None) -> tuple[str | None, dict[str, Any] | None, str | None]:
+    normalized = str(raw_intent or "").strip().lower().replace("_", "-")
+    profile_id = PR_INTENT_ALIAS_INDEX.get(normalized)
+    if not profile_id:
+        return None, None, f"unknown PR intent profile: {raw_intent or '<missing>'}"
+    return profile_id, PR_INTENT_PROFILES[profile_id], None
+
+
+def pr_intent_current_head(target: Path, explicit_head: str | None) -> str | None:
+    return explicit_head or git_head_sha_for_target(target)
+
+
+def pr_intent_current_branch(target: Path, explicit_branch: str | None) -> str | None:
+    return explicit_branch or git_branch_for_target(target)
+
+
+def pr_intent_na_value(profile: dict[str, Any], key: str, explicit: str | None) -> str:
+    return str(explicit or profile.get(f"default_{key}") or "").strip()
+
+
+def pr_intent_scope_proof(profile_id: str, paths: list[str], explicit: str | None) -> str:
+    if explicit:
+        return explicit.strip()
+    if paths:
+        return f"{profile_id} changed paths: " + ", ".join(paths[:20])
+    return f"{profile_id} scope proof: no changed paths reported by local diff"
+
+
+def pr_intent_not_applicable_spec_content(
+    *,
+    item: str,
+    profile_id: str,
+    profile: dict[str, Any],
+    rationale: str,
+    consumer_boundary: str,
+    recheck_condition: str,
+    scope_proof: str,
+) -> str:
+    return (
+        "# Spec\n\n"
+        "- Suite path: not_applicable\n\n"
+        f"- Suite-level not_applicable: rationale: {rationale}; "
+        f"consumer boundary: {consumer_boundary}; "
+        f"recheck condition: {recheck_condition}; "
+        f"scope proof: {scope_proof}; "
+        f"review requirement: {profile['review_requirement']}.\n\n"
+        "## PR Intent\n\n"
+        f"- Intent profile: {profile_id}\n"
+        f"- Work Item: {item}\n"
+        f"- Change class: {profile['change_class']}\n"
+        "- Review, PR gate, merge-ready, release readback, and closeout evidence remain required by their normal gates.\n"
+    )
+
+
+def pr_intent_not_applicable_write(
+    *,
+    target: Path,
+    item: str,
+    profile_id: str,
+    profile: dict[str, Any],
+    rationale: str,
+    consumer_boundary: str,
+    recheck_condition: str,
+    scope_proof: str,
+    apply: bool,
+) -> tuple[dict[str, Any], str | None]:
+    item_error = suite_item_segment_error(item)
+    destination = target / ".loom" / "specs" / item / "spec.md"
+    locator = f".loom/specs/{item}/spec.md"
+    missing_inputs: list[str] = []
+    if item_error:
+        missing_inputs.append(item_error)
+    for component in (target / ".loom", target / ".loom" / "specs", destination.parent, destination):
+        if component.is_symlink():
+            try:
+                missing_inputs.append(f"not_applicable path must not traverse symlink: {repo_locator(component, target)}")
+            except ValueError:
+                missing_inputs.append("not_applicable path must not traverse symlink")
+    if destination.exists() and not destination.is_file():
+        missing_inputs.append(f"not_applicable spec target is not a regular file: {locator}")
+    created_locators: list[str] = []
+    exists = destination.exists()
+    if apply and not exists and not missing_inputs:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            pr_intent_not_applicable_spec_content(
+                item=item,
+                profile_id=profile_id,
+                profile=profile,
+                rationale=rationale,
+                consumer_boundary=consumer_boundary,
+                recheck_condition=recheck_condition,
+                scope_proof=scope_proof,
+            ),
+            encoding="utf-8",
+        )
+        created_locators.append(locator)
+    payload = {
+        "suite_path": "not_applicable",
+        "planned_writes": [
+            {
+                "artifact": "spec.md",
+                "locator": locator,
+                "status": "exists" if exists else ("created" if created_locators else "would_create"),
+                "planned_action": "preserve_existing" if exists else "create",
+                "would_write": not exists,
+                "wrote": bool(created_locators),
+                "overwrite_policy": "preserve_existing",
+                "requirement": "suite_not_applicable_decision",
+            }
+        ],
+        "overwrite_policy": {
+            "mode": "preserve_existing",
+            "allows_overwrite": False,
+            "existing_files": [locator] if exists else [],
+        },
+        "created_locators": created_locators,
+        "missing_inputs": missing_inputs,
+        "not_applicable": {
+            "rationale": rationale,
+            "consumer_boundary": consumer_boundary,
+            "recheck_condition": recheck_condition,
+            "scope_proof": scope_proof,
+            "review_requirement": profile["review_requirement"],
+        },
+    }
+    return payload, "invalid_not_applicable_target" if missing_inputs else None
+
+
+def pr_intent_changed_paths(
+    *,
+    target: Path,
+    explicit_paths: list[str],
+    base: str | None,
+    head_sha: str | None,
+) -> tuple[list[str], list[str], str]:
+    paths = sorted({normalized for path in explicit_paths if (normalized := normalize_changed_path(path))})
+    if paths:
+        return paths, [], "explicit"
+    local_paths, errors = ship_local_changed_paths(target, target_branch=base, head_sha=head_sha)
+    return local_paths, errors, "local_git_diff"
+
+
+def pr_intent_scope_validation(profile: dict[str, Any], paths: list[str], path_errors: list[str]) -> dict[str, Any]:
+    allowed_prefixes = tuple(profile.get("allowed_prefixes") or ())
+    allowed_exact = tuple(profile.get("allowed_exact") or ())
+    blocked_paths = [
+        path
+        for path in paths
+        if not path_matches_any(path, prefixes=allowed_prefixes, exact=allowed_exact)
+    ]
+    result = "pass" if not path_errors and not blocked_paths else "block"
+    return {
+        "schema_version": "loom-pr-intent-scope-proof/v1",
+        "result": result,
+        "changed_paths": paths,
+        "allowed_prefixes": list(allowed_prefixes),
+        "allowed_exact": list(allowed_exact),
+        "blocked_paths": blocked_paths,
+        "missing_inputs": path_errors,
+        "summary": (
+            "Changed paths match the declared PR intent profile."
+            if result == "pass"
+            else "Changed paths are unreadable or outside the declared PR intent profile."
+        ),
+    }
+
+
+def pr_intent_metadata_flow_args(
+    *,
+    operation: str,
+    target: Path,
+    profile: dict[str, Any],
+    item: str,
+    issue: str | None,
+    branch: str | None,
+    head_sha: str | None,
+    body_file: str | None = None,
+    output_file: str | None = None,
+    base_body_file: str | None = None,
+    rationale: str | None = None,
+    consumer_boundary: str | None = None,
+    recheck_condition: str | None = None,
+    scope_proof: str | None = None,
+    pr: str | None = None,
+) -> list[str]:
+    args = ["pr-metadata", operation, "--target", str(target), "--surface", str(profile["surface"]), "--item", item]
+    if issue:
+        args.extend(["--issue", issue])
+    if branch:
+        args.extend(["--branch", branch])
+    if head_sha:
+        args.extend(["--head-sha", head_sha])
+    if pr:
+        args.extend(["--pr", pr])
+    if body_file:
+        args.extend(["--body-file", body_file])
+    if output_file:
+        args.extend(["--output-file", output_file])
+    if base_body_file:
+        args.extend(["--base-body-file", base_body_file])
+    if operation in {"render", "update"}:
+        args.extend(["--governance-intensity", str(profile["governance_intensity"])])
+        args.extend(["--change-class", str(profile["change_class"])])
+        args.extend(["--suite-path", str(profile["suite_path"])])
+        args.extend(["--review-requirement", str(profile["review_requirement"])])
+        args.extend(["--release-judgment", str(profile["release_judgment"])])
+        for trigger in profile.get("upgrade_triggers") or ():
+            args.extend(["--upgrade-trigger", str(trigger)])
+        if profile["suite_path"] == "not_applicable":
+            args.extend(["--suite-na-rationale", rationale or ""])
+            args.extend(["--suite-na-consumer-boundary", consumer_boundary or ""])
+            args.extend(["--suite-na-recheck-condition", recheck_condition or ""])
+            args.extend(["--suite-na-scope-proof", scope_proof or ""])
+            args.extend(["--suite-na-review-requirement", str(profile["review_requirement"])])
+    return args
+
+
+def pr_intent_governance_fields(metadata_payload: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(metadata_payload, dict):
+        return {}
+    carrier = metadata_payload.get("governance_intensity_carrier")
+    envelope = carrier.get("envelope") if isinstance(carrier, dict) else None
+    fields = envelope.get("fields") if isinstance(envelope, dict) else None
+    return fields if isinstance(fields, dict) else {}
+
+
+def pr_intent_consistency_validation(
+    *,
+    profile_id: str,
+    profile: dict[str, Any],
+    item: str,
+    branch: str | None,
+    head_sha: str | None,
+    metadata_payload: dict[str, Any] | None,
+    suite_result: str,
+) -> dict[str, Any]:
+    fields = pr_intent_governance_fields(metadata_payload)
+    missing: list[str] = []
+    expected = {
+        "loom_work_item": item,
+        "change_class": profile["change_class"],
+        "suite_path": profile["suite_path"],
+        "review_requirement": profile["review_requirement"],
+        "release_judgment": profile["release_judgment"],
+    }
+    if branch:
+        expected["branch"] = branch
+    if head_sha:
+        expected["head_sha"] = head_sha
+    for key, value in expected.items():
+        if fields.get(key) != value:
+            missing.append(f"metadata.{key}")
+    if profile["suite_path"] == "not_applicable":
+        if suite_result != "not_applicable":
+            missing.append("suite.not_applicable")
+        suite_na = fields.get("suite_not_applicable")
+        if not isinstance(suite_na, dict):
+            missing.append("metadata.suite_not_applicable")
+        else:
+            for key in ("rationale", "consumer_boundary", "recheck_condition", "scope_proof", "review_requirement"):
+                if not isinstance(suite_na.get(key), str) or not suite_na.get(key).strip():
+                    missing.append(f"metadata.suite_not_applicable.{key}")
+    elif suite_result not in {"pass"}:
+        missing.append("suite.path_ready")
+    return {
+        "schema_version": "loom-pr-intent-carrier-set-consistency/v1",
+        "result": "pass" if not missing else "block",
+        "intent": profile_id,
+        "expected": expected,
+        "metadata_fields": fields,
+        "suite_result": suite_result,
+        "missing_inputs": missing,
+        "summary": (
+            "Metadata, suite path, head binding, and profile intent agree."
+            if not missing
+            else "Metadata, suite path, head binding, or profile intent drifted across carriers."
+        ),
+    }
+
+
+def pr_intent_suite_prepare(
+    *,
+    target: Path,
+    item: str,
+    profile_id: str,
+    profile: dict[str, Any],
+    rationale: str,
+    consumer_boundary: str,
+    recheck_condition: str,
+    scope_proof: str,
+    apply: bool,
+) -> tuple[dict[str, Any], str | None]:
+    if profile["suite_path"] == "not_applicable":
+        return pr_intent_not_applicable_write(
+            target=target,
+            item=item,
+            profile_id=profile_id,
+            profile=profile,
+            rationale=rationale,
+            consumer_boundary=consumer_boundary,
+            recheck_condition=recheck_condition,
+            scope_proof=scope_proof,
+            apply=apply,
+        )
+    summary, payload, failure = suite_scaffold_payload(target, item, str(profile["suite_path"]), apply=apply)
+    return {**payload, "summary": summary}, failure
+
+
+def pr_intent_prepare_payload(
+    *,
+    command_name: str,
+    target: Path,
+    profile_id: str,
+    profile: dict[str, Any],
+    item: str | None,
+    issue: str | None,
+    branch: str | None,
+    head_sha: str | None,
+    output_file: str | None,
+    base_body_file: str,
+    rationale: str | None,
+    consumer_boundary: str | None,
+    recheck_condition: str | None,
+    scope_proof: str | None,
+    apply: bool,
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    if not item:
+        missing_inputs.append("missing --item")
+    if item and suite_item_segment_error(item):
+        missing_inputs.append(str(suite_item_segment_error(item)))
+    current_branch = pr_intent_current_branch(target, branch)
+    current_head = pr_intent_current_head(target, head_sha)
+    if not current_branch:
+        missing_inputs.append("branch is unavailable; pass --branch <work/...>")
+    if not current_head:
+        missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
+    if not target.exists():
+        missing_inputs.append("target path does not exist")
+
+    effective_item = item or "<item>"
+    effective_output = output_file or f".loom/runtime/pr/{effective_item}-{profile_id}-body.md"
+    paths, path_errors, path_source = pr_intent_changed_paths(target=target, explicit_paths=[], base="main", head_sha=current_head)
+    effective_scope_proof = pr_intent_scope_proof(profile_id, paths, scope_proof)
+    effective_rationale = pr_intent_na_value(profile, "rationale", rationale)
+    effective_consumer = pr_intent_na_value(profile, "consumer_boundary", consumer_boundary)
+    effective_recheck = pr_intent_na_value(profile, "recheck_condition", recheck_condition)
+
+    suite_prepare: dict[str, Any] = {"planned_writes": [], "created_locators": [], "missing_inputs": []}
+    suite_failure: str | None = None
+    metadata_prepare: dict[str, Any] = {
+        "operation": "render",
+        "output_file": effective_output,
+        "apply": apply,
+        "planned_command": "loom pr metadata-render --surface "
+        + str(profile["surface"])
+        + " --item "
+        + effective_item
+        + " --output-file "
+        + effective_output
+        + " --json",
+    }
+    if not missing_inputs and item:
+        suite_prepare, suite_failure = pr_intent_suite_prepare(
+            target=target,
+            item=item,
+            profile_id=profile_id,
+            profile=profile,
+            rationale=effective_rationale,
+            consumer_boundary=effective_consumer,
+            recheck_condition=effective_recheck,
+            scope_proof=effective_scope_proof,
+            apply=apply,
+        )
+        missing_inputs.extend(str(entry) for entry in suite_prepare.get("missing_inputs", []))
+        if apply:
+            metadata_args = pr_intent_metadata_flow_args(
+                operation="render",
+                target=target,
+                profile=profile,
+                item=item,
+                issue=issue,
+                branch=current_branch,
+                head_sha=current_head,
+                output_file=effective_output,
+                base_body_file=base_body_file,
+                rationale=effective_rationale,
+                consumer_boundary=effective_consumer,
+                recheck_condition=effective_recheck,
+                scope_proof=effective_scope_proof,
+            )
+            metadata_prepare = flow_payload(
+                command_name,
+                metadata_args,
+                fallback_to=["loom pr metadata-render --surface <surface> --item <id> --json"],
+            )
+            if metadata_prepare.get("result") != "pass":
+                missing_inputs.extend(str(entry) for entry in metadata_prepare.get("missing_inputs", []))
+    result = "pass" if not missing_inputs and suite_failure is None else "block"
+    return output(
+        command_name,
+        result,
+        schema=PR_INTENT_PREPARE_SCHEMA,
+        target=str(target),
+        item_id=item,
+        intent=profile_id,
+        mutates=apply,
+        summary=(
+            "PR intent prepare produced or planned the profile carrier set."
+            if result == "pass"
+            else "PR intent prepare found missing or invalid carrier inputs."
+        ),
+        profile={
+            "schema_version": PR_INTENT_PROFILE_SCHEMA,
+            "intent": profile_id,
+            "surface": profile["surface"],
+            "suite_path": profile["suite_path"],
+            "change_class": profile["change_class"],
+            "release_judgment": profile["release_judgment"],
+        },
+        path_source=path_source,
+        path_read_warnings=path_errors,
+        suite_prepare=suite_prepare,
+        metadata_prepare=metadata_prepare,
+        missing_inputs=dedupe_strings(missing_inputs),
+        fallback_to=[f"loom {command_name} --intent {profile_id} --item <id> --apply --json"] if result == "block" else None,
+        consumed_contracts=list(PR_INTENT_SHARED_CONTRACTS),
+    )
+
+
+def pr_intent_check_payload(
+    *,
+    command_name: str,
+    target: Path,
+    profile_id: str,
+    profile: dict[str, Any],
+    item: str | None,
+    issue: str | None,
+    branch: str | None,
+    head_sha: str | None,
+    body_file: str | None,
+    pr: str | None,
+    changed_paths: list[str],
+    base: str | None,
+) -> dict[str, Any]:
+    blocking_gaps: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    if not item:
+        missing_inputs.append("missing --item")
+    if item and suite_item_segment_error(item):
+        missing_inputs.append(str(suite_item_segment_error(item)))
+    current_branch = pr_intent_current_branch(target, branch)
+    current_head = pr_intent_current_head(target, head_sha)
+    if not current_branch:
+        missing_inputs.append("branch is unavailable; pass --branch <work/...>")
+    if not current_head:
+        missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
+    if not body_file and not pr:
+        missing_inputs.append("metadata check requires --body-file or PR number")
+
+    suite_validation: dict[str, Any] = {"result": "block", "missing_inputs": ["missing --item"]}
+    evidence_validation: dict[str, Any] = {"result": "not_applicable", "summary": "Suite evidence validation is not applicable for this intent profile."}
+    carrier_validation: dict[str, Any] = {"result": "not_applicable", "summary": "Suite carrier validation is not applicable for this intent profile."}
+    metadata_validation: dict[str, Any] | None = None
+
+    if item and not suite_item_segment_error(item):
+        suite_summary, suite_result, suite_payload, suite_failed_layer, suite_fail_reason, suite_fallback = suite_validate_payload(target, item)
+        suite_validation = {
+            "command": "suite validate",
+            "result": suite_result,
+            "summary": suite_summary,
+            "failed_layer": suite_failed_layer,
+            "fail_closed_reason": suite_fail_reason,
+            "fallback_to": suite_fallback,
+            "payload": suite_payload,
+        }
+        if profile["suite_path"] == "not_applicable":
+            if suite_result != "not_applicable":
+                missing_inputs.append("suite path is not the profile-required not_applicable decision")
+        elif suite_result != "pass":
+            missing_inputs.extend(str(entry) for entry in suite_payload.get("missing_inputs", []))
+        else:
+            evidence_summary, evidence_result, evidence_payload, evidence_failed_layer, evidence_fail_reason, evidence_fallback = suite_evidence_validate_payload(target, item)
+            evidence_validation = {
+                "command": "suite evidence validate",
+                "result": evidence_result,
+                "summary": evidence_summary,
+                "failed_layer": evidence_failed_layer,
+                "fail_closed_reason": evidence_fail_reason,
+                "fallback_to": evidence_fallback,
+                "payload": evidence_payload,
+            }
+            carrier_summary, carrier_result, carrier_payload, carrier_failed_layer, carrier_fail_reason, carrier_fallback = suite_carrier_validate_payload(target, item)
+            carrier_validation = {
+                "command": "suite carrier validate",
+                "result": carrier_result,
+                "summary": carrier_summary,
+                "failed_layer": carrier_failed_layer,
+                "fail_closed_reason": carrier_fail_reason,
+                "fallback_to": carrier_fallback,
+                "payload": carrier_payload,
+            }
+            if evidence_result != "pass":
+                missing_inputs.extend(str(entry) for entry in evidence_payload.get("missing_inputs", []))
+            if carrier_result != "pass":
+                missing_inputs.extend(str(entry) for entry in carrier_payload.get("missing_inputs", []))
+
+    if item and (body_file or pr):
+        metadata_args = pr_intent_metadata_flow_args(
+            operation="preflight",
+            target=target,
+            profile=profile,
+            item=item,
+            issue=issue,
+            branch=current_branch,
+            head_sha=current_head,
+            body_file=body_file,
+            pr=pr,
+        )
+        metadata_validation = flow_payload(
+            command_name,
+            metadata_args,
+            fallback_to=["loom pr metadata-preflight --surface <surface> --body-file <rendered-pr-body.md> --json"],
+        )
+        if metadata_validation.get("result") != "pass":
+            missing_inputs.extend(str(entry) for entry in metadata_validation.get("missing_inputs", []))
+
+    paths, path_errors, path_source = pr_intent_changed_paths(
+        target=target,
+        explicit_paths=changed_paths,
+        base=base,
+        head_sha=current_head,
+    )
+    scope_validation = pr_intent_scope_validation(profile, paths, path_errors)
+    if scope_validation["result"] != "pass":
+        missing_inputs.extend(str(entry) for entry in scope_validation.get("missing_inputs", []))
+        missing_inputs.extend(f"scope path outside intent: {path}" for path in scope_validation.get("blocked_paths", []))
+
+    consistency_validation = pr_intent_consistency_validation(
+        profile_id=profile_id,
+        profile=profile,
+        item=item or "",
+        branch=current_branch,
+        head_sha=current_head,
+        metadata_payload=metadata_validation,
+        suite_result=str(suite_validation.get("result")),
+    )
+    if consistency_validation["result"] != "pass":
+        missing_inputs.extend(str(entry) for entry in consistency_validation.get("missing_inputs", []))
+
+    for key, validation in (
+        ("suite", suite_validation),
+        ("evidence", evidence_validation),
+        ("carrier", carrier_validation),
+        ("metadata", metadata_validation or {}),
+        ("scope", scope_validation),
+        ("consistency", consistency_validation),
+    ):
+        if isinstance(validation, dict) and validation.get("result") == "block":
+            blocking_gaps.append(
+                {
+                    "surface": key,
+                    "summary": validation.get("summary"),
+                    "missing_inputs": validation.get("missing_inputs", []),
+                    "fallback_to": validation.get("fallback_to"),
+                }
+            )
+
+    missing_inputs = dedupe_strings(missing_inputs)
+    result = "pass" if not missing_inputs and not blocking_gaps else "block"
+    return output(
+        command_name,
+        result,
+        schema=PR_INTENT_CHECK_SCHEMA,
+        target=str(target),
+        item_id=item,
+        intent=profile_id,
+        mutates=False,
+        summary=(
+            "PR intent check passed across suite, metadata, scope, head binding, and carrier consistency."
+            if result == "pass"
+            else "PR intent check found missing, stale, partial, or cross-surface drift."
+        ),
+        profile={
+            "schema_version": PR_INTENT_PROFILE_SCHEMA,
+            "intent": profile_id,
+            "surface": profile["surface"],
+            "suite_path": profile["suite_path"],
+            "change_class": profile["change_class"],
+            "release_judgment": profile["release_judgment"],
+        },
+        validations={
+            "suite": suite_validation,
+            "evidence": evidence_validation,
+            "carrier": carrier_validation,
+            "metadata": metadata_validation,
+            "scope": scope_validation,
+            "consistency": consistency_validation,
+        },
+        changed_paths={"source": path_source, "paths": paths},
+        missing_inputs=missing_inputs,
+        blocking_gaps=blocking_gaps,
+        fallback_to=[f"loom {command_name} --intent {profile_id} --item <id> --body-file <rendered-pr-body.md> --json"] if result == "block" else None,
+        consumed_contracts=list(PR_INTENT_SHARED_CONTRACTS),
+    )
+
+
+def handle_pr_intent(argv: list[str], *, default_intent: str | None = None, command_root: str = "pr-intent") -> int:
+    parser = argparse.ArgumentParser(prog=f"loom {command_root}")
+    parser.add_argument("action", choices=("prepare", "check"))
+    if default_intent is None:
+        parser.add_argument("--intent", required=True)
+    else:
+        parser.add_argument("--intent", default=default_intent)
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
+    parser.add_argument("--issue")
+    parser.add_argument("--pr")
+    parser.add_argument("--branch")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--body-file")
+    parser.add_argument("--output-file")
+    parser.add_argument("--base-body-file", default=".github/PULL_REQUEST_TEMPLATE.md")
+    parser.add_argument("--base", default="main")
+    parser.add_argument("--changed-path", action="append", default=[])
+    parser.add_argument("--rationale")
+    parser.add_argument("--consumer-boundary")
+    parser.add_argument("--recheck-condition")
+    parser.add_argument("--scope-proof")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    profile_id, profile, profile_error = pr_intent_profile(args.intent)
+    command_name = f"{command_root} {args.action}"
+    target = resolve_target(args.target)
+    if profile_error or profile is None or profile_id is None:
+        return emit(
+            output(
+                command_name,
+                "block",
+                schema=PR_INTENT_CHECK_SCHEMA if args.action == "check" else PR_INTENT_PREPARE_SCHEMA,
+                target=str(target),
+                intent=args.intent,
+                mutates=False,
+                summary="Unsupported PR intent profile.",
+                missing_inputs=[profile_error],
+                fallback_to=["loom pr-intent prepare --intent docs-governance-only --item <id> --json"],
+                supported_intents=sorted(PR_INTENT_PROFILES),
+            )
+        )
+    if not target.exists():
+        return emit(block_target(command_name, target, "target path does not exist"))
+    if args.action == "prepare":
+        payload = pr_intent_prepare_payload(
+            command_name=command_name,
+            target=target,
+            profile_id=profile_id,
+            profile=profile,
+            item=args.item,
+            issue=args.issue,
+            branch=args.branch,
+            head_sha=args.head_sha,
+            output_file=args.output_file,
+            base_body_file=args.base_body_file,
+            rationale=args.rationale,
+            consumer_boundary=args.consumer_boundary,
+            recheck_condition=args.recheck_condition,
+            scope_proof=args.scope_proof,
+            apply=args.apply,
+        )
+    else:
+        payload = pr_intent_check_payload(
+            command_name=command_name,
+            target=target,
+            profile_id=profile_id,
+            profile=profile,
+            item=args.item,
+            issue=args.issue,
+            branch=args.branch,
+            head_sha=args.head_sha,
+            body_file=args.body_file,
+            pr=args.pr,
+            changed_paths=args.changed_path,
+            base=args.base,
+        )
+    return emit(payload)
 
 
 def ship_validation_profile_for_paths(paths: list[str], closeout_policy: dict[str, Any]) -> tuple[str, list[str]]:
@@ -10196,6 +11071,12 @@ def main(argv: list[str]) -> int:
     if command == "project" or command.startswith("project "):
         project_args = command.split()[1:] + forwarded if command.startswith("project ") else forwarded
         return handle_project(project_args)
+    if command == "pr-intent" or command.startswith("pr-intent "):
+        intent_args = command.split()[1:] + forwarded if command.startswith("pr-intent ") else forwarded
+        return handle_pr_intent(intent_args)
+    if command == "docs-pr" or command.startswith("docs-pr "):
+        docs_pr_args = command.split()[1:] + forwarded if command.startswith("docs-pr ") else forwarded
+        return handle_pr_intent(docs_pr_args, default_intent="docs-governance-only", command_root="docs-pr")
     if command == "pr" or command.startswith("pr "):
         pr_args = command.split()[1:] + forwarded if command.startswith("pr ") else forwarded
         return handle_pr(pr_args)

@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1800
-- Goal: Close the #1800 global CLI and strong governance hardening tree, ship v0.21.2, and leave #1802/#1800 for post-merge release closeout.
-- Scope: #1800 PR scope: #1793-#1799, #1801, #1803, and #1804 fixes only. Includes target/context resolution, global-cli metadata-only bootstrap and CI verify, active-ruleset strong detector, adversarial adoption evidence, audited repair-pr evidence, runtime parity, release readiness for v0.21.2, merge wrapper target/readback behavior, and opaque path-safe Work Item ID compatibility. Excludes #1806 and #1807-#1810.
-- Execution Path: Issue tree #1800 -> branch work/1800-global-cli-strong-governance-hardening -> PR #1816 -> release v0.21.2 -> #1802 release evidence -> #1800 parent closeout.
+- Item ID: WI-1806
+- Goal: Provide shared PR intent profiles and easier governance carrier commands for docs/governance-only, closeout-only, release-only, carrier-sync-only, and fixture-only PRs.
+- Scope: #1806 parent plus #1807-#1814 implementation and verification. Owned files are limited to `tools/loom.py`, `tools/check_cli_contract.py`, `docs/methodology/harness/cli-command-matrix.md`, `.loom/reviews/WI-1806.spec.json`, `.loom/reviews/WI-1806.json`, `.loom/shadow/merge-ready-loom.json`, `.loom/shadow/closeout-loom.json`, and WI-1806 Loom carriers. #1815 release readiness is tracked; `v0.22.0` publishing is now sequenced after PR #1817 merge and release readback because `v0.21.2` is present on `main`.
+- Execution Path: issue tree #1806 -> branch `work/1806-pr-intent-carrier-ergonomics` -> shared `pr-intent prepare/check` implementation -> focused CLI contract fixtures -> PR readiness -> merge -> #1815 `v0.22.0` release readiness.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1800.md
-- Review Entry: .loom/reviews/WI-1800.json
-- Validation Entry: Focused unit/contract/runtime parity/package/release checks plus tools/loom_check.py --profile source . on the final PR head.
-- Closing Condition: PR #1816 merges to main; loom-cli-release publishes v0.21.2; release readback confirms tag, GitHub Release, npm package, workflow run, and installed/global CLI evidence; #1802 and #1800 closeout comments consume those facts.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1800 closed out by closeout run: PR #1816 merged at f0594b3f900504b574c8f52af602ac9130e38476, issue #1800 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1800 implementation work remains.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-06-30 local convergence after PR #1816 hosted failure classification: suite validate/evidence/carrier pass for WI-1800; demo bootstrap fixture drift check pass; root loom_init verify pass; fact-chain pass for WI-1800; runtime-parity validate pass; governance-profile status pass; carrier refresh dry-run reports only merge-ready/closeout shadow refresh needed after status update.
-- Recovery Boundary: WI-1800 owns #1793-#1799, #1801, #1803, #1804, v0.21.2 release readiness, demo fixture sync caused by runtime changes, and current PR carriers. It excludes #1806 and #1807-#1810, and #1802/#1800 remain open until post-merge release evidence is consumed.
-- Current Lane: post-merge-closeout-run
+- Recovery Entry: .loom/progress/WI-1806.md
+- Review Entry: .loom/reviews/WI-1806.json
+- Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/check_cli_contract.py --surface suite-contract`; `python3 tools/check_cli_contract.py --surface aggregate`; `git diff --check`.
+- Closing Condition: PR #1817 for #1806 merges with current-head review and gate evidence, then #1815 completes `v0.22.0` release notes, version/package/plugin metadata and hash checks, pre-release checks, npm/package readback, release evidence, and #1806 closeout.
+- Current Checkpoint: merge
+- Current Stop: Implementation and focused local validation for #1807-#1814 are complete on branch `work/1806-pr-intent-carrier-ergonomics`; PR #1817 has been rebased by merge onto `v0.21.2` main. #1815 release is no longer blocked by #1800, but waits for PR #1817 merge and release readback.
+- Next Step: Rebind implementation review to the `v0.21.2` merge baseline, refresh PR #1817 metadata/readback for the new head, push, wait hosted checks, merge PR #1817, then run #1815 `v0.22.0` release and closeout on `main`.
+- Blockers: None
+- Latest Validation Summary: 2026-06-30 local validation passed for WI-1806 after merging `origin/main` at `f0594b3f` (`v0.21.2`) into head `33c7adfe`: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/skills_surface.py`; `python3 tools/check_cli_contract.py --surface pr-metadata` passed in 38.02s; `python3 tools/check_cli_contract.py --surface suite-contract` passed in 14.49s; `python3 tools/check_npm_package.py --surface runtime-copy-parity`; `python3 tools/loom.py fact-chain --target . --item WI-1806 --json`; `python3 tools/loom.py shadow-parity --target . --surface all --blocking --json`; `git diff --check`. PR #1817 metadata readback/preflight and PR gate must be rerun after the next head-changing review/status commit.
+- Recovery Boundary: WI-1806 owns PR intent carrier ergonomics and #1815 `v0.22.0` release convergence only. It does not close #1800/#1802, does not rewrite `v0.21.2` release evidence, and does not make PR intent profiles bypass review, PR gate, merge-ready, release readback, host reconciliation, or closeout evidence.
+- Current Lane: main-control-carrier-sync
 
 ## Runtime Evidence
 
-- Run Entry: 2026-06-29 WI-1790 repair started in repo-relative workspace `.` on branch `work/fix-init-bootstrap-entrypoint`.
-- Logs Entry: Local reproduction and validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1790.md`.
-- Diagnostics Entry: Installed package bootstrap failed because wrappers searched for missing top-level `skills/shared/scripts/loom_init.py`; PR gate currently requires WI-1790 metadata and review refresh.
-- Verification Entry: Local source/package checks passed before carrier refresh; hosted checks, release publish, plugin payload refresh, and installed CLI readback remain required.
-- Lane Entry: init-bootstrap-installed-entrypoint-release
+- Run Entry: 2026-06-30 WI-1806 started in repo-relative workspace `.` on branch `work/1806-pr-intent-carrier-ergonomics`; local formal worktree locator is `/Users/mc/dev/Loom-1806-pr-intent-carrier-ergonomics`.
+- Logs Entry: Local validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1806.md`.
+- Diagnostics Entry: #1806 has no existing branch/PR at start; GitHub issue native dependencies were empty; release boundary is external to #1806 and tied to #1800 / `v0.21.2`.
+- Verification Entry: Focused local checks passed before PR metadata/readback; review, hosted checks, merge-ready, and release readback remain pending.
+- Lane Entry: pr-intent-carrier-ergonomics
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1800.md
-- Dynamic Truth: .loom/progress/WI-1800.md
+- Static Truth: .loom/work-items/WI-1806.md
+- Dynamic Truth: .loom/progress/WI-1806.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
