@@ -6,8 +6,8 @@
   "summary": "adversarial adoption evidence is fresh and satisfies strong-governance rollout checks.",
   "target": "/Users/mc/dev/Loom",
   "branch": "work/1800-global-cli-strong-governance-hardening",
-  "head_sha": "b596e80e9ec2dd06aefa7eb5d605e851f37bf60e",
-  "generated_at": "2026-06-30T07:22:21Z",
+  "head_sha": "2b78fd15eeac1881fa538fd5ae7a471cc6c2d1ee",
+  "generated_at": "2026-06-30T07:43:09Z",
   "evidence_locator": ".loom/companion/adversarial-adoption.json",
   "record": {
     "requested": true,
