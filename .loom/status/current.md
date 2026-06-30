@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1806.json
 - Validation Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/check_cli_contract.py --surface suite-contract`; `python3 tools/check_cli_contract.py --surface aggregate`; `git diff --check`.
 - Closing Condition: PR for #1806 merges with current-head review and gate evidence. `v0.22.0` release closeout (#1815) remains blocked until #1800 / `v0.21.2` is complete or the release line is explicitly released.
-- Current Checkpoint: build_validation_complete_release_blocked
+- Current Checkpoint: merge
 - Current Stop: Implementation and focused local validation for #1807-#1814 are complete on branch `work/1806-pr-intent-carrier-ergonomics`; PR/review/release closeout is pending. #1815 release is blocked by #1800 / `v0.21.2`.
 - Next Step: Commit and push the #1806 branch, prepare PR metadata/readback, then run review/merge-ready only after PR metadata and head SHA are stable. Do not publish `v0.22.0` until #1800 / `v0.21.2` releases or explicitly releases the publication line.
 - Blockers: Release blocker only: #1800 / `v0.21.2` is not complete. No implementation blocker is recorded for #1807-#1814.

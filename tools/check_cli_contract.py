@@ -7076,9 +7076,9 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
     if stale_check.get("result") != "block" or "head_sha" not in stale_missing:
         raise AssertionError("docs-pr check did not fail closed on stale head binding")
 
-    for intent, item, body_file in (
-        ("closeout-only", "WI-1809", ".loom/runtime/pr/WI-1809-closeout.md"),
-        ("carrier-sync-only", "WI-1813", ".loom/runtime/pr/WI-1813-carrier-sync.md"),
+    for intent, item, body_file, changed_path in (
+        ("closeout-only", "WI-1809", ".loom/runtime/pr/WI-1809-closeout.md", ".loom/progress/WI-1809.md"),
+        ("carrier-sync-only", "WI-1813", ".loom/runtime/pr/WI-1813-carrier-sync.md", ".loom/bootstrap/init-result.json"),
     ):
         _, prepare_payload = run_json(
             [
@@ -7129,7 +7129,7 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
                 "--body-file",
                 body_file,
                 "--changed-path",
-                f".loom/progress/{item}.md",
+                changed_path,
                 "--json",
             ],
             expect=0,

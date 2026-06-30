@@ -5086,6 +5086,7 @@ PR_INTENT_DOC_EXACT = (
     ".github/PULL_REQUEST_TEMPLATE.md",
 )
 PR_INTENT_CARRIER_PREFIXES = (
+    ".loom/bootstrap/",
     ".loom/work-items/",
     ".loom/progress/",
     ".loom/status/",
