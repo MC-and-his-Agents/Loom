@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1865.json
 - Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
 - Closing Condition: v0.26.0 tag, GitHub Release, npm @mc-and-his-agents/loom@0.26.0, plugin payload metadata/hash, #1859/#1860-#1865 closeout evidence, and milestone #23 readback are consistent.
-- Current Checkpoint: merge
-- Current Stop: v0.26.0 release candidate metadata, npm/package/plugin payload metadata, release readiness evidence, and WI-1865 carriers are prepared on branch work/1865-v0.26.0-release.
-- Next Step: Record release review, refresh carrier shadows, create the release PR, bind PR metadata to the current head, then run local and hosted gates before merging to main for publication.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1865 release closeout synced for v0.26.0: release PR #1867 merged at d892586713de176144a908166c8b7a512c2421af; published release readback consumed into terminal repo carrier state.
+- Next Step: Commit and merge the carrier-only closeout PR, then close #1859/#1860-#1865 and milestone #23 after post-merge readback confirms terminal carrier on main.
 - Blockers: None recorded.
-- Latest Validation Summary: Pre-release validation passed: py_compile_clean for release tooling, version_surface_check, check_release_surface, check_npm_package aggregate with payload file count 388 and plugin payload hash c451654a83380621ed7af0ff2eafa461512a0cc8c67d6373f4429ffc5526c00e, npm pack dry-run entryCount 388, release-readback CLI contract in 1.93s, aggregate CLI contract in 350.93s, suite validate/evidence/carrier for WI-1865, fact-chain, and pre-publication release readback verdict missing as expected.
+- Latest Validation Summary: v0.26.0 release validation passed: release PR #1867 merged at d892586713de176144a908166c8b7a512c2421af; release workflow run 28524645818 succeeded; tag v0.26.0 resolves to d892586713de176144a908166c8b7a512c2421af; GitHub Release https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.26.0 is published; npm @mc-and-his-agents/loom@0.26.0 exists with latest=0.26.0; release readback verdict is published; carrier closeout-sync wrote terminal state closed_out.
 - Recovery Boundary: WI-1865 owns v0.26.0 root release authority, package/plugin payload metadata/hash, release readiness evidence, WI-1865 carriers, WI-1859 implementation-merged progress consumption, release PR metadata, publication readback, terminal carrier closeout, and #1859/#1860-#1865 plus milestone #23 closeout. It does not add new runtime behavior beyond merged #1859, does not publish legacy installer, does not change plugin surface compatibility, does not do multi-repo batching, and does not close issues before release readback plus terminal carrier closeout.
-- Current Lane: release-pr
+- Current Lane: release-closeout-sync
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-01 WI-1865 release work is active in `/Users/mc/dev/Loom.worktrees/1865-v0.26.0-release` on branch `work/1865-v0.26.0-release`.
+- Run Entry: 2026-07-01 WI-1865 closeout work is active in `/Users/mc/dev/Loom.worktrees/1865-v0.26.0-release` on branch `work/1865-v0.26.0-closeout`.
 - Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1865.md`.
-- Diagnostics Entry: Branch starts from main at `06f85307587308121627bbf2f6603dc96f629721`, the merge commit for implementation PR #1866.
-- Verification Entry: pre-release package, plugin payload, release surface, suite, fact-chain, npm dry-run, release-readback, and CLI contract checks passed before PR creation.
-- Lane Entry: release-pr
+- Diagnostics Entry: Branch starts from main at `d892586713de176144a908166c8b7a512c2421af`, the merge commit for release PR #1867.
+- Verification Entry: post-publish release readback is `published`; tag, GitHub Release, npm latest, release workflow, package surface, and terminal carrier are consistent.
+- Lane Entry: release-closeout-sync
 
 ## Sources
 
