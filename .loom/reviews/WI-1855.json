@@ -3,26 +3,16 @@
   "item_id": "WI-1855",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1855 release candidate is allowed at head 1ebb0411: VERSION, package.json, plugin payload metadata/hash, release readiness evidence, WI-1855 carriers, suite/evidence/task carriers, fact-chain, shadow parity, npm package payload, CLI contracts, and pre-release readback are consistent. Publication remains gated to the main-push release workflow after the release PR merges.",
+  "summary": "WI-1855 terminal closeout carrier sync is allowed at head f310c2dd: release v0.25.0 is published and read back at merge commit d9ca2ed4, release closeout-sync wrote terminal closed_out metadata, suite/evidence/carrier validation, fact-chain, shadow parity, and release readback all pass. This review covers carrier-only closeout sync and does not approve new runtime behavior or republish.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-07-01T10:48:39Z",
-  "reviewed_head": "1ebb04111b98545b576e33f8f525710a9c4f4a8e",
-  "reviewed_validation_summary": "Pre-release local validation passed on 2026-07-01: py_compile_clean; version_surface_check; check_release_surface; check_npm_package; check_cli_contract --surface release-readback; check_cli_contract --surface aggregate; npm pack --dry-run --json --ignore-scripts; suite validate/evidence/carrier for WI-1855; fact-chain; resume; state-check; git diff --check. Release readback for v0.25.0 passed with expected pre-publication verdict `missing`.",
+  "authored_at": "2026-07-01T11:15:00Z",
+  "reviewed_head": "f310c2dde2cc6aaecb1c72f660ef04a9f7d3c446",
+  "reviewed_validation_summary": "Pre-release local validation passed on 2026-07-01; PR #1857 local PR gate, hosted checks, and merge check passed; release workflow `loom-cli-release` run 28512888728 published v0.25.0; final release readback for merge commit d9ca2ed4e281cf123fc92a435e335d2600374f4d passed with verdict `published`.",
   "fallback_to": null,
   "findings": [
     {
       "id": "compat-follow-up-1",
-      "summary": "Before merge, update PR metadata to the final head and rerun PR metadata readback, PR gate, hosted checks, and merge check.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-2",
-      "summary": "After merge, wait for v0.25.0 GitHub Release/npm publication, run release readback, then run release closeout-sync and close #1850/#1851-#1855 plus milestone #22.",
+      "summary": "After the closeout carrier PR merges, close #1850/#1851-#1855 and milestone #22 with release/npm/workflow/readback evidence.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
@@ -33,8 +23,7 @@
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "Before merge, update PR metadata to the final head and rerun PR metadata readback, PR gate, hosted checks, and merge check.",
-    "After merge, wait for v0.25.0 GitHub Release/npm publication, run release readback, then run release closeout-sync and close #1850/#1851-#1855 plus milestone #22."
+    "After the closeout carrier PR merges, close #1850/#1851-#1855 and milestone #22 with release/npm/workflow/readback evidence."
   ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1855.md",
@@ -57,8 +46,8 @@
     "engine_adapter": null,
     "engine_evidence": null,
     "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release --item WI-1855 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release --item WI-1855 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1855 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1855 --json",
     "suite_evidence_map": ".loom/specs/WI-1855/evidence-map.md",
     "suite_consistency_analysis": null,
     "suite_task_carriers": [
@@ -76,6 +65,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored closeout carrier review approved the current terminal carrier head for closeout PR consumption."
   }
 }
