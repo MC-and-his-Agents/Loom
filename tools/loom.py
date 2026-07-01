@@ -2298,6 +2298,16 @@ def agent_safe_payload(
         if over_budget
         else actionable_findings
     )
+    envelope_fields = {
+        "actionable_findings": envelope_actionable_findings,
+        "diagnostic_counts": output_diagnostic_counts(payload),
+        "key_locators": output_key_locators(payload),
+        "stdout_budget_bytes": stdout_budget_bytes,
+        "summary_target_bytes": summary_target_bytes,
+    }
+    readiness = payload.get("readiness")
+    if isinstance(readiness, dict):
+        envelope_fields["readiness"] = readiness
     return output_envelope(
         str(payload.get("command", "loom-output")),
         str(payload.get("result", "block")),
@@ -2309,11 +2319,7 @@ def agent_safe_payload(
         full_output_available=True,
         full_output_truncated=True,
         sensitive=sensitive,
-        actionable_findings=envelope_actionable_findings,
-        diagnostic_counts=output_diagnostic_counts(payload),
-        key_locators=output_key_locators(payload),
-        stdout_budget_bytes=stdout_budget_bytes,
-        summary_target_bytes=summary_target_bytes,
+        **envelope_fields,
     )
 
 
