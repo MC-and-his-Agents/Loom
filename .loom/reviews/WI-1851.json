@@ -20,6 +20,7 @@
     "status_surface": ".loom/status/current.md",
     "spec": ".loom/specs/WI-1851/spec.md",
     "plan": ".loom/specs/WI-1851/plan.md",
+    "implementation_contract": ".loom/specs/WI-1851/implementation-contract.md",
     "evidence_map": ".loom/specs/WI-1851/evidence-map.md",
     "task_carrier": ".loom/specs/WI-1851/task-carrier.md",
     "implementation": [
@@ -33,5 +34,9 @@
       "plugins/loom/skills/route-matrix.md",
       "plugins/loom/.codex-plugin/plugin.json"
     ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved implementation head 837b1db946bbb8578ed8f373a5d9d7cf1a2bd2b1; current PR head ca122df590e8572c46e99f670e6c7eb8631feab6 contains only review/progress/status carrier drift."
   }
 }
