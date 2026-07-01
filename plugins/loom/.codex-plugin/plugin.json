@@ -19,11 +19,11 @@
     "provider_scope": "user",
     "payload_root": "skills",
     "source_package": "@mc-and-his-agents/loom",
-    "source_package_version": "0.26.0",
+    "source_package_version": "0.26.1",
     "source_git_sha": "unreleased",
     "source_git_sha_status": "pending_release_commit",
-    "plugin_payload_version": "0.26.0",
-    "plugin_payload_hash": "54b5f24a608d5a0cacaed128c23b49345e515186cbb0e36027f201bd0768e02c",
+    "plugin_payload_version": "0.26.1",
+    "plugin_payload_hash": "0fa86d1aae010dc30f57c4164e64fcf53c4dca2ee6e5645cd696e80f432c4825",
     "repository_payload": false
   },
   "keywords": [
