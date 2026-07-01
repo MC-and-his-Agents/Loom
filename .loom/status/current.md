@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1851
-- Goal: v0.25.0 shift-left readiness and task-oriented CLI guidance
-- Scope: Implement local readiness drift classification, write-after-readback/preflight, closeout/carrier-sync suite preservation, and task-oriented help/README/SKILL guidance for #1851/#1852/#1853/#1850/#1854.
-- Execution Path: minimal suite; implementation PR then release PR
+- Item ID: WI-1855
+- Goal: 发布 v0.25.0 readiness guidance release。
+- Scope: bump root Loom CLI release authority to `v0.25.0`, align root npm package and Codex plugin payload release metadata/hash, add v0.25.0 release readiness evidence, publish tag/GitHub Release/npm after merge, and close out #1850/#1851-#1855 plus milestone #22 after release readback. Ownership is limited to v0.25.0 release authority, plugin payload release metadata/hash, release readiness evidence, WI-1855 carriers, and current status/shadow readback.
+- Execution Path: issue #1855 -> branch work/1855-v0.25.0-release -> release readiness evidence -> release PR -> main push release workflow -> release readback -> #1850/#1851-#1855/milestone #22 closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1851.md
-- Review Entry: .loom/reviews/WI-1851.json
-- Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash
-- Closing Condition: PR merged, no-release closeout evidence consumed for implementation, then v0.25.0 release/readback/terminal carrier closeout in #1855.
-- Current Checkpoint: merge
-- Current Stop: Release-readback contract blocker is fixed at reviewed code head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a; review/progress validation summaries are synchronized for the carrier-only PR head.
-- Next Step: Commit this carrier-only summary sync, push, update PR metadata to the final head, then rerun PR gate and hosted checks.
+- Recovery Entry: .loom/progress/WI-1855.md
+- Review Entry: .loom/reviews/WI-1855.json
+- Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
+- Closing Condition: v0.25.0 tag, GitHub Release, npm `@mc-and-his-agents/loom@0.25.0`, plugin payload metadata/hash, #1850/#1851-#1855 closeout evidence, and milestone #22 readback are consistent.
+- Current Checkpoint: build
+- Current Stop: Release branch has v0.25.0 version/package/plugin metadata, release readiness evidence, and WI-1855 carriers prepared after #1851 implementation PR #1856 merged to main.
+- Next Step: Refresh closeout/merge-ready shadow, record review evidence, open release PR, then run PR metadata readback, PR gate, hosted checks, controlled merge, release readback, and closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed for reviewed code head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a and pre-sync carrier head 68a44b1157111885b1d4a5a2559ae1f30b4a4e79: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface pr-metadata; git diff --check; python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 tools/loom.py pr metadata-readback 1856 --target . --surface merge_ready --item WI-1851 --issue 1851 --branch work/1851-shift-left-readiness --head-sha 68a44b1157111885b1d4a5a2559ae1f30b4a4e79 --body-file .loom/runtime/pr/metadata-rendered.md --readback-file .loom/runtime/pr/WI-1851-readback.md --json. Final PR metadata readback, PR gate, hosted checks, and merge-ready must be rerun after this carrier-only summary sync.
-- Recovery Boundary: .loom/reviews/WI-1851.json; .loom/reviews/WI-1851.spec.json; .loom/progress/WI-1851.md; .loom/status/current.md
-- Current Lane: merge-gate-prep
+- Latest Validation Summary: Pre-release local validation passed on 2026-07-01: py_compile_clean; version_surface_check; check_release_surface; check_npm_package; check_cli_contract --surface release-readback; check_cli_contract --surface aggregate; npm pack --dry-run --json --ignore-scripts; suite validate/evidence/carrier for WI-1855; fact-chain; resume; state-check; git diff --check. Release readback for v0.25.0 passed with expected pre-publication verdict `missing`.
+- Recovery Boundary: WI-1855 owns v0.25.0 root release authority, plugin payload release metadata/hash, release readiness evidence, WI-1855 carriers, WI-1851 implementation-merged progress consumption, and status/shadow readback. It does not add new runtime behavior beyond the merged #1851 implementation, does not publish a legacy installer version, and does not change plugin surface compatibility.
+- Current Lane: release-prep
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-01 WI-1851 work is active in `/Users/mc/dev/Loom.worktrees/1851-shift-left-readiness` on branch `work/1851-shift-left-readiness`.
-- Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1851.md`.
-- Diagnostics Entry: Hosted `release-judgment` exposed that agent-safe output was dropping the `readiness` envelope; `tools/loom.py` now preserves readiness in compact agent-safe output.
-- Verification Entry: `python3 -m py_compile tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface release-readback`; `python3 tools/check_cli_contract.py --surface pr-metadata`; suite validate/evidence/carrier; fact-chain; shadow parity; PR metadata readback at pre-sync carrier head 68a44b1157111885b1d4a5a2559ae1f30b4a4e79.
-- Lane Entry: merge-gate-prep
+- Run Entry: 2026-07-01 WI-1855 release work is active in `/Users/mc/dev/Loom.worktrees/1855-v0.25.0-release` on branch `work/1855-v0.25.0-release`.
+- Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1855.md` and `docs/evidence/v0.25.0-release-readiness.md`.
+- Diagnostics Entry: PR #1856 merged to main at `4cde91ccedaf0c8a11b38030d8452888c7e43d58`; release branch starts from that merge commit.
+- Verification Entry: pre-release local validation passed; publication readback remains pending until the release PR merges and the main-push workflow publishes v0.25.0.
+- Lane Entry: release-prep
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1851.md
-- Dynamic Truth: .loom/progress/WI-1851.md
+- Static Truth: .loom/work-items/WI-1855.md
+- Dynamic Truth: .loom/progress/WI-1855.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
