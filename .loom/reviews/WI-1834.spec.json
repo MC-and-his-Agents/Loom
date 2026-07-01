@@ -3,11 +3,11 @@
   "item_id": "WI-1834",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review allows WI-1834 minimal suite at head f3c30571b80c27713885cbf999eba95a54d7f0c5: scenarios S1-S6 map to phases P1-P6; acceptance A1-A6 map to CLI contract, package/runtime-copy, docs, PR metadata, hosted checks, and release readback evidence; suite validate, suite evidence validate, suite carrier validate, and fact-chain passed. The suite is intentionally minimal and does not add multi-repo batch mode, user-level host mutation, a new DSL, or HotCP-specific Loom core behavior.",
+  "summary": "Spec review allows WI-1834 minimal suite at implementation head 6bebb4e6fa21ee6e82f2234a8792f825b1f9e5f3. The checkpoint normalization repair is covered by existing governance-closeout contract scope and does not expand the minimal suite, add multi-repo batch mode, mutate user-level host/plugin cache, introduce a DSL, or add HotCP-specific Loom core behavior.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-07-01T03:08:15Z",
-  "reviewed_head": "f3c30571b80c27713885cbf999eba95a54d7f0c5",
-  "reviewed_validation_summary": "`make py-compile`, `make loom-demo-new-project-check`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/check_cli_contract.py --surface runtime-upgrade`, `python3 tools/check_cli_contract.py --surface pr-metadata`, `python3 tools/check_npm_package.py`, `python3 tools/check_npm_package.py --surface runtime-copy-parity`, `python3 tools/loom.py skills release-check --json`, `git diff --check`, PR metadata preflight/readback for PR #1839, and hosted `loom-check` component jobs passed for current or immediately preceding stable inputs. `loom-pr-merge-gate` previously failed on stale body/head timing plus missing WI-1834 fact-chain/review, now being repaired.",
+  "authored_at": "2026-07-01T03:26:00Z",
+  "reviewed_head": "6bebb4e6fa21ee6e82f2234a8792f825b1f9e5f3",
+  "reviewed_validation_summary": "`make py-compile`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `python3 tools/check_npm_package.py`, `python3 tools/check_npm_package.py --surface runtime-copy-parity`, `python3 tools/loom.py resume --target . --item WI-1834 --json`, and `git diff --check` passed after normalizing `review` checkpoint to `merge`; earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -37,6 +37,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored spec review approved the minimal suite for merge checkpoint consumption."
+    "reason": "Authored review approved the normalized checkpoint repair for merge checkpoint consumption."
   }
 }
