@@ -9,7 +9,7 @@
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1844.md
 - Review Entry: .loom/reviews/WI-1844.json
-- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/check_release_surface.py; ruby YAML parse for .github/workflows/pr-merge-gate.yml; loom release closeout-sync dogfood dry-run
+- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface aggregate; loom release closeout-sync dogfood dry-run
 - Closing Condition: PR merges, #1842/#1843/#1846 close, v0.24.1 publishes and release closeout-sync carrier is terminalized.
 - Current Checkpoint: merge
 - Current Stop: hosted `loom-pr-merge-gate` 在 head `eec35d1` 重复暴露 `head_sha_drift`：PR body metadata 未绑定当前 head。已在该 gate 失败路径加入最小提示，要求先执行 metadata-update/readback 绑定当前 head，再 rerun failed hosted gate；不新增调度系统或 DSL。
