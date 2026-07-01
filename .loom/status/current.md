@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1844.json
 - Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface aggregate; loom release closeout-sync dogfood dry-run
 - Closing Condition: PR merges, #1842/#1843/#1846 close, v0.24.1 publishes and release closeout-sync carrier is terminalized.
-- Current Checkpoint: release
-- Current Stop: Implementation PR #1847 merged into main at 62dd8e0abab37c80c19c3035c546fdf0bdb302ba after hosted gates and controlled merge. Release branch work/1845-v0.24.1-release is preparing v0.24.1 version/package/plugin metadata, release readiness evidence, PR body, and release gate inputs.
-- Next Step: Open and gate the #1845 release PR, merge it after PR body/head/review/checks are stable, consume the main-push loom-cli-release run, then use `loom release closeout-sync --version v0.24.1 --item WI-1844 --apply` to terminalize repo carriers before issue and milestone closeout.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1844 release closeout synced for v0.24.1: release PR #1848 merged at a03efd3c0943d7466a05ad1eec5d73cd97928695; published release readback consumed into terminal repo carrier state.
+- Next Step: None.
 - Blockers: None recorded.
-- Latest Validation Summary: #1847 merged at 62dd8e0abab37c80c19c3035c546fdf0bdb302ba after local PR gate, loom merge check/run, and hosted gates passed for head c3c62f46048e5387de49a6f473eb8921ed96a6e3. Release branch validation passed: py_compile_clean for release tools; version_surface_check; check_release_surface; check_npm_package with plugin hash 2ff7aa999840442fd179cbc8101b1d5fdd437889aab2516aebe90a66018e7cfb; check_cli_contract --surface release-readback; check_cli_contract --surface aggregate in 429.97s; npm pack --dry-run --json --ignore-scripts; suite validate/carrier/evidence; fact-chain. Release readback for v0.24.1 is missing/unpublished with tag, GitHub Release, and npm version unoccupied.
+- Latest Validation Summary: #1847 merged at 62dd8e0abab37c80c19c3035c546fdf0bdb302ba after local PR gate, loom merge check/run, and hosted gates passed for head c3c62f46048e5387de49a6f473eb8921ed96a6e3. #1848 merged at a03efd3c0943d7466a05ad1eec5d73cd97928695 after local release checks, hosted gates, and controlled merge. v0.24.1 release readback found tag, GitHub Release, npm package, package surface, and workflow run 28502700719 published; release closeout-sync applied terminal carrier metadata and refreshed closeout/merge-ready shadows.
 - Recovery Boundary: WI-1844 owns release closeout-sync wrapper, docs, tests, and v0.24.1 convergence only; no republishing, automatic merge, multi-repo batch, new DSL, or new carrier. Publication is only the authorized v0.24.1 release workflow after the release PR merges.
-- Current Lane: release-pr
+- Current Lane: release-closeout-sync
 
 ## Runtime Evidence
 
