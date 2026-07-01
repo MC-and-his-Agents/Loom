@@ -3,10 +3,10 @@
   "item_id": "WI-1834",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review allows WI-1834 minimal suite at head e8b38464a6e17bb9050d0536f7afb6e2666aa99c. The additional bootstrap/shadow carrier refresh remains within the existing runtime-upgrade and governance carrier scope and does not expand product behavior.",
+  "summary": "Spec review allows WI-1834 minimal suite at head c7d34e33bf76ea897b7bc81d1d38421e51aa7f80; the final shadow refresh remains a governance carrier update within the existing minimal suite scope.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-07-01T03:38:00Z",
-  "reviewed_head": "e8b38464a6e17bb9050d0536f7afb6e2666aa99c",
+  "authored_at": "2026-07-01T03:42:00Z",
+  "reviewed_head": "c7d34e33bf76ea897b7bc81d1d38421e51aa7f80",
   "reviewed_validation_summary": "make py-compile; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py resume --target . --item WI-1834 --json; git diff --check passed after normalizing review checkpoint to merge. Earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.",
   "fallback_to": null,
   "findings": [],
@@ -37,6 +37,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored review approved the current PR head for merge checkpoint consumption after carrier refresh."
+    "reason": "Authored review approved the current PR head after final shadow refresh."
   }
 }
