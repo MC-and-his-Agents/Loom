@@ -1,0 +1,42 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1834",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1834 minimal suite at head f3c30571b80c27713885cbf999eba95a54d7f0c5: scenarios S1-S6 map to phases P1-P6; acceptance A1-A6 map to CLI contract, package/runtime-copy, docs, PR metadata, hosted checks, and release readback evidence; suite validate, suite evidence validate, suite carrier validate, and fact-chain passed. The suite is intentionally minimal and does not add multi-repo batch mode, user-level host mutation, a new DSL, or HotCP-specific Loom core behavior.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T03:08:15Z",
+  "reviewed_head": "f3c30571b80c27713885cbf999eba95a54d7f0c5",
+  "reviewed_validation_summary": "`make py-compile`, `make loom-demo-new-project-check`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/check_cli_contract.py --surface runtime-upgrade`, `python3 tools/check_cli_contract.py --surface pr-metadata`, `python3 tools/check_npm_package.py`, `python3 tools/check_npm_package.py --surface runtime-copy-parity`, `python3 tools/loom.py skills release-check --json`, `git diff --check`, PR metadata preflight/readback for PR #1839, and hosted `loom-check` component jobs passed for current or immediately preceding stable inputs. `loom-pr-merge-gate` previously failed on stale body/head timing plus missing WI-1834 fact-chain/review, now being repaired.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Complete hosted PR gate and #1838 release/readback/closeout after merge."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1834.md",
+    "recovery_entry": ".loom/progress/WI-1834.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1834 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1834 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1834 --json",
+    "suite_spec": ".loom/specs/WI-1834/spec.md",
+    "suite_plan": ".loom/specs/WI-1834/plan.md",
+    "suite_implementation_contract": ".loom/specs/WI-1834/implementation-contract.md",
+    "suite_evidence_map": ".loom/specs/WI-1834/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1834/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md",
+      "docs/methodology/templates/evidence-map.md",
+      "docs/methodology/harness/task-carrier-contract.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored spec review approved the minimal suite for merge checkpoint consumption."
+  }
+}
