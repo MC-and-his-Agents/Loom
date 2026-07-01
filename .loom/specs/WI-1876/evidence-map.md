@@ -6,8 +6,8 @@
 - FR / parent locator: https://github.com/MC-and-his-Agents/Loom/issues/1876
 - Scope: target-aware Loom CLI full_output artifact emission and readback contract.
 - Suite path: see `.loom/specs/WI-1876/spec.md` for the formal-suite bypass decision.
-- Current `HEAD`: current PR head at merge-ready.
-- PR locator: https://github.com/MC-and-his-Agents/Loom/pull/1878
+- Current `HEAD`: current closeout carrier PR head; implementation PR head `15828345b56250b9e7b662b3d0e1089a3bfff839`.
+- PR locator: implementation PR https://github.com/MC-and-his-Agents/Loom/pull/1878; closeout PR https://github.com/MC-and-his-Agents/Loom/pull/1880
 - Host state locator: GitHub issue #1876 and PR #1878
 
 ## Input Snapshot
@@ -28,7 +28,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | EV-001 | behavior_evidence | `tools/loom.py`; `tools/check_cli_contract.py`; `docs/methodology/harness/cli-command-matrix.md` | target-bound artifact locator contract and acceptance in `.loom/specs/WI-1876/spec.md` | work_item=WI-1876; scope=target-aware-output-artifacts; head=current PR head at merge-ready; pr_head=current PR head at merge-ready; pr=1878 | present | review; merge-ready; release closeout; status | Recheck after target resolution, output artifact directory, PR metadata, or command matrix contract changes. |
 | EV-002 | test_evidence | `test/output_envelope_test.py`; `test/target_resolution_test.py`; `python3 tools/check_cli_contract.py --surface aggregate`; real `node bin/loom.mjs build --target <tmp> --item WI-test --json`; real `node bin/loom.mjs fact-chain --target <tmp> --json` | validation strategy in `.loom/specs/WI-1876/plan.md` | work_item=WI-1876; scope=target-aware-output-artifacts; head=current PR head at merge-ready; pr_head=current PR head at merge-ready; pr=1878 | present | review; merge-ready; release closeout | Rerun focused unit tests, Node wrapper probes, aggregate contract, and compile checks after code, wrapper, or contract-helper changes. |
-| EV-003 | fresh_verification_input | `.loom/progress/WI-1876.md` | EV-001 EV-002 current validation summary and PR head binding | work_item=WI-1876; head=current PR head at merge-ready; pr_head=current PR head at merge-ready; validation_summary_sha256=463b03e7d728224a8aad5eef1b75d35b33646aea6c99070a35bde2d01f074bcf; pr=1878 | present | merge-ready; release closeout; status | Refresh evidence-map, PR metadata, shadow carriers, review consumption, and hosted checks after branch head, validation summary, or PR body changes. |
+| EV-003 | fresh_verification_input | `.loom/progress/WI-1876.md` | EV-001 EV-002 current validation summary and PR head binding | work_item=WI-1876; head=current closeout PR head; pr_head=current closeout PR head; validation_summary_sha256=65d7bb94bae7a70348530d185d00b643768e114431efeb97eeb6756026b052bb; pr=1880; implementation_pr=1878 | present | closeout PR gate; release closeout; status | Refresh evidence-map, PR metadata, shadow carriers, review consumption, and hosted checks after branch head, validation summary, or PR body changes. |
 
 ## Deferred
 
