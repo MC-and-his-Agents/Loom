@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1859",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1859 implementation review allows head b2dec2f4: runtime-upgrade safe lane reuses existing PR metadata, host-binding PR readback, carrier closeout-sync, recovery/shadow refresh, and route docs without adding multi-repo batch, auto-merge, product issue auto-close, or gate bypass. Local py_compile, suite validate/evidence/carrier validate, fact-chain, runtime-upgrade contract, aggregate contract, and plugin payload hash checks pass; post-implementation drift since ed1afebc is limited to review/evidence carriers.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T12:41:23Z",
+  "reviewed_head": "b2dec2f408731cf31d753be29d4294863ee6b1b3",
+  "reviewed_validation_summary": "`PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py` passed; `python3 tools/loom.py suite validate --target . --item WI-1859 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1859 --json` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/check_cli_contract.py --surface runtime-upgrade` passed in 7.29s; `python3 tools/check_cli_contract.py --surface aggregate` passed in 408.81s; `python3 tools/check_npm_package.py --surface plugin-payload-hash` passed with plugin payload hash `5d5d8d96238ffda916f9590c33844e107341d49f957614849fcada4451fb6fa5`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1859.md",
+    "recovery_entry": ".loom/progress/WI-1859.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane --item WI-1859 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane --item WI-1859 --json",
+    "suite_evidence_map": ".loom/specs/WI-1859/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1859/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
