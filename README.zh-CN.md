@@ -200,6 +200,23 @@ repo PR 的 advisory，除非 PR 明确声明本次也验证本机 Codex runtime
 日常开发中，当工作项已经有拉取请求后，让智能体使用 `loom ship` 交付，不要手工串联
 合并就绪、宿主事实同步、载体收尾和收尾检查这些底层步骤。
 
+查找命令时，先从任务路径进入，不要先扫全量命令表：
+
+| 任务 | 第一条命令 |
+| --- | --- |
+| 接手事项 | `loom resume --target . --item <WI> --json` |
+| 准备 PR 载体组 | `loom pr-intent prepare --intent <intent> --target . --item <WI> --apply --json` |
+| 检查 PR readiness | `loom pr-intent check --intent <intent> --target . --item <WI> --pr <pr> --head-sha <sha> --json` |
+| 审查 | `loom review --target . --item <WI> --json` |
+| 合并就绪 | `loom merge-ready --target . --item <WI> --json` |
+| 发布读回 | `loom release readback --target . --version <version> --commit <sha> --json` |
+| 发布后收口 | `loom release closeout-sync --target . --version <version> --item <WI> --pr <release-pr> --apply --json` |
+| 运行时升级 | `loom runtime-upgrade status --target . --json` |
+| Codex plugin/cache | `loom host doctor --host codex --scope user --json` |
+
+`prepare/apply` 类命令会在进入 hosted gate 前输出本地 readiness 和下一条命令。
+hosted gate 仍然是最终确认，不被本地检查替代。
+
 在第二台开发机器上打开已采用 Loom 的仓库时，安装全局命令行工具、注册 Codex
 用户级插件，然后验证仓库：
 

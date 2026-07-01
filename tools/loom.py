@@ -129,7 +129,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "core",
         "status": "implemented",
         "json": True,
-        "summary": "Show the frozen CLI command matrix.",
+        "summary": "Show task-oriented guidance plus the frozen CLI command matrix.",
     },
     {
         "command": "installed-state show",
@@ -571,6 +571,89 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Validate task-carrier locator/status/backlink consistency without promoting carrier truth.",
     },
 ]
+
+HELP_TASK_ROUTES: list[dict[str, Any]] = [
+    {
+        "task": "resume",
+        "summary": "Take over the current Work Item from repository facts.",
+        "first_command": "loom resume --target <repo> --item <WI> --json",
+        "next_step": "Continue with build, review, merge-ready, or closeout based on the resume checkpoint.",
+    },
+    {
+        "task": "prepare-pr",
+        "summary": "Prepare or verify a known PR intent carrier set before review/gate.",
+        "first_command": "loom pr-intent prepare --intent <intent> --target <repo> --item <WI> --apply --json",
+        "next_step": "Run pr-intent check after the PR body metadata is updated and read back.",
+    },
+    {
+        "task": "review",
+        "summary": "Run the semantic review path for the current Work Item.",
+        "first_command": "loom review --target <repo> --item <WI> --json",
+        "next_step": "Only continue when the review record is bound to the current head or accepted carrier-only drift.",
+    },
+    {
+        "task": "merge-ready",
+        "summary": "Check final readiness before host merge.",
+        "first_command": "loom merge-ready --target <repo> --item <WI> --json",
+        "next_step": "Run pr gate and merge check against the same PR head.",
+    },
+    {
+        "task": "release",
+        "summary": "Read back release surfaces without publishing or republishing.",
+        "first_command": "loom release readback --target <repo> --version <version> --commit <sha> --json",
+        "next_step": "Publish only through the repository release workflow; use closeout-sync after published readback passes.",
+    },
+    {
+        "task": "release-closeout",
+        "summary": "Terminalize repo carriers after release artifacts are already published.",
+        "first_command": "loom release closeout-sync --target <repo> --version <version> --item <WI> --pr <release-pr> --apply --json",
+        "next_step": "Commit the carrier sync, update PR metadata, then run PR gate and merge check.",
+    },
+    {
+        "task": "runtime-upgrade",
+        "summary": "Update one repository's Loom workflow pin through a maintenance PR.",
+        "first_command": "loom runtime-upgrade status --target <repo> --json",
+        "next_step": "Use prepare/check/closeout; do not mix repo workflow mutation with user plugin cache mutation.",
+    },
+    {
+        "task": "host-plugin-doctor",
+        "summary": "Diagnose local Codex plugin/cache freshness.",
+        "first_command": "loom host doctor --host codex --scope user --json",
+        "next_step": "Run host install/register with --apply only when refreshing the user workstation surface is intended.",
+    },
+]
+
+HELP_COMMAND_TIERS: dict[str, list[str]] = {
+    "common_path": [
+        "resume",
+        "pr-intent prepare",
+        "pr-intent check",
+        "review",
+        "merge-ready",
+        "pr gate",
+        "merge check",
+        "merge run",
+    ],
+    "maintenance_path": [
+        "runtime-upgrade status",
+        "runtime-upgrade prepare",
+        "runtime-upgrade check",
+        "runtime-upgrade closeout",
+        "release readback",
+        "release closeout-sync",
+        "host doctor",
+    ],
+    "advanced_debug_path": [
+        "carrier closeout-sync",
+        "pr metadata-render",
+        "pr metadata-readback",
+        "pr metadata-update",
+        "pr metadata-preflight",
+        "suite validate",
+        "suite evidence validate",
+        "suite carrier validate",
+    ],
+}
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
 IMPLEMENTED_SUITE_COMMANDS = tuple(
@@ -1475,6 +1558,11 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
             dry_run=not args.apply,
             steps=steps,
             missing_inputs=[reason],
+            readiness=readiness_payload(
+                ready=False,
+                reasons=["release_readback_mismatch"],
+                next_command="loom release readback --target <repo> --json",
+            ),
             fallback_to=["loom release readback --target <repo> --json"],
             next_action="Resolve release readback drift/missing artifacts before carrier terminalization.",
         )
@@ -1506,6 +1594,11 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
             dry_run=not args.apply,
             steps=steps,
             missing_inputs=pr_readback.get("missing_inputs", []),
+            readiness=readiness_payload(
+                ready=False,
+                reasons=readiness_reasons_from_text(pr_readback.get("missing_inputs", [])) or ["release_readback_mismatch"],
+                next_command="loom pr inspect <pr> --json --full-output",
+            ),
             fallback_to=pr_readback.get("fallback_to"),
             next_action="Bind --pr to the merged release PR before carrier terminalization.",
         )
@@ -1605,6 +1698,18 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
         steps=steps,
         first_blocker=blocker,
         missing_inputs=blocker.get("missing_inputs", []) if blocker else [],
+        readiness=readiness_payload(
+            ready=False,
+            reasons=readiness_reasons_from_text(blocker.get("missing_inputs", []) if blocker else []) if blocker else [],
+            next_command=next_commands["metadata_update"] if args.apply and result == "pass" else "loom release closeout-sync --target <repo> --item <item> --pr <release-pr> --apply --json",
+            summary=(
+                "Release carrier sync is written; update/read back the closeout PR metadata before hosted gate."
+                if args.apply and result == "pass"
+                else "Review the release closeout-sync dry-run before applying carrier writes."
+                if result == "pass"
+                else "Release closeout-sync stopped before hosted gate readiness."
+            ),
+        ),
         fallback_to=blocker.get("fallback_to") if blocker else None,
         next_commands=next_commands,
         next_action=next_commands["metadata_update"] if args.apply and result == "pass" else "Review the dry-run plan, then rerun with --apply.",
@@ -2665,8 +2770,10 @@ def handle_help(argv: list[str]) -> int:
     payload = output(
         "help",
         "pass",
-        summary="Frozen CLI command matrix.",
+        summary="Task-oriented guidance plus the frozen CLI command matrix.",
         command_count=len(COMMANDS),
+        task_routes=HELP_TASK_ROUTES,
+        command_tiers=HELP_COMMAND_TIERS,
         commands=command_matrix(),
         output_modes={
             "default": "Use `loom ... --json` for normal agent workflows; JSON is emitted directly only when it fits the effective stdout budget, otherwise stdout contains an agent-safe summary envelope and an artifact locator.",
@@ -2697,6 +2804,9 @@ def handle_help(argv: list[str]) -> int:
     if args.json:
         return emit(payload)
     print_usage(sys.stdout)
+    print("\ntask routes:")
+    for route in HELP_TASK_ROUTES:
+        print(f"  {route['task']:<22} {route['first_command']}")
     print("\ncommands:")
     for entry in COMMANDS:
         print(f"  {entry['command']:<32} {entry['status']:<11} {entry['domain']}")
@@ -6059,6 +6169,16 @@ PR_INTENT_ALIAS_INDEX: dict[str, str] = {
     for profile_id, profile in PR_INTENT_PROFILES.items()
     for alias in (profile_id, *profile["aliases"])
 }
+PR_INTENT_PRESERVE_SUITE_PROFILES = {"closeout-only", "carrier-sync-only"}
+READINESS_REASON_ORDER = (
+    "head_sha_drift",
+    "pr_metadata_stale",
+    "review_stale",
+    "shadow_stale",
+    "carrier_not_terminal",
+    "release_readback_mismatch",
+    "carrier_set_incomplete",
+)
 
 
 def pr_intent_profile(raw_intent: str | None) -> tuple[str | None, dict[str, Any] | None, str | None]:
@@ -6067,6 +6187,81 @@ def pr_intent_profile(raw_intent: str | None) -> tuple[str | None, dict[str, Any
     if not profile_id:
         return None, None, f"unknown PR intent profile: {raw_intent or '<missing>'}"
     return profile_id, PR_INTENT_PROFILES[profile_id], None
+
+
+def readiness_reasons_from_text(values: list[Any]) -> list[str]:
+    text = "\n".join(str(value).lower() for value in values if value)
+    reasons: list[str] = []
+    if "head_sha" in text or "head sha" in text or "head-sha" in text:
+        reasons.append("head_sha_drift")
+    if "metadata" in text or "machine block" in text or "pr body" in text:
+        reasons.append("pr_metadata_stale")
+    if "review" in text:
+        reasons.append("review_stale")
+    if "shadow" in text:
+        reasons.append("shadow_stale")
+    if "carrier_not_terminal" in text or "not terminal" in text:
+        reasons.append("carrier_not_terminal")
+    if "release readback" in text or "release_readback" in text:
+        reasons.append("release_readback_mismatch")
+    if not reasons and text:
+        reasons.append("carrier_set_incomplete")
+    return [reason for reason in READINESS_REASON_ORDER if reason in set(reasons)]
+
+
+def readiness_payload(
+    *,
+    ready: bool,
+    reasons: list[str],
+    next_command: str | None,
+    summary: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "schema_version": "loom-shift-left-readiness/v1",
+        "ready_for_hosted_gate": ready,
+        "reasons": reasons,
+        "next_command": None if ready else next_command,
+        "summary": summary
+        or (
+            "Local readiness inputs are bound; hosted gate may be run for final confirmation."
+            if ready
+            else "Local readiness found drift or an incomplete carrier set before hosted gate."
+        ),
+    }
+
+
+def pr_intent_effective_profile(
+    *,
+    target: Path,
+    item: str | None,
+    profile_id: str,
+    profile: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    effective = dict(profile)
+    probe: dict[str, Any] = {
+        "schema_version": "loom-pr-intent-suite-path-resolution/v1",
+        "profile_suite_path": profile.get("suite_path"),
+        "effective_suite_path": profile.get("suite_path"),
+        "source": "profile_default",
+    }
+    if profile_id not in PR_INTENT_PRESERVE_SUITE_PROFILES or not item:
+        return effective, probe
+    summary, result, payload, failed_layer, fail_reason, fallback_to = suite_validate_payload(target, item)
+    existing_suite_path = str(payload.get("suite_path") or "")
+    probe.update(
+        {
+            "suite_validate_result": result,
+            "suite_path": existing_suite_path,
+            "summary": summary,
+            "failed_layer": failed_layer,
+            "fail_closed_reason": fail_reason,
+            "fallback_to": fallback_to,
+        }
+    )
+    if result == "pass" and existing_suite_path in {"minimal", "full"}:
+        effective["suite_path"] = existing_suite_path
+        probe.update({"effective_suite_path": existing_suite_path, "source": "preserved_existing_suite"})
+    return effective, probe
 
 
 def pr_intent_current_head(target: Path, explicit_head: str | None) -> str | None:
@@ -6403,6 +6598,12 @@ def pr_intent_prepare_payload(
         missing_inputs.append("target path does not exist")
 
     effective_item = item or "<item>"
+    profile, suite_path_resolution = pr_intent_effective_profile(
+        target=target,
+        item=item,
+        profile_id=profile_id,
+        profile=profile,
+    )
     effective_output = output_file or f".loom/runtime/pr/{effective_item}-{profile_id}-body.md"
     paths, path_errors, path_source = pr_intent_changed_paths(target=target, explicit_paths=[], base="main", head_sha=current_head)
     effective_scope_proof = pr_intent_scope_proof(profile_id, paths, scope_proof)
@@ -6460,7 +6661,32 @@ def pr_intent_prepare_payload(
             )
             if metadata_prepare.get("result") != "pass":
                 missing_inputs.extend(str(entry) for entry in metadata_prepare.get("missing_inputs", []))
+    metadata_preflight: dict[str, Any] | None = None
+    if apply and not missing_inputs and item and metadata_prepare.get("result") == "pass":
+        preflight_args = pr_intent_metadata_flow_args(
+            operation="preflight",
+            target=target,
+            profile=profile,
+            item=item,
+            issue=issue,
+            branch=current_branch,
+            head_sha=current_head,
+            body_file=effective_output,
+        )
+        metadata_preflight = flow_payload(
+            command_name,
+            preflight_args,
+            fallback_to=["loom pr metadata-preflight --surface <surface> --body-file <rendered-pr-body.md> --json"],
+        )
+        if metadata_preflight.get("result") != "pass":
+            missing_inputs.extend(str(entry) for entry in metadata_preflight.get("missing_inputs", []))
     result = "pass" if not missing_inputs and suite_failure is None else "block"
+    check_command = (
+        f"loom pr-intent check --intent {profile_id} --target {target} --item {effective_item} "
+        f"--branch {current_branch or '<branch>'} --head-sha {current_head or '<head-sha>'} "
+        f"--body-file {effective_output} --json"
+    )
+    readiness_reasons = readiness_reasons_from_text(missing_inputs)
     return output(
         command_name,
         result,
@@ -6484,8 +6710,20 @@ def pr_intent_prepare_payload(
         },
         path_source=path_source,
         path_read_warnings=path_errors,
+        suite_path_resolution=suite_path_resolution,
         suite_prepare=suite_prepare,
         metadata_prepare=metadata_prepare,
+        metadata_preflight=metadata_preflight,
+        readiness=readiness_payload(
+            ready=False,
+            reasons=readiness_reasons or ([] if result == "pass" else ["carrier_set_incomplete"]),
+            next_command=check_command if result == "pass" else f"loom pr-intent prepare --intent {profile_id} --target {target} --item <id> --apply --json",
+            summary=(
+                "Carrier files passed local preflight; update/read back the PR body before hosted gate."
+                if result == "pass"
+                else "Prepare stopped before the carrier set was ready for PR metadata readback."
+            ),
+        ),
         missing_inputs=dedupe_strings(missing_inputs),
         fallback_to=[f"loom {command_name} --intent {profile_id} --item <id> --apply --json"] if result == "block" else None,
         consumed_contracts=list(PR_INTENT_SHARED_CONTRACTS),
@@ -6521,6 +6759,12 @@ def pr_intent_check_payload(
         missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
     if not body_file and not pr:
         missing_inputs.append("metadata check requires --body-file or PR number")
+    profile, suite_path_resolution = pr_intent_effective_profile(
+        target=target,
+        item=item,
+        profile_id=profile_id,
+        profile=profile,
+    )
 
     suite_validation: dict[str, Any] = {"result": "block", "missing_inputs": ["missing --item"]}
     evidence_validation: dict[str, Any] = {"result": "not_applicable", "summary": "Suite evidence validation is not applicable for this intent profile."}
@@ -6632,6 +6876,15 @@ def pr_intent_check_payload(
 
     missing_inputs = dedupe_strings(missing_inputs)
     result = "pass" if not missing_inputs and not blocking_gaps else "block"
+    ready_for_hosted_gate = result == "pass" and bool(pr)
+    readiness_reasons = readiness_reasons_from_text(missing_inputs)
+    if result == "pass" and not pr:
+        readiness_reasons = ["pr_metadata_stale"]
+    next_command = (
+        f"loom pr gate {pr} --target {target} --surface {profile['surface']} --work-item {item or '<item>'} --head-sha {current_head or '<head-sha>'} --json"
+        if ready_for_hosted_gate
+        else f"loom pr metadata-update <pr> --target {target} --surface {profile['surface']} --item {item or '<item>'} --branch {current_branch or '<branch>'} --head-sha {current_head or '<head-sha>'} --apply --json"
+    )
     return output(
         command_name,
         result,
@@ -6661,6 +6914,12 @@ def pr_intent_check_payload(
             "scope": scope_validation,
             "consistency": consistency_validation,
         },
+        suite_path_resolution=suite_path_resolution,
+        readiness=readiness_payload(
+            ready=ready_for_hosted_gate,
+            reasons=readiness_reasons,
+            next_command=next_command,
+        ),
         changed_paths={"source": path_source, "paths": paths},
         missing_inputs=missing_inputs,
         blocking_gaps=blocking_gaps,

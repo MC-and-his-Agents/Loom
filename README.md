@@ -228,6 +228,24 @@ For day-to-day delivery after a PR exists, ask the agent to use `loom ship`
 instead of manually chaining merge-ready, reconciliation, carrier closeout, and
 closeout checks.
 
+For command discovery, start from the task path instead of scanning every
+command:
+
+| Task | First command |
+| --- | --- |
+| Resume work | `loom resume --target . --item <WI> --json` |
+| Prepare a PR carrier set | `loom pr-intent prepare --intent <intent> --target . --item <WI> --apply --json` |
+| Check PR readiness | `loom pr-intent check --intent <intent> --target . --item <WI> --pr <pr> --head-sha <sha> --json` |
+| Review | `loom review --target . --item <WI> --json` |
+| Merge-ready | `loom merge-ready --target . --item <WI> --json` |
+| Release readback | `loom release readback --target . --version <version> --commit <sha> --json` |
+| Release closeout | `loom release closeout-sync --target . --version <version> --item <WI> --pr <release-pr> --apply --json` |
+| Runtime upgrade | `loom runtime-upgrade status --target . --json` |
+| Codex plugin/cache | `loom host doctor --host codex --scope user --json` |
+
+Prepare/apply commands report local readiness and the next command before a
+hosted gate. Hosted gates still remain the final confirmation.
+
 On a second development machine for an already adopted repository, install the
 global CLI and register the Codex user-level plugin, then verify the repository:
 

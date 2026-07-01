@@ -7458,6 +7458,8 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
             prepare_payload.get("result") != "pass"
             or prepare_payload.get("profile", {}).get("intent") != intent
             or prepare_payload.get("profile", {}).get("suite_path") != "not_applicable"
+            or prepare_payload.get("readiness", {}).get("ready_for_hosted_gate") is not False
+            or not prepare_payload.get("metadata_preflight")
             or not (target / body_file).exists()
         ):
             raise AssertionError(f"{intent} prepare did not produce the shared not_applicable carrier set")
@@ -7489,8 +7491,76 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
             check_payload.get("result") != "pass"
             or check_payload.get("validations", {}).get("suite", {}).get("result") != "not_applicable"
             or check_payload.get("validations", {}).get("consistency", {}).get("result") != "pass"
+            or check_payload.get("readiness", {}).get("ready_for_hosted_gate") is not False
+            or check_payload.get("readiness", {}).get("reasons") != ["pr_metadata_stale"]
         ):
             raise AssertionError(f"{intent} check did not consume shared not_applicable consistency")
+
+    write_minimal_suite(target, "WI-1850")
+    preserve_body = ".loom/runtime/pr/WI-1850-closeout-preserve-suite.md"
+    _, preserve_prepare = run_json(
+        [
+            "pr-intent",
+            "prepare",
+            "--intent",
+            "closeout-only",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1850",
+            "--issue",
+            "1850",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--output-file",
+            preserve_body,
+            "--apply",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        preserve_prepare.get("result") != "pass"
+        or preserve_prepare.get("profile", {}).get("suite_path") != "minimal"
+        or preserve_prepare.get("suite_path_resolution", {}).get("source") != "preserved_existing_suite"
+        or preserve_prepare.get("metadata_preflight", {}).get("result") != "pass"
+    ):
+        raise AssertionError("closeout-only prepare must preserve an existing minimal suite path")
+    _, preserve_check = run_json(
+        [
+            "pr-intent",
+            "check",
+            "--intent",
+            "closeout-only",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1850",
+            "--issue",
+            "1850",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            preserve_body,
+            "--changed-path",
+            ".loom/progress/WI-1850.md",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        preserve_check.get("result") != "pass"
+        or preserve_check.get("profile", {}).get("suite_path") != "minimal"
+        or preserve_check.get("validations", {}).get("suite", {}).get("result") != "pass"
+        or preserve_check.get("validations", {}).get("evidence", {}).get("result") != "pass"
+        or preserve_check.get("validations", {}).get("carrier", {}).get("result") != "pass"
+        or preserve_check.get("validations", {}).get("consistency", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"closeout-only check did not preserve existing minimal suite consistency: {preserve_check.get('missing_inputs')}")
 
     for intent, item, changed_path, expected_release in (
         ("release-only", "WI-1812", "VERSION", "release_required"),
@@ -10534,11 +10604,18 @@ def assert_suite_carrier_aggregate_fixtures(tmp: Path) -> None:
 def assert_governance_closeout_help_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    routes = {entry["task"]: entry for entry in help_payload.get("task_routes", [])}
+    tiers = help_payload.get("command_tiers", {})
     for command in ("reconcile", "gate closeout", "closeout", "closeout queue status"):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for governance closeout")
     if matrix["carrier closeout-sync"]["status"] != "implemented" or matrix["carrier closeout-sync"]["domain"] != "harness":
         raise AssertionError("carrier closeout-sync must be declared as a harness command for #1231")
+    for task in ("resume", "prepare-pr", "review", "merge-ready", "release", "release-closeout", "runtime-upgrade", "host-plugin-doctor"):
+        if task not in routes or not routes[task].get("first_command") or not routes[task].get("next_step"):
+            raise AssertionError(f"help task route missing first command or next step: {task}")
+    if "pr-intent check" not in tiers.get("common_path", []) or "release closeout-sync" not in tiers.get("maintenance_path", []):
+        raise AssertionError("help command tiers must separate common and maintenance paths")
 
 
 def assert_closeout_checkpoint_normalization_contract() -> None:
@@ -10913,6 +10990,14 @@ def run_release_readback_surface() -> None:
         )
         if status != 0 or emitted.get("result") != "pass" or emitted.get("apply") is not True:
             raise AssertionError("release closeout-sync apply did not emit a passing payload")
+        readiness = emitted.get("readiness")
+        if (
+            not isinstance(readiness, dict)
+            or readiness.get("schema_version") != "loom-shift-left-readiness/v1"
+            or readiness.get("ready_for_hosted_gate") is not False
+            or "metadata-update" not in str(readiness.get("next_command"))
+        ):
+            raise AssertionError("release closeout-sync apply must point to PR metadata readback before hosted gate")
         if [call[:2] for call in flow_calls] != [
             ["carrier", "closeout-sync"],
             ["recovery", "writeback"],
@@ -10954,6 +11039,8 @@ def run_release_readback_surface() -> None:
         )
         if status == 0 or emitted.get("result") != "block":
             raise AssertionError("release closeout-sync must block release drift before carrier writes")
+        if emitted.get("readiness", {}).get("reasons") != ["release_readback_mismatch"]:
+            raise AssertionError("release closeout-sync drift blocker must classify release readback mismatch")
         if flow_calls:
             raise AssertionError("release closeout-sync drift blocker must not delegate carrier writes")
 

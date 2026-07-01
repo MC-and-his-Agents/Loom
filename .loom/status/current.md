@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1844
-- Goal: 产品化 release readback 后的通用 release closeout-sync 入口。
-- Scope: 实现 loom release closeout-sync dry-run/apply、CLI contract、README/README.zh-CN 和 CLI matrix；不发布、不 republish、不自动 merge、不新增 carrier/DSL。
-- Execution Path: issue #1844 -> branch work/1844-release-closeout-sync -> PR -> v0.24.1 release
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1844.md
-- Review Entry: .loom/reviews/WI-1844.json
-- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface aggregate; loom release closeout-sync dogfood dry-run
-- Closing Condition: PR merges, #1842/#1843/#1846 close, v0.24.1 publishes and release closeout-sync carrier is terminalized.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1844 release closeout synced for v0.24.1: release PR #1848 merged at a03efd3c0943d7466a05ad1eec5d73cd97928695; published release readback consumed into terminal repo carrier state.
-- Next Step: None.
+- Item ID: WI-1851
+- Goal: v0.25.0 shift-left readiness and task-oriented CLI guidance
+- Scope: Implement local readiness drift classification, write-after-readback/preflight, closeout/carrier-sync suite preservation, and task-oriented help/README/SKILL guidance for #1851/#1852/#1853/#1850/#1854.
+- Execution Path: minimal suite; implementation PR then release PR
+- Workspace Entry: . on branch work/1851-shift-left-readiness
+- Recovery Entry: .loom/progress/WI-1851.md
+- Review Entry: .loom/reviews/WI-1851.json
+- Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash
+- Closing Condition: PR merged, no-release closeout evidence consumed for implementation, then v0.25.0 release/readback/terminal carrier closeout in #1855.
+- Current Checkpoint: pre_review
+- Current Stop: Implementation, suite carriers, docs, generated skills, and plugin payload hash are updated; targeted and aggregate contract checks pass.
+- Next Step: Record current-head review, render PR metadata, push branch, open PR, and run PR gate/merge-ready.
 - Blockers: None recorded.
-- Latest Validation Summary: #1847 merged at 62dd8e0abab37c80c19c3035c546fdf0bdb302ba after local PR gate, loom merge check/run, and hosted gates passed for head c3c62f46048e5387de49a6f473eb8921ed96a6e3. #1848 merged at a03efd3c0943d7466a05ad1eec5d73cd97928695 after local release checks, hosted gates, and controlled merge. v0.24.1 release readback found tag, GitHub Release, npm package, package surface, and workflow run 28502700719 published; release closeout-sync applied terminal carrier metadata and refreshed closeout/merge-ready shadows.
-- Recovery Boundary: WI-1844 owns release closeout-sync wrapper, docs, tests, and v0.24.1 convergence only; no republishing, automatic merge, multi-repo batch, new DSL, or new carrier. Publication is only the authorized v0.24.1 release workflow after the release PR merges.
-- Current Lane: release-closeout-sync
+- Latest Validation Summary: Passed on branch work/1851-shift-left-readiness head cc3c4e12c178bc50dccfdda139734ad3379467eb: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json.
+- Recovery Boundary: .loom/work-items/WI-1851.md; .loom/progress/WI-1851.md; .loom/specs/WI-1851/; tools/loom.py; tools/check_cli_contract.py; README.md; README.zh-CN.md; docs/methodology/harness/cli-command-matrix.md; src/skills/route-matrix.md
+- Current Lane: implementation
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1844.md
-- Dynamic Truth: .loom/progress/WI-1844.md
+- Static Truth: .loom/work-items/WI-1851.md
+- Dynamic Truth: .loom/progress/WI-1851.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
