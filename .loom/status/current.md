@@ -12,12 +12,12 @@
 - Validation Entry: make py-compile; make loom-demo-new-project-check; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py skills release-check --json; PR metadata preflight/readback for PR #1839
 - Closing Condition: PR #1839 merges to main, #1835-#1837 implementation scope is closed, v0.24.0 release issue #1838 publishes and reads back GitHub/npm/package/plugin metadata, #1834-#1838 and milestone #20 close, and repo carrier closeout consumes the final facts.
 - Current Checkpoint: merge
-- Current Stop: Implementation PR #1839 has runtime-upgrade implementation, checkpoint normalization, bootstrap hash refresh, shadow refresh, and demo bootstrap fixture sync pushed. Awaiting hosted checks and controlled merge before #1838 release convergence.
-- Next Step: Update PR #1839 body to the latest head, rerun hosted checks after PR metadata readback is stable, merge PR #1839 when gates pass, then run #1838 v0.24.0 release/readback/closeout from main.
+- Current Stop: Implementation PR #1839 merged into main at b795a83800a1c08ef667036371965f13bc811611. Release branch work/1838-v0.24.0-release is preparing #1838 v0.24.0 version/package/plugin metadata, release readiness evidence, PR body, and release gate inputs.
+- Next Step: Open and gate the #1838 release PR, merge it after PR body/head/review/checks are stable, then consume the main-push loom-cli-release run, tag v0.24.0, GitHub Release, npm readback, plugin metadata readback, issue closeout, milestone closeout, and carrier terminalization.
 - Blockers: None recorded.
-- Latest Validation Summary: make py-compile; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py resume --target . --item WI-1834 --json; git diff --check passed after normalizing review checkpoint to merge. Earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.
+- Latest Validation Summary: #1839 merged at b795a83800a1c08ef667036371965f13bc811611 after hosted loom-check, node-installer-pr-gate, loom-pr-merge-gate, and release-judgment passed for head b66e6086da0908ed04c5e7d2397e44fe05f527fa. Release branch validation: make py-compile passed; python3 tools/check_cli_contract.py --surface aggregate passed in 421.06s; python3 tools/check_npm_package.py passed with plugin hash 7b8cc6820fc12b148eb8935e1c7ebb079ef89e37f3099efc0280ef878f51001d; python3 tools/check_release_surface.py passed; release readback for v0.24.0 classified missing/unpublished with tag, GitHub Release, and npm version unoccupied.
 - Recovery Boundary: WI-1834 owns single-repo runtime-upgrade maintenance flow implementation and v0.24.0 release convergence only. Do not add multi-repo batch mode, do not mutate user-level Codex plugin/cache from repo PR commands, do not lower review/PR gate/head binding/CI/release/closeout requirements, and do not represent plugin/cache advisory state as a repo merge fact.
-- Current Lane: implementation-pr
+- Current Lane: release-pr
 
 ## Runtime Evidence
 
@@ -25,7 +25,7 @@
 - Logs Entry: Validation output and hosted check classification are retained in this Codex thread and summarized in `.loom/progress/WI-1834.md`.
 - Diagnostics Entry: Hosted `loom-pr-merge-gate` first failed because it read stale PR body/head metadata before update propagation and because repo fact-chain/review still pointed at WI-1805. WI-1834 fact-chain and review carriers are now refreshed and must be consumed by a new gate run.
 - Verification Entry: `make py-compile`, `make loom-demo-new-project-check`, `python3 tools/check_cli_contract.py --surface aggregate`, package checks, release-check, diff whitespace, PR metadata preflight/readback, and hosted `loom-check` component jobs passed for current or immediately preceding stable inputs.
-- Lane Entry: implementation-pr
+- Lane Entry: release-pr
 
 ## Sources
 
