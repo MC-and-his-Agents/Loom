@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1874.json
 - Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
 - Closing Condition: v0.26.1 tag, GitHub Release, npm @mc-and-his-agents/loom@0.26.1, plugin payload metadata/hash, #1869/#1874 closeout evidence, and milestone #24 readback are consistent.
-- Current Checkpoint: release
-- Current Stop: v0.26.1 release metadata, readiness evidence, suite carriers, fact-chain, package checks, release-readback fixture, aggregate CLI contract, skills release-check, demo bootstrap, and diff whitespace validation all pass locally.
-- Next Step: Commit the release candidate facts, record release-only review for the current head, prepare PR metadata, push, open the release PR, and run hosted checks.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1874 release closeout synced for v0.26.1: release PR #1877 merged at 37d78b64c8d60e227be38a814792df6cac0b8fa8; published release readback consumed into terminal repo carrier state.
+- Next Step: None.
 - Blockers: None recorded.
 - Latest Validation Summary: local pre-release validation passed on 2026-07-01 for `python3 tools/version_surface_check.py`, `python3 tools/check_release_surface.py`, `python3 tools/check_npm_package.py --surface aggregate`, `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `npm pack --dry-run --json --ignore-scripts`, `python3 tools/check_cli_contract.py --surface release-readback`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/loom.py suite validate --target . --item WI-1874 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1874 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1874 --json`, `python3 .loom/bin/loom_init.py fact-chain --target .`, `python3 tools/loom.py skills release-check --json`, `python3 tools/check_demo_bootstrap_fixture.py`, and `git diff --check`; release readback verdict is `missing` with only expected pre-publication gaps.
 - Recovery Boundary: WI-1874 owns v0.26.1 root release authority, package/plugin payload metadata/hash, release readiness evidence, release PR metadata, publication readback, terminal carrier closeout, and #1869/#1874 plus milestone #24 closeout. It does not add new runtime behavior beyond merged PR #1875, does not publish legacy installer, does not change plugin surface compatibility, and does not close issues before release readback plus terminal carrier closeout.
-- Current Lane: release
+- Current Lane: release-closeout-sync
 
 ## Runtime Evidence
 
