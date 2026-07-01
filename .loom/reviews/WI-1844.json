@@ -3,17 +3,15 @@
   "item_id": "WI-1844",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "当前 head c4e3f171 的 release closeout-sync 实现、contract 覆盖、双语文档和 WI-1844 证据仍满足 release-aftercare 边界；090f7870 后的 work item/status/progress carrier 修正没有扩大 scope 或削弱 gate。",
+  "summary": "当前 head 9953ecb7 的 release closeout-sync 修复移除了高频实现路径中的直接 gh pr view 调用，改为消费 Loom host-binding PR 读面；PR 未合并、缺 merge commit、target commit mismatch 或 payload 缺字段仍 fail closed，且不扩大发布、merge 或 carrier 边界。",
   "reviewer": "codex-subagent-implementation-review",
-  "authored_at": "2026-07-01T06:30:20Z",
-  "reviewed_head": "c4e3f171e7bed695a7004ebed738b226e7572609",
-  "reviewed_validation_summary": "py_compile_clean passed; check_cli_contract --surface release-readback passed in 1.61s with published/idempotent, non-carrier-gap, PR-readback fail-closed, dry-run, apply, and drift coverage; check_cli_contract --surface aggregate passed locally at current head in 404.53s; suite validate, suite carrier validate, and suite evidence validate passed; dogfood release closeout-sync dry-run for v0.24.0/WI-1834/PR #1840 passed against main without carrier mutation; cross-item WI-1844 target correctly failed closed.",
+  "authored_at": "2026-07-01T06:51:10Z",
+  "reviewed_head": "9953ecb7b6a959437d34b97d7b5e750a51ea9a67",
+  "reviewed_validation_summary": "py_compile_clean passed for tools/loom.py and tools/check_cli_contract.py; `rg -n \"gh pr view\" tools/loom.py` returned no matches; check_cli_contract --surface release-readback passed in 1.33s with host-binding PR readback coverage, published/idempotent, non-carrier-gap, PR-readback fail-closed, dry-run, apply, and drift coverage; earlier check_cli_contract --surface aggregate passed locally at current head in 404.53s; suite validate, suite carrier validate, and suite evidence validate passed; dogfood release closeout-sync dry-run for v0.24.0/WI-1834/PR #1840 passed against main without carrier mutation.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "低优先级：.loom/status/current.md Runtime Evidence 的 Lane Entry 仍写作 implementation-ready，而 Dynamic Facts 的 Current Lane 已是 merge-ready；不影响 merge-ready gate，可在后续 carrier cleanup 中统一。"
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1844.md",
     "recovery_entry": ".loom/progress/WI-1844.md",
