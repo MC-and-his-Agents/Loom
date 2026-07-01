@@ -3,55 +3,35 @@
   "item_id": "WI-1844",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "当前 head aa535491 在 release closeout-sync host-binding PR readback 修复基础上，仅为重复出现的 hosted PR metadata head_sha_drift 增加失败提示：gate 失败时提示先 metadata-update/readback 绑定当前 head 再 rerun；不新增调度系统、DSL 或 gate 绕过。py_compile、release surface、workflow YAML、suite/carrier/evidence 验证通过。",
-  "reviewer": "codex-main-implementation-review",
-  "authored_at": "2026-07-01T07:12:22Z",
-  "reviewed_head": "aa535491a2746456ebfa9f696daecb1833e66787",
-  "reviewed_validation_summary": "hosted run 28499745738/job 84474000577 classified repeated `head_sha_drift`; py_compile_clean passed for tools/loom.py and tools/check_cli_contract.py; check_release_surface passed; YAML parse passed for .github/workflows/pr-merge-gate.yml; `rg -n \"gh pr view\" tools/loom.py tools/check_cli_contract.py` returned no matches; earlier check_cli_contract --surface release-readback passed with host-binding PR readback coverage; earlier check_cli_contract --surface aggregate passed locally in 404.53s; suite validate, suite carrier validate, suite evidence validate, and dogfood release closeout-sync dry-run passed.",
+  "summary": "Semantic review allows release PR #1848 semantic head 2bed81a03b3999b719756a70dddbfea7501e5c0e. The diff is limited to v0.24.1 VERSION/package/plugin payload metadata, release readiness evidence, and WI-1844 release-lane carrier updates; no release closeout-sync behavior, host-binding readback contract, gate behavior, publishing boundary, or carrier schema changes are introduced by this release PR.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T07:48:00Z",
+  "reviewed_head": "2bed81a03b3999b719756a70dddbfea7501e5c0e",
+  "reviewed_validation_summary": "#1847 merged at 62dd8e0abab37c80c19c3035c546fdf0bdb302ba after local PR gate, loom merge check/run, and hosted gates passed for head c3c62f46048e5387de49a6f473eb8921ed96a6e3. Release branch validation passed: py_compile_clean for release tools; version_surface_check; check_release_surface; check_npm_package with plugin hash 2ff7aa999840442fd179cbc8101b1d5fdd437889aab2516aebe90a66018e7cfb; check_cli_contract --surface release-readback; check_cli_contract --surface aggregate in 429.97s; npm pack --dry-run --json --ignore-scripts; suite validate/carrier/evidence; fact-chain. Release readback for v0.24.1 is missing/unpublished with tag, GitHub Release, and npm version unoccupied.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
-  "follow_ups": [],
+  "follow_ups": [
+    "Refresh shadow carriers after this review record and rerun PR #1848 gate on the carrier-only head.",
+    "After PR #1848 merges, consume the main-push loom-cli-release run, v0.24.1 tag, GitHub Release, npm readback, and terminal closeout via loom release closeout-sync."
+  ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1844.md",
     "recovery_entry": ".loom/progress/WI-1844.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "budget_risk": {
-      "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
-      "enforcement": "advisory",
-      "highest_risk": "none",
-      "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
-      "adapter_evidence_locator": "",
-      "provenance": {
-        "source": "github_host"
-      }
-    },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync --item WI-1844 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync --item WI-1844 --json",
-    "suite_evidence_map": ".loom/specs/WI-1844/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1844/task-carrier.md"
-    ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "suite_path": "minimal",
+    "spec": ".loom/specs/WI-1844/spec.md",
+    "plan": ".loom/specs/WI-1844/plan.md",
+    "release_readiness": "docs/evidence/v0.24.1-release-readiness.md",
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1848",
+    "pr_metadata_readback": ".loom/runtime/pr/metadata-readback.md",
+    "release_readback": "python3 tools/loom.py release readback --target . --version v0.24.1 --release-judgment release_required --json",
+    "package_validation": "python3 tools/check_npm_package.py",
+    "release_surface_validation": "python3 tools/check_release_surface.py",
+    "cli_contract_validation": "python3 tools/check_cli_contract.py --surface aggregate"
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored review approved the current release PR semantic head after version, package, plugin payload metadata, release readiness, release readback, and carrier validation passed."
   }
 }
