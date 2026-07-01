@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1876",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1876 at head f5215c59: target-aware agent-safe artifact locators now write relative artifacts under the resolved target root, absolute LOOM_OUTPUT_ARTIFACT_DIR remains an override, build/fact-chain Python and Node wrapper readback regressions pass, aggregate CLI contract consumes target-bound locators, and WI-1876 carriers are current for v0.26.2 release-required closeout.",
+  "reviewer": "codex",
+  "authored_at": "2026-07-01T18:57:06Z",
+  "reviewed_head": "f5215c59fbcd915320e39137ae42418d4da4847e",
+  "reviewed_validation_summary": "2026-07-01 local validation passed for `python3 -m unittest test.output_envelope_test test.target_resolution_test`, `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py test/target_resolution_test.py`, real `node bin/loom.mjs build --target <tmp> --item WI-test --json` and `node bin/loom.mjs fact-chain --target <tmp> --json` artifact readback probes, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/loom.py suite validate --target . --item WI-1876 --json`, `python3 tools/loom.py build --target . --item WI-1876 --build-evidence .loom/progress/WI-1876-build-evidence.json --json --full-output`, `python3 tools/skills_surface.py check`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, and `git diff --check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1876.md",
+    "recovery_entry": ".loom/progress/WI-1876.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
