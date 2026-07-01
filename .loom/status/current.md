@@ -12,11 +12,11 @@
 - Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash
 - Closing Condition: PR merged, no-release closeout evidence consumed for implementation, then v0.25.0 release/readback/terminal carrier closeout in #1855.
 - Current Checkpoint: merge
-- Current Stop: PR #1856 metadata readback is bound to final head ca122df590e8572c46e99f670e6c7eb8631feab6; review disposition and implementation contract carrier have been repaired for PR gate consumption.
-- Next Step: Rerun PR metadata readback, PR gate, hosted checks, and merge-ready for PR #1856.
+- Current Stop: Implementation and spec reviews now approve current head 6fb65633545d84b5cc590486692c9a425d884be3; final PR head may only add review/progress/status carrier drift.
+- Next Step: Commit review/spec-review carrier refresh, push, update PR metadata to the new head, then rerun PR gate and hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed for implementation head 837b1db946bbb8578ed8f373a5d9d7cf1a2bd2b1: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json; git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .
-- Recovery Boundary: .loom/reviews/WI-1851.json; .loom/specs/WI-1851/implementation-contract.md; .loom/work-items/WI-1851.md; .loom/progress/WI-1851.md; .loom/status/current.md
+- Latest Validation Summary: Passed for current reviewed head 6fb65633545d84b5cc590486692c9a425d884be3: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json; git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 tools/loom.py pr metadata-readback 1856 --target . --surface merge_ready --item WI-1851 --issue 1851 --branch work/1851-shift-left-readiness --head-sha 6fb65633545d84b5cc590486692c9a425d884be3 --json.
+- Recovery Boundary: .loom/reviews/WI-1851.json; .loom/reviews/WI-1851.spec.json; .loom/progress/WI-1851.md; .loom/status/current.md
 - Current Lane: merge-gate-prep
 
 ## Runtime Evidence
