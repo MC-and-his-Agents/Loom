@@ -605,6 +605,12 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
         "next_step": "Run pr gate and merge check against the same PR head.",
     },
     {
+        "task": "post-merge-closeout",
+        "summary": "Synchronize host completion facts and terminal repo carriers after a PR is merged.",
+        "first_command": "loom closeout run --target <repo> --item <WI> --issue <issue> --pr <merged-pr> --branch <target-branch> --apply --json",
+        "next_step": "Use the emitted next_action; a passing apply ends with terminal carrier state and no extra closeout step.",
+    },
+    {
         "task": "release",
         "summary": "Read back release surfaces without publishing or republishing.",
         "first_command": "loom release readback --target <repo> --version <version> --commit <sha> --json",
@@ -640,6 +646,7 @@ HELP_COMMAND_TIERS: dict[str, list[str]] = {
         "pr gate",
         "merge check",
         "merge run",
+        "closeout run",
     ],
     "maintenance_path": [
         "runtime-upgrade status",
@@ -1224,6 +1231,36 @@ def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any
     }
 
 
+def release_closeout_head_hint(
+    *,
+    target: Path,
+    context: dict[str, Any],
+    release_judgment: str,
+    readbacks: dict[str, Any],
+    classification: dict[str, Any],
+) -> dict[str, Any]:
+    gaps = set(classification.get("gaps", [])) if isinstance(classification.get("gaps"), list) else set()
+    if not {"tag_target_commit_mismatch", "workflow_run_target_commit_missing"} & gaps:
+        return classification
+    tag = readbacks.get("tag") if isinstance(readbacks.get("tag"), dict) else {}
+    workflow = readbacks.get("workflow_run") if isinstance(readbacks.get("workflow_run"), dict) else {}
+    selected = workflow.get("selected") if isinstance(workflow.get("selected"), dict) else {}
+    release_commit = tag.get("commit")
+    target_commit = tag.get("target_commit") or workflow.get("target_commit")
+    if not isinstance(release_commit, str) or release_commit == target_commit:
+        return classification
+    if selected.get("headSha") not in {None, release_commit}:
+        return classification
+    version = context.get("version") or context.get("tag") or "<version>"
+    command = f"loom release readback --target {target} --version {version} --commit {release_commit} --release-judgment {release_judgment} --json"
+    return {
+        **classification,
+        "resume_action": command,
+        "next_action": command,
+        "closeout_head_hint": "release artifacts are bound to the published release commit; rerun readback with --commit when checking from a later closeout carrier head.",
+    }
+
+
 def release_fixture_payload(fixture_file: Path, fixture_name: str) -> dict[str, Any] | None:
     try:
         data = json.loads(fixture_file.read_text(encoding="utf-8"))
@@ -1304,6 +1341,13 @@ def release_readback_payload(
 
     errors = release_read_errors(readbacks)
     classification = classify_release_readback(release_judgment=release_judgment, readbacks=readbacks)
+    classification = release_closeout_head_hint(
+        target=target,
+        context=context,
+        release_judgment=release_judgment,
+        readbacks=readbacks,
+        classification=classification,
+    )
     if errors:
         classification = {
             "verdict": "blocked",

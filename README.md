@@ -218,6 +218,18 @@ metadata, status sync, closeout/merge-ready shadow refresh, and post-commit PR
 metadata/gate next commands. It does not create tags, publish npm, edit the
 GitHub Release, or merge the closeout PR.
 
+For ordinary post-merge closeout, use the common runner instead of hand-chaining
+host reconciliation, carrier sync, status writeback, shadow refresh, and final
+checks:
+
+```bash
+loom closeout run --target . --item <work-item> --issue <issue> --pr <merged-pr> --branch <target-branch> --apply --json
+```
+
+If release readback is run from a later closeout carrier PR head, pass the
+published release PR merge commit with `--commit <release-merge-commit>`; Loom
+will also suggest that exact command when it detects this closeout-head drift.
+
 `runtime-upgrade status|prepare|check` also reports the local Codex
 plugin/cache freshness and points to `loom host doctor --host codex --scope user
 --json` plus `loom host install|register --host codex --scope user --apply
@@ -242,6 +254,7 @@ command:
 | Check PR readiness | `loom pr-intent check --intent <intent> --target . --item <WI> --pr <pr> --head-sha <sha> --json` |
 | Review | `loom review --target . --item <WI> --json` |
 | Merge-ready | `loom merge-ready --target . --item <WI> --json` |
+| Post-merge closeout | `loom closeout run --target . --item <WI> --issue <issue> --pr <merged-pr> --branch <branch> --apply --json` |
 | Release readback | `loom release readback --target . --version <version> --commit <sha> --json` |
 | Release closeout | `loom release closeout-sync --target . --version <version> --item <WI> --pr <release-pr> --apply --json` |
 | Runtime upgrade | `loom runtime-upgrade status --target . --json` |

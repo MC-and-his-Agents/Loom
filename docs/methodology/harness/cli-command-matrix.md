@@ -290,6 +290,15 @@ does not publish, republish, edit GitHub Releases, modify npm, or merge a PR.
 Release artifact drift blocks before any carrier write. The only blocked
 release-readback verdict it may repair is `carrier_not_terminal`.
 
+For normal post-merge closeout, prefer `loom closeout run ... --apply` as the
+common path. It composes host reconciliation, terminal carrier metadata,
+recovery/status writeback, shadow refresh, and final closeout check, then emits
+one next command instead of asking the operator to rebuild those arguments by
+hand. When release readback runs from a later closeout carrier head, the
+published release PR merge commit remains the release artifact anchor; rerun
+readback with `--commit <release-merge-commit>` rather than treating the
+closeout carrier head as the release commit.
+
 Copyable validation commands for a `global-cli` repository:
 
 ```bash

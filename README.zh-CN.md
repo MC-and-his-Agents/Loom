@@ -191,6 +191,17 @@ loom release closeout-sync --target . --version <version> --item <work-item> --p
 closeout/merge-ready shadow refresh，以及提交后的 PR metadata / gate 下一步命令。
 它不会创建 tag、发布 npm、编辑 GitHub Release，也不会合并 closeout PR。
 
+普通 PR 合并后的收口，优先使用 common runner，不要手工串联宿主事实同步、载体
+收口、status 回写、shadow refresh 和最终检查：
+
+```bash
+loom closeout run --target . --item <work-item> --issue <issue> --pr <merged-pr> --branch <target-branch> --apply --json
+```
+
+如果在后续 closeout carrier PR head 上做 release readback，应通过
+`--commit <release-merge-commit>` 明确传入已发布 release PR 的 merge commit；
+Loom 检测到这种 closeout-head drift 时也会输出这条精确下一步命令。
+
 `runtime-upgrade status|prepare|check` 也会显示本机 Codex plugin/cache 的新鲜度。
 如果该本机表面过期或不可读，命令会指向 `loom host doctor --host codex --scope user
 --json`，以及需要时显式运行的 `loom host install|register --host codex --scope user
@@ -212,6 +223,7 @@ repo PR 的 advisory，除非 PR 明确声明本次也验证本机 Codex runtime
 | 检查 PR readiness | `loom pr-intent check --intent <intent> --target . --item <WI> --pr <pr> --head-sha <sha> --json` |
 | 审查 | `loom review --target . --item <WI> --json` |
 | 合并就绪 | `loom merge-ready --target . --item <WI> --json` |
+| 合并后收口 | `loom closeout run --target . --item <WI> --issue <issue> --pr <merged-pr> --branch <branch> --apply --json` |
 | 发布读回 | `loom release readback --target . --version <version> --commit <sha> --json` |
 | 发布后收口 | `loom release closeout-sync --target . --version <version> --item <WI> --pr <release-pr> --apply --json` |
 | 运行时升级 | `loom runtime-upgrade status --target . --json` |
