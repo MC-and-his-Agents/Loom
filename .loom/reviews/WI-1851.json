@@ -1,0 +1,37 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1851",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1851 implementation is allowed: PR intent prepare/check now emits local readiness, prepare runs metadata preflight after rendering, closeout-only and carrier-sync-only profiles preserve valid existing minimal/full suites, release closeout-sync reports local readiness without replacing hosted gates, and help/README/SKILL routes expose task-oriented command discovery without renaming or weakening existing commands.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "837b1db946bbb8578ed8f373a5d9d7cf1a2bd2b1",
+  "reviewed_validation_summary": "Passed for implementation head 837b1db946bbb8578ed8f373a5d9d7cf1a2bd2b1: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json; git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Run PR metadata readback, PR gate, hosted checks, and merge-ready on the final PR head before merging.",
+    "Release issue #1855 must consume the merged implementation and publish/read back v0.25.0 before closing #1851 and milestone #22."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1851.md",
+    "recovery_entry": ".loom/progress/WI-1851.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1851/spec.md",
+    "plan": ".loom/specs/WI-1851/plan.md",
+    "evidence_map": ".loom/specs/WI-1851/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1851/task-carrier.md",
+    "implementation": [
+      "tools/loom.py",
+      "tools/check_cli_contract.py",
+      "README.md",
+      "README.zh-CN.md",
+      "docs/methodology/harness/cli-command-matrix.md",
+      "src/skills/route-matrix.md",
+      "skills/route-matrix.md",
+      "plugins/loom/skills/route-matrix.md",
+      "plugins/loom/.codex-plugin/plugin.json"
+    ]
+  }
+}
