@@ -10730,8 +10730,9 @@ def run_release_readback_surface() -> None:
     spec.loader.exec_module(module)
 
     merge_sha = "7777777777777777777777777777777777777777"
-    if "gh pr view" in LOOM.read_text(encoding="utf-8"):
-        raise AssertionError("release closeout-sync must not shell out to gh pr view; use the Loom host-binding readback surface")
+    forbidden_pr_view = "gh pr" + " view"
+    if forbidden_pr_view in LOOM.read_text(encoding="utf-8"):
+        raise AssertionError("release closeout-sync must not shell out to the forbidden PR view command; use the Loom host-binding readback surface")
 
     binding_payload = {
         "command": "release closeout-sync pr-readback",
