@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1869",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1869 closeout recovery polish review allows the current implementation and review-carrier head. Scope covers reconciliation native blocked-by apply, release readback closeout-head guidance, terminal closeout carrier-only review consumption, closeout common-path docs/help, and contract coverage. The review-carrier-only commit after implementation does not add product behavior. No version bump or release publish is included.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-01T16:24:37Z",
+  "reviewed_head": "9db3f12001e393de8b831db59f85f5f9043b693d",
+  "reviewed_validation_summary": "local validation passed on 2026-07-01: `python3 tools/check_cli_contract.py --surface release-readback`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/check_cli_contract.py --surface closeout-wrapper`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `python3 tools/check_cli_contract.py --surface runtime-upgrade`; `python3 tools/loom.py skills release-check --json`; `python3 tools/check_cli_contract.py --surface aggregate`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1869.md",
+    "recovery_entry": ".loom/progress/WI-1869.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1869-closeout-recovery-polish/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1869-closeout-recovery-polish --item WI-1869 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1869-closeout-recovery-polish/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1869-closeout-recovery-polish --item WI-1869 --json",
+    "suite_evidence_map": ".loom/specs/WI-1869/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1869/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
