@@ -3,10 +3,10 @@
   "item_id": "WI-1834",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review allows WI-1834 minimal suite at implementation head 6bebb4e6fa21ee6e82f2234a8792f825b1f9e5f3. The checkpoint normalization repair is covered by existing governance-closeout contract scope and does not expand the minimal suite, add multi-repo batch mode, mutate user-level host/plugin cache, introduce a DSL, or add HotCP-specific Loom core behavior.",
+  "summary": "Spec review allows WI-1834 minimal suite at head e8b38464a6e17bb9050d0536f7afb6e2666aa99c. The additional bootstrap/shadow carrier refresh remains within the existing runtime-upgrade and governance carrier scope and does not expand product behavior.",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-07-01T03:26:00Z",
-  "reviewed_head": "6bebb4e6fa21ee6e82f2234a8792f825b1f9e5f3",
+  "authored_at": "2026-07-01T03:38:00Z",
+  "reviewed_head": "e8b38464a6e17bb9050d0536f7afb6e2666aa99c",
   "reviewed_validation_summary": "make py-compile; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py resume --target . --item WI-1834 --json; git diff --check passed after normalizing review checkpoint to merge. Earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.",
   "fallback_to": null,
   "findings": [],
@@ -37,6 +37,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored review approved the normalized checkpoint repair for merge checkpoint consumption."
+    "reason": "Authored review approved the current PR head for merge checkpoint consumption after carrier refresh."
   }
 }
