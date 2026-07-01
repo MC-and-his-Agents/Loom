@@ -6,7 +6,7 @@
 - Goal: 单仓 Loom runtime-upgrade 安全 lane。
 - Scope: implement the v0.26.0 runtime-upgrade maintenance lane for #1859/#1860-#1864: PR creation/update with metadata readback, issue/PR host readback for closeout, carrier-only closeout sync orchestration, carrier-only review guidance, hosted gate consistency contracts, and README/中文 README/SKILL route documentation.
 - Execution Path: issue #1859 -> branch work/1859-runtime-upgrade-safe-lane -> implementation PR -> v0.26.0 release issue #1865.
-- Workspace Entry: /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1859.md
 - Review Entry: .loom/reviews/WI-1859.json
 - Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface runtime-upgrade; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/check_npm_package.py --surface plugin-payload-hash
