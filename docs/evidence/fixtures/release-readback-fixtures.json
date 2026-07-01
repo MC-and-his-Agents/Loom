@@ -293,6 +293,79 @@
       }
     },
     {
+      "name": "closeout-head-drift",
+      "story": "Release artifacts are bound to the published release commit, but readback is run from a later closeout carrier head.",
+      "expected_verdict": "drifted",
+      "target": {
+        "repo": "MC-and-his-Agents/Loom",
+        "version": "v9.99.31",
+        "tag": "v9.99.31",
+        "npm_version": "9.99.31",
+        "npm_package": "@mc-and-his-agents/loom",
+        "package_json_version": "9.99.31",
+        "target_commit": "cccccccccccccccccccccccccccccccccccccccc"
+      },
+      "readbacks": {
+        "tag": {
+          "kind": "git_tag",
+          "tag": "v9.99.31",
+          "exists": true,
+          "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "target_commit": "cccccccccccccccccccccccccccccccccccccccc",
+          "matches_target_commit": false
+        },
+        "github_release": {
+          "kind": "github_release",
+          "tagName": "v9.99.31",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": true,
+          "url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.31"
+        },
+        "npm_package": {
+          "kind": "npm_package",
+          "package": "@mc-and-his-agents/loom",
+          "version": "9.99.31",
+          "observed_version": "9.99.31",
+          "version_exists": true,
+          "dist_tags": {
+            "latest": "9.99.31"
+          }
+        },
+        "workflow_run": {
+          "kind": "workflow_run",
+          "workflow": "loom-cli-release.yml",
+          "repo": "MC-and-his-Agents/Loom",
+          "exists": true,
+          "target_commit": "cccccccccccccccccccccccccccccccccccccccc",
+          "matching_target_commit_count": 0,
+          "selected": {
+            "databaseId": 999931,
+            "event": "push",
+            "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "completed",
+            "conclusion": "success",
+            "url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/999931"
+          }
+        },
+        "package_surface": {
+          "kind": "package_surface",
+          "result": "pass",
+          "version_file": "v9.99.31",
+          "package_json_name": "@mc-and-his-agents/loom",
+          "package_json_version": "9.99.31",
+          "gaps": [],
+          "errors": []
+        },
+        "carrier": {
+          "kind": "carrier_status",
+          "path": ".loom/status/current.md",
+          "state": "terminal",
+          "current_checkpoint": "closed_out",
+          "current_stop": "Release closeout consumed."
+        }
+      }
+    },
+    {
       "name": "blocked-workflow",
       "story": "Release artifacts exist, but the selected release workflow failed.",
       "expected_verdict": "blocked",

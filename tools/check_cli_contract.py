@@ -3335,6 +3335,99 @@ def assert_issue_dependency_machine_block_contract() -> None:
         raise AssertionError("structured issue dependency machine block must remain consumable as authored proof")
 
 
+def assert_reconciliation_sync_apply_native_dependency_contract(tmp: Path) -> None:
+    loom_flow = load_loom_flow_module()
+    target = tmp / "reconciliation-native-dependency-apply"
+    target.mkdir()
+    calls: list[tuple[int, int, str]] = []
+    emitted: dict[str, Any] = {}
+    finding = {
+        "category": "drift",
+        "kind": "stale_native_edge",
+        "severity": "fix-needed",
+        "subject": "dependency edge 100 blocked by 99",
+        "evidence": {
+            "edge": {
+                "source_issue": 100,
+                "blocking_issue": 99,
+                "source_of_truth": "github_native_edge",
+                "blocker_state": "closed",
+                "provenance": {
+                    "source_owner": "github",
+                    "source_locator": "graphql:repository.issue.blockedBy",
+                },
+            }
+        },
+    }
+    audit_calls = 0
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def fake_audit(**_kwargs: Any) -> tuple[dict[str, Any], list[str]]:
+        nonlocal audit_calls
+        audit_calls += 1
+        if audit_calls == 1:
+            return {"command": "reconciliation", "operation": "audit", "result": "fix-needed", "findings": [finding]}, []
+        return {"command": "reconciliation", "operation": "audit", "result": "pass", "findings": []}, []
+
+    def fake_set_native_dependency(_root: Path, owner: str, repo_name: str, issue_number: int, blocking_issue_number: int, mutation: str) -> list[str]:
+        if (owner, repo_name) != ("MC-and-his-Agents", "Loom"):
+            return ["wrong repo"]
+        calls.append((issue_number, blocking_issue_number, mutation))
+        return []
+
+    original_emit = loom_flow.emit
+    original_runtime_state = loom_flow.runtime_state_payload
+    original_audit = loom_flow.reconciliation_audit_payload
+    original_set_native_dependency = loom_flow.set_native_dependency
+    loom_flow.emit = fake_emit
+    loom_flow.runtime_state_payload = lambda _target_root: {"result": "pass"}
+    loom_flow.reconciliation_audit_payload = fake_audit
+    loom_flow.set_native_dependency = fake_set_native_dependency
+    try:
+        status = loom_flow.handle_reconciliation(
+            argparse.Namespace(
+                target=str(target),
+                item="WI-100",
+                operation="sync",
+                comment=None,
+                comment_file=None,
+                owner="MC-and-his-Agents",
+                repo_name="Loom",
+                pr=None,
+                pr_role=None,
+                implementation_pr=None,
+                release_pr=None,
+                carrier_sync_pr=None,
+                final_closeout_pr=None,
+                phase=None,
+                fr=None,
+                issue=100,
+                project=None,
+                branch="work/100-closeout",
+                issue_payload_file=None,
+                pr_payload_file=None,
+                project_payload_file=None,
+                dry_run=False,
+                apply=True,
+            )
+        )
+    finally:
+        loom_flow.emit = original_emit
+        loom_flow.runtime_state_payload = original_runtime_state
+        loom_flow.reconciliation_audit_payload = original_audit
+        loom_flow.set_native_dependency = original_set_native_dependency
+    if status != 0 or emitted.get("result") != "pass":
+        raise AssertionError(f"reconciliation sync apply did not pass after native dependency removal: {emitted}")
+    if calls != [(100, 99, "removeBlockedBy")]:
+        raise AssertionError(f"reconciliation sync apply did not execute removeBlockedBy: {calls}")
+    if not emitted.get("applied_actions"):
+        raise AssertionError("reconciliation sync apply did not retain applied action evidence")
+
+
 def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
     loom_flow = load_loom_flow_module()
     target = tmp / "docs-contract-suite-not-applicable"
@@ -8234,6 +8327,36 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     commit_fixture_file(target, f".loom/progress/{item}.md", "fixture terminal closeout progress")
     commit_fixture_file(target, ".loom/status/current.md", "fixture terminal closeout status")
     commit_fixture_file(target, f".loom/specs/{item}/task-carrier.md", "fixture terminal closeout task carrier")
+    _, closeout_review_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--review-file",
+            fixture["review_path"],
+            "--surface",
+            "closeout",
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Fixture closeout carrier-only review approves terminal carrier metadata only.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    closeout_review_record = closeout_review_payload.get("review", {}).get("record", {})
+    if (
+        closeout_review_payload.get("result") != "pass"
+        or closeout_review_record.get("semantic_review_disposition") is not None
+        or closeout_review_record.get("carrier_only_closeout_review", {}).get("status") != "passed"
+    ):
+        raise AssertionError(f"closed_out closeout review record fixture failed: {closeout_review_payload}")
+    commit_fixture_file(target, fixture["review_path"], "fixture terminal closeout review")
     update_fixture_pr_head(target, fixture)
     append_governance_intensity_metadata_body(target, fixture, surface="closeout")
     closeout_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
@@ -10681,6 +10804,7 @@ def run_governance_closeout_contract() -> None:
         assert_closeout_queue_status_contract(tmp)
         assert_hotcp_stale_active_closeout_regression_fixture(tmp)
         assert_idle_read_surface_contract(tmp)
+        assert_reconciliation_sync_apply_native_dependency_contract(tmp)
 
     print("governance closeout surface checks passed")
 
@@ -10756,6 +10880,7 @@ def run_release_readback_surface() -> None:
         "missing-tag": ("release", "readback", "missing"),
         "npm-missing": ("release", "readback", "missing"),
         "drifted-tag": ("release", "readback", "drifted"),
+        "closeout-head-drift": ("release", "readback", "drifted"),
         "blocked-workflow": ("release", "readback", "blocked"),
         "multi-worktree-main-busy": ("release", "resume", "blocked"),
         "no-release-docs-only": ("release", "resume", "no_release"),
@@ -10789,6 +10914,8 @@ def run_release_readback_surface() -> None:
             raise AssertionError(f"{fixture} non-blocked verdict must not set diagnostic.blocked")
         if not payload.get("next_action"):
             raise AssertionError(f"{fixture} did not expose a short next_action")
+        if fixture == "closeout-head-drift" and "--commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" not in payload.get("next_action", ""):
+            raise AssertionError("closeout-head release drift must suggest rerunning readback with the published release commit")
         target = payload.get("release_target", {})
         if not all(target.get(field) for field in ("version", "tag", "npm_version", "npm_package")):
             raise AssertionError(f"{fixture} did not expose target version/tag/npm package readback context")
