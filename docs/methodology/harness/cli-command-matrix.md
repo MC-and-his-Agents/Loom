@@ -41,7 +41,7 @@ Regression bucket / named surface / fast-vs-full validation semantics for long-r
 | --- | --- | --- |
 | `loom version` | implemented | Emits repository, skills, plugin, host-adapter, runtime, and package version context. |
 | `loom -v` / `loom --version` | implemented | Emits the current Loom CLI version as a short human-readable string. |
-| `loom help` | implemented | Emits the full command matrix and fail-closed rules. |
+| `loom help` | implemented | Emits task-oriented command routes, command tiers, the full command matrix, and fail-closed rules. |
 | `loom installed-state show` | implemented | Reads `loom-installed-state/v2` from the target repo. |
 | `loom installed-state validate` | implemented | Validates schema, layers, graph, and version metadata. |
 | `loom installed-state export` | implemented | Emits valid installed-state plus installation graph. |
@@ -96,6 +96,12 @@ formal-suite decision for docs/governance-only, closeout-only,
 carrier-sync-only, and runtime-upgrade-only profiles; it does not bypass
 review, PR gate, merge-ready, release/no-release readback, host reconciliation,
 or closeout evidence.
+For closeout-only and carrier-sync-only profiles, if the Work Item already has
+a valid `minimal` or `full` suite, `prepare` and `check` preserve that suite
+path instead of forcing `not_applicable`; terminal carrier sync must not rewrite
+the original Work Item suite truth.
+`prepare` and `check` also emit `loom-shift-left-readiness/v1`, including
+`ready_for_hosted_gate`, structured drift reasons, and the next local command.
 `loom docs-pr prepare|check` is only the short path for
 `docs-governance-only`.
 

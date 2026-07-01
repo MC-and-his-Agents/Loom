@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1851",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1851 minimal suite is approved for v0.25.0 shift-left readiness and task-oriented CLI guidance. Scope is limited to local readiness output, PR intent suite preservation, metadata preflight after render, release closeout readiness guidance, and README/SKILL/help discoverability; hosted gate scheduling, multi-repo orchestration, command renames, and release publishing remain out of scope.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a",
+  "reviewed_validation_summary": "Spec scope remains approved at current reviewed head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a; implementation-only readiness output repair does not change the minimal suite boundary. Suite validation and carrier refresh must be rerun after this carrier-only review update.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1855 must consume this implementation before v0.25.0 release publication and closeout."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1851.md",
+    "recovery_entry": ".loom/progress/WI-1851.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_spec": ".loom/specs/WI-1851/spec.md",
+    "suite_plan": ".loom/specs/WI-1851/plan.md",
+    "implementation_contract": ".loom/specs/WI-1851/implementation-contract.md",
+    "suite_evidence_map": ".loom/specs/WI-1851/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1851/task-carrier.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored spec review approved the minimal suite and scope boundary for current head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a."
+  }
+}

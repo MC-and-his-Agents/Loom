@@ -22,6 +22,10 @@
 | 正式 review | 正式 review、语义审查、输出 review 结论、code review、implementation review、确认 review gate | `loom-review` | `loom review --target <repo> [--item <id>] --json` + `loom review run --target <repo> --item <id>` + `loom review record --target <repo> --item <id>` |
 | 交接 | 交接、回写停点、移交当前事项 | `loom-handoff` | `loom handoff --target <repo> [--item <id>] --json` |
 | 普通交付 / ship | 工作项已有拉取请求，用户要求合并并收尾，且不属于发布、父级 / 里程碑、多个工作项同批交付、宿主冲突或强化治理升级 | `loom-init` 输出 ship 路径；`loom-merge-ready` 仅作显式预检 | `loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json` |
+| release readback | 发布已经触发或声称完成，需要确认 tag、GitHub Release、npm、workflow、package surface、carrier 状态 | `loom-init` 输出 release readback 路径 | `loom release readback --target <repo> --version <version> --commit <sha> --json` |
+| release closeout | release 已发布并读回通过，只需要把 repo carrier / status / shadow / PR metadata 下一步收口 | `loom-init` 输出 release closeout-sync 路径 | `loom release closeout-sync --target <repo> --version <version> --item <WI> --pr <release-pr> --apply --json` |
+| runtime upgrade | 单仓 Loom workflow pin 升级维护，不做多仓批量，不刷新用户级 plugin/cache | `loom-init` 输出 runtime-upgrade 路径 | `loom runtime-upgrade status --target <repo> --json` -> `loom runtime-upgrade prepare|check|closeout ... --json` |
+| host/plugin 诊断 | Codex plugin/cache 过期、不可读或用户要求诊断本机插件状态 | `loom-init` 输出 host doctor 路径 | `loom host doctor --host codex --scope user --json`；需要时显式 `loom host install|register --host codex --scope user --apply --json` |
 | 清理 / retire | 清理现场、退休现场、结束当前事项现场 | `loom-retire` | `loom retire --target <repo> --item <id> --json` |
 | merge 前放行 | merge-ready、最终放行前预检、确认是否可合并、确认 GitHub controlled merge 前置是否齐全 | `loom-merge-ready` | `loom merge-ready --target <repo> [--item <id>] --json` |
 
