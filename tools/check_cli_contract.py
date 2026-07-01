@@ -80,6 +80,7 @@ REQUIRED_COMMANDS = {
     "upgrade-plan",
     "runtime-upgrade status",
     "runtime-upgrade prepare",
+    "runtime-upgrade pr",
     "runtime-upgrade check",
     "runtime-upgrade closeout",
     "upgrade",
@@ -11174,6 +11175,10 @@ def run_runtime_upgrade_surface() -> None:
     if not short_version or short_version != long_version:
         raise AssertionError("loom -v and loom --version must emit the same non-empty version")
 
+    _, help_payload = run_json(["runtime-upgrade", "--help"], expect=0)
+    if help_payload.get("result") != "pass" or "pr" not in set(help_payload.get("operations", [])):
+        raise AssertionError("runtime-upgrade help must expose the safe lane pr operation")
+
     with tempfile.TemporaryDirectory(prefix="loom-runtime-upgrade-") as raw_tmp:
         target = Path(raw_tmp)
         write_governance_metadata_contract_fixture(target)
@@ -11277,6 +11282,29 @@ def run_runtime_upgrade_surface() -> None:
         ):
             raise AssertionError("runtime-upgrade prepare --apply must generate the runtime-upgrade-only carrier set")
 
+        _, pr_plan = run_json(
+            [
+                "runtime-upgrade",
+                "pr",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--json",
+            ],
+            expect=0,
+        )
+        if pr_plan.get("result") != "pass" or pr_plan.get("readiness", {}).get("ready_for_hosted_gate") is not False:
+            raise AssertionError("runtime-upgrade pr dry-run must render metadata but keep hosted gate readiness false until PR readback")
+        if "--create" not in str(pr_plan.get("next_action")):
+            raise AssertionError("runtime-upgrade pr dry-run must point to the create/update lane")
+
         _, blocked_check = run_json(["runtime-upgrade", "check", "--target", str(target), "--to", "0.24.0", "--item", "WI-1834", "--json"], expect=1)
         blocked_ids = {gap.get("id") for gap in blocked_check.get("blocking_gaps", [])}
         if blocked_check.get("result") != "block" or not {"missing-pr", "missing-branch", "missing-head_sha"}.issubset(blocked_ids):
@@ -11357,6 +11385,107 @@ def run_runtime_upgrade_surface() -> None:
         )
         if closeout_payload.get("result") != "pass" or "loom carrier closeout-sync" not in str(closeout_payload.get("carrier_closeout_sync_command")):
             raise AssertionError("runtime-upgrade closeout must expose carrier closeout-sync command")
+
+    spec = importlib.util.spec_from_file_location("loom_runtime_upgrade_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for runtime-upgrade contract")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    emitted: dict[str, Any] = {}
+    flow_calls: list[list[str]] = []
+    run_calls: list[list[str]] = []
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        run_calls.append(list(args))
+        if args[:3] == ["gh", "issue", "view"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps(
+                    {
+                        "number": 1834,
+                        "state": "CLOSED",
+                        "closedAt": "2026-07-01T00:00:00Z",
+                        "url": "https://github.com/MC-and-his-Agents/Loom/issues/1834",
+                        "closedByPullRequestsReferences": [{"number": 1839}],
+                    }
+                ),
+                "",
+            )
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        flow_calls.append(list(flow_args))
+        if flow_args[:2] == ["host-binding", "inspect"]:
+            return {
+                "command": command,
+                "result": "pass",
+                "binding_chain": {
+                    "nodes": {
+                        "pr": {
+                            "value": {
+                                "number": 1839,
+                                "state": "MERGED",
+                                "baseRefName": "main",
+                                "mergedAt": "2026-07-01T00:01:00Z",
+                                "url": "https://github.com/MC-and-his-Agents/Loom/pull/1839",
+                                "statusCheckRollup": [
+                                    {
+                                        "name": "loom-pr-merge-gate",
+                                        "status": "COMPLETED",
+                                        "conclusion": "SUCCESS",
+                                        "detailsUrl": "https://github.com/MC-and-his-Agents/Loom/actions/runs/1/job/2",
+                                    }
+                                ],
+                            }
+                        },
+                        "merge_commit": {"value": {"sha": "d" * 40, "status": "present"}},
+                    }
+                },
+            }
+        return {"command": command, "result": "pass", "summary": "ok"}
+
+    original_emit = module.emit
+    original_run_capture = module.run_capture
+    original_flow_payload = module.flow_payload
+    module.emit = fake_emit
+    module.run_capture = fake_run_capture
+    module.flow_payload = fake_flow_payload
+    try:
+        status = module.handle_runtime_upgrade(
+            [
+                "closeout",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                "WI-1834",
+                "--issue",
+                "1834",
+                "--sync",
+                "--json",
+            ]
+        )
+    finally:
+        module.emit = original_emit
+        module.run_capture = original_run_capture
+        module.flow_payload = original_flow_payload
+    if status != 0 or emitted.get("result") != "pass":
+        raise AssertionError(f"runtime-upgrade closeout host readback lane did not pass: {emitted}")
+    terminal = emitted.get("terminal_metadata", {})
+    if terminal.get("closed_at") != "2026-07-01T00:00:00Z" or terminal.get("merge_commit") != "d" * 40:
+        raise AssertionError(f"runtime-upgrade closeout did not derive terminal metadata from host readback: {terminal}")
+    if "actions/runs/1/job/2" not in str(terminal.get("evidence_locator")):
+        raise AssertionError("runtime-upgrade closeout must carry hosted run URL evidence when host readback exposes it")
+    if [call[:2] for call in flow_calls[:2]] != [["host-binding", "inspect"], ["carrier", "closeout-sync"]]:
+        raise AssertionError(f"runtime-upgrade closeout delegated unexpected first flow calls: {flow_calls}")
+    if not any(call[:3] == ["gh", "issue", "view"] for call in run_calls):
+        raise AssertionError("runtime-upgrade closeout must read issue state/closedAt from host")
 
     print("runtime-upgrade surface checks passed")
 

@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1855
-- Goal: 发布 v0.25.0 readiness guidance release。
-- Scope: bump root Loom CLI release authority to `v0.25.0`, align root npm package and Codex plugin payload release metadata/hash, add v0.25.0 release readiness evidence, publish tag/GitHub Release/npm after merge, and close out #1850/#1851-#1855 plus milestone #22 after release readback. Ownership is limited to v0.25.0 release authority, plugin payload release metadata/hash, release readiness evidence, WI-1855 carriers, and current status/shadow readback.
-- Execution Path: issue #1855 -> branch work/1855-v0.25.0-release -> release readiness evidence -> release PR -> main push release workflow -> release readback -> #1850/#1851-#1855/milestone #22 closeout.
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1855.md
-- Review Entry: .loom/reviews/WI-1855.json
-- Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
-- Closing Condition: v0.25.0 tag, GitHub Release, npm `@mc-and-his-agents/loom@0.25.0`, plugin payload metadata/hash, #1850/#1851-#1855 closeout evidence, and milestone #22 readback are consistent.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1855 release closeout synced for v0.25.0: release PR #1857 merged at d9ca2ed4e281cf123fc92a435e335d2600374f4d; published release readback consumed into terminal repo carrier state.
-- Next Step: None.
+- Item ID: WI-1859
+- Goal: 单仓 Loom runtime-upgrade 安全 lane。
+- Scope: implement the v0.26.0 runtime-upgrade maintenance lane for #1859/#1860-#1864: PR creation/update with metadata readback, issue/PR host readback for closeout, carrier-only closeout sync orchestration, carrier-only review guidance, hosted gate consistency contracts, and README/中文 README/SKILL route documentation.
+- Execution Path: issue #1859 -> branch work/1859-runtime-upgrade-safe-lane -> implementation PR -> v0.26.0 release issue #1865.
+- Workspace Entry: /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane
+- Recovery Entry: .loom/progress/WI-1859.md
+- Review Entry: .loom/reviews/WI-1859.json
+- Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface runtime-upgrade; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/check_npm_package.py --surface plugin-payload-hash
+- Closing Condition: implementation PR merged, #1860-#1864 evidence consumed, then v0.26.0 release/readback/terminal carrier closeout completed by #1865.
+- Current Checkpoint: implemented
+- Current Stop: Runtime-upgrade safe lane implementation and documentation are staged in the worktree; local contract checks passed before PR creation.
+- Next Step: Commit, push, create PR, render/read back PR metadata, run review and merge gate.
 - Blockers: None recorded.
-- Latest Validation Summary: Pre-release local validation passed on 2026-07-01; PR #1857 local PR gate, hosted checks, and merge check passed; release workflow `loom-cli-release` run 28512888728 published v0.25.0; final release readback for merge commit d9ca2ed4e281cf123fc92a435e335d2600374f4d passed with verdict `published`.
-- Recovery Boundary: WI-1855 owns v0.25.0 root release authority, plugin payload release metadata/hash, release readiness evidence, WI-1855 carriers, WI-1851 implementation-merged progress consumption, and status/shadow readback. It does not add new runtime behavior beyond the merged #1851 implementation, does not publish a legacy installer version, and does not change plugin surface compatibility.
-- Current Lane: release-closeout-sync
+- Latest Validation Summary: `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py` passed; `python3 tools/loom.py suite validate --target . --item WI-1859 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1859 --json` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/check_cli_contract.py --surface runtime-upgrade` passed in 7.29s; `python3 tools/check_cli_contract.py --surface aggregate` passed in 408.81s; `python3 tools/check_npm_package.py --surface plugin-payload-hash` passed with plugin payload hash `5d5d8d96238ffda916f9590c33844e107341d49f957614849fcada4451fb6fa5`.
+- Recovery Boundary: WI-1859 owns runtime-upgrade safe lane CLI behavior, contract checks, README/中文 README/CLI matrix/SKILL route docs, generated skill mirrors, plugin payload hash, and WI-1859 carriers. It does not publish v0.26.0, auto-merge PRs, auto-close product issues, implement multi-repo batching, or weaken review/PR gate/hosted check/readback/closeout evidence.
+- Current Lane: implementation-pr
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-01 WI-1855 release work is active in `/Users/mc/dev/Loom.worktrees/1855-v0.25.0-release` on branch `work/1855-v0.25.0-release`.
-- Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1855.md` and `docs/evidence/v0.25.0-release-readiness.md`.
-- Diagnostics Entry: PR #1856 merged to main at `4cde91ccedaf0c8a11b38030d8452888c7e43d58`; release branch starts from that merge commit.
-- Verification Entry: pre-release local validation passed; publication readback remains pending until the release PR merges and the main-push workflow publishes v0.25.0.
-- Lane Entry: release-pr-gate
+- Run Entry: 2026-07-01 WI-1859 implementation work is active in `/Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane` on branch `work/1859-runtime-upgrade-safe-lane`.
+- Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1859.md`.
+- Diagnostics Entry: Branch starts from main at `56f915ce42c73663d2a7b20f6678c1d145b190c6`.
+- Verification Entry: local py_compile, runtime-upgrade contract, aggregate contract, and plugin payload hash checks passed before PR creation.
+- Lane Entry: implementation-pr
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1855.md
-- Dynamic Truth: .loom/progress/WI-1855.md
+- Static Truth: .loom/work-items/WI-1859.md
+- Dynamic Truth: .loom/progress/WI-1859.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

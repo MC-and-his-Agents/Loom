@@ -216,11 +216,18 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Fail-closed readback for single repository Loom runtime upgrade maintenance PR readiness.",
     },
     {
+        "command": "runtime-upgrade pr",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Render, create, update, and read back a single repository Loom runtime upgrade maintenance PR.",
+    },
+    {
         "command": "runtime-upgrade closeout",
         "domain": "delivery",
         "status": "implemented",
         "json": True,
-        "summary": "Report closeout requirements and carrier sync command for a completed runtime upgrade maintenance PR.",
+        "summary": "Read merged runtime upgrade PR/issue facts and orchestrate carrier-only closeout sync.",
     },
     {"command": "upgrade", "domain": "delivery", "status": "implemented", "json": True},
     {"command": "rollback", "domain": "delivery", "status": "implemented", "json": True},
@@ -637,6 +644,7 @@ HELP_COMMAND_TIERS: dict[str, list[str]] = {
     "maintenance_path": [
         "runtime-upgrade status",
         "runtime-upgrade prepare",
+        "runtime-upgrade pr",
         "runtime-upgrade check",
         "runtime-upgrade closeout",
         "release readback",
@@ -4421,6 +4429,25 @@ def runtime_upgrade_apply_workflow_pin_update(target: Path, target_version: str)
     return writes
 
 
+def runtime_upgrade_artifact_path(target: Path, item: str | None, suffix: str) -> str:
+    safe_item = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(item or "runtime-upgrade")).strip("-") or "runtime-upgrade"
+    if not suffix.endswith(".md"):
+        suffix = f"{suffix}.md"
+    return f".loom/runtime/pr/{safe_item}-{suffix}"
+
+
+def runtime_upgrade_effective_branch(args: argparse.Namespace, target: Path) -> str | None:
+    return args.branch or git_branch_for_target(target)
+
+
+def runtime_upgrade_effective_head(args: argparse.Namespace, target: Path) -> str | None:
+    return args.head_sha or git_head_sha_for_target(target)
+
+
+def runtime_upgrade_version_label(version: str | None) -> str:
+    return str(version or "<version>")
+
+
 def runtime_upgrade_pr_metadata_command(args: argparse.Namespace) -> str | None:
     if not args.item:
         return None
@@ -4437,7 +4464,7 @@ def runtime_upgrade_pr_metadata_command(args: argparse.Namespace) -> str | None:
         "--suite-na-consumer-boundary CI workflow installs the pinned @mc-and-his-agents/loom runtime",
         "--suite-na-recheck-condition workflow pin, PR metadata, head SHA, hosted checks, and carrier closeout change",
         "--suite-na-scope-proof only Loom runtime workflow pin and maintenance carrier surfaces changed",
-        "--suite-na-review-requirement semantic review remains required",
+        "--suite-na-review-requirement current_head_review_required",
     ]
     if args.issue:
         parts.append(f"--issue {args.issue}")
@@ -4446,6 +4473,197 @@ def runtime_upgrade_pr_metadata_command(args: argparse.Namespace) -> str | None:
     if args.head_sha:
         parts.append(f"--head-sha {args.head_sha}")
     return " ".join(parts)
+
+
+def runtime_upgrade_pr_metadata_flow_args(
+    args: argparse.Namespace,
+    target: Path,
+    *,
+    action: str,
+    surface: str,
+    pr: str | None = None,
+    output_file: str | None = None,
+    readback_file: str | None = None,
+) -> list[str]:
+    branch = runtime_upgrade_effective_branch(args, target)
+    head_sha = runtime_upgrade_effective_head(args, target)
+    flow_args = ["pr-metadata", action, "--target", str(target), "--surface", surface]
+    for flag, value in (
+        ("--pr", pr),
+        ("--item", args.item),
+        ("--issue", args.issue),
+        ("--branch", branch),
+        ("--head-sha", head_sha),
+    ):
+        if value:
+            flow_args.extend([flag, str(value)])
+    if output_file:
+        flow_args.extend(["--output-file", output_file])
+    if readback_file:
+        flow_args.extend(["--readback-file", readback_file])
+    if args.base_body_file:
+        flow_args.extend(["--base-body-file", args.base_body_file])
+    flow_args.extend(
+        [
+            "--change-class",
+            "runtime_upgrade" if surface == "merge_ready" else "metadata_schema",
+            "--suite-path",
+            "not_applicable" if surface == "merge_ready" else "minimal",
+            "--review-requirement",
+            "current_head_review_required",
+            "--release-judgment",
+            "no_release",
+            "--upgrade-trigger",
+            "runtime_upgrade",
+        ]
+    )
+    if surface == "closeout":
+        flow_args.extend(["--upgrade-trigger", "carrier_sync_only"])
+    flow_args.extend(
+        [
+            "--suite-na-rationale",
+            "workflow-only Loom runtime version pin maintenance",
+            "--suite-na-consumer-boundary",
+            "CI workflow installs the pinned @mc-and-his-agents/loom runtime; carrier-only closeout remains repo metadata only",
+            "--suite-na-recheck-condition",
+            "workflow pin, PR metadata, head SHA, hosted checks, and carrier closeout change",
+            "--suite-na-scope-proof",
+            "only Loom runtime workflow pin and maintenance carrier surfaces changed",
+            "--suite-na-review-requirement",
+            "current_head_review_required",
+        ]
+    )
+    return flow_args
+
+
+def runtime_upgrade_parse_pr_url(raw: str) -> tuple[str | None, str | None]:
+    match = re.search(r"https://github\.com/[^/\s]+/[^/\s]+/pull/(\d+)", raw)
+    if match:
+        return match.group(1), match.group(0)
+    return None, raw.strip() or None
+
+
+def runtime_upgrade_create_pr_payload(args: argparse.Namespace, target: Path, *, body_file: str) -> dict[str, Any]:
+    branch = runtime_upgrade_effective_branch(args, target)
+    if not branch:
+        return output(
+            "runtime-upgrade pr create",
+            "block",
+            summary="runtime-upgrade pr create requires a branch binding.",
+            missing_inputs=["missing branch"],
+            fallback_to=["pass --branch <branch> or run from the upgrade branch"],
+        )
+    title = args.title or f"chore(runtime): upgrade Loom runtime to {runtime_upgrade_version_label(args.to)}"
+    command = [
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        args.base or "main",
+        "--head",
+        branch,
+        "--title",
+        title,
+        "--body-file",
+        str(target / body_file),
+    ]
+    completed = run_capture(command, cwd=target)
+    if completed.returncode != 0:
+        return output(
+            "runtime-upgrade pr create",
+            "block",
+            summary="gh pr create failed before PR metadata readback.",
+            missing_inputs=[completed.stderr.strip() or completed.stdout.strip() or "gh pr create failed"],
+            fallback_to=["create the PR manually, then rerun loom runtime-upgrade pr --pr <n> --update --json"],
+        )
+    number, url = runtime_upgrade_parse_pr_url(completed.stdout)
+    return output(
+        "runtime-upgrade pr create",
+        "pass",
+        summary="runtime-upgrade maintenance PR created; metadata readback must still pass before hosted gate.",
+        pr={"number": number, "url": url, "base": args.base or "main", "head": branch},
+        host_mutations=True,
+        mutates=True,
+    )
+
+
+def runtime_upgrade_issue_payload_from_gh(target: Path, *, repo: str | None, issue: str | None) -> dict[str, Any]:
+    command = "runtime-upgrade closeout issue-readback"
+    if not issue:
+        return output(command, "block", summary="Runtime upgrade closeout requires an issue locator.", missing_inputs=["missing issue"], fallback_to=["pass --issue <maintenance-issue>"])
+    repo_args = ["--repo", repo] if repo else []
+    completed = run_capture(
+        [
+            "gh",
+            "issue",
+            "view",
+            str(issue),
+            *repo_args,
+            "--json",
+            "number,state,closedAt,url,closedByPullRequestsReferences",
+        ],
+        cwd=target,
+    )
+    if completed.returncode != 0:
+        return output(
+            command,
+            "block",
+            summary="Issue readback failed.",
+            missing_inputs=[completed.stderr.strip() or completed.stdout.strip() or "gh issue view failed"],
+            fallback_to=["ensure GitHub issue readback is available or pass explicit --pr metadata"],
+        )
+    try:
+        issue_payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return output(command, "block", summary="Issue readback returned invalid JSON.", missing_inputs=["invalid issue readback JSON"], fallback_to=["retry gh issue view"])
+    refs = issue_payload.get("closedByPullRequestsReferences")
+    pr_number = None
+    if isinstance(refs, list) and refs:
+        first = refs[0]
+        if isinstance(first, dict) and first.get("number") is not None:
+            pr_number = str(first["number"])
+    missing: list[str] = []
+    if str(issue_payload.get("state", "")).upper() != "CLOSED":
+        missing.append("issue is not closed")
+    if not issue_payload.get("closedAt"):
+        missing.append("issue closedAt is missing")
+    result = "pass" if not missing else "block"
+    return output(
+        command,
+        result,
+        summary="Issue readback is closed and can feed runtime-upgrade closeout." if result == "pass" else "Issue readback is not terminal.",
+        issue=issue_payload,
+        inferred_pr=pr_number,
+        missing_inputs=missing,
+        fallback_to=["close the maintenance issue or pass explicit terminal evidence"] if missing else None,
+    )
+
+
+def runtime_upgrade_hosted_run_url(pr: dict[str, Any]) -> str | None:
+    checks = pr.get("statusCheckRollup")
+    if not isinstance(checks, list):
+        return None
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        name = str(check.get("name") or check.get("context") or "")
+        url = check.get("detailsUrl") or check.get("targetUrl")
+        if name == "loom-pr-merge-gate" and isinstance(url, str) and url:
+            return url
+    return None
+
+
+def runtime_upgrade_closeout_next_commands(args: argparse.Namespace, target: Path, *, closeout_pr: str | None = None) -> dict[str, str]:
+    branch = runtime_upgrade_effective_branch(args, target) or "<closeout-branch>"
+    head_sha = runtime_upgrade_effective_head(args, target) or "<post-commit-head-sha>"
+    pr = closeout_pr or args.closeout_pr or "<closeout-pr>"
+    return {
+        "metadata_update": f"loom pr metadata-update {pr} --target {target} --surface closeout --item {args.item or '<item>'} --branch {branch} --head-sha {head_sha} --change-class metadata_schema --release-judgment no_release --upgrade-trigger runtime_upgrade --upgrade-trigger carrier_sync_only --apply --json",
+        "metadata_readback": f"loom pr metadata-readback {pr} --target {target} --surface closeout --item {args.item or '<item>'} --branch {branch} --head-sha {head_sha} --json",
+        "gate": f"loom pr gate {pr} --target {target} --surface closeout --work-item {args.item or '<item>'} --head-sha {head_sha} --json",
+        "merge": f"loom merge check {pr} --target {target} --work-item {args.item or '<item>'} --head-sha {head_sha} --pr-role carrier_sync_pr --carrier-sync-pr {pr} --change-class metadata_schema --json",
+        "carrier_only_review": f"loom review --target {target} --item {args.item or '<item>'} --json # review only the carrier-only closeout diff; do not claim product implementation approval",
+    }
 
 
 def runtime_upgrade_pr_intent_prepare_payload(args: argparse.Namespace, target: Path, *, command: str, apply: bool | None = None) -> dict[str, Any] | None:
@@ -4550,7 +4768,25 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
     if not argv:
         return emit(output("runtime-upgrade", "block", schema=RUNTIME_UPGRADE_SCHEMA, summary="Runtime upgrade requires an operation.", failed_layer="runtime-upgrade-input", fail_closed_reason="missing operation", fallback_to=["loom runtime-upgrade status --target <repo> --json"]))
     operation = argv[0]
-    if operation not in {"status", "prepare", "check", "closeout"}:
+    if operation in {"-h", "--help", "help"}:
+        return emit(
+            output(
+                "runtime-upgrade help",
+                "pass",
+                schema=RUNTIME_UPGRADE_SCHEMA,
+                summary="Runtime upgrade lane operations: status, prepare, pr, check, closeout.",
+                operations=["status", "prepare", "pr", "check", "closeout"],
+                first_command="loom runtime-upgrade status --target <repo> --json",
+                next_commands=[
+                    "loom runtime-upgrade prepare --target <repo> --item <maintenance-work-item> --to <version> --apply --json",
+                    "loom runtime-upgrade pr --target <repo> --item <maintenance-work-item> --to <version> --create --json",
+                    "loom runtime-upgrade check --target <repo> --item <maintenance-work-item> --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json",
+                    "loom runtime-upgrade closeout --target <repo> --issue <maintenance-issue> --pr <merged-pr> --sync --create-pr --json",
+                ],
+                mutates=False,
+            )
+        )
+    if operation not in {"status", "prepare", "pr", "check", "closeout"}:
         return emit(output("runtime-upgrade", "block", schema=RUNTIME_UPGRADE_SCHEMA, summary="Unsupported runtime-upgrade operation.", failed_layer="runtime-upgrade-input", fail_closed_reason=f"unsupported operation: {operation}", fallback_to=["loom runtime-upgrade status --target <repo> --json"]))
 
     parser = argparse.ArgumentParser(prog=f"loom runtime-upgrade {operation}")
@@ -4565,12 +4801,21 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
     parser.add_argument("--target-branch")
     parser.add_argument("--closed-at")
     parser.add_argument("--evidence-locator")
+    parser.add_argument("--repo")
+    parser.add_argument("--base", default="main")
+    parser.add_argument("--title")
+    parser.add_argument("--closeout-pr")
+    parser.add_argument("--pr-payload-file")
     parser.add_argument("--output-file")
     parser.add_argument("--base-body-file")
     parser.add_argument("--rationale")
     parser.add_argument("--consumer-boundary")
     parser.add_argument("--recheck-condition")
     parser.add_argument("--scope-proof")
+    parser.add_argument("--create", action="store_true")
+    parser.add_argument("--update", action="store_true")
+    parser.add_argument("--sync", action="store_true")
+    parser.add_argument("--create-pr", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--require-plugin-readiness", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -4605,13 +4850,13 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
             )
         )
 
-    if operation in {"prepare", "check"} and not args.to:
+    if operation in {"prepare", "pr", "check"} and not args.to:
         blocking_gaps.append({"id": "missing-target-version", "summary": "Runtime upgrade requires --to <version>."})
     if not args.item:
         blocking_gaps.append({"id": "missing-work-item", "summary": "Runtime upgrade maintenance requires a real Work Item."})
     elif args.item == "INIT-0001":
         blocking_gaps.append({"id": "reserved-work-item", "summary": "Runtime upgrade must not reuse INIT-0001."})
-    if not pins["pin_count"]:
+    if operation in {"prepare", "pr", "check"} and not pins["pin_count"]:
         blocking_gaps.append({"id": "missing-workflow-pin", "summary": "No LOOM_VERSION workflow pin was found."})
 
     if operation == "prepare":
@@ -4657,6 +4902,112 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
             )
         )
 
+    if operation == "pr":
+        if not args.to:
+            blocking_gaps.append({"id": "missing-target-version", "summary": "Runtime upgrade PR orchestration requires --to <version>."})
+        branch = runtime_upgrade_effective_branch(args, target)
+        head_sha = runtime_upgrade_effective_head(args, target)
+        if not branch:
+            blocking_gaps.append({"id": "missing-branch", "summary": "Runtime upgrade PR orchestration requires --branch or a checked-out branch."})
+        if not head_sha:
+            blocking_gaps.append({"id": "missing-head_sha", "summary": "Runtime upgrade PR orchestration requires --head-sha or a readable git HEAD."})
+        output_file = args.output_file or runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-pr.md")
+        readback_file = runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-pr-readback.md")
+        steps: list[dict[str, Any]] = []
+        rendered: dict[str, Any] | None = None
+        pr_number = str(args.pr) if args.pr else None
+        created: dict[str, Any] | None = None
+        if not blocking_gaps:
+            render_args = runtime_upgrade_pr_metadata_flow_args(
+                args,
+                target,
+                action="render",
+                surface="merge_ready",
+                output_file=output_file,
+            )
+            rendered = flow_payload(command, render_args, fallback_to=["loom pr metadata-render --surface merge_ready --json"])
+            steps.append({"name": "metadata-render", "result": rendered.get("result"), "payload": rendered})
+            if rendered.get("result") != "pass":
+                blocking_gaps.extend({"id": "metadata-render", "summary": str(entry)} for entry in rendered.get("missing_inputs", []))
+
+        if not blocking_gaps and args.create:
+            created = runtime_upgrade_create_pr_payload(args, target, body_file=output_file)
+            steps.append({"name": "pr-create", "result": created.get("result"), "payload": created, "mutates": created.get("mutates", False)})
+            if created.get("result") == "pass":
+                created_pr = created.get("pr") if isinstance(created.get("pr"), dict) else {}
+                if created_pr.get("number"):
+                    pr_number = str(created_pr["number"])
+            else:
+                blocking_gaps.extend({"id": "pr-create", "summary": str(entry)} for entry in created.get("missing_inputs", []))
+
+        if not blocking_gaps and (args.update or (args.create and pr_number)):
+            if not pr_number:
+                blocking_gaps.append({"id": "missing-pr", "summary": "Runtime upgrade PR update requires --pr or a PR created by --create."})
+            else:
+                update_args = runtime_upgrade_pr_metadata_flow_args(
+                    args,
+                    target,
+                    action="update",
+                    surface="merge_ready",
+                    pr=pr_number,
+                    output_file=output_file,
+                    readback_file=readback_file,
+                )
+                update_args.append("--apply")
+                updated = flow_payload(command, update_args, fallback_to=["loom pr metadata-update <pr> --surface merge_ready --apply --json"])
+                steps.append({"name": "metadata-update", "result": updated.get("result"), "payload": updated, "mutates": True})
+                if updated.get("result") != "pass":
+                    blocking_gaps.extend({"id": "metadata-update", "summary": str(entry)} for entry in updated.get("missing_inputs", []))
+
+        readback: dict[str, Any] | None = None
+        if not blocking_gaps and pr_number:
+            readback_args = runtime_upgrade_pr_metadata_flow_args(
+                args,
+                target,
+                action="readback",
+                surface="merge_ready",
+                pr=pr_number,
+                readback_file=readback_file,
+            )
+            readback = flow_payload(command, readback_args, fallback_to=["loom pr metadata-readback <pr> --surface merge_ready --json"])
+            steps.append({"name": "metadata-readback", "result": readback.get("result"), "payload": readback})
+            if readback.get("result") != "pass":
+                blocking_gaps.extend({"id": "metadata-readback", "summary": str(entry)} for entry in readback.get("missing_inputs", []))
+
+        result = "pass" if not blocking_gaps else "block"
+        next_command = (
+            f"loom runtime-upgrade check --target {target} --item {args.item or '<item>'} --to {args.to or '<version>'} --pr {pr_number or '<pr>'} --branch {branch or '<branch>'} --head-sha {head_sha or '<head-sha>'} --json"
+            if result == "pass" and pr_number
+            else f"loom runtime-upgrade pr --target {target} --item {args.item or '<item>'} --to {args.to or '<version>'} --branch {branch or '<branch>'} --head-sha {head_sha or '<head-sha>'} --create --json"
+        )
+        return emit(
+            output(
+                command,
+                result,
+                schema=RUNTIME_UPGRADE_SCHEMA,
+                summary="Runtime upgrade PR metadata is rendered and read back." if result == "pass" else "Runtime upgrade PR orchestration is blocked.",
+                mutates=bool(args.create or args.update),
+                host_mutations=bool(args.create),
+                carrier_mutations=False,
+                pr={"number": pr_number, "branch": branch, "head_sha": head_sha},
+                body_file=output_file,
+                readback_file=readback_file if pr_number else None,
+                steps=steps,
+                readiness=readiness_payload(
+                    ready=result == "pass" and bool(pr_number),
+                    reasons=readiness_reasons_from_text([gap["summary"] for gap in blocking_gaps]),
+                    next_command=next_command,
+                    summary="PR metadata is ready for runtime-upgrade check." if result == "pass" and pr_number else "Create/update and read back the runtime-upgrade PR before hosted gate.",
+                ),
+                failed_layer=None if result == "pass" else "runtime-upgrade-pr",
+                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
+                blocking_gaps=blocking_gaps,
+                fallback_to=None if result == "pass" else [next_command],
+                next_action=next_command,
+                **payload,
+            )
+        )
+
     if operation == "check":
         current_versions = set(pins["versions"])
         if args.to and current_versions != {args.to}:
@@ -4682,37 +5033,233 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
             )
         )
 
-    closeout_missing = []
-    for value, flag in ((args.item, "--item"), (args.pr, "--pr"), (args.merge_commit, "--merge-commit"), (args.target_branch, "--target-branch"), (args.evidence_locator, "--evidence-locator")):
-        if not value:
-            closeout_missing.append(flag)
-    if closeout_missing:
-        blocking_gaps.extend({"id": f"missing-{flag[2:]}", "summary": f"Runtime upgrade closeout requires {flag}."} for flag in closeout_missing)
-    carrier_command = None
-    if args.item:
-        carrier_command = (
-            f"loom carrier closeout-sync --target {target} --item {args.item} "
-            f"--terminal-state closed_out --pr {args.pr or '<pr>'} "
-            f"--merge-commit {args.merge_commit or '<merge-commit>'} "
-            f"--target-branch {args.target_branch or '<target-branch>'} "
-            f"--evidence-locator {args.evidence_locator or '<evidence-locator>'} --apply --json"
+    if operation == "closeout":
+        explicit_terminal_evidence = bool(args.pr and args.merge_commit and args.target_branch and args.evidence_locator)
+        if not args.issue and not explicit_terminal_evidence:
+            blocking_gaps.append({"id": "missing-issue", "summary": "Runtime upgrade closeout requires --issue so Loom can read issue state and closedAt."})
+        steps: list[dict[str, Any]] = []
+        repo_slug = args.repo or infer_github_repo(target)
+        issue_readback: dict[str, Any] | None = None
+        pr_number = str(args.pr) if args.pr else None
+        if not blocking_gaps and args.issue:
+            issue_readback = runtime_upgrade_issue_payload_from_gh(target, repo=repo_slug, issue=args.issue)
+            steps.append({"name": "issue-readback", "result": issue_readback.get("result"), "payload": issue_readback})
+            if issue_readback.get("result") != "pass":
+                blocking_gaps.extend({"id": "issue-readback", "summary": str(entry)} for entry in issue_readback.get("missing_inputs", []))
+            if not pr_number and issue_readback.get("inferred_pr"):
+                pr_number = str(issue_readback["inferred_pr"])
+        if not pr_number:
+            blocking_gaps.append({"id": "missing-pr", "summary": "Runtime upgrade closeout requires --pr or an issue readback with a closing PR reference."})
+
+        pr_readback: dict[str, Any] | None = None
+        pr: dict[str, Any] = {}
+        if not blocking_gaps and pr_number and not explicit_terminal_evidence:
+            pr_readback = release_closeout_pr_readback_payload(
+                target=target,
+                pr_number=pr_number,
+                repo=repo_slug,
+                target_commit=args.merge_commit,
+                pr_payload_file=args.pr_payload_file,
+            )
+            steps.append({"name": "pr-readback", "result": pr_readback.get("result"), "payload": pr_readback})
+            if pr_readback.get("result") != "pass":
+                blocking_gaps.extend({"id": "pr-readback", "summary": str(entry)} for entry in pr_readback.get("missing_inputs", []))
+            else:
+                pr = pr_readback.get("pr") if isinstance(pr_readback.get("pr"), dict) else {}
+
+        issue_payload = issue_readback.get("issue") if isinstance(issue_readback, dict) and isinstance(issue_readback.get("issue"), dict) else {}
+        merge_commit = pr.get("mergeCommit") if isinstance(pr.get("mergeCommit"), dict) else {}
+        merge_sha = str(args.merge_commit or merge_commit.get("oid") or "not_applicable")
+        target_branch = str(args.target_branch or pr.get("baseRefName") or "not_applicable")
+        closed_at = str(args.closed_at or issue_payload.get("closedAt") or pr.get("mergedAt") or (now_iso() if explicit_terminal_evidence else "not_applicable"))
+        hosted_run_url = runtime_upgrade_hosted_run_url(pr)
+        evidence_locator = str(
+            args.evidence_locator
+            or ";".join(str(value) for value in (hosted_run_url, issue_payload.get("url"), pr.get("url")) if value)
+            or "runtime-upgrade-host-readback"
         )
-    result = "pass" if not blocking_gaps else "block"
-    return emit(
-        output(
-            command,
-            result,
-            schema=RUNTIME_UPGRADE_SCHEMA,
-            summary="Runtime upgrade closeout evidence is complete." if result == "pass" else "Runtime upgrade closeout is blocked by missing terminal evidence.",
-            mutates=False,
-            carrier_closeout_sync_command=carrier_command,
-            failed_layer=None if result == "pass" else "runtime-upgrade-closeout",
-            fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
-            blocking_gaps=blocking_gaps,
-            fallback_to=None if result == "pass" else ["loom carrier closeout-sync --target <repo> --item <item> --apply --json"],
-            **payload,
+        terminal_metadata = {
+            "terminal_state": "closed_out",
+            "issue": str(args.issue or "not_applicable"),
+            "pr": str(pr_number or "not_applicable"),
+            "merge_commit": merge_sha,
+            "target_branch": target_branch,
+            "closed_at": closed_at,
+            "evidence_locator": evidence_locator,
+            "hosted_run_url": hosted_run_url,
+        }
+        for field_name in ("merge_commit", "target_branch", "closed_at"):
+            if terminal_metadata[field_name] == "not_applicable":
+                blocking_gaps.append({"id": f"missing-{field_name}", "summary": f"Runtime upgrade closeout could not infer {field_name.replace('_', ' ')} from host readback."})
+
+        apply_closeout = args.sync or args.apply
+        carrier_command = None
+        if not blocking_gaps and args.item:
+            carrier_args = [
+                "carrier",
+                "closeout-sync",
+                "--target",
+                str(target),
+                "--item",
+                args.item,
+                "--terminal-state",
+                "closed_out",
+                "--issue",
+                terminal_metadata["issue"],
+                "--pr",
+                terminal_metadata["pr"],
+                "--merge-commit",
+                terminal_metadata["merge_commit"],
+                "--target-branch",
+                terminal_metadata["target_branch"],
+                "--closed-at",
+                terminal_metadata["closed_at"],
+                "--evidence-locator",
+                terminal_metadata["evidence_locator"],
+                "--apply" if apply_closeout else "--dry-run",
+            ]
+            carrier_command = "loom " + " ".join(str(part) for part in carrier_args)
+            if not apply_closeout:
+                steps.append(
+                    {
+                        "name": "carrier-closeout-sync-plan",
+                        "result": "pass",
+                        "payload": {"command": carrier_command, "result": "pass", "summary": "carrier closeout-sync is planned; rerun with --sync to write repo carriers."},
+                        "mutates": False,
+                    }
+                )
+            else:
+                carrier = flow_payload(command, carrier_args, fallback_to=["loom carrier closeout-sync --target <repo> --item <item> --apply --json"])
+                steps.append({"name": "carrier-closeout-sync", "result": carrier.get("result"), "payload": carrier, "mutates": apply_closeout})
+                if carrier.get("result") != "pass":
+                    blocking_gaps.extend({"id": "carrier-closeout-sync", "summary": str(entry)} for entry in carrier.get("missing_inputs", []))
+            if apply_closeout and not blocking_gaps:
+                stop = (
+                    f"{args.item} runtime-upgrade closeout synced: PR #{terminal_metadata['pr']} merged at {terminal_metadata['merge_commit']}; "
+                    "host readback consumed into terminal repo carrier state."
+                )
+                recovery_args = [
+                    "recovery",
+                    "writeback",
+                    "--target",
+                    str(target),
+                    "--item",
+                    args.item,
+                    "--current-checkpoint",
+                    "closed_out",
+                    "--current-stop",
+                    stop,
+                    "--next-step",
+                    "Commit/push this carrier-only closeout branch, update PR metadata, run hosted gate, then merge the carrier-only PR.",
+                    "--blockers",
+                    "None recorded.",
+                    "--current-lane",
+                    "runtime-upgrade-closeout-sync",
+                ]
+                recovery = flow_payload(command, recovery_args, fallback_to=["loom recovery writeback --target <repo> --item <item>"])
+                steps.append({"name": "recovery-writeback", "result": recovery.get("result"), "payload": recovery, "mutates": True})
+                if recovery.get("result") == "pass":
+                    for surface in ("closeout", "merge_ready"):
+                        refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--surface", surface, "--write"]
+                        refresh = flow_payload(command, refresh_args, fallback_to=["loom carrier refresh --target <repo> --write"])
+                        steps.append({"name": f"carrier-refresh-{surface}", "result": refresh.get("result"), "payload": refresh, "mutates": True})
+                        if refresh.get("result") != "pass":
+                            blocking_gaps.extend({"id": f"carrier-refresh-{surface}", "summary": str(entry)} for entry in refresh.get("missing_inputs", []))
+                else:
+                    blocking_gaps.extend({"id": "recovery-writeback", "summary": str(entry)} for entry in recovery.get("missing_inputs", []))
+        elif not args.item:
+            blocking_gaps.append({"id": "missing-work-item", "summary": "Runtime upgrade closeout requires --item."})
+
+        closeout_pr_number = str(args.closeout_pr) if args.closeout_pr else None
+        body_file = args.output_file or runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-closeout-pr.md")
+        readback_file = runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-closeout-pr-readback.md")
+        if not blocking_gaps and (args.create_pr or args.closeout_pr):
+            render_args = runtime_upgrade_pr_metadata_flow_args(args, target, action="render", surface="closeout", output_file=body_file)
+            rendered = flow_payload(command, render_args, fallback_to=["loom pr metadata-render --surface closeout --json"])
+            steps.append({"name": "closeout-metadata-render", "result": rendered.get("result"), "payload": rendered})
+            if rendered.get("result") != "pass":
+                blocking_gaps.extend({"id": "closeout-metadata-render", "summary": str(entry)} for entry in rendered.get("missing_inputs", []))
+            if not blocking_gaps and args.create_pr:
+                created = runtime_upgrade_create_pr_payload(args, target, body_file=body_file)
+                steps.append({"name": "closeout-pr-create", "result": created.get("result"), "payload": created, "mutates": created.get("mutates", False)})
+                if created.get("result") == "pass":
+                    created_pr = created.get("pr") if isinstance(created.get("pr"), dict) else {}
+                    if created_pr.get("number"):
+                        closeout_pr_number = str(created_pr["number"])
+                else:
+                    blocking_gaps.extend({"id": "closeout-pr-create", "summary": str(entry)} for entry in created.get("missing_inputs", []))
+            if not blocking_gaps and closeout_pr_number:
+                update_args = runtime_upgrade_pr_metadata_flow_args(
+                    args,
+                    target,
+                    action="update",
+                    surface="closeout",
+                    pr=closeout_pr_number,
+                    output_file=body_file,
+                    readback_file=readback_file,
+                )
+                update_args.append("--apply")
+                updated = flow_payload(command, update_args, fallback_to=["loom pr metadata-update <pr> --surface closeout --apply --json"])
+                steps.append({"name": "closeout-metadata-update", "result": updated.get("result"), "payload": updated, "mutates": True})
+                if updated.get("result") != "pass":
+                    blocking_gaps.extend({"id": "closeout-metadata-update", "summary": str(entry)} for entry in updated.get("missing_inputs", []))
+                else:
+                    readback_args = runtime_upgrade_pr_metadata_flow_args(
+                        args,
+                        target,
+                        action="readback",
+                        surface="closeout",
+                        pr=closeout_pr_number,
+                        readback_file=readback_file,
+                    )
+                    readback = flow_payload(command, readback_args, fallback_to=["loom pr metadata-readback <pr> --surface closeout --json"])
+                    steps.append({"name": "closeout-metadata-readback", "result": readback.get("result"), "payload": readback})
+                    if readback.get("result") != "pass":
+                        blocking_gaps.extend({"id": "closeout-metadata-readback", "summary": str(entry)} for entry in readback.get("missing_inputs", []))
+
+        result = "pass" if not blocking_gaps else "block"
+        next_commands = runtime_upgrade_closeout_next_commands(args, target, closeout_pr=closeout_pr_number)
+        next_action = (
+            next_commands["metadata_update"]
+            if apply_closeout and result == "pass" and not closeout_pr_number
+            else next_commands["gate"]
+            if result == "pass" and closeout_pr_number
+            else "Resolve runtime-upgrade closeout readback gaps before writing carrier metadata."
         )
-    )
+        return emit(
+            output(
+                command,
+                result,
+                schema=RUNTIME_UPGRADE_SCHEMA,
+                summary="Runtime upgrade closeout carrier sync is ready." if result == "pass" else "Runtime upgrade closeout stopped before terminal carrier readiness.",
+                mutates=apply_closeout or bool(args.create_pr),
+                host_mutations=bool(args.create_pr),
+                carrier_mutations=apply_closeout,
+                terminal_metadata=terminal_metadata,
+                carrier_closeout_sync_command=carrier_command,
+                steps=steps,
+                next_commands=next_commands,
+                carrier_only_review={
+                    "mode": "carrier-only",
+                    "summary": "Current-head review may cover only terminal carrier metadata/review carrier drift; it must not be represented as product implementation approval.",
+                    "next_command": next_commands["carrier_only_review"],
+                },
+                readiness=readiness_payload(
+                    ready=False,
+                    reasons=readiness_reasons_from_text([gap["summary"] for gap in blocking_gaps]) if blocking_gaps else ["pr_metadata_stale"],
+                    next_command=next_action,
+                    summary="Carrier sync is written; update/read back closeout PR metadata before hosted gate." if apply_closeout and result == "pass" else "Runtime-upgrade closeout is not a hosted gate bypass.",
+                ),
+                failed_layer=None if result == "pass" else "runtime-upgrade-closeout",
+                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
+                blocking_gaps=blocking_gaps,
+                fallback_to=None if result == "pass" else [next_action],
+                next_action=next_action,
+                **payload,
+            )
+        )
+
+    raise AssertionError(f"unhandled runtime-upgrade operation: {operation}")
 
 
 def handle_delivery(command: str, argv: list[str]) -> int:

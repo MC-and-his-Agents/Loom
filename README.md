@@ -194,13 +194,17 @@ chain:
 loom -v
 loom runtime-upgrade status --target . --json
 loom runtime-upgrade prepare --target . --item <maintenance-work-item> --to <version> --apply --json
+loom runtime-upgrade pr --target . --item <maintenance-work-item> --to <version> --create --json
 loom runtime-upgrade check --target . --item <maintenance-work-item> --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json
-loom runtime-upgrade closeout --target . --item <maintenance-work-item> --pr <pr> --merge-commit <sha> --target-branch main --evidence-locator <locator> --json
+loom runtime-upgrade closeout --target . --item <maintenance-work-item> --issue <maintenance-issue> --pr <merged-pr> --sync --create-pr --json
 ```
 
 This flow is workflow-only maintenance scaffolding. It still requires a real
 maintenance Work Item, PR metadata readback, semantic review, hosted checks,
-head binding, PR gate, and carrier closeout sync.
+head binding, PR gate, and carrier closeout sync. The closeout lane reads the
+host issue/PR state for `closedAt`, merge commit, target branch, and hosted run
+URL; carrier-only review evidence covers only terminal carrier metadata drift,
+not product implementation approval.
 
 After a release is already published and read back, use the release closeout
 sync wrapper to terminalize repo carriers without republishing:
