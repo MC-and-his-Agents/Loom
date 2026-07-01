@@ -3,11 +3,11 @@
   "item_id": "WI-1859",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1859 implementation review allows head cd90cfcd: runtime-upgrade safe lane reuses existing PR metadata, host-binding PR readback, carrier closeout-sync, recovery/shadow refresh, and route docs without adding multi-repo batch, auto-merge, product issue auto-close, or gate bypass. Additional carrier fix keeps Workspace Entry repo-relative for hosted checkout. Local py_compile, suite validate/evidence/carrier validate, fact-chain, runtime-upgrade contract, aggregate contract, plugin payload hash, and PR metadata readback pass.",
+  "summary": "允许 head 815060e3747d68c0ce5c62814d28647e83f9f31c: runtime-upgrade closeout issue readback 已改为复用 Loom host-binding issue/PR surface，避免高频实现路径直接读取宿主 issue；carrier-only closeout 仍只同步仓库事实载体，不降低 review、PR metadata、hosted gate 或 closeout evidence 要求。当前 progress 已记录最新验证：runtime-upgrade contract、host-binding issue smoke、closeout dry-run、runtime copy parity、plugin payload hash、package aggregate、CLI aggregate、loom_init verify、完整 loom_check 均通过。",
   "reviewer": "codex-main-agent",
-  "authored_at": "2026-07-01T12:45:31Z",
-  "reviewed_head": "cd90cfcd93cd9f0fcbf79e6360149da0168a978d",
-  "reviewed_validation_summary": "`PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py` passed; `python3 tools/loom.py suite validate --target . --item WI-1859 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1859 --json` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/check_cli_contract.py --surface runtime-upgrade` passed in 7.29s; `python3 tools/check_cli_contract.py --surface aggregate` passed in 408.81s; `python3 tools/check_npm_package.py --surface plugin-payload-hash` passed with plugin payload hash `5d5d8d96238ffda916f9590c33844e107341d49f957614849fcada4451fb6fa5`.",
+  "authored_at": "2026-07-01T13:36:25Z",
+  "reviewed_head": "815060e3747d68c0ce5c62814d28647e83f9f31c",
+  "reviewed_validation_summary": "`PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py` passed; `python3 tools/check_cli_contract.py --surface runtime-upgrade` passed; `python3 src/skills/shared/scripts/loom_flow.py host-binding inspect --target . --issue 1834` returned closedAt and closing PR readback; `python3 tools/loom.py runtime-upgrade closeout --target . --item WI-1834 --issue 1834 --json` passed in dry-run with inferred PR, merge commit, target branch, and closed_at; `python3 tools/check_npm_package.py --surface runtime-copy-parity` passed; `python3 tools/check_npm_package.py --surface plugin-payload-hash` passed with plugin payload hash `2763bc7cf503ef57dea03d5ed1fa21dd6a14ca052d169e2964afcb9ee5d162b9`; `python3 tools/check_npm_package.py --surface aggregate` passed; `python3 tools/loom_init.py verify --target .` passed after carrier refresh; `python3 tools/check_cli_contract.py --surface aggregate` passed in 414.22s; `python3 tools/loom_check.py` passed 45 source/distribution surfaces.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
