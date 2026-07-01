@@ -10544,6 +10544,8 @@ def assert_closeout_checkpoint_normalization_contract() -> None:
     loom_flow = load_loom_flow_module()
     if loom_flow.normalize_checkpoint("closeout") != "closed_out":
         raise AssertionError("closeout checkpoint must normalize to closed_out")
+    if loom_flow.normalize_checkpoint("review") != "merge":
+        raise AssertionError("review checkpoint must normalize to merge")
 
 
 def assert_active_closeout_contract(active_item: str) -> None:
