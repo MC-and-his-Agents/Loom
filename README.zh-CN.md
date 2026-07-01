@@ -169,13 +169,16 @@ Codex 插件入口时，使用 `loom host doctor|install|register --host codex -
 loom -v
 loom runtime-upgrade status --target . --json
 loom runtime-upgrade prepare --target . --item <maintenance-work-item> --to <version> --apply --json
+loom runtime-upgrade pr --target . --item <maintenance-work-item> --to <version> --create --json
 loom runtime-upgrade check --target . --item <maintenance-work-item> --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json
-loom runtime-upgrade closeout --target . --item <maintenance-work-item> --pr <pr> --merge-commit <sha> --target-branch main --evidence-locator <locator> --json
+loom runtime-upgrade closeout --target . --item <maintenance-work-item> --issue <maintenance-issue> --pr <merged-pr> --sync --create-pr --json
 ```
 
 这个流程只是 workflow-only 维护入口，仍然需要真实维护 Work Item、PR metadata
 readback、语义审查、hosted checks、head binding、PR gate 和 carrier closeout
-sync。
+sync。closeout lane 会从宿主 issue/PR 读回 `closedAt`、merge commit、target branch
+和 hosted run URL；carrier-only review evidence 只覆盖 terminal carrier metadata
+漂移，不代表产品实现审查通过。
 
 当 release 已经发布并完成读回后，用 release closeout sync 包装器把仓库载体收口到
 terminal 状态，不重新发布：

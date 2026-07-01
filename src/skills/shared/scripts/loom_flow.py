@@ -22664,19 +22664,33 @@ def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path)
     }
 
 
-def issue_binding_entry(role: str, number: int | None, payload: dict[str, Any] | None, errors: list[str]) -> dict[str, Any]:
+def issue_binding_entry(
+    role: str,
+    number: int | None,
+    payload: dict[str, Any] | None,
+    errors: list[str],
+    *,
+    closing_pull_requests: list[dict[str, Any]] | None = None,
+    closing_pull_request_errors: list[str] | None = None,
+) -> dict[str, Any]:
     status = "present" if payload is not None else "missing"
     if errors:
         status = "unreadable"
-    return {
+    entry = {
         "role": role,
         "number": number,
         "status": status,
         "state": payload.get("state") if payload else None,
         "title": payload.get("title") if payload else None,
         "url": payload.get("url") if payload else None,
+        "closedAt": payload.get("closedAt") if payload else None,
         "errors": errors,
     }
+    if closing_pull_requests is not None:
+        entry["closingPullRequests"] = closing_pull_requests
+    if closing_pull_request_errors:
+        entry["closingPullRequestErrors"] = closing_pull_request_errors
+    return entry
 
 
 def text_mentions_issue(text: object, issue_number: int) -> bool:
@@ -22684,6 +22698,52 @@ def text_mentions_issue(text: object, issue_number: int) -> bool:
         return False
     pattern = re.compile(rf"(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|related)\s+#?{issue_number}\b|#{issue_number}\b")
     return bool(pattern.search(text))
+
+
+def normalize_closing_pr_reference(payload: dict[str, Any]) -> dict[str, Any]:
+    merge_commit = payload.get("mergeCommit") if isinstance(payload.get("mergeCommit"), dict) else None
+    return {
+        "number": payload.get("number"),
+        "state": payload.get("state"),
+        "title": payload.get("title"),
+        "url": payload.get("url"),
+        "mergedAt": payload.get("mergedAt"),
+        "baseRefName": payload.get("baseRefName"),
+        "headRefName": payload.get("headRefName"),
+        "mergeCommit": {"oid": merge_commit.get("oid")} if isinstance(merge_commit, dict) and merge_commit.get("oid") else None,
+    }
+
+
+def github_issue_closing_pull_requests_graphql(root: Path, owner: str, repo_name: str, issue_number: int) -> tuple[list[dict[str, Any]], list[str]]:
+    query = """
+    query($owner: String!, $repo: String!, $issue: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $issue) {
+          closedByPullRequestsReferences(first: 10) {
+            nodes {
+              number
+              state
+              title
+              url
+              mergedAt
+              baseRefName
+              headRefName
+              mergeCommit { oid }
+            }
+          }
+        }
+      }
+    }
+    """
+    payload, errors = gh_graphql(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
+    if errors or payload is None:
+        return [], errors
+    issue = payload.get("repository", {}).get("issue") if isinstance(payload.get("repository"), dict) else None
+    if not isinstance(issue, dict):
+        return [], [f"GitHub issue #{issue_number} closing PR query returned no issue"]
+    refs = issue.get("closedByPullRequestsReferences") if isinstance(issue.get("closedByPullRequestsReferences"), dict) else {}
+    nodes = refs.get("nodes") if isinstance(refs.get("nodes"), list) else []
+    return [normalize_closing_pr_reference(node) for node in nodes if isinstance(node, dict)], []
 
 
 def github_binding_payload(
@@ -22735,6 +22795,8 @@ def github_binding_payload(
     issue_errors: list[str] = []
     pr_errors: list[str] = []
     branch_errors: list[str] = []
+    closing_pull_requests: list[dict[str, Any]] = []
+    closing_pull_request_errors: list[str] = []
 
     if owner and repo_name:
         if phase_number is not None:
@@ -22749,6 +22811,8 @@ def github_binding_payload(
         if pr_number is not None:
             pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+        if issue_payload is not None and issue_payload.get("state") == "CLOSED" and issue_number is not None:
+            closing_pull_requests, closing_pull_request_errors = github_issue_closing_pull_requests_graphql(target_root, owner, repo_name, issue_number)
 
     inferred_branch = branch_name
     if inferred_branch is None and pr_payload is not None and isinstance(pr_payload.get("headRefName"), str):
@@ -22817,7 +22881,14 @@ def github_binding_payload(
         "objects": {
             "phase": issue_binding_entry("phase", phase_number, phase_payload, phase_errors),
             "fr": issue_binding_entry("fr", fr_number, fr_payload, fr_errors),
-            "work_item": issue_binding_entry("work_item", issue_number, issue_payload, issue_errors),
+            "work_item": issue_binding_entry(
+                "work_item",
+                issue_number,
+                issue_payload,
+                issue_errors,
+                closing_pull_requests=closing_pull_requests if issue_payload is not None and issue_payload.get("state") == "CLOSED" else None,
+                closing_pull_request_errors=closing_pull_request_errors,
+            ),
             "branch": {
                 "role": "branch",
                 "name": inferred_branch,

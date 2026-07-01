@@ -229,6 +229,7 @@ loom install
 loom upgrade-plan
 loom runtime-upgrade status
 loom runtime-upgrade prepare
+loom runtime-upgrade pr
 loom runtime-upgrade check
 loom runtime-upgrade closeout
 loom release closeout-sync
@@ -255,14 +256,21 @@ installed-state is invalid or legacy surfaces remain unclassified. `rollback`
 remains a structured fail-closed command because rollback/delete ownership
 cannot be inferred from installed surface detection.
 
-`runtime-upgrade status|prepare|check|closeout` is the single-repository
+`runtime-upgrade status|prepare|pr|check|closeout` is the single-repository
 maintenance profile for repositories that pin Loom in GitHub workflow files.
 It reports three version layers: the current Loom CLI, the target repository
 workflow pin (`LOOM_VERSION` and package specs), and the local Codex
 plugin/cache surface. `prepare --apply` may update only the repository workflow
 pin and emits PR metadata / suite `not_applicable` / carrier closeout guidance
-for a real maintenance Work Item. It never runs `loom host install/register` or
-mutates the user workstation plugin cache. `status`, `prepare`, and `check`
+for a real maintenance Work Item. `pr --create|--update` renders, writes, and
+reads back PR metadata before the hosted gate so head drift is visible locally.
+`closeout --issue <n> --sync --create-pr` reads the host issue/PR state for
+`closedAt`, merge commit, target branch, and hosted run URL, then syncs terminal
+carrier metadata and prepares the closeout carrier PR. Carrier-only review
+evidence in this lane covers only terminal carrier metadata drift; it must not
+be represented as product implementation approval. The runtime-upgrade family
+never runs `loom host install/register` or mutates the user workstation plugin
+cache. `status`, `prepare`, and `check`
 point stale or unreadable plugin/cache users to `loom host doctor --host codex
 --scope user --json` and the explicit `loom host install|register --host codex
 --scope user --apply --json` commands. `check` treats plugin/cache stale state
