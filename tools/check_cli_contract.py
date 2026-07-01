@@ -10730,6 +10730,50 @@ def run_release_readback_surface() -> None:
     spec.loader.exec_module(module)
 
     merge_sha = "7777777777777777777777777777777777777777"
+    if "gh pr view" in LOOM.read_text(encoding="utf-8"):
+        raise AssertionError("release closeout-sync must not shell out to gh pr view; use the Loom host-binding readback surface")
+
+    binding_payload = {
+        "command": "release closeout-sync pr-readback",
+        "result": "block",
+        "binding_chain": {
+            "nodes": {
+                "pr": {
+                    "value": {
+                        "number": 1999,
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "headRefName": "work/release",
+                        "url": "https://github.com/MC-and-his-Agents/Loom/pull/1999",
+                    }
+                },
+                "merge_commit": {"value": {"sha": merge_sha, "status": "present"}},
+            }
+        },
+    }
+    binding_calls: list[list[str]] = []
+
+    def binding_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        binding_calls.append(list(flow_args))
+        return binding_payload
+
+    original_flow_for_pr = module.flow_payload
+    module.flow_payload = binding_flow_payload
+    try:
+        pr_readback = module.release_closeout_pr_readback_payload(
+            target=REPO_ROOT,
+            pr_number="1999",
+            repo="MC-and-his-Agents/Loom",
+            target_commit=merge_sha,
+            pr_payload_file=None,
+        )
+    finally:
+        module.flow_payload = original_flow_for_pr
+    if pr_readback.get("result") != "pass":
+        raise AssertionError(f"release closeout-sync did not consume host-binding PR readback: {pr_readback}")
+    if binding_calls != [["host-binding", "inspect", "--target", str(REPO_ROOT), "--pr", "1999", "--owner", "MC-and-his-Agents", "--repo", "Loom"]]:
+        raise AssertionError(f"release closeout-sync delegated unexpected PR readback: {binding_calls}")
+
     flow_calls: list[list[str]] = []
     emitted: dict[str, Any] = {}
 

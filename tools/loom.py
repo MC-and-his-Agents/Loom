@@ -1291,6 +1291,62 @@ def release_closeout_readback_allows_sync(readback: dict[str, Any]) -> tuple[boo
     return False, f"release readback verdict `{verdict or 'unknown'}` is not eligible for closeout-sync"
 
 
+RELEASE_CLOSEOUT_PR_READBACK_FALLBACK = [
+    "loom pr inspect <pr> --json --full-output",
+    "pass --pr-payload-file <path> with a saved PR readback payload",
+]
+
+
+def release_closeout_repo_flow_args(repo: str | None) -> list[str]:
+    if not repo or "/" not in repo:
+        return []
+    owner, repo_name = repo.split("/", 1)
+    if not owner or not repo_name:
+        return []
+    return ["--owner", owner, "--repo", repo_name]
+
+
+def release_closeout_pr_from_binding_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    chain = payload.get("binding_chain") if isinstance(payload.get("binding_chain"), dict) else {}
+    nodes = chain.get("nodes") if isinstance(chain.get("nodes"), dict) else {}
+    pr_node = nodes.get("pr") if isinstance(nodes.get("pr"), dict) else nodes.get("implementation_pr")
+    if not isinstance(pr_node, dict):
+        return None
+    pr_value = pr_node.get("value") if isinstance(pr_node.get("value"), dict) else {}
+    if not pr_value:
+        return None
+    pr = dict(pr_value)
+    merge_node = nodes.get("merge_commit") if isinstance(nodes.get("merge_commit"), dict) else {}
+    merge_value = merge_node.get("value") if isinstance(merge_node.get("value"), dict) else {}
+    merge_sha = merge_value.get("sha")
+    if merge_sha and not isinstance(pr.get("mergeCommit"), dict):
+        pr["mergeCommit"] = {"oid": str(merge_sha)}
+    return pr
+
+
+def release_closeout_normalize_pr_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    pr = payload.get("pr") if isinstance(payload.get("pr"), dict) else payload
+    if any(key in pr for key in ("number", "state", "mergeCommit", "merge_commit_sha")):
+        normalized = dict(pr)
+    else:
+        binding_pr = release_closeout_pr_from_binding_payload(payload)
+        if binding_pr is None:
+            return None
+        normalized = binding_pr
+    if "mergeCommit" not in normalized and normalized.get("merge_commit_sha"):
+        normalized["mergeCommit"] = {"oid": str(normalized.get("merge_commit_sha"))}
+    if "mergedAt" not in normalized and normalized.get("merged_at"):
+        normalized["mergedAt"] = normalized.get("merged_at")
+    if "url" not in normalized and normalized.get("html_url"):
+        normalized["url"] = normalized.get("html_url")
+    state = str(normalized.get("state") or "").upper()
+    if state == "CLOSED" and normalized.get("mergedAt"):
+        normalized["state"] = "MERGED"
+    return normalized
+
+
 def release_closeout_pr_readback_payload(
     *,
     target: Path,
@@ -1307,33 +1363,27 @@ def release_closeout_pr_readback_payload(
         try:
             loaded = read_json(path)
         except (OSError, json.JSONDecodeError) as exc:
-            return output(command, "block", summary="PR readback fixture is unreadable.", missing_inputs=[str(exc)], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
-        pr = loaded.get("pr") if isinstance(loaded, dict) and isinstance(loaded.get("pr"), dict) else loaded
+            return output(command, "block", summary="PR readback fixture is unreadable.", missing_inputs=[str(exc)], fallback_to=RELEASE_CLOSEOUT_PR_READBACK_FALLBACK)
+        pr = release_closeout_normalize_pr_payload(loaded) if isinstance(loaded, dict) else None
     else:
-        if not repo:
-            return output(command, "block", summary="PR readback requires a GitHub repo.", missing_inputs=["missing repo"], fallback_to=["pass --repo owner/name or run inside a GitHub checkout"])
-        completed = run_readback_command(
-            [
-                "gh",
-                "pr",
-                "view",
-                str(pr_number),
-                "--repo",
-                repo,
-                "--json",
-                "number,state,mergedAt,mergeCommit,baseRefName,url,headRefName,headRefOid",
-            ],
-            cwd=target,
+        inspect_args = [
+            "host-binding",
+            "inspect",
+            "--target",
+            str(target),
+            "--pr",
+            str(pr_number),
+            *release_closeout_repo_flow_args(repo),
+        ]
+        inspected = flow_payload(
+            command,
+            inspect_args,
+            fallback_to=RELEASE_CLOSEOUT_PR_READBACK_FALLBACK,
         )
-        if completed.returncode != 0:
-            return output(command, "block", summary="PR readback failed.", missing_inputs=[completed.stderr.strip() or "gh pr view failed"], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
-        try:
-            pr = json.loads(completed.stdout)
-        except json.JSONDecodeError as exc:
-            return output(command, "block", summary="PR readback returned invalid JSON.", missing_inputs=[str(exc)], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
+        pr = release_closeout_normalize_pr_payload(inspected)
 
     if not isinstance(pr, dict):
-        return output(command, "block", summary="PR readback payload is invalid.", missing_inputs=["PR payload must be an object"], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
+        return output(command, "block", summary="PR readback payload is invalid.", missing_inputs=["PR payload must expose PR number, state, and merge commit"], fallback_to=RELEASE_CLOSEOUT_PR_READBACK_FALLBACK)
     missing: list[str] = []
     if str(pr.get("number")) != str(pr_number):
         missing.append("PR number mismatch")
