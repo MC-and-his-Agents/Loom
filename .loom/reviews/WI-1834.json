@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1834",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Semantic review allows PR #1839 head 848d23490f10b55981d857a4dda371be09b1eda9 for merge-gate consumption after runtime checkpoint normalization, bootstrap/shadow carrier refresh, demo bootstrap fixture sync, and stabilized recovery carrier wording. The final remaining drift after this review record is expected to be review-carrier-only.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T03:45:00Z",
+  "reviewed_head": "848d23490f10b55981d857a4dda371be09b1eda9",
+  "reviewed_validation_summary": "make py-compile; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py resume --target . --item WI-1834 --json; git diff --check passed after normalizing review checkpoint to merge. Earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Update PR #1839 body to the final carrier head and rerun hosted PR gate.",
+    "Complete #1838 v0.24.0 release/readback/closeout after PR #1839 merges."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1834.md",
+    "recovery_entry": ".loom/progress/WI-1834.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_path": "minimal",
+    "spec": ".loom/specs/WI-1834/spec.md",
+    "plan": ".loom/specs/WI-1834/plan.md",
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1839",
+    "pr_metadata_readback": ".loom/runtime/pr/metadata-readback.md"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored review approved the current PR head after final recovery and fixture carrier synchronization."
+  }
+}

@@ -269,6 +269,7 @@ GOVERNANCE_CHANGE_CLASS_VALUES = {
     "fixture",
     "release",
     "workflow",
+    "runtime_upgrade",
     "metadata_schema",
     "host_write",
     "permissions",
@@ -304,8 +305,8 @@ GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {
     "external_action",
     "mixed",
 }
-GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES = {"docs_only", "docs_governance", "fixture"}
-GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES = {"docs_only", "docs_governance"}
+GOVERNANCE_LITE_ALLOWED_CHANGE_CLASSES = {"docs_only", "docs_governance", "fixture", "runtime_upgrade"}
+GOVERNANCE_LITE_NOT_APPLICABLE_CHANGE_CLASSES = {"docs_only", "docs_governance", "runtime_upgrade"}
 GOVERNANCE_LITE_MINIMAL_SUITE_CHANGE_CLASSES = {"fixture"}
 GOVERNANCE_DOCS_LITE_CHANGE_CLASS = "docs_governance"
 GOVERNANCE_LITE_ALLOWED_SUITE_PATH = "not_applicable"
@@ -4682,6 +4683,8 @@ def normalize_checkpoint(raw: str) -> str:
         return "admission"
     if "build checkpoint" in lowered:
         return "build"
+    if lowered in {"review", "review checkpoint", "reviewed", "reviewed checkpoint"}:
+        return "merge"
     if "merge checkpoint" in lowered or lowered in {"merge gate", "merge-gate", "merge_gate"}:
         return "merge"
     if lowered in {"closed", "done", "closeout", "closed_out", "closed-out", "closed out", "closed checkpoint", "done checkpoint"}:

@@ -40,6 +40,7 @@ Regression bucket / named surface / fast-vs-full validation semantics for long-r
 | Command | Status | Contract |
 | --- | --- | --- |
 | `loom version` | implemented | Emits repository, skills, plugin, host-adapter, runtime, and package version context. |
+| `loom -v` / `loom --version` | implemented | Emits the current Loom CLI version as a short human-readable string. |
 | `loom help` | implemented | Emits the full command matrix and fail-closed rules. |
 | `loom installed-state show` | implemented | Reads `loom-installed-state/v2` from the target repo. |
 | `loom installed-state validate` | implemented | Validates schema, layers, graph, and version metadata. |
@@ -78,8 +79,8 @@ loom merge run <pr> --head-sha <head-sha> --work-item <WI> --merge-method merge 
 known before review:
 
 ```text
-loom pr-intent prepare --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only
-loom pr-intent check --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only
+loom pr-intent prepare --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only|runtime-upgrade-only
+loom pr-intent check --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only|runtime-upgrade-only
 loom docs-pr prepare
 loom docs-pr check
 ```
@@ -91,9 +92,10 @@ produce a complete carrier set bound to the current branch and head SHA.
 where applicable, PR metadata preflight, changed-path scope proof, and
 cross-surface consistency. Partial, stale, manual drift, head SHA mismatch, or
 scope mismatch fails closed. A suite `not_applicable` result is a successful
-formal-suite decision for docs/governance-only, closeout-only, and
-carrier-sync-only profiles; it does not bypass review, PR gate, merge-ready,
-release/no-release readback, host reconciliation, or closeout evidence.
+formal-suite decision for docs/governance-only, closeout-only,
+carrier-sync-only, and runtime-upgrade-only profiles; it does not bypass
+review, PR gate, merge-ready, release/no-release readback, host reconciliation,
+or closeout evidence.
 `loom docs-pr prepare|check` is only the short path for
 `docs-governance-only`.
 
@@ -219,6 +221,10 @@ loom carrier closeout-sync
 ```text
 loom install
 loom upgrade-plan
+loom runtime-upgrade status
+loom runtime-upgrade prepare
+loom runtime-upgrade check
+loom runtime-upgrade closeout
 loom upgrade
 loom rollback
 loom verify
@@ -241,6 +247,24 @@ readiness stay aligned. `upgrade` requires `--apply` and refuses to mutate while
 installed-state is invalid or legacy surfaces remain unclassified. `rollback`
 remains a structured fail-closed command because rollback/delete ownership
 cannot be inferred from installed surface detection.
+
+`runtime-upgrade status|prepare|check|closeout` is the single-repository
+maintenance profile for repositories that pin Loom in GitHub workflow files.
+It reports three version layers: the current Loom CLI, the target repository
+workflow pin (`LOOM_VERSION` and package specs), and the local Codex
+plugin/cache surface. `prepare --apply` may update only the repository workflow
+pin and emits PR metadata / suite `not_applicable` / carrier closeout guidance
+for a real maintenance Work Item. It never runs `loom host install/register` or
+mutates the user workstation plugin cache. `status`, `prepare`, and `check`
+point stale or unreadable plugin/cache users to `loom host doctor --host codex
+--scope user --json` and the explicit `loom host install|register --host codex
+--scope user --apply --json` commands. `check` treats plugin/cache stale state
+as advisory by default because it is workstation-local, and makes it blocking
+only when the PR explicitly claims Codex runtime/plugin readiness. `check`
+remains read-only and fail-closed when the target version, Work Item, PR,
+branch, head SHA, or workflow pin readback is missing or drifted. The profile
+does not bypass semantic review, hosted checks, PR gate, head binding, or
+closeout evidence.
 
 Copyable validation commands for a `global-cli` repository:
 

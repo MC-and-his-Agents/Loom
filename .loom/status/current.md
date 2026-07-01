@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1805
-- Goal: Complete the v0.23.0 Host Governance Capability milestone by adding host governance diagnosis, explicit governance capability profiles, merge runtime consumption, governance mode evidence, and release convergence.
-- Scope: Parent issue #1805 plus milestone children #1826-#1830. Implementation covers GitHub host governance capability diagnosis, `host-enforced` and `advisory/local-enforced` profile contracts, merge check/run profile enforcement, governance mode metadata/evidence/readback, v0.23.0 version/package/plugin metadata, release readiness evidence, tests, and Loom carriers for this work. Advisory/local-enforced remains a low-assurance fallback and must not be represented as strong governance.
-- Execution Path: issue tree #1805 -> branch `work/1805-host-governance-capability` -> diagnosis/profile lanes #1826/#1827 -> merge runtime #1828 -> evidence/readback #1829 -> release convergence #1830 -> PR -> merge -> v0.23.0 publish/readback -> issue and milestone closeout.
+- Item ID: WI-1834
+- Goal: 实现单仓 Loom 运行时升级维护流程，并为 v0.24.0 发布准备标准、低摩擦、可验证的 repo runtime pin 升级路径。
+- Scope: 覆盖 issue #1834-#1838 的 runtime-upgrade status/prepare/check/closeout、loom -v/--version、CLI help/matrix、英文/中文 README、Codex plugin/cache advisory guidance、runtime copy/plugin metadata/hash 与示例 fixture 同步；不包含多仓批量升级或跳过治理。
+- Execution Path: issue tree #1834 -> branch work/1834-runtime-upgrade -> PR #1839 -> merge -> v0.24.0 release #1838 -> closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1805.md
-- Review Entry: .loom/reviews/WI-1805.json
-- Validation Entry: `python3 -m unittest test.host_governance_capability_test test.governance_capability_profiles_test test.governance_merge_profile_test test.output_envelope_test test.plugin_payload_hash_test`; `node --test test/npm-package-smoke.test.mjs`; `python3 tools/check_npm_package.py`; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`
-- Closing Condition: PR for #1805 merges to `main`, v0.23.0 is published to GitHub Release and npm with package/plugin readback, #1826-#1830 and #1805 are closed, the milestone is closed, and repo-local Loom carrier closeout consumes the release facts.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1805 completed and closed out: PR #1831 merged to `main` at `70128780aee1f867f15245cb24f94bf73a043f53`, closeout carrier PR #1832 merged at `adeb5d3e33ca896f43d7c529539ef0acc151bf2e`, v0.23.0 GitHub Release and npm package were published/read back, release workflow `28465118633` passed, #1805/#1826-#1830 are closed, milestone `v0.23.0 - Host Governance Capability` is closed, and terminal closeout metadata is recorded.
-- Next Step: No further WI-1805 implementation, release, issue, milestone, or carrier work remains.
+- Recovery Entry: .loom/progress/WI-1834.md
+- Review Entry: .loom/reviews/WI-1834.json
+- Validation Entry: make py-compile; make loom-demo-new-project-check; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py skills release-check --json; PR metadata preflight/readback for PR #1839
+- Closing Condition: PR #1839 merges to main, #1835-#1837 implementation scope is closed, v0.24.0 release issue #1838 publishes and reads back GitHub/npm/package/plugin metadata, #1834-#1838 and milestone #20 close, and repo carrier closeout consumes the final facts.
+- Current Checkpoint: merge
+- Current Stop: Implementation PR #1839 has runtime-upgrade implementation, checkpoint normalization, bootstrap hash refresh, shadow refresh, and demo bootstrap fixture sync pushed. Awaiting hosted checks and controlled merge before #1838 release convergence.
+- Next Step: Update PR #1839 body to the latest head, rerun hosted checks after PR metadata readback is stable, merge PR #1839 when gates pass, then run #1838 v0.24.0 release/readback/closeout from main.
 - Blockers: None recorded.
-- Latest Validation Summary: Targeted unittest suite, npm package smoke, package/release/version checks, full CLI contract, suite evidence/carrier validate, fact-chain readback, carrier refresh, PR metadata preflight/readback for PR #1831, spec review, and semantic review passed for WI-1805.
-- Recovery Boundary: WI-1805 owns #1826-#1830 implementation, v0.23.0 release readiness and release closeout only. It must not represent advisory/local-enforced as strong governance, must not bypass review/PR gate/head binding/CI rollup/release readback/closeout evidence, and must not expand into unrelated milestones or HotCP-specific core behavior.
-- Current Lane: release-closeout-sync
+- Latest Validation Summary: make py-compile; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py resume --target . --item WI-1834 --json; git diff --check passed after normalizing review checkpoint to merge. Earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.
+- Recovery Boundary: WI-1834 owns single-repo runtime-upgrade maintenance flow implementation and v0.24.0 release convergence only. Do not add multi-repo batch mode, do not mutate user-level Codex plugin/cache from repo PR commands, do not lower review/PR gate/head binding/CI/release/closeout requirements, and do not represent plugin/cache advisory state as a repo merge fact.
+- Current Lane: implementation-pr
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-01 WI-1805 host governance capability work resumed in `/Users/mc/dev/Loom.worktrees/1805-host-governance-capability` on branch `work/1805-host-governance-capability`.
-- Logs Entry: Lane summaries and validation output are retained in this Codex thread and summarized in `.loom/progress/WI-1805.md`.
-- Diagnostics Entry: Runtime carrier hash drift was refreshed in `.loom/bootstrap/manifest.json` and `.loom/bootstrap/init-result.json`; `carrier refresh` now reports no refresh-needed actions and only correctly blocks on the expected pre-review stale-review state.
-- Verification Entry: Targeted unittest suite, npm smoke, npm package check, release surface check, version surface check, full CLI contract, suite evidence/carrier validate, PR metadata preflight/readback, spec review, semantic review, hosted PR gates, merge, release workflow, GitHub Release readback, npm readback, terminal carrier sync, issue readback, and milestone readback passed.
-- Lane Entry: release-closeout-sync
+- Run Entry: 2026-07-01 WI-1834 runtime-upgrade work resumed in `/Users/mc/dev/Loom.worktrees/1834-runtime-upgrade` on branch `work/1834-runtime-upgrade`.
+- Logs Entry: Validation output and hosted check classification are retained in this Codex thread and summarized in `.loom/progress/WI-1834.md`.
+- Diagnostics Entry: Hosted `loom-pr-merge-gate` first failed because it read stale PR body/head metadata before update propagation and because repo fact-chain/review still pointed at WI-1805. WI-1834 fact-chain and review carriers are now refreshed and must be consumed by a new gate run.
+- Verification Entry: `make py-compile`, `make loom-demo-new-project-check`, `python3 tools/check_cli_contract.py --surface aggregate`, package checks, release-check, diff whitespace, PR metadata preflight/readback, and hosted `loom-check` component jobs passed for current or immediately preceding stable inputs.
+- Lane Entry: implementation-pr
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1805.md
-- Dynamic Truth: .loom/progress/WI-1805.md
+- Static Truth: .loom/work-items/WI-1834.md
+- Dynamic Truth: .loom/progress/WI-1834.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
