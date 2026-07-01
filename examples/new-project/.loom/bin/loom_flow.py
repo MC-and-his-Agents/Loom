@@ -999,6 +999,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--kind", choices=tuple(sorted(REVIEW_KINDS)))
     review.add_argument("--summary", help="Stable review conclusion summary")
     review.add_argument("--reviewer", help="Reviewer identity")
+    review.add_argument("--surface", choices=("review", "closeout"), default="review", help="Review record surface; closeout is restricted to terminal carrier-only review.")
     review.add_argument("--fallback-to", choices=("admission", "build", "merge"))
     review.add_argument("--findings-file", help="Optional findings JSON path relative to the target root")
     review.add_argument(
@@ -18029,6 +18030,7 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None,
         "pr_head": head_sha,
         "binding_status": "unknown",
         "semantic_review_disposition": None,
+        "carrier_only_closeout_review": None,
         "head_binding": None,
         "missing_inputs": [],
         "next_action": "run authored Loom review for the current PR head before freezing gate inputs.",
@@ -18059,14 +18061,24 @@ def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None,
     binding["current_head"] = head_binding.get("current_head")
     binding["pr_head"] = head_sha or head_binding.get("current_head")
     binding["binding_status"] = head_binding.get("status")
-    disposition, disposition_errors = semantic_review_disposition_payload(
-        review_record=review_record,
-        review_path=review_path,
-        pr_head=head_sha or head_binding.get("current_head"),
-        head_binding=head_binding,
-        current_validation_summary=context.get("latest_validation_summary"),
-    )
-    binding["semantic_review_disposition"] = disposition
+    if terminal_closeout_surface:
+        disposition, disposition_errors = carrier_only_closeout_review_payload(
+            review_record=review_record,
+            review_path=review_path,
+            pr_head=head_sha or head_binding.get("current_head"),
+            head_binding=head_binding,
+            current_validation_summary=context.get("latest_validation_summary"),
+        )
+        binding["carrier_only_closeout_review"] = disposition
+    else:
+        disposition, disposition_errors = semantic_review_disposition_payload(
+            review_record=review_record,
+            review_path=review_path,
+            pr_head=head_sha or head_binding.get("current_head"),
+            head_binding=head_binding,
+            current_validation_summary=context.get("latest_validation_summary"),
+        )
+        binding["semantic_review_disposition"] = disposition
     binding["surface"] = surface
     binding["allowed_paths_policy"] = (
         "terminal closeout carrier paths only; requires terminal checkpoint"
@@ -18113,6 +18125,8 @@ def gate_freeze_review_binding_next_action(binding: dict[str, Any]) -> str | Non
         return "run or refresh authored Loom implementation review for the current PR head."
     if any("semantic_review_disposition" in message for message in messages):
         return "fix the authored review record semantic_review_disposition, then rerun gate freeze."
+    if any("carrier_only_closeout_review" in message for message in messages):
+        return "fix the authored closeout carrier-only review record, then rerun gate freeze."
     return "refresh review binding inputs and rerun `loom gate freeze check --target <repo> --json`."
 
 
@@ -20133,6 +20147,58 @@ def semantic_review_disposition_payload(
         and review_record.get("reviewed_validation_summary") != current_validation_summary
     ):
         errors.append(f"semantic_review_disposition {status} validation summary does not match current recovery")
+    payload["consumable"] = not errors
+    return payload, errors
+
+
+def carrier_only_closeout_review_payload(
+    *,
+    review_record: dict[str, Any],
+    review_path: str,
+    pr_head: str | None,
+    head_binding: dict[str, Any],
+    current_validation_summary: str | None,
+) -> tuple[dict[str, Any], list[str]]:
+    raw_disposition = review_record.get("carrier_only_closeout_review")
+    errors: list[str] = []
+    base = {
+        "status": "missing",
+        "source": "review_record",
+        "path": review_path,
+        "reviewed_head": review_record.get("reviewed_head"),
+        "pr_head": pr_head,
+        "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
+        "current_validation_summary": current_validation_summary,
+        "head_binding": head_binding,
+        "consumable": False,
+        "does_not_approve_product_implementation": True,
+        "details": {},
+    }
+    if raw_disposition is None:
+        return base, [f"carrier_only_closeout_review missing in review artifact `{review_path}`"]
+    if not isinstance(raw_disposition, dict):
+        return base, [f"carrier_only_closeout_review invalid in review artifact `{review_path}`"]
+    status = raw_disposition.get("status")
+    payload = {**base, "status": status if isinstance(status, str) else "invalid", "details": dict(raw_disposition)}
+    if status != "passed":
+        return payload, [f"carrier_only_closeout_review must be passed in review artifact `{review_path}`"]
+    if review_record.get("decision") != "allow":
+        errors.append("carrier_only_closeout_review passed requires review decision allow")
+    if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+        errors.append("carrier_only_closeout_review passed requires an implementation review kind")
+    if head_binding.get("stale") is True or head_binding.get("status") not in {
+        "fresh",
+        "carrier-only",
+        "generated-only",
+        "carrier-and-generated-only",
+    }:
+        errors.append("carrier_only_closeout_review passed is not bound to the current PR head")
+    if (
+        isinstance(current_validation_summary, str)
+        and current_validation_summary
+        and review_record.get("reviewed_validation_summary") != current_validation_summary
+    ):
+        errors.append("carrier_only_closeout_review passed validation summary does not match current recovery")
     payload["consumable"] = not errors
     return payload, errors
 
@@ -23175,6 +23241,47 @@ def set_project_item_done(root: Path, project_id: str, item_id: str, status_fiel
     return []
 
 
+def set_native_dependency(root: Path, owner: str, repo_name: str, issue_number: int, blocking_issue_number: int, mutation: str) -> list[str]:
+    if mutation not in {"addBlockedBy", "removeBlockedBy"}:
+        return [f"unsupported native dependency mutation `{mutation}`"]
+    query = """
+query($owner:String!, $name:String!, $issue:Int!, $blockingIssue:Int!) {
+  repository(owner:$owner, name:$name) {
+    issue(number:$issue) { id }
+    blockingIssue: issue(number:$blockingIssue) { id }
+  }
+}
+"""
+    data, errors = gh_graphql(
+        root,
+        query,
+        {"owner": owner, "name": repo_name, "issue": issue_number, "blockingIssue": blocking_issue_number},
+    )
+    if errors or data is None:
+        return errors or ["GitHub native dependency issue id readback failed"]
+    repo = data.get("repository") if isinstance(data.get("repository"), dict) else {}
+    issue = repo.get("issue") if isinstance(repo.get("issue"), dict) else {}
+    blocking_issue = repo.get("blockingIssue") if isinstance(repo.get("blockingIssue"), dict) else {}
+    issue_id = issue.get("id")
+    blocking_issue_id = blocking_issue.get("id")
+    if not isinstance(issue_id, str) or not isinstance(blocking_issue_id, str):
+        return [f"GitHub native dependency mutation missing issue ids for #{issue_number} blocked by #{blocking_issue_number}"]
+    mutation_query = f"""
+mutation($issueId:ID!, $blockingIssueId:ID!, $clientMutationId:String!) {{
+  {mutation}(input:{{issueId:$issueId, blockingIssueId:$blockingIssueId, clientMutationId:$clientMutationId}}) {{
+    clientMutationId
+  }}
+}}
+"""
+    client_mutation_id = f"loom-reconciliation-{mutation}-{issue_number}-{blocking_issue_number}"
+    _, mutation_errors = gh_graphql(
+        root,
+        mutation_query,
+        {"issueId": issue_id, "blockingIssueId": blocking_issue_id, "clientMutationId": client_mutation_id},
+    )
+    return mutation_errors
+
+
 def issue_tree_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> tuple[dict[str, Any] | None, list[str]]:
     # GraphQL-only for now: native parent/sub-issue tree shape is outside the high-frequency REST replacement scope.
     query = """
@@ -25977,6 +26084,22 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 continue
             executed_actions.append(action)
             continue
+        if step_kind in {"add_blocked_by", "remove_blocked_by"}:
+            issue_number = action.get("issue_number")
+            blocking_issue_number = action.get("blocking_issue_number")
+            write_target = action.get("write_target") if isinstance(action.get("write_target"), dict) else {}
+            mutation = write_target.get("mutation") or ("addBlockedBy" if step_kind == "add_blocked_by" else "removeBlockedBy")
+            if not isinstance(issue_number, int) or not isinstance(blocking_issue_number, int) or not isinstance(mutation, str):
+                sync_missing.append(f"{subject} is missing native dependency mutation inputs")
+                skipped_actions.append({**action, "reason": "missing native dependency mutation inputs"})
+                continue
+            step_errors = set_native_dependency(target_root, owner, repo_name, issue_number, blocking_issue_number, mutation)
+            if step_errors:
+                sync_missing.extend(step_errors)
+                skipped_actions.append({**action, "reason": "; ".join(step_errors)})
+                continue
+            executed_actions.append(action)
+            continue
         sync_missing.append(f"{subject} uses unsupported sync action `{step_kind}`")
         skipped_actions.append(
             {
@@ -26303,7 +26426,43 @@ def handle_review(args: argparse.Namespace) -> int:
             }
         )
 
-    build_payload = checkpoint_payload("build", context)
+    terminal_closeout_review = (
+        args.surface == "closeout"
+        and context["current_checkpoint"] in TERMINAL_CHECKPOINTS
+    )
+    if args.surface == "closeout" and not terminal_closeout_review:
+        return emit(
+            {
+                "command": "review",
+                "operation": "record",
+                "result": "block",
+                "summary": "closeout review record is only allowed for terminal closeout carrier-only review.",
+                "missing_inputs": ["closed_out checkpoint"],
+                "fallback_to": "closeout",
+            }
+        )
+    if terminal_closeout_review and args.kind not in IMPLEMENTATION_REVIEW_KINDS:
+        return emit(
+            {
+                "command": "review",
+                "operation": "record",
+                "result": "block",
+                "summary": "closeout carrier-only review must use an implementation review kind without approving product behavior.",
+                "missing_inputs": ["general_review or code_review"],
+                "fallback_to": "closeout",
+            }
+        )
+
+    build_payload = (
+        {
+            "result": "pass",
+            "summary": "terminal closeout carrier-only review does not consume build checkpoint as product implementation approval.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+        if terminal_closeout_review
+        else checkpoint_payload("build", context)
+    )
     if args.decision == "allow" and build_payload["result"] != "pass":
         missing = list(build_payload["missing_inputs"])
         return emit(
@@ -26334,7 +26493,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 }
             )
     suite_gate_validation: dict[str, Any] | None = None
-    if args.decision == "allow" and args.kind != "spec_review":
+    if args.decision == "allow" and args.kind != "spec_review" and not terminal_closeout_review:
         spec_gate = spec_review_gate_payload(context)
         if not spec_review_gate_ready_for_implementation_review(spec_gate):
             return emit(
@@ -26428,10 +26587,16 @@ def handle_review(args: argparse.Namespace) -> int:
         },
     }
     if args.decision == "allow" and args.kind in IMPLEMENTATION_REVIEW_KINDS:
-        review_payload["semantic_review_disposition"] = {
-            "status": "passed",
-            "reason": "Authored implementation review approved the current head for merge checkpoint consumption.",
-        }
+        if terminal_closeout_review:
+            review_payload["carrier_only_closeout_review"] = {
+                "status": "passed",
+                "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior.",
+            }
+        else:
+            review_payload["semantic_review_disposition"] = {
+                "status": "passed",
+                "reason": "Authored implementation review approved the current head for merge checkpoint consumption.",
+            }
     if isinstance(suite_gate_validation, dict):
         review_payload["consumed_inputs"].update(suite_gate_consumed_inputs(suite_gate_validation))
     if isinstance(suite_validation, dict):
@@ -26449,6 +26614,20 @@ def handle_review(args: argparse.Namespace) -> int:
             }
         )
     assert review_abs is not None
+    if terminal_closeout_review:
+        allowed_paths = allowed_terminal_closeout_carrier_paths(context, review_path)
+        if review_path not in allowed_paths:
+            return emit(
+                {
+                    "command": "review",
+                    "operation": "record",
+                    "result": "block",
+                    "summary": "closeout carrier-only review refused a review artifact outside terminal closeout carrier surfaces.",
+                    "missing_inputs": [f"review artifact outside closeout carrier surfaces: {review_path}"],
+                    "fallback_to": "closeout",
+                    "allowed_paths": sorted(allowed_paths),
+                }
+            )
     review_abs.parent.mkdir(parents=True, exist_ok=True)
     write_json_file(review_abs, review_payload)
 
@@ -26474,6 +26653,8 @@ def handle_review(args: argparse.Namespace) -> int:
             "summary": (
                 "formal spec review conclusion was recorded and is ready for spec gate consumption."
                 if args.kind == "spec_review"
+                else "formal closeout carrier-only review conclusion was recorded; it does not approve product implementation behavior."
+                if terminal_closeout_review
                 else "formal review conclusion was recorded and is ready for merge checkpoint consumption."
             ),
             "missing_inputs": [],
@@ -27551,6 +27732,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "missing_inputs": review_errors or ([] if review_record else [f"missing review artifact: {review_path}"]),
                 "fallback_to": "build" if (review_errors or review_record is None) else None,
             }
+            suite_gate_validation = suite_gate_payload_for_surface(context, surface="review")
             steps.extend(
                 [
                     {
@@ -27560,6 +27742,8 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "missing_inputs": build_payload["missing_inputs"],
                         "fallback_to": build_payload["fallback_to"],
                     },
+                    suite_gate_step("suite-evidence-validate", suite_gate_validation, "evidence"),
+                    suite_gate_step("suite-carrier-validate", suite_gate_validation, "carrier"),
                     review_step,
                 ]
             )
