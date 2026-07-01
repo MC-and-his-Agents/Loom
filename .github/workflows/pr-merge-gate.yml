@@ -66,4 +66,11 @@ jobs:
           if [ -n "$PR_NUMBER" ]; then
             args+=(--pr "$PR_NUMBER")
           fi
-          python3 tools/loom_flow.py "${args[@]}"
+          set +e
+          python3 tools/loom_flow.py "${args[@]}" | tee .loom/runtime/pr/pr-gate-output.json
+          gate_status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$gate_status" -ne 0 ] && grep -q 'head_sha_drift' .loom/runtime/pr/pr-gate-output.json; then
+            printf '%s\n' "::error title=PR metadata head drift::PR metadata is not bound to current PR head ${PR_HEAD_SHA}. Run: python3 tools/loom.py pr metadata-update ${PR_NUMBER} --target . --surface ${pr_gate_surface} --head-sha ${PR_HEAD_SHA} --branch ${PR_HEAD_REF} --apply --json; then read back with: python3 tools/loom.py pr metadata-readback ${PR_NUMBER} --target . --surface ${pr_gate_surface} --head-sha ${PR_HEAD_SHA} --json; then rerun this failed hosted gate."
+          fi
+          exit "$gate_status"

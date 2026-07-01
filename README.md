@@ -202,6 +202,18 @@ This flow is workflow-only maintenance scaffolding. It still requires a real
 maintenance Work Item, PR metadata readback, semantic review, hosted checks,
 head binding, PR gate, and carrier closeout sync.
 
+After a release is already published and read back, use the release closeout
+sync wrapper to terminalize repo carriers without republishing:
+
+```bash
+loom release closeout-sync --target . --version <version> --item <work-item> --pr <release-pr> --apply --json
+```
+
+It only writes repo carrier surfaces under `--apply`: progress terminal
+metadata, status sync, closeout/merge-ready shadow refresh, and post-commit PR
+metadata/gate next commands. It does not create tags, publish npm, edit the
+GitHub Release, or merge the closeout PR.
+
 `runtime-upgrade status|prepare|check` also reports the local Codex
 plugin/cache freshness and points to `loom host doctor --host codex --scope user
 --json` plus `loom host install|register --host codex --scope user --apply

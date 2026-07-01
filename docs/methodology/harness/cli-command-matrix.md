@@ -225,6 +225,7 @@ loom runtime-upgrade status
 loom runtime-upgrade prepare
 loom runtime-upgrade check
 loom runtime-upgrade closeout
+loom release closeout-sync
 loom upgrade
 loom rollback
 loom verify
@@ -265,6 +266,15 @@ remains read-only and fail-closed when the target version, Work Item, PR,
 branch, head SHA, or workflow pin readback is missing or drifted. The profile
 does not bypass semantic review, hosted checks, PR gate, head binding, or
 closeout evidence.
+
+`release closeout-sync` is the release-aftercare wrapper for repositories whose
+release artifacts are already published and read back. It accepts a release
+version, Work Item, and merged release PR, then composes existing release
+readback, `carrier closeout-sync`, recovery/status writeback, closeout and
+merge-ready shadow refresh, and post-commit PR metadata/gate next commands. It
+does not publish, republish, edit GitHub Releases, modify npm, or merge a PR.
+Release artifact drift blocks before any carrier write. The only blocked
+release-readback verdict it may repair is `carrier_not_terminal`.
 
 Copyable validation commands for a `global-cli` repository:
 

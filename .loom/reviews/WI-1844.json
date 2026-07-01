@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1844",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "当前 head aa535491 在 release closeout-sync host-binding PR readback 修复基础上，仅为重复出现的 hosted PR metadata head_sha_drift 增加失败提示：gate 失败时提示先 metadata-update/readback 绑定当前 head 再 rerun；不新增调度系统、DSL 或 gate 绕过。py_compile、release surface、workflow YAML、suite/carrier/evidence 验证通过。",
+  "reviewer": "codex-main-implementation-review",
+  "authored_at": "2026-07-01T07:12:22Z",
+  "reviewed_head": "aa535491a2746456ebfa9f696daecb1833e66787",
+  "reviewed_validation_summary": "hosted run 28499745738/job 84474000577 classified repeated `head_sha_drift`; py_compile_clean passed for tools/loom.py and tools/check_cli_contract.py; check_release_surface passed; YAML parse passed for .github/workflows/pr-merge-gate.yml; `rg -n \"gh pr view\" tools/loom.py tools/check_cli_contract.py` returned no matches; earlier check_cli_contract --surface release-readback passed with host-binding PR readback coverage; earlier check_cli_contract --surface aggregate passed locally in 404.53s; suite validate, suite carrier validate, suite evidence validate, and dogfood release closeout-sync dry-run passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1844.md",
+    "recovery_entry": ".loom/progress/WI-1844.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync --item WI-1844 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync --item WI-1844 --json",
+    "suite_evidence_map": ".loom/specs/WI-1844/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1844/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

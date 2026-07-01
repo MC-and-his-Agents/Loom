@@ -108,6 +108,7 @@ REQUIRED_COMMANDS = {
     "gate repair-pr",
     "release readback",
     "release resume",
+    "release closeout-sync",
     "closeout run",
     "host list",
     "host doctor",
@@ -10668,7 +10669,7 @@ def run_work_item_audit_surface() -> None:
 def run_release_readback_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
-    for command in ("release readback", "release resume"):
+    for command in ("release readback", "release resume", "release closeout-sync"):
         if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
             raise AssertionError(f"{command} must be declared as an implemented delivery command")
 
@@ -10721,6 +10722,308 @@ def run_release_readback_surface() -> None:
             raise AssertionError(f"{fixture} missing merge_fallback readback")
         if operation == "resume" and not isinstance(payload.get("resume_contract"), dict):
             raise AssertionError(f"{fixture} release resume did not expose the non-mutating resume contract")
+
+    spec = importlib.util.spec_from_file_location("loom_cli_release_closeout_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for release closeout-sync regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    merge_sha = "7777777777777777777777777777777777777777"
+    forbidden_pr_view = "gh pr" + " view"
+    if forbidden_pr_view in LOOM.read_text(encoding="utf-8"):
+        raise AssertionError("release closeout-sync must not shell out to the forbidden PR view command; use the Loom host-binding readback surface")
+
+    binding_payload = {
+        "command": "release closeout-sync pr-readback",
+        "result": "block",
+        "binding_chain": {
+            "nodes": {
+                "pr": {
+                    "value": {
+                        "number": 1999,
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "headRefName": "work/release",
+                        "url": "https://github.com/MC-and-his-Agents/Loom/pull/1999",
+                    }
+                },
+                "merge_commit": {"value": {"sha": merge_sha, "status": "present"}},
+            }
+        },
+    }
+    binding_calls: list[list[str]] = []
+
+    def binding_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        binding_calls.append(list(flow_args))
+        return binding_payload
+
+    original_flow_for_pr = module.flow_payload
+    module.flow_payload = binding_flow_payload
+    try:
+        pr_readback = module.release_closeout_pr_readback_payload(
+            target=REPO_ROOT,
+            pr_number="1999",
+            repo="MC-and-his-Agents/Loom",
+            target_commit=merge_sha,
+            pr_payload_file=None,
+        )
+    finally:
+        module.flow_payload = original_flow_for_pr
+    if pr_readback.get("result") != "pass":
+        raise AssertionError(f"release closeout-sync did not consume host-binding PR readback: {pr_readback}")
+    if binding_calls != [["host-binding", "inspect", "--target", str(REPO_ROOT), "--pr", "1999", "--owner", "MC-and-his-Agents", "--repo", "Loom"]]:
+        raise AssertionError(f"release closeout-sync delegated unexpected PR readback: {binding_calls}")
+
+    flow_calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def blocked_only_by_carrier(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "command": kwargs.get("command"),
+            "result": "pass",
+            "classification": {"verdict": "blocked", "gaps": ["carrier_not_terminal"]},
+            "release_target": {
+                "version": "v9.99.9",
+                "target_commit": merge_sha,
+                "repo": "MC-and-his-Agents/Loom",
+            },
+            "readbacks": {
+                "github_release": {"url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.9"}
+            },
+        }
+
+    def published_release(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "command": kwargs.get("command"),
+            "result": "pass",
+            "classification": {"verdict": "published", "gaps": []},
+            "release_target": {
+                "version": "v9.99.9",
+                "target_commit": merge_sha,
+                "repo": "MC-and-his-Agents/Loom",
+            },
+            "readbacks": {
+                "github_release": {"url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.9"}
+            },
+        }
+
+    def fake_pr_readback(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "command": "release closeout-sync pr-readback",
+            "result": "pass",
+            "pr": {
+                "number": int(kwargs["pr_number"]),
+                "state": "MERGED",
+                "mergeCommit": {"oid": kwargs["target_commit"]},
+                "baseRefName": "main",
+                "mergedAt": "2026-07-01T00:00:00Z",
+                "url": "https://github.com/MC-and-his-Agents/Loom/pull/1999",
+            },
+        }
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        flow_calls.append(list(flow_args))
+        return {"command": command, "result": "pass", "summary": "ok"}
+
+    original_emit = module.emit
+    original_release_readback = module.release_readback_payload
+    original_pr_readback = module.release_closeout_pr_readback_payload
+    original_flow_payload = module.flow_payload
+    module.emit = fake_emit
+    module.release_readback_payload = blocked_only_by_carrier
+    module.release_closeout_pr_readback_payload = fake_pr_readback
+    module.flow_payload = fake_flow_payload
+    try:
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--branch",
+                "work/9999-release-closeout",
+                "--head-sha",
+                "a" * 40,
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass" or emitted.get("dry_run") is not True:
+            raise AssertionError("release closeout-sync dry-run did not emit a passing plan")
+        if [call[:2] for call in flow_calls] != [["carrier", "closeout-sync"]]:
+            raise AssertionError(f"release closeout-sync dry-run delegated unexpected sequence: {[call[:2] for call in flow_calls]}")
+        if "--dry-run" not in flow_calls[0] or "--apply" in flow_calls[0]:
+            raise AssertionError("release closeout-sync dry-run did not delegate carrier closeout-sync as dry-run")
+        if "metadata_update" not in emitted.get("next_commands", {}):
+            raise AssertionError("release closeout-sync must output post-commit PR metadata guidance")
+
+        module.release_readback_payload = published_release
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("release closeout-sync must be idempotent when release readback is already published")
+        if [call[:2] for call in flow_calls] != [["carrier", "closeout-sync"]]:
+            raise AssertionError("release closeout-sync published path must still limit delegation to carrier closeout-sync dry-run")
+
+        module.release_readback_payload = blocked_only_by_carrier
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--branch",
+                "work/9999-release-closeout",
+                "--head-sha",
+                "a" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass" or emitted.get("apply") is not True:
+            raise AssertionError("release closeout-sync apply did not emit a passing payload")
+        if [call[:2] for call in flow_calls] != [
+            ["carrier", "closeout-sync"],
+            ["recovery", "writeback"],
+            ["carrier", "refresh"],
+            ["carrier", "refresh"],
+        ]:
+            raise AssertionError(f"release closeout-sync apply delegated unexpected sequence: {[call[:2] for call in flow_calls]}")
+        if "--apply" not in flow_calls[0] or "--dry-run" in flow_calls[0]:
+            raise AssertionError("release closeout-sync apply did not delegate carrier closeout-sync as apply")
+        refresh_surfaces = [call[call.index("--surface") + 1] for call in flow_calls if call[:2] == ["carrier", "refresh"]]
+        if refresh_surfaces != ["closeout", "merge_ready"]:
+            raise AssertionError(f"release closeout-sync did not refresh both closeout and merge_ready shadows: {refresh_surfaces}")
+
+        def drifted_release(**kwargs: Any) -> dict[str, Any]:
+            return {
+                "command": kwargs.get("command"),
+                "result": "pass",
+                "classification": {"verdict": "drifted", "gaps": ["tag_target_commit_mismatch"]},
+                "release_target": {"version": "v9.99.9", "target_commit": merge_sha},
+            }
+
+        module.release_readback_payload = drifted_release
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout-sync must block release drift before carrier writes")
+        if flow_calls:
+            raise AssertionError("release closeout-sync drift blocker must not delegate carrier writes")
+
+        def workflow_not_success(**kwargs: Any) -> dict[str, Any]:
+            return {
+                "command": kwargs.get("command"),
+                "result": "pass",
+                "classification": {"verdict": "blocked", "gaps": ["workflow_run_not_success"]},
+                "release_target": {"version": "v9.99.9", "target_commit": merge_sha},
+            }
+
+        module.release_readback_payload = workflow_not_success
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout-sync must block non-carrier release gaps")
+        if flow_calls:
+            raise AssertionError("release closeout-sync non-carrier blocker must not delegate carrier writes")
+
+        def unmerged_pr_readback(**kwargs: Any) -> dict[str, Any]:
+            return {
+                "command": "release closeout-sync pr-readback",
+                "result": "block",
+                "missing_inputs": ["PR is not merged"],
+                "fallback_to": ["verify --pr points at the merged release PR for this version"],
+            }
+
+        module.release_readback_payload = blocked_only_by_carrier
+        module.release_closeout_pr_readback_payload = unmerged_pr_readback
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout-sync must block unmerged release PR readback")
+        if flow_calls:
+            raise AssertionError("release closeout-sync PR blocker must not delegate carrier writes")
+    finally:
+        module.emit = original_emit
+        module.release_readback_payload = original_release_readback
+        module.release_closeout_pr_readback_payload = original_pr_readback
+        module.flow_payload = original_flow_payload
 
     print("release readback surface checks passed")
 
