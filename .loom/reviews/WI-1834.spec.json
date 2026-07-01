@@ -7,7 +7,7 @@
   "reviewer": "codex-main-agent",
   "authored_at": "2026-07-01T03:26:00Z",
   "reviewed_head": "6bebb4e6fa21ee6e82f2234a8792f825b1f9e5f3",
-  "reviewed_validation_summary": "`make py-compile`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `python3 tools/check_npm_package.py`, `python3 tools/check_npm_package.py --surface runtime-copy-parity`, `python3 tools/loom.py resume --target . --item WI-1834 --json`, and `git diff --check` passed after normalizing `review` checkpoint to `merge`; earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.",
+  "reviewed_validation_summary": "make py-compile; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py resume --target . --item WI-1834 --json; git diff --check passed after normalizing review checkpoint to merge. Earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
