@@ -83,6 +83,46 @@ class OutputEnvelopeTest(unittest.TestCase):
             self.assertTrue(locator.exists())
             self.assertNotIn('"diagnostic":', json.dumps(safe))
 
+    def test_agent_safe_payload_writes_default_artifact_under_target_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            target = Path(tempdir) / "target"
+            target.mkdir()
+            payload = loom_cli.output("build", "block", summary="large", diagnostic="x" * 4096)
+
+            safe = loom_cli.agent_safe_payload(payload, stdout_budget_bytes=512, target_root=target)
+
+            locator = Path(safe["full_output"]["artifact_locator"])
+            self.assertFalse(locator.is_absolute())
+            self.assertTrue((target / locator).is_file())
+
+    def test_relative_artifact_dir_env_is_target_relative_when_target_root_is_set(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            target = Path(tempdir) / "target"
+            target.mkdir()
+            os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = "custom-output-artifacts"
+            payload = loom_cli.output("fact-chain", "block", summary="large", diagnostic="x" * 4096)
+
+            safe = loom_cli.agent_safe_payload(payload, stdout_budget_bytes=512, target_root=target)
+
+            locator = Path(safe["full_output"]["artifact_locator"])
+            self.assertEqual(locator.parts[0], "custom-output-artifacts")
+            self.assertTrue((target / locator).is_file())
+
+    def test_absolute_artifact_dir_env_overrides_target_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            target = Path(tempdir) / "target"
+            artifact_dir = Path(tempdir) / "artifacts"
+            target.mkdir()
+            os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = str(artifact_dir)
+            payload = loom_cli.output("build", "block", summary="large", diagnostic="x" * 4096)
+
+            safe = loom_cli.agent_safe_payload(payload, stdout_budget_bytes=512, target_root=target)
+
+            locator = Path(safe["full_output"]["artifact_locator"])
+            self.assertTrue(locator.is_absolute())
+            self.assertTrue(locator.is_file())
+            self.assertTrue(str(locator).startswith(str(artifact_dir)))
+
     def test_default_budget_keeps_large_payload_out_of_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             payload = loom_cli.output(
@@ -279,6 +319,30 @@ class OutputEnvelopeTest(unittest.TestCase):
         finally:
             loom_cli.flow_payload = original
 
+    def test_fact_chain_handler_defaults_artifact_to_target_root(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                target = Path(tempdir) / "target"
+                target.mkdir()
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+
+                def fake_payload(*_args, **_kwargs):
+                    return loom_cli.output("fact-chain", "block", summary="Fact chain diagnostics.", diagnostic="x" * 4096)
+
+                loom_cli.flow_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.handle_fact_chain(["--target", str(target), "--json"])
+
+                payload = json.loads(stream.getvalue())
+                locator = Path(payload["full_output"]["artifact_locator"])
+                self.assertEqual(code, 1)
+                self.assertFalse(locator.is_absolute())
+                self.assertTrue((target / locator).is_file())
+        finally:
+            loom_cli.flow_payload = original
+
     def test_shadow_parity_handler_defaults_to_agent_safe_stdout(self) -> None:
         original = loom_cli.flow_payload
         try:
@@ -412,6 +476,30 @@ class OutputEnvelopeTest(unittest.TestCase):
                 self.assertEqual(payload["key_gaps"], ["suite evidence missing"])
                 self.assertTrue(Path(payload["full_output"]["artifact_locator"]).exists())
                 self.assertNotIn('"diagnostic":', rendered)
+        finally:
+            loom_cli.flow_payload = original
+
+    def test_scenario_build_defaults_artifact_to_target_root(self) -> None:
+        original = loom_cli.flow_payload
+        try:
+            with tempfile.TemporaryDirectory() as tempdir:
+                target = Path(tempdir) / "target"
+                target.mkdir()
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+
+                def fake_payload(*_args, **_kwargs):
+                    return loom_cli.output("build", "block", summary="Build diagnostics.", diagnostic="x" * 4096)
+
+                loom_cli.flow_payload = fake_payload
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    code = loom_cli.handle_scenario("build", ["--target", str(target), "--item", "WI-test", "--json"])
+
+                payload = json.loads(stream.getvalue())
+                locator = Path(payload["full_output"]["artifact_locator"])
+                self.assertEqual(code, 1)
+                self.assertFalse(locator.is_absolute())
+                self.assertTrue((target / locator).is_file())
         finally:
             loom_cli.flow_payload = original
 
