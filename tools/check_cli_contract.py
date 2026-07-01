@@ -78,6 +78,10 @@ REQUIRED_COMMANDS = {
     "repair apply",
     "install",
     "upgrade-plan",
+    "runtime-upgrade status",
+    "runtime-upgrade prepare",
+    "runtime-upgrade check",
+    "runtime-upgrade closeout",
     "upgrade",
     "rollback",
     "verify",
@@ -7418,9 +7422,13 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
     if stale_check.get("result") != "block" or "head_sha" not in stale_missing:
         raise AssertionError("docs-pr check did not fail closed on stale head binding")
 
+    (target / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+    (target / ".github" / "workflows" / "loom-check.yml").write_text("env:\n  LOOM_VERSION: 0.23.0\n", encoding="utf-8")
+
     for intent, item, body_file, changed_path in (
         ("closeout-only", "WI-1809", ".loom/runtime/pr/WI-1809-closeout.md", ".loom/progress/WI-1809.md"),
         ("carrier-sync-only", "WI-1813", ".loom/runtime/pr/WI-1813-carrier-sync.md", ".loom/bootstrap/init-result.json"),
+        ("runtime-upgrade-only", "WI-1834", ".loom/runtime/pr/WI-1834-runtime-upgrade.md", ".github/workflows/loom-check.yml"),
     ):
         _, prepare_payload = run_json(
             [
@@ -9136,7 +9144,7 @@ if path.endswith("/issues/2002"):
     print(json.dumps({"id": 2002, "node_id": "I_2002", "number": 2002, "state": "closed", "title": "Closed host issue", "body": "", "html_url": "https://github.com/example/repo/issues/2002", "closed_at": "2026-06-13T02:01:00Z", "labels": []}))
     raise SystemExit(0)
 if path.endswith("/pulls/2003"):
-    print(json.dumps({"number": 2003, "state": "closed", "title": "Merged host PR", "body": "Closes #2002", "html_url": "https://github.com/example/repo/pull/2003", "draft": False, "merged_at": "2026-06-13T02:00:00Z", "merge_commit_sha": "abc123", "head": {"ref": "work/closed-host-carrier", "sha": "def456"}, "base": {"ref": "main"}}))
+    print(json.dumps({"number": 2003, "state": "closed", "title": "Merged host PR", "body": "Closes #2002", "html_url": "https://github.com/example/repo/pull/2003", "draft": False, "merged_at": "2026-06-13T02:00:00Z", "merge_commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "head": {"ref": "work/closed-host-carrier", "sha": "def456"}, "base": {"ref": "main"}}))
     raise SystemExit(0)
 print(json.dumps({"message": "not found"}), file=sys.stderr)
 raise SystemExit(1)
@@ -9284,7 +9292,7 @@ def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
             "--pr",
             "1299",
             "--merge-commit",
-            "abc123",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "--target-branch",
             "main",
             "--closed-at",
@@ -9317,7 +9325,7 @@ def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
             "--pr",
             "1299",
             "--merge-commit",
-            "abc123",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "--target-branch",
             "main",
             "--closed-at",
@@ -9507,7 +9515,7 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
         or "## Terminal Closeout Metadata" not in progress_text
         or "- Issue: 2002" not in progress_text
         or "- PR: 2003" not in progress_text
-        or "- Merge Commit: abc123" not in progress_text
+        or "- Merge Commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in progress_text
         or "- Item ID: no_active_item" not in status_text
         or init_payload.get("fact_chain", {}).get("mode") != "idle"
         or init_payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
@@ -10747,6 +10755,218 @@ def run_gate_repair_pr_surface() -> None:
         assert_gate_repair_pr_evidence_contract(Path(raw_tmp))
 
     print("gate repair-pr surface checks passed")
+
+
+def run_plain_cli(args: list[str]) -> str:
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.setdefault("LOOM_SKIP_NPM_LATEST", "1")
+    completed = subprocess.run(
+        [sys.executable, str(LOOM), *args],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(f"{args} returned {completed.returncode}\n{completed.stderr}\n{completed.stdout}")
+    return completed.stdout.strip()
+
+
+def run_runtime_upgrade_surface() -> None:
+    short_version = run_plain_cli(["-v"])
+    long_version = run_plain_cli(["--version"])
+    if not short_version or short_version != long_version:
+        raise AssertionError("loom -v and loom --version must emit the same non-empty version")
+
+    with tempfile.TemporaryDirectory(prefix="loom-runtime-upgrade-") as raw_tmp:
+        target = Path(raw_tmp)
+        write_governance_metadata_contract_fixture(target)
+        workflow = target / ".github" / "workflows" / "loom-check.yml"
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text(
+            "\n".join(
+                [
+                    "name: Loom",
+                    "on: [pull_request]",
+                    "env:",
+                    "  LOOM_VERSION: 0.23.0",
+                    "jobs:",
+                    "  check:",
+                    "    runs-on: ubuntu-latest",
+                    "    steps:",
+                    "      - run: npm install -g @mc-and-his-agents/loom@${{ env.LOOM_VERSION }}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        _, status_payload = run_json(["runtime-upgrade", "status", "--target", str(target), "--json"], expect=0)
+        if status_payload.get("schema_version") != "loom-runtime-upgrade/v1" or status_payload.get("result") != "pass":
+            raise AssertionError("runtime-upgrade status must pass with a LOOM_VERSION workflow pin")
+        readback = status_payload.get("workflow_pin_readback", {})
+        if readback.get("pin_count") != 1 or readback.get("versions") != ["0.23.0"]:
+            raise AssertionError("runtime-upgrade status did not read the workflow LOOM_VERSION pin")
+        layers = status_payload.get("version_layers", {})
+        if not {"loom_cli", "target_repository_workflow_pin", "codex_plugin_cache"}.issubset(layers):
+            raise AssertionError("runtime-upgrade status must expose CLI, workflow pin, and Codex plugin/cache version layers")
+        if "loom host doctor --host codex --scope user --json" not in str(status_payload.get("codex_plugin_advisory")):
+            raise AssertionError("runtime-upgrade status must expose Codex plugin/cache readback guidance")
+
+        _, missing_item = run_json(["runtime-upgrade", "prepare", "--target", str(target), "--to", "0.24.0", "--json"], expect=1)
+        if missing_item.get("result") != "block" or "missing-work-item" not in {gap.get("id") for gap in missing_item.get("blocking_gaps", [])}:
+            raise AssertionError("runtime-upgrade prepare must require a maintenance Work Item")
+
+        _, reserved_item = run_json(["runtime-upgrade", "prepare", "--target", str(target), "--to", "0.24.0", "--item", "INIT-0001", "--json"], expect=1)
+        if reserved_item.get("result") != "block" or "reserved-work-item" not in {gap.get("id") for gap in reserved_item.get("blocking_gaps", [])}:
+            raise AssertionError("runtime-upgrade prepare must reject INIT-0001 reuse")
+
+        before = workflow.read_text(encoding="utf-8")
+        _, dry_run = run_json(
+            [
+                "runtime-upgrade",
+                "prepare",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--output-file",
+                ".loom/runtime/pr/WI-1834-runtime-upgrade.md",
+                "--json",
+            ],
+            expect=0,
+        )
+        if dry_run.get("result") != "pass" or dry_run.get("mutates") is not False or not dry_run.get("planned_writes"):
+            raise AssertionError("runtime-upgrade prepare dry-run must plan the workflow pin update without mutation")
+        if workflow.read_text(encoding="utf-8") != before:
+            raise AssertionError("runtime-upgrade prepare dry-run mutated the workflow")
+
+        _, apply_payload = run_json(
+            [
+                "runtime-upgrade",
+                "prepare",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--output-file",
+                ".loom/runtime/pr/WI-1834-runtime-upgrade.md",
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        if apply_payload.get("result") != "pass" or apply_payload.get("mutates") is not True or not apply_payload.get("applied_writes"):
+            raise AssertionError("runtime-upgrade prepare --apply must report applied workflow pin writes")
+        if "LOOM_VERSION: 0.24.0" not in workflow.read_text(encoding="utf-8"):
+            raise AssertionError("runtime-upgrade prepare --apply did not update LOOM_VERSION")
+        pr_intent_prepare = apply_payload.get("pr_intent_prepare", {})
+        if (
+            pr_intent_prepare.get("result") != "pass"
+            or pr_intent_prepare.get("profile", {}).get("intent") != "runtime-upgrade-only"
+            or not (target / ".loom/specs/WI-1834/spec.md").exists()
+            or not (target / ".loom/runtime/pr/WI-1834-runtime-upgrade.md").exists()
+        ):
+            raise AssertionError("runtime-upgrade prepare --apply must generate the runtime-upgrade-only carrier set")
+
+        _, blocked_check = run_json(["runtime-upgrade", "check", "--target", str(target), "--to", "0.24.0", "--item", "WI-1834", "--json"], expect=1)
+        blocked_ids = {gap.get("id") for gap in blocked_check.get("blocking_gaps", [])}
+        if blocked_check.get("result") != "block" or not {"missing-pr", "missing-branch", "missing-head_sha"}.issubset(blocked_ids):
+            raise AssertionError("runtime-upgrade check must require PR, branch, and head SHA readback")
+
+        _, ready_check = run_json(
+            [
+                "runtime-upgrade",
+                "check",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--pr",
+                "1839",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--json",
+            ],
+            expect=0,
+        )
+        if ready_check.get("result") != "pass" or ready_check.get("maintenance_profile", {}).get("review_required") is not True:
+            raise AssertionError("runtime-upgrade check must pass only after readback fields are supplied")
+        if ready_check.get("codex_plugin_advisory", {}).get("blocking_by_default") is not False:
+            raise AssertionError("runtime-upgrade check must keep Codex plugin/cache stale as advisory by default")
+
+        _, plugin_block = run_json(
+            [
+                "runtime-upgrade",
+                "check",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--pr",
+                "1839",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--require-plugin-readiness",
+                "--json",
+            ],
+            expect=1,
+        )
+        if "codex-plugin-cache-not-ready" not in {gap.get("id") for gap in plugin_block.get("blocking_gaps", [])}:
+            raise AssertionError("runtime-upgrade check must block stale plugin/cache only when explicitly required")
+
+        _, blocked_closeout = run_json(["runtime-upgrade", "closeout", "--target", str(target), "--item", "WI-1834", "--json"], expect=1)
+        if blocked_closeout.get("result") != "block":
+            raise AssertionError("runtime-upgrade closeout must fail closed without terminal evidence")
+
+        _, closeout_payload = run_json(
+            [
+                "runtime-upgrade",
+                "closeout",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1834",
+                "--pr",
+                "1839",
+                "--merge-commit",
+                "def456",
+                "--target-branch",
+                "main",
+                "--evidence-locator",
+                ".loom/evidence/runtime-upgrade/WI-1834.md",
+                "--json",
+            ],
+            expect=0,
+        )
+        if closeout_payload.get("result") != "pass" or "loom carrier closeout-sync" not in str(closeout_payload.get("carrier_closeout_sync_command")):
+            raise AssertionError("runtime-upgrade closeout must expose carrier closeout-sync command")
+
+    print("runtime-upgrade surface checks passed")
 
 
 def run_aggregate_cli_contract() -> None:
@@ -12933,6 +13153,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="gate-repair-pr",
             fixture_group="gate-repair-pr",
             run=run_gate_repair_pr_surface,
+        ),
+        SurfaceCheck(
+            name="runtime-upgrade",
+            fixture_group="runtime-upgrade",
+            run=run_runtime_upgrade_surface,
         ),
         SurfaceCheck(
             name="aggregate",

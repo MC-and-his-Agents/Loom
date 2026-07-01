@@ -93,6 +93,7 @@ PROFILE_SCHEMA = "loom-governance-profile-control/v1"
 GATE_SCHEMA = "loom-gate-control/v1"
 DELIVERY_SCHEMA = "loom-delivery-control/v1"
 RELEASE_READBACK_SCHEMA = "loom-release-readback/v1"
+RUNTIME_UPGRADE_SCHEMA = "loom-runtime-upgrade/v1"
 CLOSEOUT_PR_ROLES = (
     "implementation_pr",
     "release_pr",
@@ -192,6 +193,34 @@ COMMANDS: list[dict[str, Any]] = [
         "status": "implemented",
         "json": True,
         "summary": "Plan non-mutating upgrades across installed-state, legacy surfaces, and runtime-provider carriers.",
+    },
+    {
+        "command": "runtime-upgrade status",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Inspect a single repository Loom runtime workflow pin and current upgrade context.",
+    },
+    {
+        "command": "runtime-upgrade prepare",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan or explicitly apply a single repository Loom runtime workflow pin update with maintenance PR guidance.",
+    },
+    {
+        "command": "runtime-upgrade check",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Fail-closed readback for single repository Loom runtime upgrade maintenance PR readiness.",
+    },
+    {
+        "command": "runtime-upgrade closeout",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Report closeout requirements and carrier sync command for a completed runtime upgrade maintenance PR.",
     },
     {"command": "upgrade", "domain": "delivery", "status": "implemented", "json": True},
     {"command": "rollback", "domain": "delivery", "status": "implemented", "json": True},
@@ -3819,6 +3848,404 @@ def host_plugin_refresh_boundary_action(host: str = "codex") -> dict[str, Any] |
     }
 
 
+def workflow_files(target: Path) -> list[Path]:
+    workflow_root = target / ".github" / "workflows"
+    if not workflow_root.exists() or not workflow_root.is_dir():
+        return []
+    return sorted(
+        path
+        for pattern in ("*.yml", "*.yaml")
+        for path in workflow_root.glob(pattern)
+        if path.is_file()
+    )
+
+
+def normalize_workflow_version_value(raw: str) -> str:
+    value = raw.strip()
+    if "#" in value:
+        value = value.split("#", 1)[0].strip()
+    return value.strip().strip("'\"")
+
+
+def extract_loom_package_specs(line: str) -> list[str]:
+    specs: list[str] = []
+    marker = "@mc-and-his-agents/loom@"
+    start = 0
+    while True:
+        index = line.find(marker, start)
+        if index == -1:
+            return specs
+        value = line[index + len(marker):].strip()
+        if value.startswith("${{"):
+            end = value.find("}}")
+            spec = value[: end + 2] if end != -1 else value
+        else:
+            spec = re.split(r"[\s'\"`]", value, maxsplit=1)[0]
+        specs.append(normalize_workflow_version_value(spec))
+        start = index + len(marker)
+
+
+def runtime_upgrade_workflow_pins(target: Path) -> dict[str, Any]:
+    pins: list[dict[str, Any]] = []
+    direct_specs: list[dict[str, Any]] = []
+    for path in workflow_files(target):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            continue
+        for index, line in enumerate(lines, start=1):
+            version_match = re.match(r"^(\s*LOOM_VERSION\s*:\s*)(.+?)\s*$", line)
+            if version_match:
+                pins.append(
+                    {
+                        "locator": f"{relative_to_target(path, target)}:{index}",
+                        "file": relative_to_target(path, target),
+                        "line": index,
+                        "version": normalize_workflow_version_value(version_match.group(2)),
+                        "source": "LOOM_VERSION",
+                        "updatable": True,
+                    }
+                )
+            for package_spec in extract_loom_package_specs(line):
+                direct_specs.append(
+                    {
+                        "locator": f"{relative_to_target(path, target)}:{index}",
+                        "file": relative_to_target(path, target),
+                        "line": index,
+                        "version": package_spec,
+                        "source": "npm_package_spec",
+                        "updatable": False,
+                    }
+                )
+    versions = sorted({pin["version"] for pin in pins})
+    return {
+        "workflow_files": [relative_to_target(path, target) for path in workflow_files(target)],
+        "pins": pins,
+        "direct_package_specs": direct_specs,
+        "versions": versions,
+        "pin_count": len(pins),
+        "updatable_pin_count": sum(1 for pin in pins if pin.get("updatable")),
+    }
+
+
+def runtime_upgrade_apply_workflow_pin_update(target: Path, target_version: str) -> list[dict[str, Any]]:
+    writes: list[dict[str, Any]] = []
+    for path in workflow_files(target):
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        changed = False
+        updated_lines: list[str] = []
+        for line in raw.splitlines(keepends=True):
+            newline = "\n" if line.endswith("\n") else ""
+            body = line[:-1] if newline else line
+            match = re.match(r"^(\s*LOOM_VERSION\s*:\s*)(.+?)(\s*(#.*)?)$", body)
+            if match:
+                suffix = match.group(3)
+                body = f"{match.group(1)}{target_version}{suffix}"
+                changed = True
+            updated_lines.append(f"{body}{newline}")
+        if changed:
+            path.write_text("".join(updated_lines), encoding="utf-8")
+            writes.append({"file": relative_to_target(path, target), "version": target_version})
+    return writes
+
+
+def runtime_upgrade_pr_metadata_command(args: argparse.Namespace) -> str | None:
+    if not args.item:
+        return None
+    parts = [
+        "loom pr metadata-render",
+        "--surface merge_ready",
+        f"--item {args.item}",
+        "--change-class runtime_upgrade",
+        "--suite-path not_applicable",
+        "--review-requirement current_head_review_required",
+        "--release-judgment no_release",
+        "--upgrade-trigger runtime_upgrade",
+        "--suite-na-rationale workflow-only Loom runtime version pin maintenance",
+        "--suite-na-consumer-boundary CI workflow installs the pinned @mc-and-his-agents/loom runtime",
+        "--suite-na-recheck-condition workflow pin, PR metadata, head SHA, hosted checks, and carrier closeout change",
+        "--suite-na-scope-proof only Loom runtime workflow pin and maintenance carrier surfaces changed",
+        "--suite-na-review-requirement semantic review remains required",
+    ]
+    if args.issue:
+        parts.append(f"--issue {args.issue}")
+    if args.branch:
+        parts.append(f"--branch {args.branch}")
+    if args.head_sha:
+        parts.append(f"--head-sha {args.head_sha}")
+    return " ".join(parts)
+
+
+def runtime_upgrade_pr_intent_prepare_payload(args: argparse.Namespace, target: Path, *, command: str, apply: bool | None = None) -> dict[str, Any] | None:
+    if not args.item:
+        return None
+    profile = PR_INTENT_PROFILES["runtime-upgrade-only"]
+    return pr_intent_prepare_payload(
+        command_name=command,
+        target=target,
+        profile_id="runtime-upgrade-only",
+        profile=profile,
+        item=args.item,
+        issue=args.issue,
+        branch=args.branch,
+        head_sha=args.head_sha,
+        output_file=args.output_file,
+        base_body_file=args.base_body_file or "",
+        rationale=args.rationale,
+        consumer_boundary=args.consumer_boundary,
+        recheck_condition=args.recheck_condition,
+        scope_proof=args.scope_proof,
+        apply=args.apply if apply is None else apply,
+    )
+
+
+def runtime_upgrade_contract_payload(args: argparse.Namespace, target: Path, *, operation: str) -> dict[str, Any]:
+    pins = runtime_upgrade_workflow_pins(target)
+    plan = handle_delivery_payload_for_upgrade_plan(target)
+    freshness = version_freshness()
+    target_version = args.to or freshness.get("latest_package_version") or version_context().get("repo_version")
+    plugin_payload = freshness.get("plugin_payload", {})
+    plugin_guidance = plugin_payload.get("refresh_guidance") or host_plugin_refresh_boundary_action("codex")
+    plugin_freshness = plugin_payload.get("freshness")
+    plugin_advisory = {
+        "mode": "advisory",
+        "freshness": plugin_freshness,
+        "action": plugin_payload.get("action"),
+        "summary": (
+            "Codex plugin/cache freshness is part of the runtime upgrade experience, "
+            "but repository runtime-upgrade commands do not mutate workstation plugin state."
+        ),
+        "blocking_by_default": False,
+        "blocking_when": "--require-plugin-readiness is supplied because the PR explicitly claims workstation Codex runtime/plugin readiness",
+        "guidance": {
+            "readback_command": "loom host doctor --host codex --scope user --json",
+            "apply_commands": [
+                "loom host install --host codex --scope user --apply --json",
+                "loom host register --host codex --scope user --apply --json",
+            ],
+        },
+    }
+    maintenance_profile = {
+        "profile": "runtime-upgrade",
+        "scope": "single-repository",
+        "multi_repo_batch": False,
+        "suite_path": "not_applicable",
+        "review_required": True,
+        "pr_gate_required": True,
+        "hosted_checks_required": True,
+        "head_binding_required": True,
+        "release_judgment": "no-release",
+        "work_item_reuse_forbidden": ["INIT-0001", "product Work Item"],
+    }
+    return {
+        "schema_version": RUNTIME_UPGRADE_SCHEMA,
+        "operation": operation,
+        "target": str(target),
+        "to_version": target_version,
+        "version_layers": {
+            "loom_cli": freshness.get("cli"),
+            "target_repository_workflow_pin": pins,
+            "codex_plugin_cache": plugin_payload,
+        },
+        "workflow_pin_readback": pins,
+        "codex_plugin_cache": plugin_payload,
+        "codex_plugin_guidance": plugin_guidance,
+        "codex_plugin_advisory": plugin_advisory,
+        "mutation_boundary": {
+            "repo_runtime_upgrade_prepare": "may update target repository workflow LOOM_VERSION pins only when --apply is present",
+            "codex_plugin_cache_refresh": "must use loom host doctor|install|register --host codex --scope user; runtime-upgrade does not mutate workstation plugin/cache state",
+        },
+        "version_freshness": freshness,
+        "upgrade_plan": plan,
+        "maintenance_profile": maintenance_profile,
+        "pr_metadata_command": runtime_upgrade_pr_metadata_command(args),
+        "pr_intent_prepare_command": (
+            f"loom pr-intent prepare --intent runtime-upgrade-only --target {target} --item {args.item or '<maintenance-work-item>'} "
+            f"--issue {args.issue or '<issue>'} --branch {args.branch or '<branch>'} --head-sha {args.head_sha or '<head-sha>'} --apply --json"
+        ),
+        "required_sequence": [
+            "runtime-upgrade status",
+            "runtime-upgrade prepare --item <maintenance Work Item> --to <version> --apply",
+            "pr metadata-render/update/readback with runtime_upgrade trigger",
+            "hosted PR gate and semantic review for current head",
+            "runtime-upgrade check --item <maintenance Work Item> --to <version> --head-sha <head>",
+            "runtime-upgrade closeout after merge and carrier closeout-sync",
+        ],
+    }
+
+
+def handle_runtime_upgrade(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("runtime-upgrade", "block", schema=RUNTIME_UPGRADE_SCHEMA, summary="Runtime upgrade requires an operation.", failed_layer="runtime-upgrade-input", fail_closed_reason="missing operation", fallback_to=["loom runtime-upgrade status --target <repo> --json"]))
+    operation = argv[0]
+    if operation not in {"status", "prepare", "check", "closeout"}:
+        return emit(output("runtime-upgrade", "block", schema=RUNTIME_UPGRADE_SCHEMA, summary="Unsupported runtime-upgrade operation.", failed_layer="runtime-upgrade-input", fail_closed_reason=f"unsupported operation: {operation}", fallback_to=["loom runtime-upgrade status --target <repo> --json"]))
+
+    parser = argparse.ArgumentParser(prog=f"loom runtime-upgrade {operation}")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--to")
+    parser.add_argument("--item")
+    parser.add_argument("--issue")
+    parser.add_argument("--pr")
+    parser.add_argument("--branch")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--merge-commit")
+    parser.add_argument("--target-branch")
+    parser.add_argument("--closed-at")
+    parser.add_argument("--evidence-locator")
+    parser.add_argument("--output-file")
+    parser.add_argument("--base-body-file")
+    parser.add_argument("--rationale")
+    parser.add_argument("--consumer-boundary")
+    parser.add_argument("--recheck-condition")
+    parser.add_argument("--scope-proof")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--require-plugin-readiness", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv[1:])
+    target = resolve_target(args.target)
+    command = f"runtime-upgrade {operation}"
+    if not target.exists():
+        return emit(block_target(command, target, "target path does not exist"))
+
+    payload = runtime_upgrade_contract_payload(args, target, operation=operation)
+    pins = payload["workflow_pin_readback"]
+    blocking_gaps: list[dict[str, str]] = []
+    plugin_freshness = payload.get("codex_plugin_cache", {}).get("freshness")
+    plugin_ready = plugin_freshness in {None, "current", "already_current"}
+
+    if operation == "status":
+        result = "pass" if pins["pin_count"] else "block"
+        if not pins["pin_count"]:
+            blocking_gaps.append({"id": "missing-workflow-pin", "summary": "No LOOM_VERSION workflow pin was found."})
+        return emit(
+            output(
+                command,
+                result,
+                schema=RUNTIME_UPGRADE_SCHEMA,
+                summary="Runtime upgrade status readback completed." if result == "pass" else "Runtime upgrade status could not find an updatable LOOM_VERSION workflow pin.",
+                mutates=False,
+                failed_layer=None if result == "pass" else "runtime-upgrade-workflow-pin",
+                fail_closed_reason=None if result == "pass" else "missing LOOM_VERSION workflow pin",
+                blocking_gaps=blocking_gaps,
+                fallback_to=None if result == "pass" else ["add a workflow LOOM_VERSION pin", "loom upgrade-plan --target <repo> --json"],
+                **payload,
+            )
+        )
+
+    if operation in {"prepare", "check"} and not args.to:
+        blocking_gaps.append({"id": "missing-target-version", "summary": "Runtime upgrade requires --to <version>."})
+    if not args.item:
+        blocking_gaps.append({"id": "missing-work-item", "summary": "Runtime upgrade maintenance requires a real Work Item."})
+    elif args.item == "INIT-0001":
+        blocking_gaps.append({"id": "reserved-work-item", "summary": "Runtime upgrade must not reuse INIT-0001."})
+    if not pins["pin_count"]:
+        blocking_gaps.append({"id": "missing-workflow-pin", "summary": "No LOOM_VERSION workflow pin was found."})
+
+    if operation == "prepare":
+        planned_writes = [
+            {"file": pin["file"], "from": pin["version"], "to": args.to}
+            for pin in pins["pins"]
+            if args.to and pin.get("version") != args.to
+        ]
+        applied_writes: list[dict[str, Any]] = []
+        pr_intent_prepare = runtime_upgrade_pr_intent_prepare_payload(args, target, command=command, apply=False)
+        if pr_intent_prepare and pr_intent_prepare.get("result") != "pass":
+            blocking_gaps.extend({"id": "pr-intent-prepare", "summary": str(entry)} for entry in pr_intent_prepare.get("missing_inputs", []))
+        if args.apply and pr_intent_prepare:
+            for locator in (args.base_body_file or ".github/PULL_REQUEST_TEMPLATE.md", ".loom/companion/repo-interface.json"):
+                if not (target / locator).is_file():
+                    blocking_gaps.append({"id": "pr-intent-metadata-contract", "summary": f"runtime-upgrade prepare requires {locator} before writing PR metadata"})
+        if args.require_plugin_readiness and not plugin_ready:
+            blocking_gaps.append({"id": "codex-plugin-cache-not-ready", "summary": "Codex plugin/cache readiness was explicitly required but is stale or unreadable."})
+        result = "block" if blocking_gaps else "pass"
+        if result == "pass" and args.apply:
+            pr_intent_prepare = runtime_upgrade_pr_intent_prepare_payload(args, target, command=command, apply=True)
+            if pr_intent_prepare and pr_intent_prepare.get("result") != "pass":
+                blocking_gaps.extend({"id": "pr-intent-prepare", "summary": str(entry)} for entry in pr_intent_prepare.get("missing_inputs", []))
+                result = "block"
+            else:
+                applied_writes = runtime_upgrade_apply_workflow_pin_update(target, args.to)
+                payload["workflow_pin_readback_after"] = runtime_upgrade_workflow_pins(target)
+        return emit(
+            output(
+                command,
+                result,
+                schema=RUNTIME_UPGRADE_SCHEMA,
+                summary="Runtime upgrade workflow pin prepared." if result == "pass" else "Runtime upgrade prepare is blocked by missing maintenance inputs.",
+                mutates=args.apply,
+                planned_writes=planned_writes,
+                applied_writes=applied_writes,
+                pr_intent_prepare=pr_intent_prepare,
+                failed_layer=None if result == "pass" else "runtime-upgrade-input",
+                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
+                blocking_gaps=blocking_gaps,
+                fallback_to=None if result == "pass" else ["loom runtime-upgrade status --target <repo> --json"],
+                **payload,
+            )
+        )
+
+    if operation == "check":
+        current_versions = set(pins["versions"])
+        if args.to and current_versions != {args.to}:
+            blocking_gaps.append({"id": "workflow-pin-drift", "summary": f"Workflow LOOM_VERSION pins do not all equal {args.to}."})
+        for required, flag in ((args.pr, "--pr"), (args.branch, "--branch"), (args.head_sha, "--head-sha")):
+            if not required:
+                blocking_gaps.append({"id": f"missing-{flag[2:].replace('-', '_')}", "summary": f"Runtime upgrade check requires {flag} readback."})
+        if args.require_plugin_readiness and not plugin_ready:
+            blocking_gaps.append({"id": "codex-plugin-cache-not-ready", "summary": "Codex plugin/cache readiness was explicitly required but is stale or unreadable."})
+        result = "pass" if not blocking_gaps else "block"
+        return emit(
+            output(
+                command,
+                result,
+                schema=RUNTIME_UPGRADE_SCHEMA,
+                summary="Runtime upgrade maintenance PR inputs are ready for normal Loom gates." if result == "pass" else "Runtime upgrade maintenance PR is not ready.",
+                mutates=False,
+                failed_layer=None if result == "pass" else "runtime-upgrade-readback",
+                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
+                blocking_gaps=blocking_gaps,
+                fallback_to=None if result == "pass" else ["loom pr metadata-readback --surface merge_ready --json", "loom pr gate <pr> --json"],
+                **payload,
+            )
+        )
+
+    closeout_missing = []
+    for value, flag in ((args.item, "--item"), (args.pr, "--pr"), (args.merge_commit, "--merge-commit"), (args.target_branch, "--target-branch"), (args.evidence_locator, "--evidence-locator")):
+        if not value:
+            closeout_missing.append(flag)
+    if closeout_missing:
+        blocking_gaps.extend({"id": f"missing-{flag[2:]}", "summary": f"Runtime upgrade closeout requires {flag}."} for flag in closeout_missing)
+    carrier_command = None
+    if args.item:
+        carrier_command = (
+            f"loom carrier closeout-sync --target {target} --item {args.item} "
+            f"--terminal-state closed_out --pr {args.pr or '<pr>'} "
+            f"--merge-commit {args.merge_commit or '<merge-commit>'} "
+            f"--target-branch {args.target_branch or '<target-branch>'} "
+            f"--evidence-locator {args.evidence_locator or '<evidence-locator>'} --apply --json"
+        )
+    result = "pass" if not blocking_gaps else "block"
+    return emit(
+        output(
+            command,
+            result,
+            schema=RUNTIME_UPGRADE_SCHEMA,
+            summary="Runtime upgrade closeout evidence is complete." if result == "pass" else "Runtime upgrade closeout is blocked by missing terminal evidence.",
+            mutates=False,
+            carrier_closeout_sync_command=carrier_command,
+            failed_layer=None if result == "pass" else "runtime-upgrade-closeout",
+            fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
+            blocking_gaps=blocking_gaps,
+            fallback_to=None if result == "pass" else ["loom carrier closeout-sync --target <repo> --item <item> --apply --json"],
+            **payload,
+        )
+    )
+
+
 def handle_delivery(command: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=f"loom {command}")
     parser.add_argument("--target", default=".")
@@ -5164,6 +5591,16 @@ PR_INTENT_FIXTURE_PREFIXES = (
     "examples/new-project/",
     ".loom/specs/",
 )
+PR_INTENT_RUNTIME_UPGRADE_PREFIXES = (
+    ".github/workflows/",
+    ".loom/specs/",
+    ".loom/runtime/",
+    ".loom/work-items/",
+    ".loom/progress/",
+    ".loom/status/",
+    ".loom/reviews/",
+    ".loom/shadow/",
+)
 
 PR_INTENT_PROFILES: dict[str, dict[str, Any]] = {
     "docs-governance-only": {
@@ -5245,6 +5682,22 @@ PR_INTENT_PROFILES: dict[str, dict[str, Any]] = {
         "default_rationale": None,
         "default_consumer_boundary": None,
         "default_recheck_condition": None,
+    },
+    "runtime-upgrade-only": {
+        "aliases": ("runtime-upgrade", "loom-runtime-upgrade", "workflow-runtime-upgrade"),
+        "summary": "Single-repository Loom runtime workflow pin upgrade PR carrier set.",
+        "surface": "merge_ready",
+        "governance_intensity": "light",
+        "change_class": "runtime_upgrade",
+        "suite_path": "not_applicable",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "upgrade_triggers": ("runtime_upgrade",),
+        "allowed_prefixes": PR_INTENT_RUNTIME_UPGRADE_PREFIXES,
+        "allowed_exact": (),
+        "default_rationale": "runtime-upgrade-only PR intent updates the target repository Loom workflow pin and maintenance carriers only",
+        "default_consumer_boundary": "suite validate, review, PR gate, merge-ready, and closeout may consume this only as workflow-only runtime maintenance non-applicability; PR metadata, current-head review, hosted checks, head binding, and carrier closeout remain required",
+        "default_recheck_condition": "diff touches non-workflow runtime code, product behavior, release surfaces, or workstation plugin/cache state",
     },
 }
 
@@ -11066,6 +11519,9 @@ def main(argv: list[str]) -> int:
     if len(argv) == 1:
         print_usage(sys.stderr)
         return 2
+    if argv[1] in {"-v", "--version"}:
+        print(version_context()["repo_version"])
+        return 0
 
     resolved = resolve_command(argv[1:])
     if resolved is None:
@@ -11093,6 +11549,9 @@ def main(argv: list[str]) -> int:
         return handle_release(release_args)
     if command in {"install", "upgrade-plan", "upgrade", "rollback", "verify"}:
         return handle_delivery(command, forwarded)
+    if command == "runtime-upgrade" or command.startswith("runtime-upgrade "):
+        runtime_upgrade_args = command.split()[1:] + forwarded if command.startswith("runtime-upgrade ") else forwarded
+        return handle_runtime_upgrade(runtime_upgrade_args)
     if command == "workspace" or command.startswith("workspace "):
         workspace_args = command.split()[1:] + forwarded if command.startswith("workspace ") else forwarded
         return handle_workspace(workspace_args)
