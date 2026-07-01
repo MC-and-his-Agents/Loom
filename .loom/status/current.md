@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1874
-- Goal: 发布 v0.26.1 closeout 恢复打磨。
-- Scope: bump root Loom CLI release authority to v0.26.1, align npm package and Codex plugin payload release metadata/hash, add v0.26.1 release readiness evidence, prepare and merge the release PR, then read back GitHub Release/npm/tag/workflow and close out #1869/#1874 plus milestone #24 after terminal carrier closeout.
-- Execution Path: issue #1874 -> branch work/1874-v0.26.1-release -> release readiness evidence -> release PR -> main push release workflow -> release readback -> #1869/#1874/milestone #24 closeout.
+- Item ID: WI-1876
+- Goal: 修复 target 绑定的 full_output artifact locator，并作为 v0.26.2 发布线交付。
+- Scope: Loom CLI target-aware command output artifact emission/readback contract: bind default relative artifact output to resolved `--target` root, preserve `LOOM_OUTPUT_ARTIFACT_DIR` explicit override, cover `build` and `fact-chain` plus npm/global wrapper regression, then complete PR #1878, review/gate, v0.26.2 release readback, and closeout. Ownership is limited to the runtime contract, focused tests, contract helper, CLI command matrix documentation, WI-1876 carriers, PR #1878 metadata, and v0.26.2 closeout for this fix.
+- Execution Path: issue #1876 -> branch work/1876-target-output-artifacts -> PR #1878 -> implementation review/gate -> merge -> v0.26.2 release -> release readback -> terminal closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1874.md
-- Review Entry: .loom/reviews/WI-1874.json
-- Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
-- Closing Condition: v0.26.1 tag, GitHub Release, npm @mc-and-his-agents/loom@0.26.1, plugin payload metadata/hash, #1869/#1874 closeout evidence, and milestone #24 readback are consistent.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1874 release closeout synced for v0.26.1: release PR #1877 merged at 37d78b64c8d60e227be38a814792df6cac0b8fa8; published release readback consumed into terminal repo carrier state.
-- Next Step: None.
+- Recovery Entry: .loom/progress/WI-1876.md
+- Review Entry: .loom/reviews/WI-1876.json
+- Validation Entry: output envelope and target resolution tests, real Node wrapper build/fact-chain readback probes, CLI contract aggregate, PR gate, release readback.
+- Closing Condition: PR #1878 merged, v0.26.2 tag/GitHub Release/npm package read back consistently, and #1876/#1878 terminal carrier closeout is synced.
+- Current Checkpoint: merge
+- Current Stop: implementation review is refreshed in `.loom/reviews/WI-1876.json` for implementation head `d9e5b0b083e17c79c286f6d5cbbf2887002df860`, local release/package/contract validation has passed, and the branch is ready for PR metadata refresh, PR gate, and controlled merge.
+- Next Step: update PR #1878 metadata to the pushed carrier head, run PR gate and controlled merge, publish v0.26.2 after merge, read back tag/GitHub Release/npm, then sync terminal closeout carriers.
 - Blockers: None recorded.
-- Latest Validation Summary: local pre-release validation passed on 2026-07-01 for `python3 tools/version_surface_check.py`, `python3 tools/check_release_surface.py`, `python3 tools/check_npm_package.py --surface aggregate`, `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `npm pack --dry-run --json --ignore-scripts`, `python3 tools/check_cli_contract.py --surface release-readback`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/loom.py suite validate --target . --item WI-1874 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1874 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1874 --json`, `python3 .loom/bin/loom_init.py fact-chain --target .`, `python3 tools/loom.py skills release-check --json`, `python3 tools/check_demo_bootstrap_fixture.py`, and `git diff --check`; release readback verdict is `missing` with only expected pre-publication gaps.
-- Recovery Boundary: WI-1874 owns v0.26.1 root release authority, package/plugin payload metadata/hash, release readiness evidence, release PR metadata, publication readback, terminal carrier closeout, and #1869/#1874 plus milestone #24 closeout. It does not add new runtime behavior beyond merged PR #1875, does not publish legacy installer, does not change plugin surface compatibility, and does not close issues before release readback plus terminal carrier closeout.
-- Current Lane: release-closeout-sync
+- Latest Validation Summary: 2026-07-01 local validation passed at head `d9e5b0b083e17c79c286f6d5cbbf2887002df860` for `python3 -m unittest test.output_envelope_test test.target_resolution_test`, `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py test/target_resolution_test.py`, `python3 tools/check_cli_contract.py --surface controlled-merge`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/version_surface_check.py`, `python3 tools/check_release_surface.py`, `python3 tools/check_npm_package.py`, `python3 tools/loom.py suite validate --target . --item WI-1876 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1876 --json`, `python3 tools/loom.py build --target . --item WI-1876 --build-evidence .loom/progress/WI-1876-build-evidence.json --json --full-output`, `python3 tools/skills_surface.py check`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, and `git diff --check`; Node wrapper build/fact-chain target artifact readback is covered by `test.target_resolution_test`.
+- Recovery Boundary: WI-1876 owns only the Loom CLI runtime artifact emission/readback contract and v0.26.2 release closeout for this fix. It does not add downstream repository-specific behavior, change authored truth carrier semantics, or reopen v0.26.1 closeout recovery.
+- Current Lane: runtime-contract-fix
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-01 WI-1874 release work is active in `/Users/mc/dev/Loom.worktrees/1874-v0.26.1-release` on branch `work/1874-v0.26.1-release`.
-- Logs Entry: Validation output is retained in this Codex thread and will be summarized in `.loom/progress/WI-1874.md`.
-- Diagnostics Entry: Branch starts from main after #1875 merged and targets #1874 v0.26.1 release only.
-- Verification Entry: release/package/suite/fact-chain/aggregate/skills/demo/diff validation passed locally before release review.
-- Lane Entry: release
+- Run Entry: 2026-07-01 WI-1876 work is active in `/Users/mc/dev/Loom` on branch `work/1876-target-output-artifacts`.
+- Logs Entry: Validation output is retained in this Codex thread and will be summarized in `.loom/progress/WI-1876.md`.
+- Diagnostics Entry: Branch starts from main after v0.26.1 closeout terminal state and targets #1876/#1878 plus v0.26.2 only.
+- Verification Entry: focused output envelope/target resolution tests, real Node wrapper readback probes, aggregate CLI contract, and diff checks passed locally before PR metadata update.
+- Lane Entry: runtime-contract-fix
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1874.md
-- Dynamic Truth: .loom/progress/WI-1874.md
+- Static Truth: .loom/work-items/WI-1876.md
+- Dynamic Truth: .loom/progress/WI-1876.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

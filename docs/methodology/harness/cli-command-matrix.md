@@ -24,6 +24,8 @@ The default stdout hard budget is 16 KiB and the summary target is 4 KiB. The
 effective values are configurable per process with
 `LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`,
 `LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`, and `LOOM_OUTPUT_ARTIFACT_DIR`.
+Relative output artifact directories are resolved from the command's resolved
+`--target` root for target-aware commands, and from the process cwd otherwise.
 
 Regression bucket / named surface / fast-vs-full validation semantics for long-running black-box checks are frozen in [regression-surface-contract.md](./regression-surface-contract.md). The command matrix may expose selectors or aggregate outputs for those surfaces, but it does not redefine that vocabulary here.
 

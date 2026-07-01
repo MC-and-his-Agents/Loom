@@ -1,0 +1,50 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1876",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1876 at carrier head c12ae97d with implementation head d9e5b0b0: target-aware full_output artifact locators remain bound to the resolved target root, explicit LOOM_OUTPUT_ARTIFACT_DIR overrides remain preserved, build/fact-chain Python and Node wrapper readback coverage is present, aggregate CLI contract consumes target-bound locators, release/package surfaces are aligned to v0.26.2, suite/evidence map validation passes, and PR #1878 metadata must declare release_required for v0.26.2 closeout.",
+  "reviewer": "codex",
+  "authored_at": "2026-07-01T20:03:00Z",
+  "reviewed_head": "c12ae97db8f245be9244c28c9ea86525f4038228",
+  "reviewed_validation_summary": "2026-07-01 local validation passed at head `d9e5b0b083e17c79c286f6d5cbbf2887002df860` for `python3 -m unittest test.output_envelope_test test.target_resolution_test`, `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py test/target_resolution_test.py`, `python3 tools/check_cli_contract.py --surface controlled-merge`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/version_surface_check.py`, `python3 tools/check_release_surface.py`, `python3 tools/check_npm_package.py`, `python3 tools/loom.py suite validate --target . --item WI-1876 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1876 --json`, `python3 tools/loom.py build --target . --item WI-1876 --build-evidence .loom/progress/WI-1876-build-evidence.json --json --full-output`, `python3 tools/skills_surface.py check`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, and `git diff --check`; Node wrapper build/fact-chain target artifact readback is covered by `test.target_resolution_test`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1876.md",
+    "recovery_entry": ".loom/progress/WI-1876.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "pass",
+    "suite_carrier_validation": "pass",
+    "suite_evidence_map": ".loom/specs/WI-1876/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1876/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

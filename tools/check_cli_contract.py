@@ -290,7 +290,27 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise AssertionError(f"{args} did not emit JSON: {exc}\n{raw}") from exc
+    annotate_contract_artifact_base(payload, args, cwd=REPO_ROOT)
     return completed.returncode, payload
+
+
+def contract_target_base_from_args(args: list[str], *, cwd: Path) -> Path | None:
+    for index, arg in enumerate(args):
+        if arg == "--target" and index + 1 < len(args):
+            raw_target = Path(args[index + 1])
+            return raw_target if raw_target.is_absolute() else (cwd / raw_target).resolve()
+        if arg.startswith("--target="):
+            raw_target = Path(arg.split("=", 1)[1])
+            return raw_target if raw_target.is_absolute() else (cwd / raw_target).resolve()
+    return None
+
+
+def annotate_contract_artifact_base(payload: dict[str, Any], args: list[str], *, cwd: Path) -> None:
+    if payload.get("envelope_schema") != "loom-agent-output-envelope/v1":
+        return
+    artifact_base = contract_target_base_from_args(args, cwd=cwd)
+    if artifact_base is not None:
+        payload["_loom_contract_artifact_base"] = str(artifact_base)
 
 
 def runtime_payload_from_agent_safe_output(payload: dict[str, Any]) -> dict[str, Any]:
@@ -302,7 +322,9 @@ def runtime_payload_from_agent_safe_output(payload: dict[str, Any]) -> dict[str,
         raise AssertionError("agent-safe output envelope did not expose full output artifact locator")
     path = Path(locator)
     if not path.is_absolute():
-        path = REPO_ROOT / path
+        artifact_base_raw = payload.get("_loom_contract_artifact_base")
+        artifact_base = Path(artifact_base_raw) if isinstance(artifact_base_raw, str) and artifact_base_raw else REPO_ROOT
+        path = artifact_base / path
     artifact = json.loads(path.read_text(encoding="utf-8"))
     runtime_payload = artifact.get("payload")
     if not isinstance(runtime_payload, dict):
@@ -336,6 +358,7 @@ def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None 
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise AssertionError(f"loom_flow.py {args} did not emit JSON: {exc}\n{raw}") from exc
+    annotate_contract_artifact_base(payload, args, cwd=cwd)
     return completed.returncode, payload
 
 
@@ -3540,8 +3563,17 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         loom_flow.git_head_sha = original_git_head_sha
 
 
+SNAPSHOT_RUNTIME_ARTIFACT_PREFIXES = (".loom/tmp",)
+
+
 def snapshot_tree(target: Path) -> list[str]:
-    return sorted(path.relative_to(target).as_posix() for path in target.rglob("*"))
+    entries: list[str] = []
+    for path in target.rglob("*"):
+        relative = path.relative_to(target).as_posix()
+        if any(relative == prefix or relative.startswith(f"{prefix}/") for prefix in SNAPSHOT_RUNTIME_ARTIFACT_PREFIXES):
+            continue
+        entries.append(relative)
+    return sorted(entries)
 
 
 def digest_path(path: Path) -> dict[str, str]:
@@ -5242,7 +5274,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
         "## Related Work\n\n- Loom Work Item:\n",
         encoding="utf-8",
     )
-    (target / ".gitignore").write_text(".loom/fixtures/\n", encoding="utf-8")
+    (target / ".gitignore").write_text(".loom/fixtures/\n.loom/tmp/\n", encoding="utf-8")
     work_item = target / ".loom" / "work-items" / f"{item}.md"
     work_item.write_text(
         f"# {item}\n\n"

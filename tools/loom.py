@@ -1618,7 +1618,7 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
             fallback_to=["loom release readback --target <repo> --json"],
             next_action="Resolve release readback drift/missing artifacts before carrier terminalization.",
         )
-        return emit(agent_safe_payload(payload, full_output=args.full_output))
+        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
     release_target = release_readback.get("release_target") if isinstance(release_readback.get("release_target"), dict) else {}
     readbacks = release_readback.get("readbacks") if isinstance(release_readback.get("readbacks"), dict) else {}
@@ -1654,7 +1654,7 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
             fallback_to=pr_readback.get("fallback_to"),
             next_action="Bind --pr to the merged release PR before carrier terminalization.",
         )
-        return emit(agent_safe_payload(payload, full_output=args.full_output))
+        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
     pr = pr_readback.get("pr") if isinstance(pr_readback.get("pr"), dict) else {}
     merge_commit = pr.get("mergeCommit") if isinstance(pr.get("mergeCommit"), dict) else {}
@@ -1766,7 +1766,7 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
         next_commands=next_commands,
         next_action=next_commands["metadata_update"] if args.apply and result == "pass" else "Review the dry-run plan, then rerun with --apply.",
     )
-    return emit(agent_safe_payload(payload, full_output=args.full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_release(argv: list[str]) -> int:
@@ -2296,9 +2296,11 @@ def write_output_artifact(
     payload: dict[str, Any],
     *,
     artifact_dir: Path | None = None,
+    target_root: Path | None = None,
     sensitive: bool = False,
 ) -> str:
-    root = artifact_dir or Path(os.environ.get("LOOM_OUTPUT_ARTIFACT_DIR", DEFAULT_OUTPUT_ARTIFACT_DIR))
+    configured = artifact_dir or Path(os.environ.get("LOOM_OUTPUT_ARTIFACT_DIR", DEFAULT_OUTPUT_ARTIFACT_DIR))
+    root = configured if configured.is_absolute() else ((target_root or Path.cwd()) / configured)
     root.mkdir(parents=True, exist_ok=True)
     command = str(payload.get("command", "loom-output"))
     slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", command).strip("-") or "loom-output"
@@ -2313,6 +2315,11 @@ def write_output_artifact(
         "payload": payload,
     }
     path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if target_root is not None and not configured.is_absolute():
+        try:
+            return str(path.relative_to(target_root))
+        except ValueError:
+            pass
     return str(path)
 
 
@@ -2322,6 +2329,7 @@ def agent_safe_payload(
     stdout_budget_bytes: int | None = None,
     summary_target_bytes: int | None = None,
     artifact_dir: Path | None = None,
+    target_root: Path | None = None,
     sensitive: bool = False,
     full_output: bool = False,
 ) -> dict[str, Any]:
@@ -2340,7 +2348,7 @@ def agent_safe_payload(
     over_budget = len(rendered.encode("utf-8")) > stdout_budget_bytes
     if not over_budget and not should_use_actionable_envelope(payload, actionable_findings):
         return payload
-    locator = write_output_artifact(payload, artifact_dir=artifact_dir, sensitive=sensitive)
+    locator = write_output_artifact(payload, artifact_dir=artifact_dir, target_root=target_root, sensitive=sensitive)
     summary = truncate_utf8(
         str(payload.get("summary") or "Full output exceeded the agent-safe stdout budget."),
         summary_target_bytes,
@@ -2450,12 +2458,13 @@ def flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str]) 
 
 def emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
     forwarded_args, full_output = split_agent_output_args(flow_args)
+    target = target_root_from_explicit_arg(forwarded_args)
     payload = flow_payload(command, forwarded_args, fallback_to=fallback_to)
     payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
-    return emit(agent_safe_payload(payload, full_output=full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
 
 
 def delegated_payload(command: str, tool_name: str, delegated_args: list[str], *, failed_layer: str, fallback_to: list[str]) -> dict[str, Any]:
@@ -2465,12 +2474,13 @@ def delegated_payload(command: str, tool_name: str, delegated_args: list[str], *
 
 def emit_delegated(command: str, tool_name: str, delegated_args: list[str], *, failed_layer: str, fallback_to: list[str]) -> int:
     forwarded_args, full_output = split_agent_output_args(delegated_args)
+    target = target_root_from_explicit_arg(forwarded_args)
     payload = delegated_payload(command, tool_name, forwarded_args, failed_layer=failed_layer, fallback_to=fallback_to)
     payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
-    return emit(agent_safe_payload(payload, full_output=full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
 
 
 def strip_json_flag(argv: list[str]) -> list[str]:
@@ -2491,6 +2501,12 @@ def split_agent_output_args(argv: list[str]) -> tuple[list[str], bool]:
 def append_full_output_flag(flow_args: list[str], args: argparse.Namespace) -> None:
     if getattr(args, "full_output", False):
         flow_args.append("--full-output")
+
+
+def target_root_from_explicit_arg(argv: list[str]) -> Path | None:
+    if "--target" in argv or any(arg.startswith("--target=") for arg in argv):
+        return target_from_args(argv)
+    return None
 
 
 def target_from_args(argv: list[str]) -> Path:
@@ -2590,6 +2606,7 @@ def command_output_policy(command: str) -> dict[str, Any]:
         "stdout_budget_env": "LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES",
         "summary_target_env": "LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES",
         "artifact_dir_env": "LOOM_OUTPUT_ARTIFACT_DIR",
+        "relative_artifact_dir_base": "resolved --target root for target-aware commands; process cwd otherwise",
     }
 
 
@@ -2844,6 +2861,7 @@ def handle_help(argv: list[str]) -> int:
                 "summary_target_env": "LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES",
                 "artifact_dir_env": "LOOM_OUTPUT_ARTIFACT_DIR",
                 "artifact_dir_default": str(DEFAULT_OUTPUT_ARTIFACT_DIR),
+                "relative_artifact_dir_base": "resolved --target root for target-aware commands; process cwd otherwise",
             },
             "artifact_lifecycle": "Artifacts are local diagnostic files under the configured artifact directory; they are diagnostic evidence locators, not authored truth carriers.",
         },
@@ -6255,6 +6273,7 @@ def merge_closeout_block(
     fallback = fallback_to or ["loom merge run <pr> --apply --closeout-run --work-item <id> --issue <n> --target-branch <branch> --json"]
     mutates = any(bool(step.get("mutates")) for step in steps or [])
     closeout_policy = merge_closeout_policy(args)
+    target = resolve_target(pr_command_target(args.target))
     return emit(
         agent_safe_payload(
             output(
@@ -6277,6 +6296,7 @@ def merge_closeout_block(
                 fallback_to=fallback,
                 next_action=fallback[0] if isinstance(fallback, list) else fallback,
             ),
+            target_root=target,
             full_output=args.full_output,
         )
     )
@@ -6349,6 +6369,7 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
                     fallback_to=blocker.get("fallback_to"),
                     next_action=blocker.get("fallback_to") or "resolve controlled merge blocker before retrying closeout-run",
                 ),
+                target_root=target,
                 full_output=full_output,
             )
         )
@@ -6418,6 +6439,7 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
                 fallback_to=blocker.get("fallback_to") if blocker else None,
                 next_action=blocker.get("fallback_to") if blocker else "merge and closeout-run completed; read back PR, issue, and target branch state.",
             ),
+            target_root=target,
             full_output=full_output,
         )
     )
@@ -7733,7 +7755,7 @@ def ship_apply_admission_block(
         fallback_to=fallback_to,
         next_action=fallback_to[0] if fallback_to else "resolve ship apply admission blocker",
     )
-    return emit(agent_safe_payload(payload, full_output=args.full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def git_branch_for_target(target: Path) -> str | None:
@@ -8134,7 +8156,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
         carrier=carrier,
         next_action=next_action,
     )
-    return emit(agent_safe_payload(payload, full_output=args.full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_ship(argv: list[str]) -> int:
@@ -8227,6 +8249,7 @@ def handle_ship(argv: list[str]) -> int:
                     fallback_to=next_action,
                     next_action=next_action,
                 ),
+                target_root=target,
                 full_output=args.full_output,
             )
         )
@@ -8368,6 +8391,7 @@ def handle_ship(argv: list[str]) -> int:
                     fallback_to=next_action,
                     next_action=next_action,
                 ),
+                target_root=target,
                 full_output=args.full_output,
             )
         )
@@ -8454,6 +8478,7 @@ def handle_ship(argv: list[str]) -> int:
                         fallback_to=blocker.get("fallback_to"),
                         next_action=blocker.get("fallback_to") or "resolve controlled merge blocker",
                     ),
+                    target_root=target,
                     full_output=args.full_output,
                 )
             )
@@ -8503,6 +8528,7 @@ def handle_ship(argv: list[str]) -> int:
                     fallback_to=(blocker.get("fallback_to") if blocker else None),
                     next_action=(blocker.get("fallback_to") if blocker else "ship --apply completed; read back PR, issue, and target branch state."),
                 ),
+                target_root=target,
                 full_output=args.full_output,
             )
         )
@@ -8532,7 +8558,7 @@ def handle_ship(argv: list[str]) -> int:
         fallback_to=next_action if blocker else None,
         next_action=next_action,
     )
-    return emit(agent_safe_payload(payload, full_output=args.full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_reconcile(argv: list[str]) -> int:
@@ -8597,7 +8623,7 @@ def handle_carrier(argv: list[str]) -> int:
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
-    return emit(agent_safe_payload(payload, full_output=args.full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def add_closeout_host_args(flow_args: list[str], args: argparse.Namespace, *, include_comment: bool) -> None:
@@ -9035,7 +9061,7 @@ def handle_closeout_sync(operation: str, argv: list[str]) -> int:
         fallback_to=diagnostic["next_action"] if blocker else None,
         next_action=diagnostic["next_action"],
     )
-    return emit(agent_safe_payload(payload, full_output=args.full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def closeout_run_payload(
@@ -9661,7 +9687,7 @@ def handle_status(argv: list[str]) -> int:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = "status"
     annotate_global_cli_runtime_entrypoint(payload, command="status", target=target, argv=argv)
-    return emit(agent_safe_payload(payload, full_output=full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
 
 
 def handle_fact_chain(argv: list[str]) -> int:
@@ -9673,7 +9699,7 @@ def handle_fact_chain(argv: list[str]) -> int:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = "fact-chain"
     annotate_global_cli_runtime_entrypoint(payload, command="fact-chain", target=target, argv=argv)
-    return emit(agent_safe_payload(payload, full_output=full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
 
 
 def handle_shadow_parity(argv: list[str]) -> int:
@@ -9685,7 +9711,7 @@ def handle_shadow_parity(argv: list[str]) -> int:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = "shadow-parity"
     annotate_global_cli_runtime_entrypoint(payload, command="shadow-parity", target=target, argv=argv)
-    return emit(agent_safe_payload(payload, full_output=full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
 
 
 def handle_profile(argv: list[str]) -> int:
@@ -9789,7 +9815,7 @@ def handle_closeout_queue_status(argv: list[str]) -> int:
     if payload.get("command") and payload.get("command") != "closeout queue status":
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = "closeout queue status"
-    return emit(agent_safe_payload(payload, full_output=args.full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_scenario(command: str, argv: list[str]) -> int:
@@ -9877,7 +9903,7 @@ def handle_scenario(command: str, argv: list[str]) -> int:
                 "summary": "Retire currently exposes the handoff/cleanup checklist and does not delete worktrees or host objects.",
                 "fallback_to": ["loom workspace retire --target <repo> --json", "loom handoff --target <repo> --json"],
             }
-        return emit(agent_safe_payload(payload, full_output=args.full_output))
+        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
     if command in {"spec", "plan"}:
         item = args.item or "unknown-item"
@@ -9938,7 +9964,7 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         if payload.get("command") and payload.get("command") != command:
             payload["wrapped_command"] = payload.get("command")
         payload["command"] = command
-        return emit(agent_safe_payload(payload, full_output=args.full_output))
+        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
     return emit(output(command, "block", schema=SCENARIO_SCHEMA, summary="Unsupported scenario command.", failed_layer="scenario-input", fail_closed_reason=command, fallback_to=["loom help --json"]))
 
@@ -9959,6 +9985,7 @@ def dispatch(command: str, forwarded_args: list[str]) -> int:
             stream=sys.stderr,
         )
     forwarded_args, full_output = split_agent_output_args(forwarded_args)
+    target = target_root_from_explicit_arg(forwarded_args)
     payload = delegated_payload(
         command,
         tool_name,
@@ -9970,7 +9997,7 @@ def dispatch(command: str, forwarded_args: list[str]) -> int:
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
-    return emit(agent_safe_payload(payload, full_output=full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
 
 
 def reserved_command(command: str, argv: list[str]) -> int:
