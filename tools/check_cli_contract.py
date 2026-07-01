@@ -3563,8 +3563,17 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         loom_flow.git_head_sha = original_git_head_sha
 
 
+SNAPSHOT_RUNTIME_ARTIFACT_PREFIXES = (".loom/tmp",)
+
+
 def snapshot_tree(target: Path) -> list[str]:
-    return sorted(path.relative_to(target).as_posix() for path in target.rglob("*"))
+    entries: list[str] = []
+    for path in target.rglob("*"):
+        relative = path.relative_to(target).as_posix()
+        if any(relative == prefix or relative.startswith(f"{prefix}/") for prefix in SNAPSHOT_RUNTIME_ARTIFACT_PREFIXES):
+            continue
+        entries.append(relative)
+    return sorted(entries)
 
 
 def digest_path(path: Path) -> dict[str, str]:
@@ -5265,7 +5274,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
         "## Related Work\n\n- Loom Work Item:\n",
         encoding="utf-8",
     )
-    (target / ".gitignore").write_text(".loom/fixtures/\n", encoding="utf-8")
+    (target / ".gitignore").write_text(".loom/fixtures/\n.loom/tmp/\n", encoding="utf-8")
     work_item = target / ".loom" / "work-items" / f"{item}.md"
     work_item.write_text(
         f"# {item}\n\n"
