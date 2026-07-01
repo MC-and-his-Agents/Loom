@@ -1,0 +1,81 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1855",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1855 release candidate is allowed at head 1ebb0411: VERSION, package.json, plugin payload metadata/hash, release readiness evidence, WI-1855 carriers, suite/evidence/task carriers, fact-chain, shadow parity, npm package payload, CLI contracts, and pre-release readback are consistent. Publication remains gated to the main-push release workflow after the release PR merges.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T10:48:39Z",
+  "reviewed_head": "1ebb04111b98545b576e33f8f525710a9c4f4a8e",
+  "reviewed_validation_summary": "Pre-release local validation passed on 2026-07-01: py_compile_clean; version_surface_check; check_release_surface; check_npm_package; check_cli_contract --surface release-readback; check_cli_contract --surface aggregate; npm pack --dry-run --json --ignore-scripts; suite validate/evidence/carrier for WI-1855; fact-chain; resume; state-check; git diff --check. Release readback for v0.25.0 passed with expected pre-publication verdict `missing`.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "Before merge, update PR metadata to the final head and rerun PR metadata readback, PR gate, hosted checks, and merge check.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-2",
+      "summary": "After merge, wait for v0.25.0 GitHub Release/npm publication, run release readback, then run release closeout-sync and close #1850/#1851-#1855 plus milestone #22.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Before merge, update PR metadata to the final head and rerun PR metadata readback, PR gate, hosted checks, and merge check.",
+    "After merge, wait for v0.25.0 GitHub Release/npm publication, run release readback, then run release closeout-sync and close #1850/#1851-#1855 plus milestone #22."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1855.md",
+    "recovery_entry": ".loom/progress/WI-1855.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release --item WI-1855 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1855-v0.25.0-release --item WI-1855 --json",
+    "suite_evidence_map": ".loom/specs/WI-1855/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1855/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
