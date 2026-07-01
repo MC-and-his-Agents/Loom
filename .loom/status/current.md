@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1855.json
 - Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
 - Closing Condition: v0.25.0 tag, GitHub Release, npm `@mc-and-his-agents/loom@0.25.0`, plugin payload metadata/hash, #1850/#1851-#1855 closeout evidence, and milestone #22 readback are consistent.
-- Current Checkpoint: merge
-- Current Stop: Release PR #1857 is open with v0.25.0 metadata, release readiness evidence, WI-1855 carriers, shadow evidence, and spec/code review records prepared.
-- Next Step: Bind PR metadata to the final carrier head, rerun PR metadata readback, PR gate, hosted checks, controlled merge, release readback, and closeout.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1855 release closeout synced for v0.25.0: release PR #1857 merged at d9ca2ed4e281cf123fc92a435e335d2600374f4d; published release readback consumed into terminal repo carrier state.
+- Next Step: None.
 - Blockers: None recorded.
-- Latest Validation Summary: Pre-release local validation passed on 2026-07-01: py_compile_clean; version_surface_check; check_release_surface; check_npm_package; check_cli_contract --surface release-readback; check_cli_contract --surface aggregate; npm pack --dry-run --json --ignore-scripts; suite validate/evidence/carrier for WI-1855; fact-chain; resume; state-check; git diff --check. Release readback for v0.25.0 passed with expected pre-publication verdict `missing`.
+- Latest Validation Summary: Pre-release local validation passed on 2026-07-01; PR #1857 local PR gate, hosted checks, and merge check passed; release workflow `loom-cli-release` run 28512888728 published v0.25.0; final release readback for merge commit d9ca2ed4e281cf123fc92a435e335d2600374f4d passed with verdict `published`.
 - Recovery Boundary: WI-1855 owns v0.25.0 root release authority, plugin payload release metadata/hash, release readiness evidence, WI-1855 carriers, WI-1851 implementation-merged progress consumption, and status/shadow readback. It does not add new runtime behavior beyond the merged #1851 implementation, does not publish a legacy installer version, and does not change plugin surface compatibility.
-- Current Lane: release-pr-gate
+- Current Lane: release-closeout-sync
 
 ## Runtime Evidence
 
