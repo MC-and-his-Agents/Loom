@@ -177,6 +177,17 @@ loom runtime-upgrade closeout --target . --item <maintenance-work-item> --pr <pr
 readback、语义审查、hosted checks、head binding、PR gate 和 carrier closeout
 sync。
 
+当 release 已经发布并完成读回后，用 release closeout sync 包装器把仓库载体收口到
+terminal 状态，不重新发布：
+
+```bash
+loom release closeout-sync --target . --version <version> --item <work-item> --pr <release-pr> --apply --json
+```
+
+它只在 `--apply` 下写仓库载体表面：progress terminal metadata、status sync、
+closeout/merge-ready shadow refresh，以及提交后的 PR metadata / gate 下一步命令。
+它不会创建 tag、发布 npm、编辑 GitHub Release，也不会合并 closeout PR。
+
 `runtime-upgrade status|prepare|check` 也会显示本机 Codex plugin/cache 的新鲜度。
 如果该本机表面过期或不可读，命令会指向 `loom host doctor --host codex --scope user
 --json`，以及需要时显式运行的 `loom host install|register --host codex --scope user

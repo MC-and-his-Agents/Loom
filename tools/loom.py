@@ -366,6 +366,13 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Classify release recovery state from readback evidence without triggering publish or closeout.",
     },
+    {
+        "command": "release closeout-sync",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan or apply repo carrier terminalization after release artifacts have already been published.",
+    },
     {"command": "workspace create", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace locate", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace check", "domain": "host-control", "status": "implemented", "json": True},
@@ -1261,10 +1268,306 @@ def release_readback_payload(
     return payload
 
 
+def release_closeout_step(name: str, payload: dict[str, Any], *, mutates: bool = False) -> dict[str, Any]:
+    return {
+        "name": name,
+        "result": payload.get("result"),
+        "summary": payload.get("summary"),
+        "missing_inputs": payload.get("missing_inputs", []),
+        "fallback_to": payload.get("fallback_to"),
+        "mutates": mutates,
+        "payload": payload,
+    }
+
+
+def release_closeout_readback_allows_sync(readback: dict[str, Any]) -> tuple[bool, str]:
+    classification = readback.get("classification") if isinstance(readback.get("classification"), dict) else {}
+    verdict = str(classification.get("verdict") or "")
+    gaps = {str(gap) for gap in classification.get("gaps", []) if gap}
+    if verdict == "published":
+        return True, "release readback is already published; closeout-sync is idempotent."
+    if verdict == "blocked" and gaps == {"carrier_not_terminal"}:
+        return True, "release artifacts are published; repo carrier terminalization is the only remaining gap."
+    return False, f"release readback verdict `{verdict or 'unknown'}` is not eligible for closeout-sync"
+
+
+def release_closeout_pr_readback_payload(
+    *,
+    target: Path,
+    pr_number: str,
+    repo: str | None,
+    target_commit: str | None,
+    pr_payload_file: str | None,
+) -> dict[str, Any]:
+    command = "release closeout-sync pr-readback"
+    if pr_payload_file:
+        path = Path(pr_payload_file)
+        if not path.is_absolute():
+            path = target / path
+        try:
+            loaded = read_json(path)
+        except (OSError, json.JSONDecodeError) as exc:
+            return output(command, "block", summary="PR readback fixture is unreadable.", missing_inputs=[str(exc)], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
+        pr = loaded.get("pr") if isinstance(loaded, dict) and isinstance(loaded.get("pr"), dict) else loaded
+    else:
+        if not repo:
+            return output(command, "block", summary="PR readback requires a GitHub repo.", missing_inputs=["missing repo"], fallback_to=["pass --repo owner/name or run inside a GitHub checkout"])
+        completed = run_readback_command(
+            [
+                "gh",
+                "pr",
+                "view",
+                str(pr_number),
+                "--repo",
+                repo,
+                "--json",
+                "number,state,mergedAt,mergeCommit,baseRefName,url,headRefName,headRefOid",
+            ],
+            cwd=target,
+        )
+        if completed.returncode != 0:
+            return output(command, "block", summary="PR readback failed.", missing_inputs=[completed.stderr.strip() or "gh pr view failed"], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
+        try:
+            pr = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            return output(command, "block", summary="PR readback returned invalid JSON.", missing_inputs=[str(exc)], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
+
+    if not isinstance(pr, dict):
+        return output(command, "block", summary="PR readback payload is invalid.", missing_inputs=["PR payload must be an object"], fallback_to=["gh pr view <pr> --json number,state,mergedAt,mergeCommit,baseRefName,url"])
+    missing: list[str] = []
+    if str(pr.get("number")) != str(pr_number):
+        missing.append("PR number mismatch")
+    if str(pr.get("state", "")).upper() != "MERGED":
+        missing.append("PR is not merged")
+    merge_commit = pr.get("mergeCommit") if isinstance(pr.get("mergeCommit"), dict) else {}
+    merge_sha = merge_commit.get("oid")
+    if not merge_sha:
+        missing.append("PR merge commit is missing")
+    if target_commit and merge_sha and merge_sha != target_commit:
+        missing.append("release target commit does not match PR merge commit")
+    if missing:
+        return output(command, "block", summary="Release closeout PR readback is not merge-complete for the release target.", missing_inputs=missing, pr=pr, fallback_to=["verify --pr points at the merged release PR for this version"])
+    return output(command, "pass", summary="Release PR readback is merge-complete and bound to the release target.", pr=pr)
+
+
+def release_closeout_next_commands(args: argparse.Namespace, target: Path, head_sha: str | None) -> dict[str, str]:
+    branch = args.branch or "<closeout-sync-branch>"
+    stable_head = head_sha or "<post-commit-head-sha>"
+    pr = args.closeout_pr or "<closeout-sync-pr>"
+    return {
+        "metadata_render": f"loom pr metadata-render --target {target} --surface closeout --item {args.item} --branch {branch} --head-sha {stable_head} --release-judgment no_release --json",
+        "metadata_update": f"loom pr metadata-update {pr} --target {target} --surface closeout --item {args.item} --branch {branch} --head-sha {stable_head} --release-judgment no_release --apply --json",
+        "gate": f"loom pr gate {pr} --target {target} --surface closeout --work-item {args.item} --head-sha {stable_head} --json",
+        "merge": f"loom merge check {pr} --target {target} --work-item {args.item} --head-sha {stable_head} --json",
+        "post_merge_readback": f"loom release readback --target {target} --version {args.version or '<version>'} --commit {args.commit or '<release-commit>'} --release-judgment release_required --json",
+    }
+
+
+def release_closeout_issue(args: argparse.Namespace) -> str:
+    if args.issue:
+        return str(args.issue)
+    match = re.search(r"\d+", str(args.item))
+    return match.group(0) if match else "not_applicable"
+
+
+def handle_release_closeout_sync(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom release closeout-sync")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--version")
+    parser.add_argument("--package", dest="package_name")
+    parser.add_argument("--repo")
+    parser.add_argument("--commit")
+    parser.add_argument("--workflow", default="loom-cli-release.yml")
+    parser.add_argument("--item", required=True)
+    parser.add_argument("--pr", required=True, help="Merged release PR number used as release evidence.")
+    parser.add_argument("--closeout-pr", help="Optional carrier-sync PR number for next-step metadata/gate commands.")
+    parser.add_argument("--issue")
+    parser.add_argument("--branch")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--target-branch")
+    parser.add_argument("--closed-at")
+    parser.add_argument("--evidence-locator")
+    parser.add_argument("--pr-payload-file")
+    parser.add_argument("--fixture-file")
+    parser.add_argument("--fixture")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target("release closeout-sync", target, "target path does not exist"))
+
+    release_readback = release_readback_payload(
+        command="release closeout-sync release-readback",
+        target=target,
+        release_judgment="release_required",
+        version=args.version,
+        package_name=args.package_name,
+        repo=args.repo,
+        commit=args.commit,
+        workflow=args.workflow,
+        fixture_file=Path(args.fixture_file).resolve() if args.fixture_file else None,
+        fixture_name=args.fixture,
+    )
+    steps = [release_closeout_step("release-readback", release_readback)]
+    allowed, reason = release_closeout_readback_allows_sync(release_readback)
+    if not allowed:
+        payload = output(
+            "release closeout-sync",
+            "block",
+            schema_version="loom-release-closeout-sync/v1",
+            summary="release closeout-sync stopped before carrier writes.",
+            target=str(target),
+            item={"id": args.item},
+            release_pr={"number": args.pr},
+            apply=args.apply,
+            dry_run=not args.apply,
+            steps=steps,
+            missing_inputs=[reason],
+            fallback_to=["loom release readback --target <repo> --json"],
+            next_action="Resolve release readback drift/missing artifacts before carrier terminalization.",
+        )
+        return emit(agent_safe_payload(payload, full_output=args.full_output))
+
+    release_target = release_readback.get("release_target") if isinstance(release_readback.get("release_target"), dict) else {}
+    readbacks = release_readback.get("readbacks") if isinstance(release_readback.get("readbacks"), dict) else {}
+    github_release = readbacks.get("github_release") if isinstance(readbacks.get("github_release"), dict) else {}
+    resolved_repo = args.repo or release_target.get("repo") or infer_github_repo(target)
+    target_commit = args.commit or release_target.get("target_commit")
+    pr_readback = release_closeout_pr_readback_payload(
+        target=target,
+        pr_number=args.pr,
+        repo=str(resolved_repo) if resolved_repo else None,
+        target_commit=str(target_commit) if target_commit else None,
+        pr_payload_file=args.pr_payload_file,
+    )
+    steps.append(release_closeout_step("release-pr-readback", pr_readback))
+    if pr_readback.get("result") != "pass":
+        payload = output(
+            "release closeout-sync",
+            "block",
+            schema_version="loom-release-closeout-sync/v1",
+            summary="release closeout-sync stopped before carrier writes.",
+            target=str(target),
+            item={"id": args.item},
+            release_pr={"number": args.pr},
+            apply=args.apply,
+            dry_run=not args.apply,
+            steps=steps,
+            missing_inputs=pr_readback.get("missing_inputs", []),
+            fallback_to=pr_readback.get("fallback_to"),
+            next_action="Bind --pr to the merged release PR before carrier terminalization.",
+        )
+        return emit(agent_safe_payload(payload, full_output=args.full_output))
+
+    pr = pr_readback.get("pr") if isinstance(pr_readback.get("pr"), dict) else {}
+    merge_commit = pr.get("mergeCommit") if isinstance(pr.get("mergeCommit"), dict) else {}
+    merge_sha = str(merge_commit.get("oid") or target_commit or "not_applicable")
+    target_branch = str(args.target_branch or pr.get("baseRefName") or "main")
+    closed_at = str(args.closed_at or pr.get("mergedAt") or now_iso())
+    evidence_locator = str(args.evidence_locator or ";".join(str(value) for value in (github_release.get("url"), pr.get("url")) if value) or "release-readback")
+    issue_number = release_closeout_issue(args)
+
+    carrier_args = [
+        "carrier",
+        "closeout-sync",
+        "--target",
+        str(target),
+        "--item",
+        args.item,
+        "--terminal-state",
+        "closed_out",
+        "--issue",
+        issue_number,
+        "--pr",
+        str(args.pr),
+        "--merge-commit",
+        merge_sha,
+        "--target-branch",
+        target_branch,
+        "--closed-at",
+        closed_at,
+        "--evidence-locator",
+        evidence_locator,
+        "--apply" if args.apply else "--dry-run",
+    ]
+    carrier = flow_payload("release closeout-sync", carrier_args, fallback_to=["loom carrier closeout-sync --target <repo> --item <item> --apply --json"])
+    steps.append(release_closeout_step("carrier-closeout-sync", carrier, mutates=args.apply))
+
+    if args.apply and carrier.get("result") == "pass":
+        stop = (
+            f"{args.item} release closeout synced for {release_target.get('version') or args.version}: "
+            f"release PR #{args.pr} merged at {merge_sha}; published release readback consumed into terminal repo carrier state."
+        )
+        recovery_args = [
+            "recovery",
+            "writeback",
+            "--target",
+            str(target),
+            "--item",
+            args.item,
+            "--current-checkpoint",
+            "closed_out",
+            "--current-stop",
+            stop,
+            "--next-step",
+            "None.",
+            "--blockers",
+            "None recorded.",
+            "--current-lane",
+            "release-closeout-sync",
+        ]
+        recovery = flow_payload("release closeout-sync", recovery_args, fallback_to=["loom recovery writeback --target <repo> --item <item>"])
+        steps.append(release_closeout_step("recovery-writeback", recovery, mutates=True))
+        if recovery.get("result") == "pass":
+            for surface in ("closeout", "merge_ready"):
+                refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--surface", surface, "--write"]
+                refresh = flow_payload("release closeout-sync", refresh_args, fallback_to=["loom carrier refresh --target <repo> --write"])
+                steps.append(release_closeout_step(f"carrier-refresh-{surface}", refresh, mutates=True))
+
+    blocker = next((step for step in steps if step.get("result") == "block"), None)
+    result = "block" if blocker else "pass"
+    next_commands = release_closeout_next_commands(args, target, args.head_sha)
+    payload = output(
+        "release closeout-sync",
+        result,
+        schema_version="loom-release-closeout-sync/v1",
+        summary="release closeout-sync applied terminal carrier updates." if args.apply and result == "pass" else "release closeout-sync produced a terminal carrier plan." if result == "pass" else "release closeout-sync stopped at a blocking step.",
+        target=str(target),
+        item={"id": args.item},
+        release_pr={"number": args.pr},
+        release_target=release_target,
+        terminal_metadata={
+            "terminal_state": "closed_out",
+            "issue": issue_number,
+            "pr": str(args.pr),
+            "merge_commit": merge_sha,
+            "target_branch": target_branch,
+            "closed_at": closed_at,
+            "evidence_locator": evidence_locator,
+        },
+        apply=args.apply,
+        dry_run=not args.apply,
+        mutates=args.apply,
+        host_mutations=False,
+        carrier_mutations=args.apply,
+        steps=steps,
+        first_blocker=blocker,
+        missing_inputs=blocker.get("missing_inputs", []) if blocker else [],
+        fallback_to=blocker.get("fallback_to") if blocker else None,
+        next_commands=next_commands,
+        next_action=next_commands["metadata_update"] if args.apply and result == "pass" else "Review the dry-run plan, then rerun with --apply.",
+    )
+    return emit(agent_safe_payload(payload, full_output=args.full_output))
+
+
 def handle_release(argv: list[str]) -> int:
     if not argv:
         return emit(output("release", "block", schema=RELEASE_READBACK_SCHEMA, summary="Release requires an operation.", failed_layer="release-input", fail_closed_reason="missing release operation", fallback_to=["loom release readback --target <repo> --json"]))
     operation = argv[0]
+    if operation == "closeout-sync":
+        return handle_release_closeout_sync(argv[1:])
     if operation not in {"readback", "resume"}:
         return emit(output("release", "block", schema=RELEASE_READBACK_SCHEMA, summary="Unsupported release operation.", failed_layer="release-input", fail_closed_reason=f"unsupported release operation: {operation}", fallback_to=["loom release readback --target <repo> --json"]))
     parser = argparse.ArgumentParser(prog=f"loom release {operation}")

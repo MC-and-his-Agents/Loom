@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1834
-- Goal: 实现单仓 Loom 运行时升级维护流程，并为 v0.24.0 发布准备标准、低摩擦、可验证的 repo runtime pin 升级路径。
-- Scope: 覆盖 issue #1834-#1838 的 runtime-upgrade status/prepare/check/closeout、loom -v/--version、CLI help/matrix、英文/中文 README、Codex plugin/cache advisory guidance、runtime copy/plugin metadata/hash 与示例 fixture 同步；不包含多仓批量升级或跳过治理。
-- Execution Path: issue tree #1834 -> branch work/1834-runtime-upgrade -> PR #1839 -> merge -> v0.24.0 release #1838 -> closeout
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1834.md
-- Review Entry: .loom/reviews/WI-1834.json
-- Validation Entry: make py-compile; make loom-demo-new-project-check; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py skills release-check --json; PR metadata preflight/readback for PR #1839
-- Closing Condition: PR #1839 merges to main, #1835-#1837 implementation scope is closed, v0.24.0 release issue #1838 publishes and reads back GitHub/npm/package/plugin metadata, #1834-#1838 and milestone #20 close, and repo carrier closeout consumes the final facts.
-- Current Checkpoint: closed
-- Current Stop: v0.24.0 implementation PR #1839 and release PR #1840 are merged; main release workflow published tag v0.24.0, GitHub Release, and npm package 0.24.0; terminal closeout metadata is recorded for WI-1834.
-- Next Step: None.
+- Item ID: WI-1844
+- Goal: 产品化 release readback 后的通用 release closeout-sync 入口。
+- Scope: 实现 loom release closeout-sync dry-run/apply、CLI contract、README/README.zh-CN 和 CLI matrix；不发布、不 republish、不自动 merge、不新增 carrier/DSL。
+- Execution Path: issue #1844 -> branch work/1844-release-closeout-sync -> PR -> v0.24.1 release
+- Workspace Entry: /Users/mc/dev/Loom.worktrees/1844-release-closeout-sync
+- Recovery Entry: .loom/progress/WI-1844.md
+- Review Entry: .loom/reviews/WI-1844.json
+- Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface aggregate; loom release closeout-sync dogfood dry-run
+- Closing Condition: PR merges, #1842/#1843/#1846 close, v0.24.1 publishes and release closeout-sync carrier is terminalized.
+- Current Checkpoint: build
+- Current Stop: release closeout-sync wrapper、contract、回归覆盖、suite/evidence 载体和双语文档已实现；targeted、aggregate、suite、carrier、evidence、dogfood dry-run 均通过。
+- Next Step: 提交实现、创建 PR、绑定 PR metadata、记录当前 head review，然后运行 hosted gate/merge；v0.24.1 release 仍需在实现 PR 合并后执行。
 - Blockers: None recorded.
-- Latest Validation Summary: #1839 merged at b795a83800a1c08ef667036371965f13bc811611 after hosted loom-check, node-installer-pr-gate, loom-pr-merge-gate, and release-judgment passed for head b66e6086da0908ed04c5e7d2397e44fe05f527fa. #1840 merged at 1aafb7fb031d997b7b497e277a525e308f766407 after release-only PR gate, pr-intent check, shadow parity, release surface, package, and hosted checks passed. Main release workflow 28493294251 published tag v0.24.0, GitHub Release, and npm @mc-and-his-agents/loom@0.24.0; release readback passed for tag/release/npm/workflow/package surfaces with only carrier terminalization pending before this sync.
-- Recovery Boundary: WI-1834 owns single-repo runtime-upgrade maintenance flow implementation and v0.24.0 release convergence only. Do not add multi-repo batch mode, do not mutate user-level Codex plugin/cache from repo PR commands, do not lower review/PR gate/head binding/CI/release/closeout requirements, and do not represent plugin/cache advisory state as a repo merge fact.
-- Current Lane: closed_out
+- Latest Validation Summary: py_compile passed; check_cli_contract --surface release-readback passed in 1.61s with published/idempotent, non-carrier-gap, PR-readback fail-closed, dry-run, apply, and drift coverage; check_cli_contract --surface aggregate passed in 344.56s; suite validate, suite carrier validate, and suite evidence validate passed; dogfood release closeout-sync dry-run for v0.24.0/WI-1834/PR #1840 passed against main without carrier mutation; cross-item WI-1844 target correctly failed closed.
+- Recovery Boundary: WI-1844 owns release closeout-sync wrapper, docs, tests, and v0.24.1 convergence only; no publishing, republishing, GitHub Release/npm mutation, auto merge, multi-repo batch, new DSL, or new carrier in implementation PR.
+- Current Lane: implementation-ready
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-01 WI-1834 runtime-upgrade work resumed in `/Users/mc/dev/Loom.worktrees/1834-runtime-upgrade` on branch `work/1834-runtime-upgrade`.
-- Logs Entry: Validation output and hosted check classification are retained in this Codex thread and summarized in `.loom/progress/WI-1834.md`.
-- Diagnostics Entry: Hosted `loom-pr-merge-gate` first failed because it read stale PR body/head metadata before update propagation and because repo fact-chain/review still pointed at WI-1805. WI-1834 fact-chain and review carriers are now refreshed and must be consumed by a new gate run.
-- Verification Entry: `make py-compile`, `make loom-demo-new-project-check`, `python3 tools/check_cli_contract.py --surface aggregate`, package checks, release-check, diff whitespace, PR metadata preflight/readback, and hosted `loom-check` component jobs passed for current or immediately preceding stable inputs.
-- Lane Entry: closed_out
+- Run Entry: 2026-07-01 WI-1844 release closeout-sync work is active in `/Users/mc/dev/Loom.worktrees/1844-release-closeout-sync` on branch `work/1844-release-closeout-sync`.
+- Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1844.md`.
+- Diagnostics Entry: Release closeout-sync dogfood dry-run passes against the WI-1834 main worktree; the same command correctly fail-closes when run from the WI-1844 worktree against WI-1834 because the fact-chain item does not match.
+- Verification Entry: `python3 -m py_compile tools/loom.py tools/check_cli_contract.py`, `python3 tools/check_cli_contract.py --surface release-readback`, suite validate, suite carrier validate, and release closeout-sync dogfood dry-run passed.
+- Lane Entry: implementation-ready
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1834.md
-- Dynamic Truth: .loom/progress/WI-1834.md
+- Static Truth: .loom/work-items/WI-1844.md
+- Dynamic Truth: .loom/progress/WI-1844.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
