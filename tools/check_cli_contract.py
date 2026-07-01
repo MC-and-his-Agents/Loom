@@ -11403,26 +11403,29 @@ def run_runtime_upgrade_surface() -> None:
 
     def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
         run_calls.append(list(args))
-        if args[:3] == ["gh", "issue", "view"]:
-            return subprocess.CompletedProcess(
-                args,
-                0,
-                json.dumps(
-                    {
-                        "number": 1834,
-                        "state": "CLOSED",
-                        "closedAt": "2026-07-01T00:00:00Z",
-                        "url": "https://github.com/MC-and-his-Agents/Loom/issues/1834",
-                        "closedByPullRequestsReferences": [{"number": 1839}],
-                    }
-                ),
-                "",
-            )
         return subprocess.CompletedProcess(args, 0, "", "")
 
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         flow_calls.append(list(flow_args))
-        if flow_args[:2] == ["host-binding", "inspect"]:
+        if flow_args[:2] == ["host-binding", "inspect"] and "--issue" in flow_args and "--pr" not in flow_args:
+            return {
+                "command": command,
+                "result": "block",
+                "binding_chain": {
+                    "nodes": {
+                        "work_item": {
+                            "value": {
+                                "number": 1834,
+                                "state": "CLOSED",
+                                "closedAt": "2026-07-01T00:00:00Z",
+                                "url": "https://github.com/MC-and-his-Agents/Loom/issues/1834",
+                                "closingPullRequests": [{"number": 1839}],
+                            }
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["host-binding", "inspect"] and "--pr" in flow_args:
             return {
                 "command": command,
                 "result": "pass",
@@ -11482,10 +11485,10 @@ def run_runtime_upgrade_surface() -> None:
         raise AssertionError(f"runtime-upgrade closeout did not derive terminal metadata from host readback: {terminal}")
     if "actions/runs/1/job/2" not in str(terminal.get("evidence_locator")):
         raise AssertionError("runtime-upgrade closeout must carry hosted run URL evidence when host readback exposes it")
-    if [call[:2] for call in flow_calls[:2]] != [["host-binding", "inspect"], ["carrier", "closeout-sync"]]:
+    if [call[:2] for call in flow_calls[:3]] != [["host-binding", "inspect"], ["host-binding", "inspect"], ["carrier", "closeout-sync"]]:
         raise AssertionError(f"runtime-upgrade closeout delegated unexpected first flow calls: {flow_calls}")
-    if not any(call[:3] == ["gh", "issue", "view"] for call in run_calls):
-        raise AssertionError("runtime-upgrade closeout must read issue state/closedAt from host")
+    if any(call[:3] == ["gh", "issue", "view"] for call in run_calls):
+        raise AssertionError("runtime-upgrade closeout must not shell out to the forbidden issue view command; use Loom host-binding readback")
 
     print("runtime-upgrade surface checks passed")
 

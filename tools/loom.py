@@ -4587,36 +4587,30 @@ def runtime_upgrade_create_pr_payload(args: argparse.Namespace, target: Path, *,
     )
 
 
-def runtime_upgrade_issue_payload_from_gh(target: Path, *, repo: str | None, issue: str | None) -> dict[str, Any]:
+def runtime_upgrade_issue_payload_from_host(target: Path, *, repo: str | None, issue: str | None) -> dict[str, Any]:
     command = "runtime-upgrade closeout issue-readback"
     if not issue:
         return output(command, "block", summary="Runtime upgrade closeout requires an issue locator.", missing_inputs=["missing issue"], fallback_to=["pass --issue <maintenance-issue>"])
-    repo_args = ["--repo", repo] if repo else []
-    completed = run_capture(
+    inspected = flow_payload(
+        command,
         [
-            "gh",
-            "issue",
-            "view",
+            "host-binding",
+            "inspect",
+            "--target",
+            str(target),
+            "--issue",
             str(issue),
-            *repo_args,
-            "--json",
-            "number,state,closedAt,url,closedByPullRequestsReferences",
+            *release_closeout_repo_flow_args(repo),
         ],
-        cwd=target,
+        fallback_to=["loom issue inspect <issue> --json", "pass explicit --pr/--merge-commit/--target-branch/--closed-at"],
     )
-    if completed.returncode != 0:
-        return output(
-            command,
-            "block",
-            summary="Issue readback failed.",
-            missing_inputs=[completed.stderr.strip() or completed.stdout.strip() or "gh issue view failed"],
-            fallback_to=["ensure GitHub issue readback is available or pass explicit --pr metadata"],
-        )
-    try:
-        issue_payload = json.loads(completed.stdout)
-    except json.JSONDecodeError:
-        return output(command, "block", summary="Issue readback returned invalid JSON.", missing_inputs=["invalid issue readback JSON"], fallback_to=["retry gh issue view"])
-    refs = issue_payload.get("closedByPullRequestsReferences")
+    chain = inspected.get("binding_chain") if isinstance(inspected.get("binding_chain"), dict) else {}
+    nodes = chain.get("nodes") if isinstance(chain.get("nodes"), dict) else {}
+    issue_node = nodes.get("work_item") if isinstance(nodes.get("work_item"), dict) else {}
+    issue_payload = issue_node.get("value") if isinstance(issue_node.get("value"), dict) else None
+    if not isinstance(issue_payload, dict):
+        return output(command, "block", summary="Issue readback payload is invalid.", missing_inputs=["host-binding issue node is missing"], fallback_to=["loom issue inspect <issue> --json", "pass explicit terminal evidence"])
+    refs = issue_payload.get("closingPullRequests") or issue_payload.get("closedByPullRequestsReferences")
     pr_number = None
     if isinstance(refs, list) and refs:
         first = refs[0]
@@ -4634,6 +4628,7 @@ def runtime_upgrade_issue_payload_from_gh(target: Path, *, repo: str | None, iss
         summary="Issue readback is closed and can feed runtime-upgrade closeout." if result == "pass" else "Issue readback is not terminal.",
         issue=issue_payload,
         inferred_pr=pr_number,
+        host_readback=inspected,
         missing_inputs=missing,
         fallback_to=["close the maintenance issue or pass explicit terminal evidence"] if missing else None,
     )
@@ -5042,7 +5037,7 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
         issue_readback: dict[str, Any] | None = None
         pr_number = str(args.pr) if args.pr else None
         if not blocking_gaps and args.issue:
-            issue_readback = runtime_upgrade_issue_payload_from_gh(target, repo=repo_slug, issue=args.issue)
+            issue_readback = runtime_upgrade_issue_payload_from_host(target, repo=repo_slug, issue=args.issue)
             steps.append({"name": "issue-readback", "result": issue_readback.get("result"), "payload": issue_readback})
             if issue_readback.get("result") != "pass":
                 blocking_gaps.extend({"id": "issue-readback", "summary": str(entry)} for entry in issue_readback.get("missing_inputs", []))
