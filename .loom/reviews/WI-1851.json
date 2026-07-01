@@ -3,10 +3,10 @@
   "item_id": "WI-1851",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1851 implementation is allowed at current reviewed head 6fb65633: PR intent prepare/check now emits local readiness, prepare runs metadata preflight after rendering, closeout-only and carrier-sync-only profiles preserve valid existing minimal/full suites, release closeout-sync reports local readiness without replacing hosted gates, help/README/SKILL routes expose task-oriented command discovery, and the added implementation-contract/work-item carrier repair is consistent with the bounded minimal suite.",
+  "summary": "WI-1851 implementation is allowed at current reviewed head e5c1e6be: PR intent prepare/check now emits local readiness, prepare runs metadata preflight after rendering, closeout-only and carrier-sync-only profiles preserve valid existing minimal/full suites, release closeout-sync reports local readiness without replacing hosted gates, agent-safe output preserves readiness guidance, help/README/SKILL routes expose task-oriented command discovery, and the bounded minimal suite remains consistent.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "6fb65633545d84b5cc590486692c9a425d884be3",
-  "reviewed_validation_summary": "Passed for current reviewed head 6fb65633545d84b5cc590486692c9a425d884be3: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json; git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 tools/loom.py pr metadata-readback 1856 --target . --surface merge_ready --item WI-1851 --issue 1851 --branch work/1851-shift-left-readiness --head-sha 6fb65633545d84b5cc590486692c9a425d884be3 --json.",
+  "reviewed_head": "e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a",
+  "reviewed_validation_summary": "Passed for current reviewed head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a before carrier-only review/status refresh: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface pr-metadata; git diff --check. Final PR metadata readback, PR gate, hosted checks, and merge-ready must be rerun after carrier refresh.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -37,6 +37,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved current head 6fb65633545d84b5cc590486692c9a425d884be3 for merge checkpoint consumption; any later PR head must contain only review/progress/status carrier drift before this disposition is consumed."
+    "reason": "Authored implementation review approved current head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a for merge checkpoint consumption; any later PR head must contain only review/progress/status/shadow carrier drift before this disposition is consumed."
   }
 }

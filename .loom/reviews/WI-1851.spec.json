@@ -5,8 +5,8 @@
   "kind": "spec_review",
   "summary": "WI-1851 minimal suite is approved for v0.25.0 shift-left readiness and task-oriented CLI guidance. Scope is limited to local readiness output, PR intent suite preservation, metadata preflight after render, release closeout readiness guidance, and README/SKILL/help discoverability; hosted gate scheduling, multi-repo orchestration, command renames, and release publishing remain out of scope.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "6fb65633545d84b5cc590486692c9a425d884be3",
-  "reviewed_validation_summary": "Passed for current reviewed head 6fb65633545d84b5cc590486692c9a425d884be3: python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json; git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .",
+  "reviewed_head": "e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a",
+  "reviewed_validation_summary": "Spec scope remains approved at current reviewed head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a; implementation-only readiness output repair does not change the minimal suite boundary. Suite validation and carrier refresh must be rerun after this carrier-only review update.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -27,6 +27,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored spec review approved the minimal suite and scope boundary for current head 6fb65633545d84b5cc590486692c9a425d884be3."
+    "reason": "Authored spec review approved the minimal suite and scope boundary for current head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a."
   }
 }

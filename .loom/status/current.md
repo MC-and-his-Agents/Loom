@@ -12,20 +12,20 @@
 - Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash
 - Closing Condition: PR merged, no-release closeout evidence consumed for implementation, then v0.25.0 release/readback/terminal carrier closeout in #1855.
 - Current Checkpoint: merge
-- Current Stop: Implementation and spec reviews now approve current head 6fb65633545d84b5cc590486692c9a425d884be3; final PR head may only add review/progress/status carrier drift.
-- Next Step: Commit review/spec-review carrier refresh, push, update PR metadata to the new head, then rerun PR gate and hosted checks.
+- Current Stop: Release-readback contract blocker is fixed at reviewed code head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a; review/spec-review now approve that head.
+- Next Step: Refresh closeout/merge-ready shadow, commit carrier-only updates, push, update PR metadata to the final head, then rerun PR gate and hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed for current reviewed head 6fb65633545d84b5cc590486692c9a425d884be3: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface pr-metadata; python3 tools/loom.py skills check --target . --json; python3 tools/check_npm_package.py --surface plugin-payload-hash; python3 tools/check_cli_contract.py --surface aggregate; python3 tools/loom.py suite validate --target . --item WI-1851 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1851 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1851 --json; git diff --check; python3 .loom/bin/loom_init.py fact-chain --target .; python3 tools/loom.py pr metadata-readback 1856 --target . --surface merge_ready --item WI-1851 --issue 1851 --branch work/1851-shift-left-readiness --head-sha 6fb65633545d84b5cc590486692c9a425d884be3 --json.
+- Latest Validation Summary: Passed for reviewed code head e5c1e6be2dcd2afbfb6740b44c8f76e800bd8d5a: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback; python3 tools/check_cli_contract.py --surface pr-metadata; git diff --check. Previous broader validation passed before the focused release-readback repair; final PR gate and hosted checks must be rerun after carrier refresh.
 - Recovery Boundary: .loom/reviews/WI-1851.json; .loom/reviews/WI-1851.spec.json; .loom/progress/WI-1851.md; .loom/status/current.md
 - Current Lane: merge-gate-prep
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-01 WI-1844 release closeout-sync work is active in `/Users/mc/dev/Loom.worktrees/1845-v0.24.1-release` on branch `work/1845-v0.24.1-release`.
-- Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1844.md`.
-- Diagnostics Entry: Release closeout-sync dogfood dry-run passes against the WI-1834 main worktree; the same command correctly fail-closes when run from the WI-1844 worktree against WI-1834 because the fact-chain item does not match.
-- Verification Entry: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `python3 tools/version_surface_check.py`, `python3 tools/check_release_surface.py`, `python3 tools/check_npm_package.py`, `python3 tools/check_cli_contract.py --surface release-readback`, `python3 tools/check_cli_contract.py --surface aggregate`, `npm pack --dry-run --json --ignore-scripts`, suite validate/carrier/evidence, fact-chain, release readback, hosted gates, and loom merge check/run passed for implementation PR #1847.
-- Lane Entry: release-pr
+- Run Entry: 2026-07-01 WI-1851 work is active in `/Users/mc/dev/Loom.worktrees/1851-shift-left-readiness` on branch `work/1851-shift-left-readiness`.
+- Logs Entry: Validation output is retained in this Codex thread and summarized in `.loom/progress/WI-1851.md`.
+- Diagnostics Entry: Hosted `release-judgment` exposed that agent-safe output was dropping the `readiness` envelope; `tools/loom.py` now preserves readiness in compact agent-safe output.
+- Verification Entry: `python3 -m py_compile tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface release-readback`; `python3 tools/check_cli_contract.py --surface pr-metadata`; `git diff --check`.
+- Lane Entry: merge-gate-prep
 
 ## Sources
 
