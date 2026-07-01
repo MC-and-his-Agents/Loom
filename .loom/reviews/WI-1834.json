@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1834",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Semantic review allows PR #1839 head 1dc3433e510535cda24dd28e057a6456a65dc9d8 for merge-gate consumption after fixture drift repair and WI-1834 carrier activation. The implementation is scoped to #1834-#1838: runtime-upgrade status/prepare/check/closeout, loom -v/--version, help/CLI matrix, README and README.zh-CN, Codex plugin/cache advisory guidance, runtime copy parity, plugin metadata/hash, and examples/new-project fixture sync. It does not add multi-repo batch automation, does not run host install/register from repo PR commands, and does not lower review, PR gate, head binding, CI, release readback, or closeout requirements.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T02:53:41Z",
+  "reviewed_head": "1dc3433e510535cda24dd28e057a6456a65dc9d8",
+  "reviewed_validation_summary": "make py-compile, make loom-demo-new-project-check, python3 tools/check_cli_contract.py --surface runtime-upgrade, python3 tools/check_cli_contract.py --surface pr-metadata, python3 tools/check_cli_contract.py --surface aggregate, python3 tools/check_npm_package.py, python3 tools/check_npm_package.py --surface runtime-copy-parity, python3 tools/loom.py skills release-check --json, git diff --check, and PR metadata preflight/readback for PR #1839 passed for current or immediately preceding stable inputs.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Run hosted PR gate after this carrier update is committed and pushed.",
+    "Complete #1838 v0.24.0 release/readback/closeout after PR #1839 merges."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1834.md",
+    "recovery_entry": ".loom/progress/WI-1834.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_path": "minimal",
+    "spec": ".loom/specs/WI-1834/spec.md",
+    "plan": ".loom/specs/WI-1834/plan.md",
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1839",
+    "pr_metadata_readback": ".loom/runtime/pr/metadata-readback.md"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
