@@ -11,12 +11,12 @@
 - Review Entry: .loom/reviews/WI-1895.json
 - Validation Entry: python3 tools/check_cli_contract.py --surface workstation-registry; python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py; python3 tools/loom.py suite validate --target . --item WI-1895 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1895 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1895 --json; python3 tools/loom.py fact-chain --target . --item WI-1895 --json; git diff --check
 - Closing Condition: CLI implementation is merged, #1895 is closed, and Loom closeout consumes PR/review/validation/merge evidence.
-- Current Checkpoint: build
-- Current Stop: WI-1895 implementation is in progress on branch `work/1895-workstation-registry-cli`; initial CLI helpers and isolated HOME contract coverage are authored locally.
-- Next Step: Finish local validation, record review evidence, create PR, run hosted checks, merge, and close out #1895.
+- Current Checkpoint: merge
+- Current Stop: WI-1895 implementation, spec review, implementation review, PR #1921, and PR metadata readback are ready for merge gate consumption at head c25883a7090f1fabcbb23cf591fd0144e93cdd05.
+- Next Step: Run PR gate, wait for hosted checks and release judgment, then use controlled merge and closeout for #1895.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-07-02T21:04Z local pass: `python3 tools/check_cli_contract.py --surface workstation-registry`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1895 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1895 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1895 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1895 --json`; `git diff --check`.
-- Recovery Boundary: WI-1895 owns `loom workstation register/list/unregister --json` only. #1896 owns live fail-closed validation for missing paths, remote hash drift, and repo id conflicts. #1902 owns workstation upgrade orchestration.
+- Recovery Boundary: WI-1895 owns loom workstation register/list/unregister --json only. #1896 owns live fail-closed validation for missing paths, remote hash drift, and repo id conflicts. #1902 owns workstation upgrade orchestration.
 - Current Lane: workstation-registry-cli
 
 ## Runtime Evidence
