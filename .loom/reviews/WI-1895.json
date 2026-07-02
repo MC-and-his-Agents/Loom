@@ -3,10 +3,10 @@
   "item_id": "WI-1895",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allow: workstation register/list/unregister is scoped to the machine-local registry, uses isolated HOME coverage for register/list/unregister and target repository write boundaries, preserves repo adoption truth boundaries, and explicitly defers live drift validation and upgrade orchestration to #1896/#1902. Carrier-only closeout review for PR #1922 is limited to terminal progress/status/shadow carrier sync after implementation PR #1921 merged and issue #1895 closed; it does not approve new runtime behavior.",
+  "summary": "Carrier-only closeout review for PR #1923 repairs WI-1895 review carrier metadata after PR #1922 accidentally replaced the implementation review record. This review is limited to terminal closeout carrier metadata and does not approve new runtime behavior.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-02T21:33:22Z",
-  "reviewed_head": "b9cfb6dab3c384e1609c386b912d25aaa6a3835d",
+  "authored_at": "2026-07-02T22:39:00Z",
+  "reviewed_head": "d5fc0f10b9a8d30518f88cd96e5c511293a39d08",
   "reviewed_validation_summary": "2026-07-02T21:04Z local pass: `python3 tools/check_cli_contract.py --surface workstation-registry`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1895 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1895 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1895 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1895 --json`; `git diff --check`.",
   "fallback_to": null,
   "findings": [],
@@ -34,7 +34,7 @@
     "engine_evidence": null,
     "normalized_findings": null,
     "implementation_reviewed_head": "e7ea715ef582581344e0fb4d3dea90cde55d8441",
-    "implementation_review_scope": "workstation register/list/unregister implementation review consumed by PR #1921 before merge; top-level reviewed_head is the reachable closeout carrier head for closeout-only PR admission.",
+    "implementation_review_scope": "workstation register/list/unregister implementation review was consumed by PR #1921 before merge; this record's top-level reviewed_head is the PR #1922 merge commit on the current PR history and is used only to admit PR #1923 closeout carrier repair drift.",
     "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1895 --json",
     "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1895 --json",
     "suite_evidence_map": ".loom/specs/WI-1895/evidence-map.md",
@@ -55,9 +55,5 @@
   "carrier_only_closeout_review": {
     "status": "passed",
     "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
-  },
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
