@@ -2,10 +2,10 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-1890",
   "decision": "allow",
-  "kind": "code_review",
-  "summary": "WI-1890 implementation review passes for PR #1915 head 2e1b0ac33c84900c19e444e59a131a01ab4b5e54 after current recovery summary refresh. The checker allows only the deterministic source-published Loom marketplace catalog shape and still fails closed on installed/cache state or outside paths; adoption docs and generated/runtime/demo/plugin metadata surfaces are synchronized. No dot-agents marketplace catalog is added and no workstation install/runtime behavior is executed.",
+  "kind": "spec_review",
+  "summary": "WI-1890 minimal spec remains approved for implementation review after current recovery summary refresh: scope is limited to distinguishing source-published Codex marketplace catalog metadata from repo-local installed marketplace state; #1891 owns adding the actual catalog file. Spec, plan, implementation contract, evidence map, task carrier, PR metadata, local PR gate evidence, and validation summary consistently define S1/S2/S3 and A1-A5 with no workstation install/runtime side effect.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-02T17:00:48Z",
+  "authored_at": "2026-07-02T17:00:47Z",
   "reviewed_head": "2e1b0ac33c84900c19e444e59a131a01ab4b5e54",
   "reviewed_validation_summary": "2026-07-03T00:59+08:00 validation passed on head 2e1b0ac33c84900c19e444e59a131a01ab4b5e54: python3 tools/py_compile_clean.py examples/new-project/.loom/bin/loom_check.py .loom/bin/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift --show-surface-evidence; make loom-demo-new-project-check; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/check_npm_package.py --surface plugin-payload-hash; python3 tools/loom.py suite validate --target . --item WI-1890 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1890 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1890 --json; python3 tools/loom.py fact-chain --target . --item WI-1890 --json; python3 tools/loom.py pr gate 1915 --target . --item WI-1890 --json; git diff --check. Full source loom_check source-self-fixture passed earlier on the same checker logic before demo fixture sync; later changes only synchronized fixture and added implementation-contract/review carriers.",
   "fallback_to": null,
@@ -33,25 +33,19 @@
     "engine_adapter": null,
     "engine_evidence": null,
     "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1890 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1890 --json",
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1890/spec.md",
+    "suite_plan": ".loom/specs/WI-1890/plan.md",
     "suite_evidence_map": ".loom/specs/WI-1890/evidence-map.md",
     "suite_consistency_analysis": null,
     "suite_task_carriers": [
       ".loom/specs/WI-1890/task-carrier.md"
     ],
-    "suite_evidence_consumed_contracts": [
+    "suite_consumed_contracts": [
       "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+      "docs/methodology/templates/spec-suite.md"
     ]
-  },
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
