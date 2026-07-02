@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1884",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1884 release-only minimal suite is approved for v0.26.3 publication. Scope is limited to version authority, package/plugin payload metadata, release readiness evidence, WI-1883 terminal carrier sync, release PR validation, main-push publication readback, and terminal closeout; no new runtime behavior beyond merged PR #1885 is approved.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-02T13:10:48Z",
+  "reviewed_head": "54f0fa64b0053d8afda92040d10a4dd79af0fa52",
+  "reviewed_validation_summary": "2026-07-02T13:08:31Z local carrier repair validation passed after WI-1883 terminal sync at head `0e9b13419aa6a129b04dfd6396b2f064cfe4cff0`: `git diff --check`, `python3 .loom/bin/loom_flow.py work-item-audit --target . --item WI-1884`, and `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1884` passed with no blocking active item conflicts. This extends 2026-07-02T12:43:25Z local pre-release validation for py-compile, version/release/package checks, npm pack dry-run, release-readback and aggregate CLI contract, suite validate/evidence/carrier, fact-chain, skills release-check, and demo fixture; pre-merge release readback for `v0.26.3` passed with expected verdict `missing` and gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_not_success`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1884.md",
+    "recovery_entry": ".loom/progress/WI-1884.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1884/spec.md",
+    "suite_plan": ".loom/specs/WI-1884/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1884/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1884/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
