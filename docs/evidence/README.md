@@ -27,9 +27,14 @@ Archived evidence should explain:
 
 Do not commit:
 
-- repo-local plugin marketplace state such as `.agents/plugins/marketplace.json`;
+- repo-local plugin marketplace installed state such as
+  `.agents/plugins/marketplace.json`;
 - local Codex or Claude installation state such as `.codex/` or `.claude/marketplaces/`;
 - generated payloads, generated skill packages, caches, `__pycache__`, or `.pyc` files;
 - one-off command transcripts that belong in PR or issue comments.
+
+Exception: a source repository may version a deterministic published plugin
+marketplace catalog when the catalog is part of its distribution contract and
+does not record workstation installation, enablement, or runtime-cache state.
 
 If a generated artifact becomes necessary for regression coverage, convert it into a minimal fixture with a stable owner and document why it is no longer treated as generated output.
