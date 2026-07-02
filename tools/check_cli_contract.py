@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
 RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "release-readback-fixtures.json"
+WORKSTATION_REGISTRY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "workstation-registry-fixtures.json"
 CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS = 60
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
@@ -4456,6 +4457,153 @@ def assert_install_upgrade_host_boundary_docs() -> None:
         missing = [snippet for snippet in snippets if snippet not in text]
         if missing:
             raise AssertionError(f"{relative} missing install/upgrade host boundary snippets: {missing}")
+
+
+def collect_mapping_keys(value: Any) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if isinstance(key, str):
+                keys.add(key)
+            keys.update(collect_mapping_keys(child))
+    elif isinstance(value, list):
+        for child in value:
+            keys.update(collect_mapping_keys(child))
+    return keys
+
+
+def classify_workstation_registry_fixture(registry: dict[str, Any]) -> list[str]:
+    classifications: list[str] = []
+    repositories = registry.get("repositories")
+    if not isinstance(repositories, list):
+        return ["schema_unsupported"]
+
+    seen_ids: dict[str, tuple[str, str | None]] = {}
+    for entry in repositories:
+        if not isinstance(entry, dict):
+            classifications.append("schema_unsupported")
+            continue
+        repo_id = entry.get("id")
+        path = entry.get("path")
+        remote = entry.get("remote") if isinstance(entry.get("remote"), dict) else {}
+        remote_hash = remote.get("hash")
+        identity = (path, remote_hash)
+        if isinstance(repo_id, str):
+            previous = seen_ids.get(repo_id)
+            if previous is not None and previous != identity:
+                classifications.append("repo_id_conflict")
+            seen_ids[repo_id] = identity
+        if entry.get("path_state") != "present":
+            classifications.append("path_missing")
+        observed_remote_hash = entry.get("observed_remote_hash")
+        if isinstance(observed_remote_hash, str) and observed_remote_hash != remote_hash:
+            classifications.append("remote_hash_drift")
+        opt_in = entry.get("opt_in") if isinstance(entry.get("opt_in"), dict) else {}
+        if opt_in.get("enabled") is False:
+            classifications.append("opted_out")
+    return classifications
+
+
+def assert_workstation_registry_entry_shape(entry: dict[str, Any], *, fixture_id: str) -> None:
+    required = {"id", "path", "path_state", "remote", "adoption", "opt_in", "last_seen_at"}
+    missing = sorted(required - set(entry))
+    if missing:
+        raise AssertionError(f"{fixture_id} registry entry missing required fields: {missing}")
+    if not isinstance(entry.get("id"), str) or not entry["id"]:
+        raise AssertionError(f"{fixture_id} registry entry id must be a non-empty string")
+    path = entry.get("path")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise AssertionError(f"{fixture_id} registry entry path must be absolute")
+    if entry.get("path_state") not in {"present", "missing", "unknown"}:
+        raise AssertionError(f"{fixture_id} registry entry path_state drifted")
+    remote = entry.get("remote")
+    if not isinstance(remote, dict):
+        raise AssertionError(f"{fixture_id} registry entry remote must be an object")
+    if "canonical_url" not in remote or "hash" not in remote or "observed_at" not in remote:
+        raise AssertionError(f"{fixture_id} registry entry remote fields drifted")
+    remote_hash = remote.get("hash")
+    if remote_hash is not None and (not isinstance(remote_hash, str) or not remote_hash.startswith("sha256:")):
+        raise AssertionError(f"{fixture_id} remote hash must be sha256-prefixed or null")
+    adoption = entry.get("adoption")
+    if not isinstance(adoption, dict):
+        raise AssertionError(f"{fixture_id} registry entry adoption must be an object")
+    if adoption.get("mode") not in {"metadata-only", "repo-local-wrapper", "legacy-embedded", "unknown"}:
+        raise AssertionError(f"{fixture_id} registry entry adoption mode drifted")
+    opt_in = entry.get("opt_in")
+    if not isinstance(opt_in, dict) or not isinstance(opt_in.get("enabled"), bool) or not opt_in.get("source"):
+        raise AssertionError(f"{fixture_id} registry entry opt_in contract drifted")
+
+
+def assert_workstation_registry_fixture_contract() -> None:
+    fixture_data = json.loads(WORKSTATION_REGISTRY_FIXTURES.read_text(encoding="utf-8"))
+    if fixture_data.get("schema_version") != "loom-workstation-registry-fixtures/v1":
+        raise AssertionError("workstation registry fixture schema drifted")
+    if fixture_data.get("registry_schema_version") != "loom-workstation-repositories/v1":
+        raise AssertionError("workstation registry schema version drifted")
+    documented_by = fixture_data.get("documented_by")
+    if not isinstance(documented_by, list) or "docs/adoption/workstation-registry-contract.md" not in documented_by:
+        raise AssertionError("workstation registry fixtures must link the registry contract")
+    command_surface = set(fixture_data.get("command_surface", []))
+    if {
+        "loom workstation register --json",
+        "loom workstation list --json",
+        "loom workstation unregister --json",
+        "loom workstation upgrade --plan --json",
+    } - command_surface:
+        raise AssertionError("workstation registry fixtures must name the future workstation command surface")
+    forbidden_truth_fields = set(fixture_data.get("forbidden_repository_truth_fields", []))
+    if not forbidden_truth_fields:
+        raise AssertionError("workstation registry fixtures must declare forbidden repository truth fields")
+
+    fixtures = fixture_data.get("fixtures")
+    if not isinstance(fixtures, list):
+        raise AssertionError("workstation registry fixtures must be a list")
+    by_id = {fixture.get("id"): fixture for fixture in fixtures if isinstance(fixture, dict)}
+    required_fixture_ids = {
+        "valid-metadata-only-opted-in",
+        "missing-path-fails-closed",
+        "remote-hash-drift-fails-closed",
+        "duplicate-id-fails-closed",
+        "opted-out-list-only",
+    }
+    missing_fixture_ids = sorted(required_fixture_ids - set(by_id))
+    if missing_fixture_ids:
+        raise AssertionError(f"workstation registry fixtures missing required cases: {missing_fixture_ids}")
+
+    for fixture in fixtures:
+        if not isinstance(fixture, dict):
+            raise AssertionError("workstation registry fixture entries must be objects")
+        fixture_id = str(fixture.get("id"))
+        registry = fixture.get("registry")
+        expected = fixture.get("expected")
+        if not isinstance(registry, dict) or not isinstance(expected, dict):
+            raise AssertionError(f"{fixture_id} must include registry and expected objects")
+        if registry.get("schema_version") != "loom-workstation-repositories/v1":
+            raise AssertionError(f"{fixture_id} registry schema_version drifted")
+        if registry.get("authority") != "workstation":
+            raise AssertionError(f"{fixture_id} registry authority must be workstation")
+        if registry.get("registry_path") != "~/.loom/repositories.json":
+            raise AssertionError(f"{fixture_id} registry path must use the logical global path")
+        repositories = registry.get("repositories")
+        if not isinstance(repositories, list) or not repositories:
+            raise AssertionError(f"{fixture_id} registry must include at least one repository entry")
+        forbidden_seen = sorted(forbidden_truth_fields & collect_mapping_keys(registry))
+        if forbidden_seen:
+            raise AssertionError(f"{fixture_id} registry leaks repository truth fields: {forbidden_seen}")
+        for entry in repositories:
+            if not isinstance(entry, dict):
+                raise AssertionError(f"{fixture_id} repository entries must be objects")
+            assert_workstation_registry_entry_shape(entry, fixture_id=fixture_id)
+        classifications = classify_workstation_registry_fixture(registry)
+        expected_classification = expected.get("classification")
+        if expected_classification and expected_classification not in classifications:
+            raise AssertionError(f"{fixture_id} expected classification {expected_classification} was not detected: {classifications}")
+        if expected.get("result") == "block" and not classifications:
+            raise AssertionError(f"{fixture_id} expected block without a fail-closed classification")
+        if fixture_id == "valid-metadata-only-opted-in" and classifications:
+            raise AssertionError(f"{fixture_id} should not produce fail-closed classifications: {classifications}")
+        if fixture_id == "opted-out-list-only" and expected.get("eligible_for_plan") != []:
+            raise AssertionError("opted-out fixture must be list-only and ineligible for upgrade apply planning")
 
 
 def valid_state(target: Path) -> dict[str, Any]:
@@ -10864,6 +11012,11 @@ def run_adoption_host_metadata_surface() -> None:
     print("adoption host metadata surface checks passed")
 
 
+def run_workstation_registry_surface() -> None:
+    assert_workstation_registry_fixture_contract()
+    print("workstation registry surface checks passed")
+
+
 def run_merge_wrapper_surface() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_merge_closeout_run_wrapper_contract()
@@ -13802,6 +13955,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="adoption-host-metadata",
             fixture_group="adoption-host-metadata",
             run=run_adoption_host_metadata_surface,
+        ),
+        SurfaceCheck(
+            name="workstation-registry",
+            fixture_group="workstation-registry",
+            run=run_workstation_registry_surface,
         ),
         SurfaceCheck(
             name="merge-wrapper",

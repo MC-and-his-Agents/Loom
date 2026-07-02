@@ -21,6 +21,7 @@ Loom separates repository truth from workstation truth:
 | Repo-owned governance residue | Versioned target repository | `.loom/companion`, repo interop metadata, evidence carriers, repo-native gates and closeout evidence | Loom plugin payload ownership or workstation discovery |
 | Global CLI runtime provider | User/workstation executable plus its shipped runtime | The `loom` command semantics, packaged runtime/provider version, and external provider provenance | Repository adoption truth, repo-owned governance residue, or workstation registration truth |
 | Published plugin marketplace catalog | Loom source repository | A deterministic catalog that advertises the packaged Loom Codex plugin, such as `.agents/plugins/marketplace.json` pointing to `./plugins/loom` | User/workstation plugin installation state, Codex runtime cache, or downstream repository adoption truth |
+| Workstation repository registry | User workstation | `~/.loom/repositories.json` repository discovery index for batch planning, diagnostics, and upgrade orchestration | Repository adoption truth, issue/PR/review/closeout authority, runtime logs, plugin payloads, or repo mutation proof |
 | Embedded repository payload | Versioned target repository, legacy residue | `plugins/loom/.codex-plugin/plugin.json` and `plugins/loom/skills/` | User-level Codex plugin registration |
 | Workstation registration truth | User workstation | Codex personal marketplace entry, user plugin cache, Codex config enablement | Repository adoption truth or repo-owned governance evidence |
 | Compatibility export | Explicit export target | `.agents/skills` or another host compatibility surface selected by the operator | Default Loom downstream adoption |
@@ -54,6 +55,7 @@ diagnosing them:
 | Repo companion / interop / evidence | Repository | Repo-owned governance residue | Preserved across plugin and provider changes. |
 | Global CLI runtime provider | User/workstation | Global CLI runtime provider | The default CLI-owned provider surface for `loom` command semantics and shipped runtime. |
 | Published plugin marketplace catalog | Source repository | Distribution catalog | Advertises `plugins/loom` as an installable Codex plugin source; not valid as downstream installed-state. |
+| Workstation repository registry | User/workstation | Workstation discovery index | Records Loom-enabled repository paths, remote hashes, adoption mode, last seen version, and opt-in state for this machine only. |
 | Host adapter plugin manifest | Repository or user plugin source | Embedded repository payload or workstation provider | Repository copy is only required in embedded payload mode. |
 | Plugin-embedded skills bundle | Repository | Legacy embedded repository payload | `plugins/loom/skills/` is unsupported legacy residue for the milestone #14 target. |
 | User-level skills provider | Workstation | Workstation registration truth | Used by metadata-only adoption; verified separately from repo truth. |
