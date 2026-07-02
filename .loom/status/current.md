@@ -12,10 +12,10 @@
 - Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
 - Closing Condition: v0.26.3 tag, GitHub Release, npm @mc-and-his-agents/loom@0.26.3, plugin payload metadata/hash, and #1881/#1882/#1884 closeout evidence are consistent.
 - Current Checkpoint: release_candidate
-- Current Stop: WI-1884 release candidate validation passed locally on 2026-07-02; the release branch is ready for PR metadata, review, hosted gates, and controlled merge.
-- Next Step: Open the release PR, pass hosted gates, merge, wait for main-push publication, run release readback, then close #1881/#1882/#1884.
+- Current Stop: WI-1884 release candidate validation and WI-1883 terminal carrier sync passed locally on 2026-07-02; the release branch is ready for refreshed review, PR metadata readback, hosted gates, and controlled merge.
+- Next Step: Refresh the release PR review/metadata to the current head, pass hosted gates, merge, wait for main-push publication, run release readback, then close #1881/#1882/#1884.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-02T12:43:25Z local pre-release validation passed for `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `python3 tools/version_surface_check.py`, `python3 tools/check_release_surface.py`, `python3 tools/check_npm_package.py --surface aggregate`, `npm pack --dry-run --json --ignore-scripts`, `python3 tools/check_cli_contract.py --surface release-readback`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/loom.py suite validate --target . --item WI-1884 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1884 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1884 --json`, `python3 .loom/bin/loom_init.py fact-chain --target .`, `python3 tools/loom.py skills release-check --json`, and `python3 tools/check_demo_bootstrap_fixture.py`; pre-merge release readback for `v0.26.3` passed with expected verdict `missing` and gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_not_success`.
+- Latest Validation Summary: 2026-07-02T13:08:31Z local carrier repair validation passed after WI-1883 terminal sync at head `0e9b13419aa6a129b04dfd6396b2f064cfe4cff0`: `git diff --check`, `python3 .loom/bin/loom_flow.py work-item-audit --target . --item WI-1884`, and `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1884` passed with no blocking active item conflicts. This extends 2026-07-02T12:43:25Z local pre-release validation for py-compile, version/release/package checks, npm pack dry-run, release-readback and aggregate CLI contract, suite validate/evidence/carrier, fact-chain, skills release-check, and demo fixture; pre-merge release readback for `v0.26.3` passed with expected verdict `missing` and gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_not_success`.
 - Recovery Boundary: WI-1884 owns only release metadata/evidence and terminal closeout for the host `AGENTS.md` guidance fix. It does not change runtime behavior beyond merged PR #1885, does not bump plugin surface compatibility, does not publish the legacy installer, and does not close parent issues before release readback.
 - Current Lane: release-pr
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-07-02 WI-1884 work is active in `/Users/mc/dev/Loom` on branch `work/1884-v0.26.3-release`.
 - Logs Entry: main-push `loom-cli-release` run `28589788160` failed at Resolve CLI release state with reason `version-already-published-on-different-commit` for `v0.26.2`; release/version/CLI/package dry-run stages passed before that fail-closed state.
 - Diagnostics Entry: Failure classified as release version authority drift, not a code/package regression; resolution is to bump to unpublished `v0.26.3`.
-- Verification Entry: Local release candidate validation passed at 2026-07-02T12:43:25Z; aggregate CLI contract passed in 379.54s and pre-merge release readback returned expected `missing`.
+- Verification Entry: Local release candidate validation passed at 2026-07-02T12:43:25Z; WI-1883 terminal carrier sync plus work-item audit and purity-check passed at 2026-07-02T13:08:31Z; aggregate CLI contract passed in 379.54s and pre-merge release readback returned expected `missing`.
 - Lane Entry: release-pr
 
 ## Sources
