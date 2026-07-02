@@ -12,8 +12,8 @@
 - Validation Entry: python3 tools/check_cli_contract.py --surface workstation-registry; python3 tools/check_cli_contract.py --surface adoption-host-metadata; python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py; python3 tools/loom.py suite validate --target . --item WI-1894 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1894 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1894 --json; python3 tools/loom.py fact-chain --target . --item WI-1894 --json; git diff --check
 - Closing Condition: Workstation registry schema contract and fixtures are merged, #1894 is closed, and Loom closeout consumes PR/review/validation/merge evidence.
 - Current Checkpoint: merge
-- Current Stop: Implementation and local validation are complete for the schema/fixture contract; ready to record implementation review and prepare PR.
-- Next Step: Record review for WI-1894, commit, push, create PR, update PR metadata, then run PR gate and hosted checks.
+- Current Stop: Implementation and local validation are complete for the schema/fixture contract; implementation review is recorded and ready for PR preparation.
+- Next Step: Commit review artifact, refresh carriers, push branch, create PR, update PR metadata, then run PR gate and hosted checks.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-07-02T20:09Z local pass: json.tool workstation-registry fixture, check_cli_contract --surface workstation-registry, check_cli_contract --surface adoption-host-metadata, py_compile_clean tools/check_cli_contract.py tools/loom.py, targeted rg for registry terms, suite validate, suite evidence validate, suite carrier validate, fact-chain, and git diff --check.
 - Recovery Boundary: WI-1894 remains schema/fixture/contract-test/docs/carriers only; #1895 owns loom workstation register/list/unregister, #1896 owns fail-closed live validation, #1902 owns workstation upgrade orchestration.
@@ -21,11 +21,11 @@
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-03 WI-1890 work is active in `/Users/mc/dev/Loom` on branch `work/1890-marketplace-catalog-contract`.
-- Logs Entry: checker/docs/generated metadata implementation authored and locally validated; no external runtime or marketplace installation action has been executed in this WI.
-- Diagnostics Entry: prior WI-1884 runtime evidence drift was corrected; #1890 now records fresh suite/evidence/carrier/fact-chain and focused checker/package validation.
-- Verification Entry: 2026-07-03T01:05+08:00 validation passed on head `0b296f1bb2f681e77851a38b72a0ce2ad71fc606` for suite evidence, suite carrier, fact-chain, and git diff --check after repo-relative workspace entry refresh. Earlier implementation validation on head `2e1b0ac33c84900c19e444e59a131a01ab4b5e54` passed py_compile_clean, demo fixture drift and aggregate, runtime-copy-parity, plugin-payload-hash, suite validate/evidence/carrier, fact-chain, local PR gate, and git diff --check.
-- Lane Entry: checker-contract
+- Run Entry: 2026-07-02T20:22Z WI-1894 work is active in `/Users/mc/dev/Loom` on branch `work/1894-workstation-registry-schema`.
+- Logs Entry: workstation registry schema, fixture catalog, focused checker validation, and WI carriers were authored locally; no real `~/.loom/repositories.json`, workstation CLI mutation, runtime payload, plugin payload, or repo adoption behavior was written.
+- Diagnostics Entry: implementation review is recorded for head `321eb86126917926321319ae05951165883acad7`; carrier/fact-chain validation passed after recovery/status sync.
+- Verification Entry: 2026-07-02T20:22Z validation passed for suite carrier and fact-chain after implementation review record. Earlier local validation passed json.tool workstation-registry fixture, check_cli_contract --surface workstation-registry, check_cli_contract --surface adoption-host-metadata, py_compile_clean tools/check_cli_contract.py tools/loom.py, targeted rg for registry terms, suite validate, suite evidence validate, suite carrier validate, fact-chain, and git diff --check.
+- Lane Entry: schema-fixture-contract
 
 ## Sources
 
