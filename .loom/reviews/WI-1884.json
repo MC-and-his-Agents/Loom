@@ -1,0 +1,37 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1884",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1884 v0.26.3 release candidate is approved for PR gate and controlled merge. Review covers release metadata, plugin payload metadata/hash, release readiness evidence, minimal suite carriers, fact-chain, shadow refresh, and pre-merge release readback; it does not approve any new runtime behavior beyond merged PR #1885.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-02T12:46:41Z",
+  "reviewed_head": "c2cc15042cc1245bfb43055a25a31b9b44099d53",
+  "reviewed_validation_summary": "2026-07-02T12:43:25Z local pre-release validation passed for `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `python3 tools/version_surface_check.py`, `python3 tools/check_release_surface.py`, `python3 tools/check_npm_package.py --surface aggregate`, `npm pack --dry-run --json --ignore-scripts`, `python3 tools/check_cli_contract.py --surface release-readback`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/loom.py suite validate --target . --item WI-1884 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1884 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1884 --json`, `python3 .loom/bin/loom_init.py fact-chain --target .`, `python3 tools/loom.py skills release-check --json`, and `python3 tools/check_demo_bootstrap_fixture.py`; pre-merge release readback for `v0.26.3` passed with expected verdict `missing` and gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_not_success`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1884.md",
+    "recovery_entry": ".loom/progress/WI-1884.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
