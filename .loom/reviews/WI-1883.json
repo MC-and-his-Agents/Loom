@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1883",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1883 current-head implementation review: generated host AGENTS guidance now removes install/bootstrap runbook details, adds concise route/resume/spec-review/gate-freshness/validation/closeout reminders, keeps root-entry generator and example fixture parity, updates contract assertions, and refreshes plugin payload metadata. Local validation matrix and suite not_applicable evidence are current; no blocking findings.",
+  "reviewer": "codex",
+  "authored_at": "2026-07-02T11:21:46Z",
+  "reviewed_head": "96144a47773070cdcd9db55eed7448ed7310851b",
+  "reviewed_validation_summary": "2026-07-02T11:17:46Z implementation validation passed at PR head `d3743a42cf1c16dc393c7284c47efbd4e52c7b2a`: `git diff --check`, `python3 tools/skills_surface.py check`, `python3 tools/skills_surface.py check --surface cache-artifacts`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/check_cli_contract.py --surface aggregate`, demo fixture drift/generation/canonicalization checks, `make loom-demo-new-project-check`, release surface/version/package checks, `make npm-package-check`, and full `make loom-check` all passed. PR #1885 metadata render/readback passed with body hash `c45461a82af5c428385af031fc359d237339907b52849921aeba7a39af57e805`. Hosted `loom-pr-merge-gate` run `28585813263` failed before this sync because fact-chain still pointed at WI-1876 and WI-1883 review was unavailable.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1883.md",
+    "recovery_entry": ".loom/progress/WI-1883.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

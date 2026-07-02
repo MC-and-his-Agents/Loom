@@ -4242,8 +4242,19 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     if managed_writes != {".loom/installed-state.json", "AGENTS.md"}:
         raise AssertionError(f"metadata-only install wrote unexpected artifacts: {sorted(managed_writes)}")
     agents_text = (target / "AGENTS.md").read_text(encoding="utf-8")
-    if "<!-- LOOM_BOOTSTRAP_START -->" not in agents_text or "loom host install --host codex --scope user --apply --json" not in agents_text:
-        raise AssertionError("metadata-only install did not write Loom bootstrap block to AGENTS.md")
+    required_agents_guidance = [
+        "<!-- LOOM_BOOTSTRAP_START -->",
+        "## Loom Execution",
+        "loom route --target . --task",
+        "loom resume --target . --json",
+        "spec_review approved",
+        "next_action",
+        "fallback_to",
+        "Loom closeout",
+    ]
+    missing_agents_guidance = [text for text in required_agents_guidance if text not in agents_text]
+    if missing_agents_guidance:
+        raise AssertionError(f"metadata-only install did not write Loom execution guidance to AGENTS.md: {missing_agents_guidance}")
     for unexpected in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
         if (target / unexpected).exists():
             raise AssertionError(f"metadata-only install created {unexpected}")
