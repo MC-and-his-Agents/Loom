@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1895",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allow: workstation register/list/unregister is scoped to the machine-local registry, uses isolated HOME coverage for register/list/unregister and target repository write boundaries, preserves repo adoption truth boundaries, and explicitly defers live drift validation and upgrade orchestration to #1896/#1902.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-02T21:33:22Z",
+  "reviewed_head": "e7ea715ef582581344e0fb4d3dea90cde55d8441",
+  "reviewed_validation_summary": "2026-07-02T21:04Z local pass: `python3 tools/check_cli_contract.py --surface workstation-registry`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata`; `python3 tools/py_compile_clean.py tools/check_cli_contract.py tools/loom.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1895 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1895 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1895 --json`; `python3 tools/loom.py fact-chain --target . --item WI-1895 --json`; `git diff --check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1895.md",
+    "recovery_entry": ".loom/progress/WI-1895.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1895 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1895 --json",
+    "suite_evidence_map": ".loom/specs/WI-1895/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1895/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
