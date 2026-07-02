@@ -39,6 +39,10 @@
     "suite_carrier_validation": "pass",
     "shadow_parity": "pass"
   },
+  "carrier_only_closeout_review": {
+    "status": "passed",
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+  },
   "semantic_review_disposition": {
     "status": "passed",
     "reason": "Authored closeout carrier review approved the current terminal closeout carrier head for closeout PR gate consumption.",
