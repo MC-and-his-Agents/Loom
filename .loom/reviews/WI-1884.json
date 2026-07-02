@@ -33,5 +33,14 @@
     "engine_adapter": null,
     "engine_evidence": null,
     "normalized_findings": null
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored release review approved the v0.26.3 release candidate for PR gate consumption.",
+    "change_class": "release",
+    "substitute_validation": "version surface, release surface, npm package aggregate, npm pack dry-run, release-readback and aggregate CLI contract, suite validate/evidence/carrier, fact-chain, shadow parity, skills release-check, demo fixture, and git diff check",
+    "authority": "codex-main-thread",
+    "risk_acceptance": "Bounded to release metadata, package/plugin payload metadata, release evidence, and carrier convergence; no new runtime behavior beyond merged PR #1885 is introduced.",
+    "one_shot": true
   }
 }
