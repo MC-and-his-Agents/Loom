@@ -74,6 +74,19 @@ An adopted repository declares:
 missing global CLI or missing Codex user plugin, but those are provider gaps, not
 repository payload drift.
 
+## Workstation Repository Registry
+
+`~/.loom/repositories.json` is optional workstation truth for remembering which
+local repositories have opted into Loom on this machine. It may record repo
+path, remote hash, adoption mode, last seen Loom version, and opt-in state so
+batch upgrade planning can skip repeated discovery. Its schema is defined in
+[workstation-registry-contract.md](./workstation-registry-contract.md).
+
+The registry does not replace `.loom/installed-state.json`. A registry entry
+does not prove that a repository is adopted, upgraded, merge-ready, reviewed, or
+closed out. Before any repository mutation, Loom must still read that
+repository's installed-state and run the relevant repository-local validation.
+
 ## Codex User-Level Plugin Target
 
 `loom host install --host codex --scope user --apply --json` installs the Codex

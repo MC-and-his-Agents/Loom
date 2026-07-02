@@ -33,6 +33,7 @@
 - 旧安装迁移说明：[legacy-install-migration.md](./legacy-install-migration.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
 - 安装 taxonomy 与权威边界：[installation-taxonomy.md](./installation-taxonomy.md)
+- workstation repo registry 合同：[workstation-registry-contract.md](./workstation-registry-contract.md)
 - 已安装 Loom status 与升级演练：[installed-loom-status.md](./installed-loom-status.md)
 - CLI-first installed-state 合同：[loom-installed-state-v2.md](./loom-installed-state-v2.md)
 - 版本权威图：[version-authority-map.md](./version-authority-map.md)

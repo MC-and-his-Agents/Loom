@@ -1,0 +1,241 @@
+{
+  "schema_version": "loom-workstation-registry-fixtures/v1",
+  "documented_by": [
+    "docs/adoption/workstation-registry-contract.md",
+    "docs/adoption/installation-taxonomy.md",
+    "docs/adoption/global-cli-user-plugin-contract.md"
+  ],
+  "registry_schema_version": "loom-workstation-repositories/v1",
+  "command_surface": [
+    "loom workstation register --json",
+    "loom workstation list --json",
+    "loom workstation unregister --json",
+    "loom workstation upgrade --plan --json"
+  ],
+  "fixtures": [
+    {
+      "id": "valid-metadata-only-opted-in",
+      "summary": "Current metadata-only repository registered on this workstation and eligible for upgrade planning.",
+      "registry": {
+        "schema_version": "loom-workstation-repositories/v1",
+        "authority": "workstation",
+        "registry_path": "~/.loom/repositories.json",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "repositories": [
+          {
+            "id": "repo_6f1b7a2c9d4e",
+            "path": "/Users/example/dev/TargetRepo",
+            "path_state": "present",
+            "remote": {
+              "canonical_url": "git@github.com:owner/TargetRepo.git",
+              "hash": "sha256:3eb0f0a1e8d2f2f0e64d1f4a0d8d8f4df6f4e2f2d3c2b1a09f8e7d6c5b4a3210",
+              "observed_at": "2026-07-02T00:00:00Z"
+            },
+            "adoption": {
+              "mode": "metadata-only",
+              "installed_state_schema": "loom-installed-state/v2",
+              "last_seen_version": "v0.26.0"
+            },
+            "opt_in": {
+              "enabled": true,
+              "source": "loom workstation register",
+              "updated_at": "2026-07-02T00:00:00Z"
+            },
+            "last_seen_at": "2026-07-02T00:00:00Z"
+          }
+        ]
+      },
+      "expected": {
+        "result": "pass",
+        "eligible_for_plan": [
+          "repo_6f1b7a2c9d4e"
+        ],
+        "classifications": []
+      }
+    },
+    {
+      "id": "missing-path-fails-closed",
+      "summary": "Previously registered repository path is gone; mutation planning must stop until the entry is repaired or unregistered.",
+      "registry": {
+        "schema_version": "loom-workstation-repositories/v1",
+        "authority": "workstation",
+        "registry_path": "~/.loom/repositories.json",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "repositories": [
+          {
+            "id": "repo_missing_path",
+            "path": "/Users/example/dev/MissingRepo",
+            "path_state": "missing",
+            "remote": {
+              "canonical_url": "git@github.com:owner/MissingRepo.git",
+              "hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "observed_at": "2026-07-02T00:00:00Z"
+            },
+            "adoption": {
+              "mode": "metadata-only",
+              "installed_state_schema": "loom-installed-state/v2",
+              "last_seen_version": "v0.26.0"
+            },
+            "opt_in": {
+              "enabled": true,
+              "source": "loom workstation register",
+              "updated_at": "2026-07-02T00:00:00Z"
+            },
+            "last_seen_at": "2026-07-02T00:00:00Z"
+          }
+        ]
+      },
+      "expected": {
+        "result": "block",
+        "classification": "path_missing",
+        "fallback_to": "loom workstation unregister or re-register the repository path"
+      }
+    },
+    {
+      "id": "remote-hash-drift-fails-closed",
+      "summary": "The path still exists but the observed remote hash no longer matches the registry entry.",
+      "registry": {
+        "schema_version": "loom-workstation-repositories/v1",
+        "authority": "workstation",
+        "registry_path": "~/.loom/repositories.json",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "repositories": [
+          {
+            "id": "repo_remote_drift",
+            "path": "/Users/example/dev/TargetRepo",
+            "path_state": "present",
+            "remote": {
+              "canonical_url": "git@github.com:owner/TargetRepo.git",
+              "hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "observed_at": "2026-07-02T00:00:00Z"
+            },
+            "observed_remote_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "adoption": {
+              "mode": "metadata-only",
+              "installed_state_schema": "loom-installed-state/v2",
+              "last_seen_version": "v0.26.0"
+            },
+            "opt_in": {
+              "enabled": true,
+              "source": "loom workstation register",
+              "updated_at": "2026-07-02T00:00:00Z"
+            },
+            "last_seen_at": "2026-07-02T00:00:00Z"
+          }
+        ]
+      },
+      "expected": {
+        "result": "block",
+        "classification": "remote_hash_drift",
+        "fallback_to": "loom workstation register --force after explicit operator confirmation"
+      }
+    },
+    {
+      "id": "duplicate-id-fails-closed",
+      "summary": "Two entries reuse the same workstation-local id for different path/remote pairs.",
+      "registry": {
+        "schema_version": "loom-workstation-repositories/v1",
+        "authority": "workstation",
+        "registry_path": "~/.loom/repositories.json",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "repositories": [
+          {
+            "id": "repo_conflict",
+            "path": "/Users/example/dev/RepoA",
+            "path_state": "present",
+            "remote": {
+              "canonical_url": "git@github.com:owner/RepoA.git",
+              "hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "observed_at": "2026-07-02T00:00:00Z"
+            },
+            "adoption": {
+              "mode": "metadata-only",
+              "installed_state_schema": "loom-installed-state/v2",
+              "last_seen_version": "v0.26.0"
+            },
+            "opt_in": {
+              "enabled": true,
+              "source": "loom workstation register",
+              "updated_at": "2026-07-02T00:00:00Z"
+            },
+            "last_seen_at": "2026-07-02T00:00:00Z"
+          },
+          {
+            "id": "repo_conflict",
+            "path": "/Users/example/dev/RepoB",
+            "path_state": "present",
+            "remote": {
+              "canonical_url": "git@github.com:owner/RepoB.git",
+              "hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "observed_at": "2026-07-02T00:00:00Z"
+            },
+            "adoption": {
+              "mode": "metadata-only",
+              "installed_state_schema": "loom-installed-state/v2",
+              "last_seen_version": "v0.26.0"
+            },
+            "opt_in": {
+              "enabled": true,
+              "source": "loom workstation register",
+              "updated_at": "2026-07-02T00:00:00Z"
+            },
+            "last_seen_at": "2026-07-02T00:00:00Z"
+          }
+        ]
+      },
+      "expected": {
+        "result": "block",
+        "classification": "repo_id_conflict",
+        "fallback_to": "manual registry repair"
+      }
+    },
+    {
+      "id": "opted-out-list-only",
+      "summary": "Registered repository remains visible for list diagnostics but must be excluded from upgrade apply planning.",
+      "registry": {
+        "schema_version": "loom-workstation-repositories/v1",
+        "authority": "workstation",
+        "registry_path": "~/.loom/repositories.json",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "repositories": [
+          {
+            "id": "repo_opted_out",
+            "path": "/Users/example/dev/TargetRepo",
+            "path_state": "present",
+            "remote": {
+              "canonical_url": "git@github.com:owner/TargetRepo.git",
+              "hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "observed_at": "2026-07-02T00:00:00Z"
+            },
+            "adoption": {
+              "mode": "metadata-only",
+              "installed_state_schema": "loom-installed-state/v2",
+              "last_seen_version": "v0.26.0"
+            },
+            "opt_in": {
+              "enabled": false,
+              "source": "loom workstation unregister --keep-entry",
+              "updated_at": "2026-07-02T00:00:00Z"
+            },
+            "last_seen_at": "2026-07-02T00:00:00Z"
+          }
+        ]
+      },
+      "expected": {
+        "result": "pass",
+        "classification": "opted_out",
+        "eligible_for_plan": []
+      }
+    }
+  ],
+  "forbidden_repository_truth_fields": [
+    "work_item_status",
+    "issue_state",
+    "pull_request_state",
+    "review_decision",
+    "merge_ready_result",
+    "closeout_result",
+    "runtime_log",
+    "plugin_payload"
+  ]
+}
