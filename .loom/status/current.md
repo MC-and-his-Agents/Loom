@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1890
-- Goal: 区分 published marketplace catalog 与 repo-local installed marketplace state，更新 checker 和合同语义，为 #1891 添加 Loom Codex marketplace catalog 解锁。
-- Scope: 仅限 #1890：root self-plugin checker、published marketplace catalog 合同文档、generated skills/plugin/runtime copies、payload metadata/hash、WI-1890 suite/recovery carriers；不添加实际 marketplace catalog，不实现 workstation registry/global cache/upgrade orchestrator/legacy migration。
-- Execution Path: issue #1890 -> branch work/1890-marketplace-catalog-contract -> implementation PR -> review/merge-ready/closeout
+- Item ID: WI-1891
+- Goal: 添加 Loom Codex marketplace catalog，指向 ./plugins/loom，并验证 Codex marketplace 可解析。
+- Scope: 仅限 #1891：新增 .agents/plugins/marketplace.json 发布目录，绑定 plugins/loom；不实现 CLI/插件自动升级、repo adoption 刷新、workstation registry/global cache、legacy migration 或 #1892 文档扩展。
+- Execution Path: issue #1891 -> branch work/1891-loom-marketplace-catalog -> PR -> review/merge-ready/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1890.md
-- Review Entry: .loom/reviews/WI-1890.json
-- Validation Entry: python3 tools/py_compile_clean.py .loom/bin/loom_check.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py && python3 tools/skills_surface.py check && python3 tools/check_npm_package.py --surface runtime-copy-parity && python3 tools/check_npm_package.py --surface plugin-payload-hash && python3 tools/loom_check.py --profile source --source-surface source-self-fixture . && git diff --check
-- Closing Condition: Implementation PR for #1890 is merged; checker/docs/generated payload metadata are consistent; validation evidence and closeout consume final PR head/merge commit.
-- Current Checkpoint: merge
-- Current Stop: WI-1890 branch head 0b296f1bb2f681e77851a38b72a0ce2ad71fc606 has host-safe repo-relative workspace entry and refreshed suite/fact-chain validation.
-- Next Step: Record spec/code review artifacts against head 0b296f1bb2f681e77851a38b72a0ce2ad71fc606, commit review-only carrier drift, refresh PR metadata, wait for hosted checks, then run PR gate and merge-ready.
+- Recovery Entry: .loom/progress/WI-1891.md
+- Review Entry: .loom/reviews/WI-1891.json
+- Validation Entry: python3 -m json.tool .agents/plugins/marketplace.json >/dev/null; tmp_home=$(mktemp -d); HOME="$tmp_home" codex plugin marketplace add /Users/mc/dev/Loom; rc=$?; rm -rf "$tmp_home"; test $rc -eq 0; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .
+- Closing Condition: Marketplace catalog is merged, Codex can parse the repo marketplace root, hosted checks pass, issue #1891 is closed, and Loom closeout consumes PR/review/merge evidence.
+- Current Checkpoint: admission
+- Current Stop: WI-1891 catalog implementation and local validation completed on branch work/1891-loom-marketplace-catalog.
+- Next Step: Commit the catalog and WI carriers, push the branch, create the PR, run PR gate/review/merge-ready, then close out #1891.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T01:05+08:00 validation passed on head 0b296f1bb2f681e77851a38b72a0ce2ad71fc606: python3 tools/loom.py suite evidence validate --target . --item WI-1890 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1890 --json; python3 tools/loom.py fact-chain --target . --item WI-1890 --json; git diff --check. Earlier implementation validation on head 2e1b0ac33c84900c19e444e59a131a01ab4b5e54 passed py_compile_clean, demo fixture drift and aggregate, runtime-copy-parity, plugin-payload-hash, suite validate/evidence/carrier, fact-chain, local PR gate, and git diff --check; source loom_check source-self-fixture passed earlier on the same checker logic.
-- Recovery Boundary: WI-1890 owns checker/docs/generated metadata/demo fixture/suite carriers only. It does not add .agents/plugins/marketplace.json or implement #1891/#1892/#1893+ behavior.
-- Current Lane: checker-contract
+- Latest Validation Summary: 2026-07-03 local validation passed: python3 -m json.tool .agents/plugins/marketplace.json >/dev/null; temporary HOME codex plugin marketplace add /Users/mc/dev/Loom; gh issue view 1892 confirms OPEN; git diff --check; python3 tools/loom.py suite validate/evidence/carrier validate --target . --item WI-1891 --json; python3 tools/loom.py fact-chain --target . --item WI-1891 --json; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-1891.md`.
+- Current Lane: not yet assigned
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1890.md
-- Dynamic Truth: .loom/progress/WI-1890.md
+- Static Truth: .loom/work-items/WI-1891.md
+- Dynamic Truth: .loom/progress/WI-1891.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
