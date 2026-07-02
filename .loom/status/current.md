@@ -12,11 +12,11 @@
 - Validation Entry: rg -n "marketplace|host install|npm install -g|repo adoption|metadata-only" README.md docs/adoption/global-cli-user-plugin-contract.md docs/adoption/host-adapter-matrix.md; python3 tools/loom.py suite validate --target . --item WI-1892 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1892 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1892 --json; python3 tools/loom.py fact-chain --target . --item WI-1892 --json; git diff --check
 - Closing Condition: Install-boundary docs are merged, #1892 is closed, and Loom closeout consumes PR/review/validation/merge evidence.
 - Current Checkpoint: build
-- Current Stop: README、global CLI/user plugin contract、host adapter matrix install-boundary documentation updated; minimal suite, evidence map, and task carrier authored.
-- Next Step: Commit WI-1892 docs and carrier changes, push branch, open PR, then run review/merge-ready/closeout.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-07-02T19:10Z local pass: targeted rg boundary search, suite validate, suite evidence validate, suite carrier validate, fact-chain, and git diff --check.
-- Recovery Boundary: WI-1892 docs-only scope: README, docs/adoption/global-cli-user-plugin-contract.md, docs/adoption/host-adapter-matrix.md, .loom/specs/WI-1892/*, progress/status/work-item/review carriers; no CLI/runtime/plugin payload changes.
+- Current Stop: PR #1918 opened at head 216fc0be; hosted failure classified: node-installer-pr release-doc-contract required host-adapter-matrix phrase `update root CLI, rerun`; documentation contract phrase restored locally.
+- Next Step: Commit and push release-doc-contract wording fix, update PR metadata for new head, record current-head review, then rerun/await hosted gates.
+- Blockers: Current hosted blockers before this local fix: node-installer-pr release-doc-contract text gap; loom-pr-merge-gate current-head review missing.
+- Latest Validation Summary: 2026-07-02T19:15Z local pass after hosted-failure fix: check_release_surface.py --surface release-doc-contract, targeted rg boundary search, suite validate, suite evidence validate, suite carrier validate, fact-chain, and git diff --check.
+- Recovery Boundary: WI-1892 docs-only scope remains README, docs/adoption/global-cli-user-plugin-contract.md, docs/adoption/host-adapter-matrix.md, WI-1892 carriers; no CLI/runtime/plugin payload changes.
 - Current Lane: docs-boundary
 
 ## Runtime Evidence
