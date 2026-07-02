@@ -127,3 +127,29 @@ repositories, but each candidate repository still needs its own adoption
 validation before repo mutation. A registry entry can say "this machine saw a
 repo here"; it cannot say "that repo is merge-ready", "that issue is done", or
 "that repository has successfully upgraded".
+
+## CLI Surface
+
+The #1895 command slice implements the minimum registry read/write surface:
+
+```bash
+loom workstation register --target <repo> --json
+loom workstation list --json
+loom workstation unregister --target <repo> --json
+loom workstation unregister --id <repo-id> --json
+loom workstation unregister --target <repo> --keep-entry --json
+```
+
+`register` writes only `~/.loom/repositories.json`. It reads the target path,
+`git remote.origin.url`, and any available `.loom/installed-state.json`
+metadata to populate one workstation registry entry. It must not write runtime,
+plugin, skills, adoption, issue, PR, review, or closeout payload into the target
+repository.
+
+`list` is read-only. It may report stored-entry diagnostics such as `opted_out`
+or malformed stored entries, but it does not replace repository-local adoption
+validation.
+
+`unregister` removes the matching entry by target path or id. With
+`--keep-entry`, it leaves the entry visible for diagnostics and sets
+`opt_in.enabled = false`, making the entry list-only for later upgrade planning.
