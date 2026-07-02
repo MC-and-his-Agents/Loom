@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1891",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Code review approved at head a20747e031ff7cb146659f5ffe5959e8ad706151: implementation changes are limited to the published marketplace catalog, Makefile self-plugin gate update, WI-1891 suite/carriers, and WI-1890 terminal carrier sync; catalog shape matches ./plugins/loom and no runtime/plugin payload mutation or workstation install state is introduced.",
+  "reviewer": "Codex",
+  "authored_at": "2026-07-02T18:38:02Z",
+  "reviewed_head": "a20747e031ff7cb146659f5ffe5959e8ad706151",
+  "reviewed_validation_summary": "2026-07-03 validation passed on head c87d0787901756e7c489f56196fe78e4cc2592e7: make loom-self-plugin-check; python3 -m json.tool .agents/plugins/marketplace.json >/dev/null; temporary HOME codex plugin marketplace add /Users/mc/dev/Loom; gh issue view 1892 confirms OPEN; git diff --check; python3 tools/loom.py suite validate/evidence/carrier validate --target . --item WI-1891 --json; python3 tools/loom.py fact-chain --target . --item WI-1891 --json; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; make loom-check currently only reports root-self-adoption pending review/shadow refresh after current-head changes.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1891.md",
+    "recovery_entry": ".loom/progress/WI-1891.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1891 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1891 --json",
+    "suite_evidence_map": ".loom/specs/WI-1891/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1891/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
