@@ -86,6 +86,8 @@ WORKSPACE_SCHEMA = "loom-workspace-control/v1"
 HOST_OBJECT_SCHEMA = "loom-host-object-control/v1"
 HOST_SCHEMA = "loom-host-orchestration/v1"
 WORKSTATION_SCHEMA = "loom-workstation-registration/v1"
+WORKSTATION_CONTROL_SCHEMA = "loom-workstation-control/v1"
+WORKSTATION_REPOSITORIES_SCHEMA = "loom-workstation-repositories/v1"
 SKILLS_SCHEMA = "loom-skills-surface/v1"
 SCENARIO_SCHEMA = "loom-scenario-control/v1"
 PROFILE_SCHEMA = "loom-governance-profile-control/v1"
@@ -497,6 +499,27 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "host upgrade", "domain": "host", "status": "implemented", "json": True},
     {"command": "host remove", "domain": "host", "status": "implemented", "json": True},
     {
+        "command": "workstation register",
+        "domain": "workstation",
+        "status": "implemented",
+        "json": True,
+        "summary": "Register the target repository in ~/.loom/repositories.json without mutating the repository.",
+    },
+    {
+        "command": "workstation list",
+        "domain": "workstation",
+        "status": "implemented",
+        "json": True,
+        "summary": "List machine-local Loom repository registry entries.",
+    },
+    {
+        "command": "workstation unregister",
+        "domain": "workstation",
+        "status": "implemented",
+        "json": True,
+        "summary": "Remove or opt out a target repository entry from ~/.loom/repositories.json.",
+    },
+    {
         "command": "skills list",
         "domain": "skills",
         "status": "implemented",
@@ -633,6 +656,12 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
         "first_command": "loom host doctor --host codex --scope user --json",
         "next_step": "Run host install/register with --apply only when refreshing the user workstation surface is intended.",
     },
+    {
+        "task": "workstation-registry",
+        "summary": "List or update the machine-local Loom repository registry.",
+        "first_command": "loom workstation list --json",
+        "next_step": "Use register/unregister to update ~/.loom/repositories.json; each repo still owns adoption truth.",
+    },
 ]
 
 HELP_COMMAND_TIERS: dict[str, list[str]] = {
@@ -656,6 +685,7 @@ HELP_COMMAND_TIERS: dict[str, list[str]] = {
         "release readback",
         "release closeout-sync",
         "host doctor",
+        "workstation list",
     ],
     "advanced_debug_path": [
         "carrier closeout-sync",
@@ -9347,6 +9377,314 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
     return hosts
 
 
+def workstation_registry_path() -> Path:
+    return Path.home().expanduser().resolve() / ".loom" / "repositories.json"
+
+
+def empty_workstation_registry(path: Path) -> dict[str, Any]:
+    return {
+        "schema_version": WORKSTATION_REPOSITORIES_SCHEMA,
+        "authority": "workstation",
+        "registry_path": "~/.loom/repositories.json",
+        "updated_at": now_iso(),
+        "repositories": [],
+    }
+
+
+def load_workstation_registry(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not path.exists():
+        return empty_workstation_registry(path), None
+    try:
+        registry = read_json(path)
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"workstation registry is unreadable: {exc}"
+    if not isinstance(registry, dict):
+        return None, "workstation registry must be a JSON object"
+    if registry.get("schema_version") != WORKSTATION_REPOSITORIES_SCHEMA:
+        return None, f"expected schema_version {WORKSTATION_REPOSITORIES_SCHEMA}"
+    if registry.get("authority") != "workstation":
+        return None, "workstation registry authority must be workstation"
+    if not isinstance(registry.get("repositories"), list):
+        return None, "workstation registry repositories must be an array"
+    registry.setdefault("registry_path", "~/.loom/repositories.json")
+    registry.setdefault("updated_at", now_iso())
+    return registry, None
+
+
+def workstation_registry_block(command: str, path: Path, reason: str) -> dict[str, Any]:
+    return output(
+        command,
+        "block",
+        schema=WORKSTATION_CONTROL_SCHEMA,
+        summary="Workstation repository registry cannot be trusted.",
+        registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+        registry_path=str(path),
+        mutates=False,
+        failed_layer="workstation-registry",
+        fail_closed_reason=reason,
+        fallback_to=["repair or remove ~/.loom/repositories.json", "loom workstation list --json"],
+    )
+
+
+def canonical_git_remote(target: Path) -> str:
+    completed = run_readback_command(["git", "config", "--get", "remote.origin.url"], cwd=target)
+    if completed.returncode != 0:
+        return ""
+    return completed.stdout.strip()
+
+
+def remote_hash(canonical_url: str) -> str | None:
+    if not canonical_url:
+        return None
+    digest = hashlib.sha256(canonical_url.encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
+
+
+def workstation_repo_id(target: Path, remote_hash_value: str | None) -> str:
+    identity = f"{target.resolve()}\0{remote_hash_value or 'missing'}"
+    return "repo_" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+
+
+def workstation_adoption_snapshot(target: Path) -> dict[str, Any]:
+    path = installed_state_path(target)
+    if path is None:
+        return {
+            "mode": "unknown",
+            "installed_state_schema": None,
+            "last_seen_version": None,
+        }
+    try:
+        state = read_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {
+            "mode": "unknown",
+            "installed_state_schema": None,
+            "last_seen_version": None,
+        }
+    if not isinstance(state, dict):
+        return {
+            "mode": "unknown",
+            "installed_state_schema": None,
+            "last_seen_version": None,
+        }
+    repo_payload = state.get("repo_payload") if isinstance(state.get("repo_payload"), dict) else {}
+    mode = repo_payload.get("mode") if isinstance(repo_payload.get("mode"), str) else "unknown"
+    if mode not in {"metadata-only", "repo-local-wrapper", "legacy-embedded", "unknown"}:
+        mode = "unknown"
+    version_data = state.get("version_context") if isinstance(state.get("version_context"), dict) else {}
+    last_seen_version = (
+        version_data.get("repo_version")
+        or version_data.get("loom_version")
+        or version_data.get("source_package_version")
+        or version_data.get("version")
+    )
+    return {
+        "mode": mode,
+        "installed_state_schema": state.get("schema_version") if isinstance(state.get("schema_version"), str) else None,
+        "last_seen_version": last_seen_version if isinstance(last_seen_version, str) else None,
+    }
+
+
+def workstation_registry_entry(target: Path, *, source: str) -> dict[str, Any]:
+    observed_at = now_iso()
+    canonical_url = canonical_git_remote(target)
+    hash_value = remote_hash(canonical_url)
+    return {
+        "id": workstation_repo_id(target, hash_value),
+        "path": str(target.resolve()),
+        "path_state": "present" if target.exists() else "missing",
+        "remote": {
+            "canonical_url": canonical_url,
+            "hash": hash_value,
+            "observed_at": observed_at,
+        },
+        "adoption": workstation_adoption_snapshot(target),
+        "opt_in": {
+            "enabled": True,
+            "source": source,
+            "updated_at": observed_at,
+        },
+        "last_seen_at": observed_at,
+    }
+
+
+def workstation_registry_classifications(registry: dict[str, Any]) -> list[dict[str, Any]]:
+    classifications: list[dict[str, Any]] = []
+    repositories = registry.get("repositories")
+    if not isinstance(repositories, list):
+        return [{"classification": "schema_unsupported", "entry_id": None, "blocking": True}]
+    seen_ids: dict[str, tuple[str | None, str | None]] = {}
+    for entry in repositories:
+        if not isinstance(entry, dict):
+            classifications.append({"classification": "schema_unsupported", "entry_id": None, "blocking": True})
+            continue
+        entry_id = entry.get("id")
+        remote = entry.get("remote") if isinstance(entry.get("remote"), dict) else {}
+        identity = (entry.get("path"), remote.get("hash"))
+        if isinstance(entry_id, str):
+            previous = seen_ids.get(entry_id)
+            if previous is not None and previous != identity:
+                classifications.append({"classification": "repo_id_conflict", "entry_id": entry_id, "blocking": True})
+            seen_ids[entry_id] = identity
+        if entry.get("path_state") != "present":
+            classifications.append({"classification": "path_missing", "entry_id": entry_id, "blocking": True})
+        opt_in = entry.get("opt_in") if isinstance(entry.get("opt_in"), dict) else {}
+        if opt_in.get("enabled") is False:
+            classifications.append({"classification": "opted_out", "entry_id": entry_id, "blocking": False})
+    return classifications
+
+
+def handle_workstation(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom workstation")
+    parser.add_argument("action", choices=("register", "list", "unregister"))
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--id")
+    parser.add_argument("--keep-entry", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    command = f"workstation {args.action}"
+    registry_path = workstation_registry_path()
+    registry, error = load_workstation_registry(registry_path)
+    if error or registry is None:
+        return emit(workstation_registry_block(command, registry_path, error or "workstation registry is unavailable"))
+
+    if args.action == "list":
+        repositories = registry.get("repositories", [])
+        classifications = workstation_registry_classifications(registry)
+        eligible = [
+            entry.get("id")
+            for entry in repositories
+            if isinstance(entry, dict)
+            and entry.get("path_state") == "present"
+            and isinstance(entry.get("opt_in"), dict)
+            and entry["opt_in"].get("enabled") is True
+        ]
+        return emit(
+            output(
+                command,
+                "pass",
+                schema=WORKSTATION_CONTROL_SCHEMA,
+                summary="Workstation repository registry listed.",
+                registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+                registry_path=str(registry_path),
+                logical_registry_path=registry.get("registry_path"),
+                mutates=False,
+                repositories=repositories,
+                repository_count=len(repositories),
+                eligible_for_plan=eligible,
+                classifications=classifications,
+                fallback_to=None,
+            )
+        )
+
+    target = resolve_target(args.target)
+    if args.action == "register" and not target.exists():
+        return emit(
+            output(
+                command,
+                "block",
+                schema=WORKSTATION_CONTROL_SCHEMA,
+                summary="Target repository path does not exist.",
+                target=str(target),
+                registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+                registry_path=str(registry_path),
+                mutates=False,
+                failed_layer="target",
+                fail_closed_reason="target path does not exist",
+                fallback_to=["loom workstation register --target <repo> --json"],
+            )
+        )
+
+    raw_repositories = registry.get("repositories", [])
+    if not all(isinstance(entry, dict) for entry in raw_repositories):
+        return emit(
+            output(
+                command,
+                "block",
+                schema=WORKSTATION_CONTROL_SCHEMA,
+                summary="Workstation registry contains unsupported repository entries.",
+                registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+                registry_path=str(registry_path),
+                mutates=False,
+                failed_layer="workstation-registry",
+                fail_closed_reason="repository entries must be JSON objects before mutation",
+                fallback_to=["repair or remove ~/.loom/repositories.json", "loom workstation list --json"],
+            )
+        )
+    repositories = [entry for entry in raw_repositories if isinstance(entry, dict)]
+    matched: list[dict[str, Any]]
+    if args.id:
+        matched = [entry for entry in repositories if entry.get("id") == args.id]
+    else:
+        matched = [entry for entry in repositories if entry.get("path") == str(target.resolve())]
+
+    if args.action == "register":
+        entry = workstation_registry_entry(target, source="loom workstation register")
+        retained = [
+            existing
+            for existing in repositories
+            if existing.get("id") != entry["id"] and existing.get("path") != entry["path"]
+        ]
+        retained.append(entry)
+        registry["repositories"] = sorted(retained, key=lambda item: str(item.get("path", "")))
+        registry["updated_at"] = now_iso()
+        write_json(registry_path, registry)
+        return emit(
+            output(
+                command,
+                "pass",
+                schema=WORKSTATION_CONTROL_SCHEMA,
+                summary="Target repository registered in the workstation registry.",
+                target=str(target),
+                registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+                registry_path=str(registry_path),
+                mutates=True,
+                writes=[str(registry_path)],
+                repository=entry,
+                repository_count=len(registry["repositories"]),
+                fallback_to=None,
+            )
+        )
+
+    if args.keep_entry:
+        now = now_iso()
+        for entry in matched:
+            entry.setdefault("opt_in", {})
+            if isinstance(entry["opt_in"], dict):
+                entry["opt_in"].update(
+                    {
+                        "enabled": False,
+                        "source": "loom workstation unregister --keep-entry",
+                        "updated_at": now,
+                    }
+                )
+        removed = 0
+    else:
+        matched_ids = {id(entry) for entry in matched}
+        registry["repositories"] = [entry for entry in repositories if id(entry) not in matched_ids]
+        removed = len(matched)
+    registry["updated_at"] = now_iso()
+    write_json(registry_path, registry)
+    return emit(
+        output(
+            command,
+            "pass",
+            schema=WORKSTATION_CONTROL_SCHEMA,
+            summary="Target repository entry updated in the workstation registry.",
+            target=str(target),
+            registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+            registry_path=str(registry_path),
+            mutates=True,
+            writes=[str(registry_path)],
+            removed_count=removed,
+            updated_count=len(matched) if args.keep_entry else 0,
+            repository_count=len(registry.get("repositories", [])),
+            fallback_to=None,
+        )
+    )
+
+
 def handle_host(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom host")
     parser.add_argument("action", choices=("list", "doctor", "install", "verify", "register", "upgrade", "remove"))
@@ -12814,6 +13152,9 @@ def main(argv: list[str]) -> int:
     if command == "host" or command.startswith("host "):
         host_args = command.split()[1:] + forwarded if command.startswith("host ") else forwarded
         return handle_host(host_args)
+    if command == "workstation" or command.startswith("workstation "):
+        workstation_args = command.split()[1:] + forwarded if command.startswith("workstation ") else forwarded
+        return handle_workstation(workstation_args)
     if command == "skills" or command.startswith("skills "):
         skills_args = command.split()[1:] + forwarded if command.startswith("skills ") else forwarded
         return handle_skills(skills_args)
