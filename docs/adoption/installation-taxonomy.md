@@ -20,6 +20,7 @@ Loom separates repository truth from workstation truth:
 | Repository adoption truth | Versioned target repository | `.loom/installed-state.json` and equivalent compatibility paths | Codex Desktop registration, user plugin cache, personal marketplace entries |
 | Repo-owned governance residue | Versioned target repository | `.loom/companion`, repo interop metadata, evidence carriers, repo-native gates and closeout evidence | Loom plugin payload ownership or workstation discovery |
 | Global CLI runtime provider | User/workstation executable plus its shipped runtime | The `loom` command semantics, packaged runtime/provider version, and external provider provenance | Repository adoption truth, repo-owned governance residue, or workstation registration truth |
+| Published plugin marketplace catalog | Loom source repository | A deterministic catalog that advertises the packaged Loom Codex plugin, such as `.agents/plugins/marketplace.json` pointing to `./plugins/loom` | User/workstation plugin installation state, Codex runtime cache, or downstream repository adoption truth |
 | Embedded repository payload | Versioned target repository, legacy residue | `plugins/loom/.codex-plugin/plugin.json` and `plugins/loom/skills/` | User-level Codex plugin registration |
 | Workstation registration truth | User workstation | Codex personal marketplace entry, user plugin cache, Codex config enablement | Repository adoption truth or repo-owned governance evidence |
 | Compatibility export | Explicit export target | `.agents/skills` or another host compatibility surface selected by the operator | Default Loom downstream adoption |
@@ -35,6 +36,13 @@ global CLI runtime provider, repository truth may declare that dependency, but
 it must not copy user/workstation provider state, provider cache paths, or
 registration outcomes into versioned repository truth.
 
+A published plugin marketplace catalog is source distribution metadata, not an
+installed-state record. The Loom source repository may version a deterministic
+catalog only when it points the `loom` plugin at the source payload
+`./plugins/loom` and contains no workstation installed-state or runtime-cache
+fields. Downstream repositories must not use `.agents/plugins/marketplace.json`
+to record Codex plugin installation or registration state.
+
 ## Artifact Types
 
 Loom install and verify commands must classify artifacts before mutating or
@@ -45,6 +53,7 @@ diagnosing them:
 | Installed-state metadata | Repository | Repository adoption truth | Records the chosen adoption mode and layer graph. |
 | Repo companion / interop / evidence | Repository | Repo-owned governance residue | Preserved across plugin and provider changes. |
 | Global CLI runtime provider | User/workstation | Global CLI runtime provider | The default CLI-owned provider surface for `loom` command semantics and shipped runtime. |
+| Published plugin marketplace catalog | Source repository | Distribution catalog | Advertises `plugins/loom` as an installable Codex plugin source; not valid as downstream installed-state. |
 | Host adapter plugin manifest | Repository or user plugin source | Embedded repository payload or workstation provider | Repository copy is only required in embedded payload mode. |
 | Plugin-embedded skills bundle | Repository | Legacy embedded repository payload | `plugins/loom/skills/` is unsupported legacy residue for the milestone #14 target. |
 | User-level skills provider | Workstation | Workstation registration truth | Used by metadata-only adoption; verified separately from repo truth. |

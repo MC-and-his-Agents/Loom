@@ -6443,7 +6443,8 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     marketplace_path = root / ".agents/plugins/marketplace.json"
     if marketplace_path.exists():
-        failures.append(Failure("root-self-plugin", "root `.agents/plugins/marketplace.json` is repo-local installed state and must not be committed upstream"))
+        failures.extend(validate_published_marketplace_catalog(root, marketplace_path))
+    failures.extend(check_published_marketplace_catalog_contract(root))
 
     root_plugin_paths = (
         "plugins/loom/.codex-plugin/plugin.json",
@@ -6524,6 +6525,78 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
             if generated_cache:
                 preview = ", ".join(generated_cache[:5])
                 failures.append(Failure("root-self-plugin", f"downstream plugin payload must exclude Python cache artifacts: {preview}"))
+    return failures
+
+
+def validate_published_marketplace_catalog(root: Path, marketplace_path: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    try:
+        payload = load_json_file(marketplace_path)
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        return [Failure("root-self-plugin", f"published marketplace catalog is unreadable: {exc}")]
+    if not isinstance(payload, dict):
+        return [Failure("root-self-plugin", "published marketplace catalog must be a JSON object")]
+    plugins = payload.get("plugins")
+    if not isinstance(plugins, list) or len(plugins) != 1:
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must expose exactly the `loom` plugin"))
+        return failures
+    entry = plugins[0]
+    if not isinstance(entry, dict) or entry.get("name") != "loom":
+        failures.append(Failure("root-self-plugin", "published marketplace catalog plugin entry must be named `loom`"))
+        return failures
+    source = entry.get("source")
+    if not isinstance(source, dict) or source.get("source") != "local" or source.get("path") != "./plugins/loom":
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must point `loom` to local `./plugins/loom`"))
+    policy = entry.get("policy")
+    if not isinstance(policy, dict) or policy.get("installation") != "AVAILABLE":
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must mark `loom` installation as AVAILABLE"))
+    forbidden_keys = {"enabled", "installed", "installed_at", "cache", "cache_path", "runtime_cache"}
+    for context, value in (("catalog", payload), ("plugin entry", entry), ("plugin source", source if isinstance(source, dict) else {})):
+        leaked = sorted(forbidden_keys & set(value))
+        if leaked:
+            failures.append(Failure("root-self-plugin", f"published marketplace catalog {context} must not contain workstation installed-state keys: {', '.join(leaked)}"))
+    if failures:
+        return failures
+    plugin_root = (marketplace_path.parent.parent.parent / "plugins/loom").resolve()
+    expected_root = (root / "plugins/loom").resolve()
+    if plugin_root != expected_root:
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must resolve `./plugins/loom` inside the source repository"))
+    return failures
+
+
+def check_published_marketplace_catalog_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    with tempfile.TemporaryDirectory(prefix="loom-marketplace-catalog-contract-") as tmp:
+        fixture_root = Path(tmp)
+        catalog = fixture_root / ".agents/plugins/marketplace.json"
+        (fixture_root / "plugins/loom").mkdir(parents=True)
+        catalog.parent.mkdir(parents=True)
+        valid_payload = {
+            "name": "loom",
+            "interface": {"displayName": "Loom"},
+            "plugins": [
+                {
+                    "name": "loom",
+                    "source": {"source": "local", "path": "./plugins/loom"},
+                    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                    "category": "Productivity",
+                }
+            ],
+        }
+        catalog.write_text(json.dumps(valid_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if validate_published_marketplace_catalog(fixture_root, catalog):
+            failures.append(Failure("root-self-plugin", "published marketplace catalog fixture must be accepted"))
+        invalid_payload = dict(valid_payload)
+        invalid_payload["plugins"] = [
+            {
+                "name": "loom",
+                "source": {"source": "local", "path": "/tmp/plugins/loom"},
+                "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+            }
+        ]
+        catalog.write_text(json.dumps(invalid_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if not validate_published_marketplace_catalog(fixture_root, catalog):
+            failures.append(Failure("root-self-plugin", "repo-local installed marketplace fixture must stay blocked"))
     return failures
 
 

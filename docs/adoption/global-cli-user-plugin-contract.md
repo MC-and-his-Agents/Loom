@@ -83,6 +83,11 @@ read from or write to `plugins/loom` in the target repository.
 `loom host register --host codex --scope user --apply --json` registers/enables
 that user-level plugin for Codex discovery.
 
+The Loom source repository may publish a Codex marketplace catalog that points
+to its packaged plugin payload at `./plugins/loom`. That catalog is distribution
+metadata only. It does not mean the plugin is installed, enabled, cached, or
+fresh on any user's workstation.
+
 Dry-run output must list only user-level planned writes, such as:
 
 - Codex personal marketplace entry
@@ -141,6 +146,11 @@ loom host doctor --host codex --scope user --json
 `loom install` and `loom upgrade` continue to manage only the target
 repository's metadata-only installed-state. They do not refresh the Codex
 workstation plugin payload and must redirect that intent to `loom host ...`.
+
+If a target repository contains `.agents/plugins/marketplace.json`, Loom must
+classify it as repository-local marketplace state unless a source-repository
+contract explicitly proves it is a deterministic published catalog pointing at
+`./plugins/loom`.
 
 ## Legacy Residue
 
