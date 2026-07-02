@@ -124,7 +124,8 @@ loom-self-plugin-check:
 	test -f src/skills/registry.json
 	test -f skills/registry.json
 	test -f skills/loom-init/SKILL.md
-	test ! -f .agents/plugins/marketplace.json
+	test -f .agents/plugins/marketplace.json
+	python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
 
 repo-local-cli-fast:
 	@test -n "$(GROUP)" || { echo "usage: make repo-local-cli-fast GROUP=<group>"; echo "groups: $(REPO_LOCAL_CLI_GROUPS)"; exit 2; }
