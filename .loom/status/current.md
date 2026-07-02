@@ -6,7 +6,7 @@
 - Goal: 区分 published marketplace catalog 与 repo-local installed marketplace state，更新 checker 和合同语义，为 #1891 添加 Loom Codex marketplace catalog 解锁。
 - Scope: 仅限 #1890：root self-plugin checker、published marketplace catalog 合同文档、generated skills/plugin/runtime copies、payload metadata/hash、WI-1890 suite/recovery carriers；不添加实际 marketplace catalog，不实现 workstation registry/global cache/upgrade orchestrator/legacy migration。
 - Execution Path: issue #1890 -> branch work/1890-marketplace-catalog-contract -> implementation PR -> review/merge-ready/closeout
-- Workspace Entry: /Users/mc/dev/Loom
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1890.md
 - Review Entry: .loom/reviews/WI-1890.json
 - Validation Entry: python3 tools/py_compile_clean.py .loom/bin/loom_check.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py && python3 tools/skills_surface.py check && python3 tools/check_npm_package.py --surface runtime-copy-parity && python3 tools/check_npm_package.py --surface plugin-payload-hash && python3 tools/loom_check.py --profile source --source-surface source-self-fixture . && git diff --check
