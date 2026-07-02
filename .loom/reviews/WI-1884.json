@@ -2,12 +2,12 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-1884",
   "decision": "allow",
-  "kind": "general_review",
-  "summary": "WI-1884 v0.26.3 release candidate is approved for PR gate and controlled merge. Review covers release metadata, plugin payload metadata/hash, release readiness evidence, WI-1883 terminal carrier sync, minimal suite carriers, fact-chain, shadow refresh, and pre-merge release readback; it does not approve any new runtime behavior beyond merged PR #1885.",
+  "kind": "code_review",
+  "summary": "WI-1884 terminal closeout carrier sync is approved for closeout PR gate consumption. Release v0.26.3 is published and read back at merge commit 2bf4912609c8ff4bd8ee858838a743cc31fe6085; release closeout-sync wrote terminal closed_out metadata, and suite evidence/carrier validation, shadow parity, release readback, and diff hygiene pass. This review covers carrier-only closeout sync and does not approve new runtime behavior or republish.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-02T13:10:48Z",
-  "reviewed_head": "54f0fa64b0053d8afda92040d10a4dd79af0fa52",
-  "reviewed_validation_summary": "2026-07-02T13:08:31Z local carrier repair validation passed after WI-1883 terminal sync at head `0e9b13419aa6a129b04dfd6396b2f064cfe4cff0`: `git diff --check`, `python3 .loom/bin/loom_flow.py work-item-audit --target . --item WI-1884`, and `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1884` passed with no blocking active item conflicts. This extends 2026-07-02T12:43:25Z local pre-release validation for py-compile, version/release/package checks, npm pack dry-run, release-readback and aggregate CLI contract, suite validate/evidence/carrier, fact-chain, skills release-check, and demo fixture; pre-merge release readback for `v0.26.3` passed with expected verdict `missing` and gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, and `workflow_run_not_success`.",
+  "authored_at": "2026-07-02T13:36:56Z",
+  "reviewed_head": "a82c68c3c1e6cac9034c280d94ac3382afa6c875",
+  "reviewed_validation_summary": "2026-07-02T13:34Z closeout carrier validation passed: `python3 tools/loom.py release readback --target . --version v0.26.3 --commit 2bf4912609c8ff4bd8ee858838a743cc31fe6085 --release-judgment release_required --json` returned published; `python3 tools/loom.py suite evidence validate --target . --item WI-1884 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1884 --json`, `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`, and `git diff --check` passed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -32,15 +32,20 @@
     },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null
+    "normalized_findings": null,
+    "release_readback": "v0.26.3 published at merge commit 2bf4912609c8ff4bd8ee858838a743cc31fe6085",
+    "release_url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.26.3",
+    "suite_evidence_validation": "pass",
+    "suite_carrier_validation": "pass",
+    "shadow_parity": "pass"
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored release review approved the v0.26.3 release candidate and WI-1883 terminal carrier sync for PR gate consumption.",
-    "change_class": "release",
-    "substitute_validation": "version surface, release surface, npm package aggregate, npm pack dry-run, release-readback and aggregate CLI contract, suite validate/evidence/carrier, fact-chain, shadow parity, skills release-check, demo fixture, and git diff check",
+    "reason": "Authored closeout carrier review approved the current terminal closeout carrier head for closeout PR gate consumption.",
+    "change_class": "docs_governance",
+    "substitute_validation": "release readback, suite evidence validation, suite carrier validation, shadow parity, and git diff check",
     "authority": "codex-main-thread",
-    "risk_acceptance": "Bounded to release metadata, package/plugin payload metadata, release evidence, and carrier convergence; no new runtime behavior beyond merged PR #1885 is introduced.",
+    "risk_acceptance": "Bounded to carrier-only terminal closeout sync after release publication; no runtime behavior, packaging, or publication side effect is introduced.",
     "one_shot": true
   }
 }
