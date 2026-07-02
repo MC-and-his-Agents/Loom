@@ -17,6 +17,7 @@ Add the source-repository Codex marketplace catalog that #1890 made legal, then 
 - Produces:
   - Validation strategy by scenario: catalog structural checks, temporary-home Codex marketplace parse, and source checker validation.
   - Test strategy by acceptance: focused JSON parse, marketplace add parse, source loom_check, issue readback, and diff hygiene.
+  - Implementation contract locator: `.loom/specs/WI-1891/implementation-contract.md`
   - Fresh verification evidence expectation: `.loom/progress/WI-1891.md` latest validation summary and evidence map.
 - Locator:
   - Plan locator: `.loom/specs/WI-1891/plan.md`
