@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1891
-- Goal: 添加 Loom Codex marketplace catalog，指向 ./plugins/loom，并验证 Codex marketplace 可解析。
-- Scope: 仅限 #1891：新增 .agents/plugins/marketplace.json 发布目录，绑定 plugins/loom；不实现 CLI/插件自动升级、repo adoption 刷新、workstation registry/global cache、legacy migration 或 #1892 文档扩展。
-- Execution Path: issue #1891 -> branch work/1891-loom-marketplace-catalog -> PR -> review/merge-ready/closeout
+- Item ID: WI-1892
+- Goal: 文档化 marketplace 安装 plugin、npm 安装 CLI、每仓 repo adoption 独立校验的安装边界。
+- Scope: 仅限 #1892：同步 README 安装/升级说明、docs/adoption/global-cli-user-plugin-contract.md、docs/adoption/host-adapter-matrix.md，以及必要 WI-1892 suite/carrier；不实现 workstation registry/global cache/upgrade orchestrator/legacy migration，不修改 CLI/runtime/plugin payload。
+- Execution Path: issue #1892 -> branch work/1892-install-boundary-docs -> PR -> review/merge-ready/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1891.md
-- Review Entry: .loom/reviews/WI-1891.json
-- Validation Entry: python3 -m json.tool .agents/plugins/marketplace.json >/dev/null; tmp_home=$(mktemp -d); HOME="$tmp_home" codex plugin marketplace add /Users/mc/dev/Loom; rc=$?; rm -rf "$tmp_home"; test $rc -eq 0; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .
-- Closing Condition: Marketplace catalog is merged, Codex can parse the repo marketplace root, hosted checks pass, issue #1891 is closed, and Loom closeout consumes PR/review/merge evidence.
-- Current Checkpoint: merge
-- Current Stop: WI-1891 PR #1917 is at head 1fce43d54a15cb092df136a9fc1ae46d5997184d with current-head review consumed as carrier-only drift and root-self adoption checks passing locally.
-- Next Step: Wait for hosted loom-check and merge gate on PR #1917, then run merge-ready and controlled merge/closeout for #1891.
+- Recovery Entry: .loom/progress/WI-1892.md
+- Review Entry: .loom/reviews/WI-1892.json
+- Validation Entry: rg -n "marketplace|host install|npm install -g|repo adoption|metadata-only" README.md docs/adoption/global-cli-user-plugin-contract.md docs/adoption/host-adapter-matrix.md; python3 tools/loom.py suite validate --target . --item WI-1892 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1892 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1892 --json; python3 tools/loom.py fact-chain --target . --item WI-1892 --json; git diff --check
+- Closing Condition: Install-boundary docs are merged, #1892 is closed, and Loom closeout consumes PR/review/validation/merge evidence.
+- Current Checkpoint: build
+- Current Stop: README、global CLI/user plugin contract、host adapter matrix install-boundary documentation updated; minimal suite, evidence map, and task carrier authored.
+- Next Step: Commit WI-1892 docs and carrier changes, push branch, open PR, then run review/merge-ready/closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03 validation passed on head 1fce43d54a15cb092df136a9fc1ae46d5997184d: PR metadata readback passed for PR #1917; local PR gate consumed review record with carrier-only drift except merge checkpoint pending before this update; governance-profile status passed at strong maturity; adopt verify passed; shadow-parity passed; make loom-self-plugin-check passed; suite validate/evidence/carrier and fact-chain passed earlier for WI-1891; source loom_check source-self-fixture passed before review/shadow carrier updates.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-1891.md`.
-- Current Lane: marketplace-catalog
+- Latest Validation Summary: 2026-07-02T19:10Z local pass: targeted rg boundary search, suite validate, suite evidence validate, suite carrier validate, fact-chain, and git diff --check.
+- Recovery Boundary: WI-1892 docs-only scope: README, docs/adoption/global-cli-user-plugin-contract.md, docs/adoption/host-adapter-matrix.md, .loom/specs/WI-1892/*, progress/status/work-item/review carriers; no CLI/runtime/plugin payload changes.
+- Current Lane: docs-boundary
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1891.md
-- Dynamic Truth: .loom/progress/WI-1891.md
+- Static Truth: .loom/work-items/WI-1892.md
+- Dynamic Truth: .loom/progress/WI-1892.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

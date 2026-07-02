@@ -144,6 +144,13 @@ The install flow has three parts:
 2. Install and register the Codex plugin.
 3. Adopt the target repository with metadata-only Loom state.
 
+These layers stay separate even when the Loom source repository is used as a
+Codex marketplace source. The marketplace can make the `loom` Codex plugin
+available to the workstation, but it does not install or upgrade the global
+`loom` CLI, and it does not adopt or migrate any target repository. CLI updates
+still come from npm; repository adoption and repository runtime upgrades still
+run per repository through the Loom CLI and their own PR/closeout flow.
+
 Copy this self-contained prompt to your coding agent:
 
 ```text
@@ -185,6 +192,10 @@ loom repair plan --target . --json
 `loom install` and `loom upgrade` manage only the target repository's
 metadata-only adoption state. To inspect or refresh the local Codex plugin
 provider, use `loom host doctor|install|register --host codex --scope user`.
+If the Loom source repository is registered as a Codex marketplace source, use
+Codex marketplace install/update for the plugin surface only; still use
+`npm install -g @mc-and-his-agents/loom` for the CLI and `loom install` /
+`loom runtime-upgrade ...` for each repository.
 
 For an already adopted single repository that pins Loom in a GitHub workflow,
 use the runtime upgrade maintenance flow instead of hand-assembling the fact
@@ -280,7 +291,10 @@ Target repository upgrade commands do not refresh the Codex plugin cache. Use
 `loom host doctor --host codex --scope user --json` first, then
 `loom host install --host codex --scope user --apply --json` and
 `loom host register --host codex --scope user --apply --json` when the local
-workstation plugin provider needs repair or refresh.
+workstation plugin provider needs repair or refresh. A Codex marketplace
+upgrade can replace the plugin refresh step when the workstation installed the
+plugin through the Loom marketplace source, but it still does not upgrade the
+global CLI or mutate repository adoption state.
 
 ## Why Loom Works
 
