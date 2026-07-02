@@ -53,22 +53,21 @@ PLUGIN_SKILLS_ROOT = REPO_ROOT / "plugins" / "loom" / "skills"
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
 LOOM_BOOTSTRAP_END = "<!-- LOOM_BOOTSTRAP_END -->"
 LOOM_BOOTSTRAP_BLOCK = f"""{LOOM_BOOTSTRAP_START}
-## Loom Bootstrap
+## Loom Execution
 
-本仓库采用 Loom 来管理 agent 执行流程、工作事实载体、review、merge-ready 和 closeout；开始实现、review、merge-ready 或 closeout 前，先完成以下 bootstrap 检查。
+本仓库使用 Loom 管理 Work Item、admission/spec、build、review、merge-ready 和 closeout。Loom 是执行控制面，不替代仓库自身业务事实源。
 
-1. 检查 `.loom/installed-state.json`。
-2. 若本机没有 `loom`，执行：
-   `npm install -g @mc-and-his-agents/loom`
-3. 运行：
-   `loom doctor --target . --json`
-4. 若 Codex Loom plugin 缺失，执行：
-   `loom host install --host codex --scope user --apply --json`
-   `loom host register --host codex --scope user --apply --json`
-5. 重新运行：
-   `loom doctor --target . --json`
+开始改文件前：
 
-不要把 Loom runtime、plugin 或 skills payload 写入仓库；它们属于用户级全局安装。
+1. 先用 `loom route --target . --task "<request>" --json` 判断入口；接手已有事项时先用 `loom resume --target . --json`。
+2. 一次只推进一个明确 Work Item；不要把无关修复、后续想法或新范围塞进同一 PR。
+3. 命中 formal spec path 时，缺 `spec.md`、`plan.md` 或 `spec_review approved` 不得进入实现。
+4. 按 Loom 返回的 `next_action` / `fallback_to` 执行；`block` 表示回退修前序事实，不表示绕过门禁。
+5. 验证证据必须写清命令、结果、时间或 head sha；不要只把结论留在会话里。
+6. 改了代码、PR body、review 输入或 carrier 后，重新确认 review/gate evidence 是否仍 fresh。
+7. merge 后不等于完成；按 Loom closeout 同步 issue、PR、主干和事实载体状态。
+
+环境或插件问题交给 `loom doctor --target . --json` 的输出处理。
 {LOOM_BOOTSTRAP_END}
 """
 
