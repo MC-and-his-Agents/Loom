@@ -88,6 +88,16 @@ to its packaged plugin payload at `./plugins/loom`. That catalog is distribution
 metadata only. It does not mean the plugin is installed, enabled, cached, or
 fresh on any user's workstation.
 
+When a user installs Loom through a Codex marketplace source, that action owns
+only the Codex user-level plugin surface. It may replace the
+`loom host install|register --host codex --scope user` refresh path for that
+workstation, depending on the host's marketplace behavior, but it does not
+install the global `loom` CLI and it does not write repository adoption truth.
+The CLI is still installed or upgraded through the npm package, and each target
+repository still needs its own `loom install`, `loom upgrade`, or
+`loom runtime-upgrade ...` flow with repository-local validation, review, PR,
+and closeout evidence.
+
 Dry-run output must list only user-level planned writes, such as:
 
 - Codex personal marketplace entry
@@ -146,6 +156,9 @@ loom host doctor --host codex --scope user --json
 `loom install` and `loom upgrade` continue to manage only the target
 repository's metadata-only installed-state. They do not refresh the Codex
 workstation plugin payload and must redirect that intent to `loom host ...`.
+Codex marketplace plugin update is also workstation truth; it must not be
+reported as repository adoption success unless the target repository's Loom
+installed-state, host verify, skills check, doctor, and closeout evidence pass.
 
 If a target repository contains `.agents/plugins/marketplace.json`, Loom must
 classify it as repository-local marketplace state unless a source-repository
