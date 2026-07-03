@@ -50,6 +50,17 @@ VERSION_FILE = REPO_ROOT / "VERSION"
 SKILLS_ROOT = REPO_ROOT / "skills"
 PLUGIN_MANIFEST = REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
 PLUGIN_SKILLS_ROOT = REPO_ROOT / "plugins" / "loom" / "skills"
+SHARED_SCRIPTS_ROOT = SKILLS_ROOT / "shared" / "scripts"
+SHARED_SCRIPT_CANDIDATES = (
+    SHARED_SCRIPTS_ROOT,
+    REPO_ROOT / "src" / "skills" / "shared" / "scripts",
+    PLUGIN_SKILLS_ROOT / "shared" / "scripts",
+)
+for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
+    if shared_scripts_root.is_dir() and str(shared_scripts_root) not in sys.path:
+        sys.path.insert(0, str(shared_scripts_root))
+from runtime_paths import global_runtime_path, is_global_runtime_locator
+
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
 LOOM_BOOTSTRAP_END = "<!-- LOOM_BOOTSTRAP_END -->"
 LOOM_BOOTSTRAP_BLOCK = f"""{LOOM_BOOTSTRAP_START}
@@ -2329,7 +2340,11 @@ def write_output_artifact(
     sensitive: bool = False,
 ) -> str:
     configured = artifact_dir or Path(os.environ.get("LOOM_OUTPUT_ARTIFACT_DIR", DEFAULT_OUTPUT_ARTIFACT_DIR))
-    root = configured if configured.is_absolute() else ((target_root or Path.cwd()) / configured)
+    configured_locator = configured.as_posix()
+    if configured.is_absolute() or target_root is None or not is_global_runtime_locator(configured_locator):
+        root = configured if configured.is_absolute() else ((target_root or Path.cwd()) / configured)
+    else:
+        root = global_runtime_path(target_root, configured_locator)
     root.mkdir(parents=True, exist_ok=True)
     command = str(payload.get("command", "loom-output"))
     slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", command).strip("-") or "loom-output"
@@ -2345,6 +2360,8 @@ def write_output_artifact(
     }
     path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     if target_root is not None and not configured.is_absolute():
+        if is_global_runtime_locator(configured_locator):
+            return f"{configured_locator.rstrip('/')}/{path.name}"
         try:
             return str(path.relative_to(target_root))
         except ValueError:

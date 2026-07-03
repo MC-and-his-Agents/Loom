@@ -57,7 +57,13 @@ from governance_surface import (
     required_status_contexts_from_branch_rules as governance_required_status_contexts_from_branch_rules,
     workspace_lifecycle_expectations,
 )
-from runtime_paths import shared_asset, shared_script
+from runtime_paths import (
+    global_runtime_locator_for_path,
+    global_runtime_path,
+    is_global_runtime_locator,
+    shared_asset,
+    shared_script,
+)
 from runtime_state import detect_runtime_state
 
 
@@ -5166,12 +5172,12 @@ def latest_successful_execution_attempt(
 ) -> tuple[dict[str, Any] | None, str | None, list[str]]:
     attempts_dir = execution_attempt_directory(target_root, item_id)
     if not attempts_dir.exists():
-        return None, None, [f"missing execution_attempt directory: {relative_to_root(attempts_dir, target_root)}"]
+        return None, None, [f"missing execution_attempt directory: {artifact_locator_for_path(attempts_dir, target_root)}"]
     versioned_candidates: list[tuple[float, str, dict[str, Any]]] = []
     latest_candidates: list[tuple[float, str, dict[str, Any]]] = []
     errors: list[str] = []
     for path in sorted(attempts_dir.glob("*.json")):
-        relative = relative_to_root(path, target_root)
+        relative = artifact_locator_for_path(path, target_root)
         try:
             payload = load_json_file(path)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -5696,7 +5702,11 @@ def non_empty_str(value: object) -> str | None:
 
 
 def execution_attempt_directory(target_root: Path, item_id: str) -> Path:
-    return target_root / ".loom/runtime/attempts" / item_id
+    return resolve_artifact_read_path(
+        target_root,
+        f".loom/runtime/attempts/{item_id}",
+        label="execution_attempt directory",
+    )[0] or (target_root / ".loom/runtime/attempts" / item_id)
 
 
 def execution_attempt_locator(item_id: str, filename: str = "latest.json") -> str:
@@ -5956,12 +5966,12 @@ def persist_execution_attempt(
 
     evidence = envelope["evidence"]
     try:
-        attempt_path, attempt_errors = resolve_repo_relative_path(
+        attempt_path, attempt_errors = resolve_artifact_write_path(
             context["target_root"],
             str(evidence["locator"]),
             label="execution_attempt evidence locator",
         )
-        latest_path, latest_errors = resolve_repo_relative_path(
+        latest_path, latest_errors = resolve_artifact_write_path(
             context["target_root"],
             str(evidence["latest_locator"]),
             label="execution_attempt latest locator",
@@ -6043,7 +6053,7 @@ def validate_execution_attempt_envelope(
 
 def latest_execution_attempt_payload(target_root: Path, item_id: str) -> dict[str, Any]:
     locator = execution_attempt_locator(item_id)
-    path, path_errors = resolve_repo_relative_path(target_root, locator, label="execution_attempt latest locator")
+    path, path_errors = resolve_artifact_read_path(target_root, locator, label="execution_attempt latest locator")
     if path_errors:
         return {
             "schema_version": EXECUTION_ATTEMPT_SCHEMA,
@@ -7023,6 +7033,42 @@ def git_tracked_files(root: Path, relative: str) -> list[str]:
 
 def relative_to_root(path: Path, root: Path) -> str:
     return str(path.resolve().relative_to(root.resolve()))
+
+
+def artifact_locator_for_path(path: Path, root: Path) -> str:
+    runtime_locator = global_runtime_locator_for_path(root, path)
+    if runtime_locator is not None:
+        return runtime_locator
+    return relative_to_root(path, root)
+
+
+def resolve_artifact_write_path(target_root: Path, locator: str, *, label: str) -> tuple[Path | None, list[str]]:
+    logical_path, errors = resolve_repo_relative_path(target_root, locator, label=label)
+    if errors:
+        return None, errors
+    assert logical_path is not None
+    if is_global_runtime_locator(locator):
+        try:
+            return global_runtime_path(target_root, locator), []
+        except ValueError as exc:
+            return None, [str(exc)]
+    return logical_path, []
+
+
+def resolve_artifact_read_path(target_root: Path, locator: str, *, label: str) -> tuple[Path | None, list[str]]:
+    logical_path, errors = resolve_repo_relative_path(target_root, locator, label=label)
+    if errors:
+        return None, errors
+    assert logical_path is not None
+    if not is_global_runtime_locator(locator):
+        return logical_path, []
+    try:
+        runtime_path = global_runtime_path(target_root, locator)
+    except ValueError as exc:
+        return None, [str(exc)]
+    if runtime_path.exists() or not logical_path.exists():
+        return runtime_path, []
+    return logical_path, []
 
 
 def resolve_workspace_path(target_root: Path, workspace_entry: str) -> tuple[Path | None, list[str]]:
@@ -8525,7 +8571,7 @@ def target_relative_label(target_root: Path, path: Path) -> str:
 
 
 def load_findings_file(target_root: Path, findings_file: str) -> tuple[list[dict[str, Any]] | None, list[str]]:
-    findings_path, locator_errors = resolve_repo_relative_path(target_root, findings_file, label="findings file locator")
+    findings_path, locator_errors = resolve_artifact_read_path(target_root, findings_file, label="findings file locator")
     if locator_errors:
         return None, locator_errors
     assert findings_path is not None
@@ -8608,7 +8654,11 @@ def build_review_context_pack(context: dict[str, Any], review_path: str) -> dict
                     )
                 )
 
-    runtime_history_root = context["target_root"] / ".loom/runtime/review" / context["item_id"]
+    runtime_history_root = resolve_artifact_read_path(
+        context["target_root"],
+        f".loom/runtime/review/{context['item_id']}",
+        label="review runtime history",
+    )[0] or (context["target_root"] / ".loom/runtime/review" / context["item_id"])
     if runtime_history_root.exists():
         for findings_path in sorted(runtime_history_root.glob("*/normalized-findings.json")):
             try:
@@ -8616,7 +8666,8 @@ def build_review_context_pack(context: dict[str, Any], review_path: str) -> dict
             except (OSError, ValueError, json.JSONDecodeError):
                 continue
             raw_findings = payload.get("findings") if isinstance(payload, dict) else None
-            findings, errors = normalize_review_findings(raw_findings, relative=relative_to_root(findings_path, context["target_root"]))
+            findings_locator = artifact_locator_for_path(findings_path, context["target_root"])
+            findings, errors = normalize_review_findings(raw_findings, relative=findings_locator)
             if errors:
                 continue
             metadata_path = findings_path.parent / "engine-metadata.json"
@@ -8631,7 +8682,7 @@ def build_review_context_pack(context: dict[str, Any], review_path: str) -> dict
             for finding in findings:
                 recent_findings.append(
                     review_context_finding_entry(
-                        source=relative_to_root(findings_path, context["target_root"]),
+                        source=findings_locator,
                         source_kind="normalized_findings",
                         reviewed_head=metadata.get("reviewed_head") if isinstance(metadata.get("reviewed_head"), str) else None,
                         validation_summary=metadata.get("validation_summary") if isinstance(metadata.get("validation_summary"), str) else None,
@@ -9139,7 +9190,11 @@ def run_default_review_engine(
     findings_path = runtime_root / "normalized-findings.json"
     metadata_path = runtime_root / "engine-metadata.json"
     context_pack_path = runtime_root / "context-pack.json"
-    scratch_dir = context["target_root"] / ".loom/runtime/tmp" / "review-engine" / context["item_id"]
+    scratch_dir = resolve_artifact_write_path(
+        context["target_root"],
+        f".loom/runtime/tmp/review-engine/{context['item_id']}",
+        label="review engine scratch directory",
+    )[0] or (context["target_root"] / ".loom/runtime/tmp" / "review-engine" / context["item_id"])
     context_pack = build_review_context_pack(context, review_path)
     runtime_root.mkdir(parents=True, exist_ok=True)
     write_json_file(context_pack_path, context_pack)
@@ -9172,12 +9227,12 @@ def run_default_review_engine(
                 "failure_reason": "runtime_conflict",
                 "reviewed_head": reviewed_head,
                 "evidence": {
-                    "runtime_root": relative_to_root(runtime_root, context["target_root"]),
-                    "prompt": relative_to_root(prompt_path, context["target_root"]),
-                    "raw_result": relative_to_root(result_path, context["target_root"]),
-                    "normalized_findings": relative_to_root(findings_path, context["target_root"]),
-                    "metadata": relative_to_root(metadata_path, context["target_root"]),
-                    "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                    "runtime_root": artifact_locator_for_path(runtime_root, context["target_root"]),
+                    "prompt": artifact_locator_for_path(prompt_path, context["target_root"]),
+                    "raw_result": artifact_locator_for_path(result_path, context["target_root"]),
+                    "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
+                    "metadata": artifact_locator_for_path(metadata_path, context["target_root"]),
+                    "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
                 },
             },
             "engine_metadata": selection_metadata,
@@ -9256,12 +9311,12 @@ def run_default_review_engine(
         failure_detail = "default review engine did not produce a readable review result"
 
     engine_evidence = {
-        "runtime_root": relative_to_root(runtime_root, context["target_root"]),
-        "prompt": relative_to_root(prompt_path, context["target_root"]),
-        "raw_result": relative_to_root(result_path, context["target_root"]),
-        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
-        "metadata": relative_to_root(metadata_path, context["target_root"]),
-        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+        "runtime_root": artifact_locator_for_path(runtime_root, context["target_root"]),
+        "prompt": artifact_locator_for_path(prompt_path, context["target_root"]),
+        "raw_result": artifact_locator_for_path(result_path, context["target_root"]),
+        "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
+        "metadata": artifact_locator_for_path(metadata_path, context["target_root"]),
+        "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
     }
 
     if failure_reason is not None:
@@ -9272,7 +9327,7 @@ def run_default_review_engine(
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
                 **selection_metadata,
-                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
                 "failure_reason": failure_reason,
                 "summary": failure_detail,
                 "reviewed_head": reviewed_head,
@@ -9301,7 +9356,7 @@ def run_default_review_engine(
 
     normalized_payload, normalization_errors = normalize_engine_review_result(
         raw_payload,
-        relative=relative_to_root(result_path, context["target_root"]),
+        relative=artifact_locator_for_path(result_path, context["target_root"]),
     )
     if normalization_errors or normalized_payload is None:
         write_json_file(
@@ -9311,7 +9366,7 @@ def run_default_review_engine(
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
                 **selection_metadata,
-                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
                 "failure_reason": "schema_drift",
                 "summary": "normalized engine output did not satisfy Loom review schema",
                 "errors": normalization_errors,
@@ -9344,7 +9399,7 @@ def run_default_review_engine(
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
                 **selection_metadata,
-                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
                 "result": "pass",
                 "reviewed_head": reviewed_head,
                 "decision": normalized_payload["decision"],
@@ -9370,22 +9425,22 @@ def run_default_review_engine(
         },
         "engine_metadata": {
             **selection_metadata,
-            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
-            "raw_result": relative_to_root(result_path, context["target_root"]),
-            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
-            "metadata": relative_to_root(metadata_path, context["target_root"]),
+            "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
+            "raw_result": artifact_locator_for_path(result_path, context["target_root"]),
+            "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
+            "metadata": artifact_locator_for_path(metadata_path, context["target_root"]),
         },
         "review_record_input": {
             "decision": normalized_payload["decision"],
             "summary": normalized_payload["summary"],
             "reviewer": DEFAULT_REVIEW_ADAPTER,
             "kind": effective_kind,
-            "findings_file": relative_to_root(findings_path, context["target_root"]),
+            "findings_file": artifact_locator_for_path(findings_path, context["target_root"]),
             "engine_adapter": DEFAULT_REVIEW_ADAPTER,
-            "engine_evidence": relative_to_root(result_path, context["target_root"]),
+            "engine_evidence": artifact_locator_for_path(result_path, context["target_root"]),
             "engine_profile": engine_profile,
-            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
-            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
+            "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
             "budget_risk": context_pack.get("budget_risk"),
         },
     }
@@ -10730,7 +10785,11 @@ def retained_item_lookup_work_item_relative(lookup: dict[str, Any]) -> str | Non
 def review_runtime_root(context: dict[str, Any], reviewed_head: str | None = None) -> Path:
     head = (reviewed_head or git_head_sha(context["target_root"]) or "unknown-head").strip() or "unknown-head"
     safe_head = re.sub(r"[^A-Za-z0-9_.-]", "-", head)
-    return context["target_root"] / ".loom/runtime/review" / context["item_id"] / safe_head
+    return resolve_artifact_write_path(
+        context["target_root"],
+        f".loom/runtime/review/{context['item_id']}/{safe_head}",
+        label="review runtime root",
+    )[0] or (context["target_root"] / ".loom/runtime/review" / context["item_id"] / safe_head)
 
 
 def default_review_kind(context: dict[str, Any]) -> str:
@@ -11371,7 +11430,7 @@ def codex_app_binding_summary(
     if non_empty_str(raw_file):
         raw_path, raw_errors = resolve_repo_relative_path(target_root, str(raw_file), label="Codex App authoritative review raw file")
         if raw_path is not None and not raw_errors:
-            raw_source = relative_to_root(raw_path, target_root)
+            raw_source = artifact_locator_for_path(raw_path, target_root)
         else:
             raw_source = str(raw_file)
     return {
@@ -12130,11 +12189,11 @@ def run_codex_app_review_shadow_adapter(
     metadata_path = shadow_root / "metadata.json"
     diff_path = shadow_root / "parity-diff.json"
     evidence = {
-        "runtime_root": relative_to_root(shadow_root, context["target_root"]),
-        "raw_review": relative_to_root(raw_path, context["target_root"]),
-        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
-        "metadata": relative_to_root(metadata_path, context["target_root"]),
-        "parity_diff": relative_to_root(diff_path, context["target_root"]),
+        "runtime_root": artifact_locator_for_path(shadow_root, context["target_root"]),
+        "raw_review": artifact_locator_for_path(raw_path, context["target_root"]),
+        "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
+        "metadata": artifact_locator_for_path(metadata_path, context["target_root"]),
+        "parity_diff": artifact_locator_for_path(diff_path, context["target_root"]),
     }
 
     if adapter != CODEX_APP_REVIEW_SHADOW_ADAPTER:
@@ -12255,8 +12314,8 @@ def run_codex_app_review_shadow_adapter(
             "result": "pass",
             "reviewed_head": reviewed_head,
             "raw_source": relative_to_root(source_path, context["target_root"]),
-            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
-            "parity_diff": relative_to_root(diff_path, context["target_root"]),
+            "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
+            "parity_diff": artifact_locator_for_path(diff_path, context["target_root"]),
             "authoritative": False,
             "summary": normalized["summary"],
         },
@@ -12317,12 +12376,12 @@ def run_codex_app_review_authoritative_adapter(
     instructions_path = runtime_root / "prompt.txt"
     context_pack = build_review_context_pack(context, review_path)
     evidence = {
-        "runtime_root": relative_to_root(runtime_root, context["target_root"]),
-        "prompt": relative_to_root(instructions_path, context["target_root"]),
-        "raw_result": relative_to_root(raw_path, context["target_root"]),
-        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
-        "metadata": relative_to_root(metadata_path, context["target_root"]),
-        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+        "runtime_root": artifact_locator_for_path(runtime_root, context["target_root"]),
+        "prompt": artifact_locator_for_path(instructions_path, context["target_root"]),
+        "raw_result": artifact_locator_for_path(raw_path, context["target_root"]),
+        "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
+        "metadata": artifact_locator_for_path(metadata_path, context["target_root"]),
+        "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
     }
     runtime_root.mkdir(parents=True, exist_ok=True)
     write_json_file(context_pack_path, context_pack)
@@ -12383,7 +12442,7 @@ def run_codex_app_review_authoritative_adapter(
                 "adapter": CODEX_APP_REVIEW_ADAPTER,
                 "profile": engine_profile,
                 **selection_metadata,
-                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
                 "result": "block",
                 "failure_reason": "runtime_conflict",
                 "summary": "Codex App authoritative review adapter is missing required live binding proof.",
@@ -12472,7 +12531,7 @@ def run_codex_app_review_authoritative_adapter(
                 "adapter": CODEX_APP_REVIEW_ADAPTER,
                 "profile": engine_profile,
                 **selection_metadata,
-                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
                 "result": "block",
                 "failure_reason": "runtime_conflict" if proof_blocked else "schema_drift",
                 "summary": (
@@ -12538,7 +12597,7 @@ def run_codex_app_review_authoritative_adapter(
         "adapter": CODEX_APP_REVIEW_ADAPTER,
         "profile": engine_profile,
         **selection_metadata,
-        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+        "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
         "result": "pass",
         "reviewed_head": reviewed_head,
         "decision": normalized["decision"],
@@ -12556,9 +12615,9 @@ def run_codex_app_review_authoritative_adapter(
         "proof_source": model_proof["proof_source"],
         "enforcement_mode": model_proof["enforcement_mode"],
         "model_proof": model_proof,
-        "raw_result": relative_to_root(raw_path, context["target_root"]),
-        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
-        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "raw_result": artifact_locator_for_path(raw_path, context["target_root"]),
+        "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
+        "metadata": artifact_locator_for_path(metadata_path, context["target_root"]),
         "review_thread_id": live_metadata.get("review_thread_id") if live_metadata else (effective_thread_id if source_path is not None else None),
         **({"live_review": {key: value for key, value in live_metadata.items() if key != "normalized"}} if live_metadata else {}),
         "authority_boundary": "normalized review_record_input only; raw Codex App output remains runtime evidence",
@@ -12584,13 +12643,13 @@ def run_codex_app_review_authoritative_adapter(
             "summary": normalized["summary"],
             "reviewer": CODEX_APP_REVIEW_ADAPTER,
             "kind": review_kind,
-            "findings_file": relative_to_root(findings_path, context["target_root"]),
+            "findings_file": artifact_locator_for_path(findings_path, context["target_root"]),
             "engine_adapter": CODEX_APP_REVIEW_ADAPTER,
-            "engine_evidence": relative_to_root(raw_path, context["target_root"]),
+            "engine_evidence": artifact_locator_for_path(raw_path, context["target_root"]),
             "engine_profile": engine_profile,
             "engine_model_proof": model_proof,
-            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
-            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "context_pack": artifact_locator_for_path(context_pack_path, context["target_root"]),
+            "normalized_findings": artifact_locator_for_path(findings_path, context["target_root"]),
             "budget_risk": context_pack.get("budget_risk"),
         },
     }
@@ -16255,7 +16314,7 @@ def handle_goal(args: argparse.Namespace) -> int:
 def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label: str) -> tuple[Any | None, list[str]]:
     if not fixture:
         return None, []
-    path, errors = resolve_repo_relative_path(target_root, fixture, label=label)
+    path, errors = resolve_artifact_read_path(target_root, fixture, label=label)
     if errors:
         return None, errors
     assert path is not None
@@ -16270,7 +16329,7 @@ def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label:
 def load_optional_text_fixture(target_root: Path, fixture: str | None, *, label: str) -> tuple[str | None, list[str]]:
     if not fixture:
         return None, []
-    path, errors = resolve_repo_relative_path(target_root, fixture, label=label)
+    path, errors = resolve_artifact_read_path(target_root, fixture, label=label)
     if errors:
         return None, errors
     assert path is not None
@@ -17487,7 +17546,7 @@ def pr_metadata_render_payload(
     suite_na_review_requirement: str | None,
 ) -> dict[str, Any]:
     base_body, base_errors = load_optional_text_fixture(target_root, base_body_file, label="PR metadata render base body")
-    output_path, output_errors = resolve_repo_relative_path(target_root, output_file, label="PR metadata render output")
+    output_path, output_errors = resolve_artifact_write_path(target_root, output_file, label="PR metadata render output")
     current_head = head_sha or git_head_sha(target_root)
     current_branch = branch_name or git_branch(target_root)
     effective_item = item_id
@@ -17574,7 +17633,7 @@ def pr_metadata_render_payload(
         }
 
     write_runtime_text_artifact(output_path, rendered_body)
-    relative_output = relative_to_root(output_path, target_root)
+    relative_output = output_file.strip()
     preflight = pr_metadata_preflight_payload(
         target_root=target_root,
         surface=surface,
@@ -17692,13 +17751,13 @@ def pr_metadata_readback_payload(
             source_body, view_errors = gh_pr_view_body(target_root, effective_pr)
             host_errors.extend(view_errors)
         if source_body is not None and readback_file:
-            readback_path, path_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
+            readback_path, path_errors = resolve_artifact_write_path(target_root, readback_file, label="PR metadata readback output")
             if path_errors:
                 host_errors.extend(path_errors)
             else:
                 assert readback_path is not None
                 write_runtime_text_artifact(readback_path, source_body)
-                effective_body_file = relative_to_root(readback_path, target_root)
+                effective_body_file = readback_file.strip()
 
     preflight = pr_metadata_preflight_payload(
         target_root=target_root,
@@ -17868,7 +17927,7 @@ def pr_metadata_update_payload(
     if effective_pr is None:
         missing_inputs.append("unable to determine target PR for metadata update")
     rendered_path = None
-    rendered_path, rendered_errors = resolve_repo_relative_path(target_root, rendered_relative, label="PR metadata rendered body")
+    rendered_path, rendered_errors = resolve_artifact_read_path(target_root, rendered_relative, label="PR metadata rendered body")
     missing_inputs.extend(rendered_errors)
     if missing_inputs:
         return {
@@ -17922,7 +17981,7 @@ def pr_metadata_update_payload(
             "dry_run": False,
             "host_mutations": True,
         }
-    readback_path, readback_errors = resolve_repo_relative_path(target_root, readback_file, label="PR metadata readback output")
+    readback_path, readback_errors = resolve_artifact_write_path(target_root, readback_file, label="PR metadata readback output")
     if readback_errors:
         return {
             "command": "pr-metadata",
@@ -17941,7 +18000,7 @@ def pr_metadata_update_payload(
         }
     assert readback_path is not None
     write_runtime_text_artifact(readback_path, host_body)
-    readback_relative = relative_to_root(readback_path, target_root)
+    readback_relative = readback_file.strip()
 
     readback_payload = pr_metadata_readback_payload(
         target_root=target_root,
@@ -17985,7 +18044,7 @@ def pr_metadata_update_payload(
 
 
 def gate_freeze_file_binding(target_root: Path, relative: str, *, label: str) -> dict[str, Any]:
-    path, errors = resolve_repo_relative_path(target_root, relative, label=label)
+    path, errors = resolve_artifact_read_path(target_root, relative, label=label)
     binding: dict[str, Any] = {
         "label": label,
         "locator": relative,
@@ -19478,7 +19537,7 @@ def hosted_freeze_snapshot_comparison(
             "missing_inputs": [],
             "fallback_to": None,
         }
-    path, errors = resolve_repo_relative_path(target_root, snapshot_file, label="hosted freeze snapshot")
+    path, errors = resolve_artifact_read_path(target_root, snapshot_file, label="hosted freeze snapshot")
     if errors or path is None:
         return {
             "result": "block",
@@ -19682,12 +19741,15 @@ def handle_gate_freeze(args: argparse.Namespace) -> int:
         item_slug = str(item_id or args.item or "unknown")
         default_name = f"{item_slug}-closeout.json" if getattr(args, "profile", "hosted") == "closeout" else f"{item_slug}.json"
         relative = args.write_path or f".loom/runtime/gate-freeze/{default_name}"
-        path, errors = resolve_repo_relative_path(target_root, relative, label="gate freeze write path")
+        logical_path, errors = resolve_repo_relative_path(target_root, relative, label="gate freeze write path")
         allowed_root = (target_root / ".loom" / "runtime" / "gate-freeze").resolve()
-        if path is not None:
-            resolved_path = path.resolve()
+        if logical_path is not None:
+            resolved_path = logical_path.resolve()
             if resolved_path == allowed_root or not resolved_path.is_relative_to(allowed_root):
                 errors.append("gate freeze write path must be under .loom/runtime/gate-freeze/")
+        path = None
+        if not errors:
+            path, errors = resolve_artifact_write_path(target_root, relative, label="gate freeze write path")
         if errors or path is None:
             payload["result"] = "block"
             payload["summary"] = "gate freeze write path is invalid."
@@ -19703,7 +19765,7 @@ def handle_gate_freeze(args: argparse.Namespace) -> int:
             payload["write_artifact"] = {
                 "result": "pass",
                 "locator": relative,
-                "mutates": "repo-local-runtime-only",
+                "mutates": "global-runtime-cache",
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             }
     return emit(payload)
@@ -20795,7 +20857,11 @@ def pr_gate_payload(
 
     # Make the bypass boundary explicit even when raw evidence is present in the repository.
     if context:
-        runtime_review_root = target_root / ".loom/runtime/review" / context["item_id"]
+        runtime_review_root = resolve_artifact_read_path(
+            target_root,
+            f".loom/runtime/review/{context['item_id']}",
+            label="review runtime evidence root",
+        )[0] or (target_root / ".loom/runtime/review" / context["item_id"])
         raw_evidence_present = runtime_review_root.exists() and any(runtime_review_root.glob("**/*"))
     else:
         raw_evidence_present = False
