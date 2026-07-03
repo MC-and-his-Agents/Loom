@@ -1,39 +1,57 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1900",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "2f0e983cd380620d9b27312870ad6f23e7bd1b4b",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Code review passed for WI-1900 at head aa23fdeba2d44e572db9db0bc9007bd75fb0be5a. The change is scoped to additive artifact_sha256 metadata in agent-safe output, byte-hash verification in contract helpers, output envelope tests, and WI-1900 carriers. Local validation passed output envelope unittest, py_compile for touched Python files, runtime-paths, governance-closeout, suite validate/evidence/carrier validate, git diff --check, and PR #1937 metadata readback.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-07-03T08:54:21Z",
+  "reviewed_head": "aa23fdeba2d44e572db9db0bc9007bd75fb0be5a",
+  "reviewed_validation_summary": "2026-07-03T08:47:31Z on head 2f0e983cd380620d9b27312870ad6f23e7bd1b4b, passed `python3 -m unittest test/output_envelope_test.py`, `python3 -m py_compile tools/loom.py tools/check_cli_contract.py test/output_envelope_test.py`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `python3 tools/loom.py suite validate --target . --item WI-1900 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1900 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1900 --json`, and `git diff --check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1900.md",
+    "recovery_entry": ".loom/progress/WI-1900.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1900 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1900 --json",
+    "suite_evidence_map": ".loom/specs/WI-1900/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1900/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
