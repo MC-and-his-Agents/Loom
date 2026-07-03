@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1904.json
 - Validation Entry: python3 tools/py_compile_clean.py src/loom_cli.py tools/loom.py tests; git diff --check; targeted workstation upgrade contract tests
 - Closing Condition: Batch PR covering #1904/#1905/#1906/#1907 is merged; local and hosted gates pass; closeout evidence is recorded for each covered issue without deferring #1906 or FR-5 scope.
-- Current Checkpoint: merge
-- Current Stop: FR-4 batch PR #1948 is open at head d889dffb with fixture sync and local PR gate path repaired; awaiting PR metadata refresh and hosted checks.
-- Next Step: Push the fixture/head carrier updates, refresh PR #1948 metadata to the new head, run PR gate, then rerun or wait for hosted checks before controlled merge and closeout for #1904/#1905/#1906/#1907.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1904 closed out by closeout run: PR #1948 merged at aa3ce1d9aa8a8ba7dd9ca366b3105789c6b3fd2a, issues #1904/#1905/#1906/#1907 closed with closeout evidence, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1904 implementation work remains.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-07-03T17:18Z on branch `work/1904-1907-workstation-upgrade-batch`, passed demo bootstrap fixture sync validation (`make loom-demo-new-project-check`), `git diff --check`, `python3 tools/py_compile_clean.py examples/new-project/.loom/bin/loom_flow.py`, and `python3 tools/check_npm_package.py --surface aggregate` after FR-4 batch validation and PR #1948 metadata/readback.
 - Recovery Boundary: Continue from implementation commit 2c21d4ae803cec5fe553ccfb91b362443239c36e and fixture sync head d889dffbaecd564e8cebd6a91825cb99f99ca9e3; scope is limited to FR-4 workstation upgrade batch #1904/#1905/#1906/#1907, fixture sync, and PR/closeout carriers.
-- Current Lane: fr4-workstation-upgrade-batch
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
