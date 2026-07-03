@@ -5089,6 +5089,22 @@ def closeout_current_pr_number(pr_roles: dict[str, Any]) -> int | None:
     return int(number) if isinstance(number, int) else None
 
 
+def closeout_role_pr_number(pr_roles: dict[str, Any], role: str) -> int | None:
+    roles = pr_roles.get("roles") if isinstance(pr_roles, dict) else None
+    number = roles.get(role) if isinstance(roles, dict) else None
+    return int(number) if isinstance(number, int) else None
+
+
+def closeout_merge_ready_pr_number(pr_roles: dict[str, Any]) -> int | None:
+    current = pr_roles.get("current") if isinstance(pr_roles, dict) else None
+    current_role = current.get("role") if isinstance(current, dict) else None
+    if current_role in {"carrier_sync_pr", "final_closeout_pr"}:
+        implementation_pr = closeout_role_pr_number(pr_roles, "implementation_pr")
+        if implementation_pr is not None:
+            return implementation_pr
+    return closeout_current_pr_number(pr_roles)
+
+
 def closeout_subcheck(
     *,
     check_id: str,
@@ -5288,6 +5304,9 @@ def closeout_backlink_subchecks(
     repo_name: str,
     pr_number: int | None,
     pr_payload: dict[str, Any] | None,
+    merge_ready_pr_number: int | None,
+    merge_ready_pr_payload: dict[str, Any] | None,
+    merge_ready_pr_errors: list[str] | None,
     merge_commit_sha: str | None,
     merge_commit_in_target: bool | None,
     pr_payload_file: str | None,
@@ -5313,6 +5332,15 @@ def closeout_backlink_subchecks(
 
     item_id = context["item_id"]
     pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str) else None
+    merge_ready_expected_head = pr_head
+    merge_ready_expected_source = "current_pr"
+    if merge_ready_pr_number is not None and merge_ready_pr_number != pr_number:
+        merge_ready_expected_source = "implementation_pr"
+        merge_ready_expected_head = (
+            merge_ready_pr_payload.get("headRefOid")
+            if isinstance(merge_ready_pr_payload, dict) and isinstance(merge_ready_pr_payload.get("headRefOid"), str)
+            else None
+        )
     target_branch = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
     validation_summary = context["latest_validation_summary"]
     validation_summary_errors: list[str] = []
@@ -5394,17 +5422,28 @@ def closeout_backlink_subchecks(
     )
 
     merge_ready_payload, merge_ready_locator, merge_ready_errors = latest_successful_execution_attempt(target_root, item_id, "merge-ready")
-    merge_ready_missing = list(merge_ready_errors)
+    merge_ready_missing = [f"merge-ready PR: {message}" for message in merge_ready_pr_errors or []]
+    merge_ready_missing.extend(merge_ready_errors)
     merge_ready_source = "execution_attempt"
     merge_ready_trigger_reason = "closeout consumes retained merge-ready pass evidence instead of rerunning the full gate chain"
     merge_ready_evidence_locator = merge_ready_locator
     merge_ready_head = merge_ready_payload.get("head_sha") if isinstance(merge_ready_payload, dict) else None
     merge_ready_fallback_reason: str | None = None
-    if merge_ready_payload is not None and pr_head and merge_ready_payload.get("head_sha") != pr_head:
-        merge_ready_missing.append("merge-ready execution_attempt head_sha does not match PR head")
+    if merge_ready_expected_head is None:
+        merge_ready_missing.append("merge-ready comparison PR head SHA is unavailable")
+    if (
+        merge_ready_payload is not None
+        and merge_ready_expected_head
+        and merge_ready_payload.get("head_sha") != merge_ready_expected_head
+    ):
+        if merge_ready_expected_source == "implementation_pr":
+            merge_ready_missing.append("merge-ready execution_attempt head_sha does not match implementation PR head")
+        else:
+            merge_ready_missing.append("merge-ready execution_attempt head_sha does not match PR head")
     if (
         merge_ready_missing
-        and pr_head
+        and merge_ready_expected_head
+        and merge_ready_expected_head == pr_head
         and missing_versioned_execution_attempt(merge_ready_errors, "merge-ready")
         and status_subcheck.get("result") == "pass"
     ):
@@ -5430,6 +5469,9 @@ def closeout_backlink_subchecks(
             missing_inputs=merge_ready_missing,
             item_id=item_id,
             head_sha=merge_ready_head,
+            expected_head_sha=merge_ready_expected_head,
+            expected_pr_number=merge_ready_pr_number,
+            expected_pr_role=merge_ready_expected_source,
             fallback_reason=merge_ready_fallback_reason,
             validation_summary_digest=validation_digest,
         )
@@ -25191,6 +25233,7 @@ def closeout_payload(
         requested_role=pr_role,
     )
     effective_pr_number = closeout_current_pr_number(pr_roles)
+    merge_ready_pr_number = closeout_merge_ready_pr_number(pr_roles)
     effective_profile = effective_closeout_gate_profile(gate_profile)
     expected_closeout_lookup = closeout_expected_item_lookup(target_root, issue_number, expected_item)
     missing_inputs.extend(retained_item_lookup_missing_inputs(expected_closeout_lookup))
@@ -25375,6 +25418,8 @@ def closeout_payload(
                         closeout_findings.append({**finding, "severity": "warn"})
 
     pr_payload: dict[str, Any] | None = None
+    merge_ready_pr_payload: dict[str, Any] | None = None
+    merge_ready_pr_errors: list[str] = []
     merge_commit_sha: str | None = None
     merge_commit_in_target: bool | None = None
     if effective_pr_number is not None:
@@ -25409,6 +25454,17 @@ def closeout_payload(
                         missing_inputs.append(f"origin/{base_ref} does not contain the merged PR commit")
                 else:
                     missing_inputs.append("pr baseRefName is missing")
+        if merge_ready_pr_number is not None and merge_ready_pr_number != effective_pr_number:
+            merge_ready_pr_payload, merge_ready_pr_errors = github_pr_payload(
+                target_root,
+                owner,
+                repo_name,
+                merge_ready_pr_number,
+            )
+            if merge_ready_pr_errors:
+                missing_inputs.extend(f"merge-ready-pr: {message}" for message in merge_ready_pr_errors)
+        else:
+            merge_ready_pr_payload = pr_payload
 
     if effective_pr_number is not None:
         backlink_subchecks = closeout_backlink_subchecks(
@@ -25419,6 +25475,9 @@ def closeout_payload(
             repo_name=repo_name,
             pr_number=effective_pr_number,
             pr_payload=pr_payload,
+            merge_ready_pr_number=merge_ready_pr_number,
+            merge_ready_pr_payload=merge_ready_pr_payload,
+            merge_ready_pr_errors=merge_ready_pr_errors,
             merge_commit_sha=merge_commit_sha,
             merge_commit_in_target=merge_commit_in_target,
             pr_payload_file=pr_payload_file,
