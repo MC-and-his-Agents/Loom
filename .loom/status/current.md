@@ -12,10 +12,10 @@
 - Validation Entry: python3 tools/loom.py suite validate --target . --item WI-1898 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1898 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1898 --json; git diff --check
 - Closing Condition: Repo/global artifact classification contract is merged, #1898 is closed, and FR #1897 can consume the contract for runtime path resolver and carrier slimdown work.
 - Current Checkpoint: review
-- Current Stop: Repo/global artifact classification contract and adoption/host cross-links are authored on branch `work/1898-repo-global-artifact-contract`; local suite/evidence/carrier/diff validation passed.
-- Next Step: Record spec/review evidence, then prepare commit, PR metadata, hosted checks, merge-ready, and closeout.
+- Current Stop: Repo/global artifact classification contract and adoption/host cross-links are authored on branch `work/1898-repo-global-artifact-contract`; PR #1931 exists; formal suite path is not_applicable; local suite/evidence/carrier/diff validation passed.
+- Next Step: Commit suite-path correction, update PR metadata for `suite_path=not_applicable`, then record current-head review evidence.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T04:54:16Z on head f2998aa640bbe0e8cbb108ae31271dbb2077f04b: `python3 tools/loom.py suite validate --target . --item WI-1898 --json` pass; `python3 tools/loom.py suite evidence validate --target . --item WI-1898 --json` pass; `python3 tools/loom.py suite carrier validate --target . --item WI-1898 --json` pass; `git diff --check` pass.
+- Latest Validation Summary: 2026-07-03T05:00:43Z on head 048013880e01923ebda7f5f07a41fb731d1096f3: `python3 tools/loom.py suite validate --target . --item WI-1898 --json` not_applicable; `python3 tools/loom.py suite evidence validate --target . --item WI-1898 --json` pass; `python3 tools/loom.py suite carrier validate --target . --item WI-1898 --json` pass; `git diff --check` pass.
 - Recovery Boundary: WI-1898 only freezes repo/global artifact classification. Runtime path resolver, repo carrier implementation, gate independence validation, legacy migration, and release behavior remain separate Work Items.
 - Current Lane: repo-global-artifact-contract
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-07-03T04:40Z WI-1898 work is active in `/Users/mc/dev/Loom` on branch `work/1898-repo-global-artifact-contract`.
 - Logs Entry: repo/global artifact classification contract and adoption/host cross-links were authored locally.
 - Diagnostics Entry: WI-1898 is a docs-only contract freeze for FR #1897; no runtime path resolver, migration apply, or gate behavior changes are in scope.
-- Verification Entry: 2026-07-03T04:54:16Z local validation passed for suite/evidence/carrier and diff hygiene on head f2998aa640bbe0e8cbb108ae31271dbb2077f04b.
+- Verification Entry: 2026-07-03T05:00:43Z local validation passed for suite/evidence/carrier and diff hygiene on head 048013880e01923ebda7f5f07a41fb731d1096f3.
 - Lane Entry: repo-global-artifact-contract
 
 ## Sources

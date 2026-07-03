@@ -5,10 +5,10 @@
 - Work Item locator: .loom/work-items/WI-1898.md
 - FR / parent locator: #1897 / #1888
 - Scope: repo/global artifact classification contract freeze only.
-- Suite path: minimal
-- Current `HEAD`: fill with current head before merge-ready consumption.
-- PR locator, or not-required rationale: not required until PR exists; consumer boundary: review and pre-PR validation only; recheck condition: author PR locator before merge-ready.
-- Host state locator, or not-required rationale: issue #1898 and later PR readback.
+- Suite path: not_applicable
+- Current `HEAD`: 048013880e01923ebda7f5f07a41fb731d1096f3
+- PR locator: https://github.com/MC-and-his-Agents/Loom/pull/1931
+- Host state locator: issue #1898 and PR #1931 readback.
 
 ## Input Snapshot
 
@@ -19,7 +19,7 @@
 | suite path decision | .loom/specs/WI-1898/spec.md#suite-contract | present | authored suite | Recheck when suite path changes. |
 | execution breakdown / task carrier | .loom/specs/WI-1898/task-carrier.md | present | authored suite | Recheck before review, merge-ready, and closeout. |
 | review record | .loom/reviews/WI-1898.json | required | authored review truth | Required after review consumption. |
-| merge-ready basis | pending PR | not required before PR | merge-ready truth | Required only for merge-ready or closeout consumption. |
+| merge-ready basis | PR #1931 metadata readback | present | merge-ready truth | Recheck before merge-ready or closeout consumption. |
 | host state | https://github.com/MC-and-his-Agents/Loom/issues/1898 | required | host mirror | Recheck before PR and closeout. |
 
 ## Evidence Rows

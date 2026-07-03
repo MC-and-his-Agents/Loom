@@ -2,8 +2,8 @@
 
 ## Suite Contract
 
-- Suite path consumed: minimal
-- Suite index locator, or `not_applicable` rationale: full-suite-artifacts not_applicable: artifacts: suite-index.md, research.md, contracts.md, readiness-checklist.md, consistency-analysis.md; rationale: WI-1898 is a focused docs-only contract freeze with direct issue scope and no runtime implementation; consumer boundary: suite validate, review, PR gate, merge-ready, and closeout for WI-1898; recheck condition: require full suite artifacts if the work expands into runtime path resolver implementation, repository mutation, gate behavior, migration apply, or release behavior.
+- Suite path consumed: not_applicable
+- Formal-suite not_applicable: rationale: WI-1898 is a docs-only contract freeze for repo/global artifact classification and does not introduce runtime behavior, repository mutation, gate behavior, migration apply, release behavior, or host/plugin installation behavior. consumer boundary: suite validate, spec review, implementation review, PR metadata, hosted checks, PR gate, merge-ready, issue closeout, and FR #1897 consumption may consume this plan only as supporting context for the formal suite path decision; fact-chain, current-head review, PR metadata/head binding, local validation, hosted checks, no-release judgment, controlled merge, and closeout evidence remain required. recheck condition: require a minimal or full suite if this PR expands beyond docs contract wording, cross-links, and WI-1898 carriers, or starts implementing #1899, #1900, #1901, #1908, runtime path resolution, repository mutation, gate parser behavior, migration apply, release mechanics, permissions, or external-visible host actions. scope proof: `git diff origin/main...HEAD` must remain limited to WI-1898 carriers and repo/global artifact classification documentation. review requirement: current_head_review_required.
 - Consumes:
   - Spec locator: .loom/specs/WI-1898/spec.md
   - Scenario ids / locators: S1-S3 in .loom/specs/WI-1898/spec.md#key-scenarios
@@ -14,6 +14,7 @@
   - Validation strategy by scenario: structural docs/readback checks.
   - Test strategy by acceptance: suite validation, evidence-map validation, carrier validation, diff hygiene, and targeted text/link checks.
   - Fresh verification evidence expectation: current branch/head validation summary in .loom/progress/WI-1898.md before review.
+  - Formal suite artifacts: skipped by the not_applicable path decision; this does not skip review, PR metadata, hosted checks, merge-ready, or closeout.
 - Locator:
   - Plan locator: .loom/specs/WI-1898/plan.md
 - Provenance:

@@ -2,8 +2,8 @@
 
 ## Suite Contract
 
-- Suite path: minimal
-- Suite index locator, or `not_applicable` rationale: full-suite-artifacts not_applicable: artifacts: suite-index.md, research.md, contracts.md, readiness-checklist.md, consistency-analysis.md; rationale: WI-1898 is a focused docs-only contract freeze with direct issue scope and no runtime implementation; consumer boundary: suite validate, review, PR gate, merge-ready, and closeout for WI-1898; recheck condition: require full suite artifacts if the work expands into runtime path resolver implementation, repository mutation, gate behavior, migration apply, or release behavior.
+- Suite path: not_applicable
+- Formal-suite not_applicable: rationale: WI-1898 is a docs-only contract freeze for repo/global artifact classification; it does not introduce runtime behavior, repository mutation, gate behavior, migration apply, release behavior, or host/plugin installation behavior. consumer boundary: suite validate, spec review, implementation review, PR metadata, hosted checks, PR gate, merge-ready, issue closeout, and FR #1897 consumption may consume this locator only as the formal suite path decision; fact-chain, current-head review, PR metadata/head binding, local validation, hosted checks, no-release judgment, controlled merge, and closeout evidence remain required. recheck condition: require a minimal or full suite if this PR expands beyond docs contract wording, cross-links, and WI-1898 carriers, or starts implementing #1899, #1900, #1901, #1908, runtime path resolution, repository mutation, gate parser behavior, migration apply, release mechanics, permissions, or external-visible host actions. scope proof: `git diff origin/main...HEAD` must remain limited to WI-1898 carriers and repo/global artifact classification documentation. review requirement: current_head_review_required.
 - Consumes:
   - Work Item / FR locator: issue #1898 / FR #1897 / Phase #1888
   - Story Readiness confirmed locator, blocking locator, or not-required rationale: not required; issue #1898 is already scoped as a contract Work Item.
@@ -12,7 +12,7 @@
 - Produces:
   - Scenario ids / locators: S1-S3 in this file.
   - Acceptance ids / locators: A1-A5 in this file.
-  - Behavior evidence expectation: docs contract and adoption cross-links are readable and non-conflicting.
+  - Behavior evidence expectation: docs contract and adoption cross-links are readable and non-conflicting; formal suite artifact discovery is explicitly skipped.
 - Locator:
   - Spec locator: .loom/specs/WI-1898/spec.md
 - Provenance:
