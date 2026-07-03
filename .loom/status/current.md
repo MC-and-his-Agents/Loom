@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1904.json
 - Validation Entry: python3 tools/py_compile_clean.py src/loom_cli.py tools/loom.py tests; git diff --check; targeted workstation upgrade contract tests
 - Closing Condition: Batch PR covering #1904/#1905/#1906/#1907 is merged; local and hosted gates pass; closeout evidence is recorded for each covered issue without deferring #1906 or FR-5 scope.
-- Current Checkpoint: admission
-- Current Stop: Work item scaffolded and waiting for the first execution pass.
-- Next Step: Write the first recovery update for this work item.
+- Current Checkpoint: build
+- Current Stop: FR-4 batch implementation for #1904/#1905/#1906/#1907 is implemented and locally validated on branch `work/1904-1907-workstation-upgrade-batch`; PR creation and hosted gates remain.
+- Next Step: Push branch, create the batch PR, update PR metadata, run PR gate/hosted checks, then controlled merge and close out #1904/#1905/#1906/#1907.
 - Blockers: None recorded.
-- Latest Validation Summary: No validation recorded yet.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-1904.md`.
-- Current Lane: not yet assigned
+- Latest Validation Summary: 2026-07-03T16:34Z on branch `work/1904-1907-workstation-upgrade-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/loom.py suite validate --target . --item WI-1904 --json`, `python3 tools/check_cli_contract.py --surface workstation-registry --surface adoption-host-metadata`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/check_npm_package.py --surface aggregate`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`.
+- Recovery Boundary: Continue from implementation commit `2c21d4ae803cec5fe553ccfb91b362443239c36e`; scope is limited to FR-4 workstation upgrade batch #1904/#1905/#1906/#1907 and final PR/closeout carriers.
+- Current Lane: fr4-workstation-upgrade-batch
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-03T12:22Z WI-1943 targeted contract checks ran in `/Users/mc/dev/Loom` on branch `work/1943-terminal-closeout-gate`.
-- Logs Entry: Real PR #1942 retained gate replay changed from controlled-merge block to pass, and post-merge closeout readback changed from missing merge-ready attempt block to pass.
-- Diagnostics Entry: Change is limited to terminal closeout carrier PR consumption; implementation PRs still require normal merge checkpoint evidence.
-- Verification Entry: 2026-07-03T12:29Z local checks passed: py_compile_clean, diff check, controlled-merge, governance-closeout, package aggregate, and skills release-check.
-- Lane Entry: post-merge-closeout-run
+- Run Entry: 2026-07-03T16:34Z FR-4 batch local checks ran in `/Users/mc/dev/Loom` on branch `work/1904-1907-workstation-upgrade-batch`.
+- Logs Entry: Workstation registry surface covers machine plan, repo classifications, machine apply, explicit single-repo apply, freshness cache, and marketplace refresh guidance.
+- Diagnostics Entry: Package aggregate and skills release-check pass; `check_cli_contract --surface aggregate` passed in 686.05s.
+- Verification Entry: 2026-07-03T16:34Z local checks passed: py_compile_clean, diff check, suite validate, workstation/adoption host surfaces, aggregate CLI contract, npm package aggregate, and skills release-check.
+- Lane Entry: fr4-workstation-upgrade-batch
 
 ## Sources
 
