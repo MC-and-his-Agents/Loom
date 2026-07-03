@@ -3576,6 +3576,75 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
                 raise AssertionError("suite not_applicable gate must not require evidence/carrier fallback inputs")
         loom_flow.suite_gate_validation_payload = original_suite_gate_validation_payload
 
+        minimal_target = tmp / "minimal-suite-spec-review"
+        (minimal_target / ".loom/specs/WI-minimal").mkdir(parents=True)
+        (minimal_target / ".loom/reviews").mkdir(parents=True)
+        (minimal_target / ".loom/specs/WI-minimal/spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts not_applicable: rationale: minimal suite review gate fixture does not use full-only artifacts; "
+            "consumer boundary: suite validate and spec review consume spec.md and plan.md only while implementation review remains required; "
+            "recheck condition: scope expands beyond minimal suite.\n",
+            encoding="utf-8",
+        )
+        (minimal_target / ".loom/specs/WI-minimal/plan.md").write_text(
+            "# Plan\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts not_applicable: rationale: minimal suite review gate fixture does not use full-only artifacts; "
+            "consumer boundary: suite validate and spec review consume spec.md and plan.md only while implementation review remains required; "
+            "recheck condition: scope expands beyond minimal suite.\n",
+            encoding="utf-8",
+        )
+        (minimal_target / ".loom/reviews/WI-minimal.spec.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": "WI-minimal",
+                    "decision": "allow",
+                    "kind": "spec_review",
+                    "summary": "minimal suite spec review approved",
+                    "reviewer": "contract-check",
+                    "reviewed_head": "current-head",
+                    "reviewed_validation_summary": "minimal suite fixture validation passed",
+                    "fallback_to": None,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "follow_ups": [],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        minimal_context = {
+            "target_root": minimal_target,
+            "item_id": "WI-minimal",
+            "review_entry": ".loom/reviews/WI-minimal.json",
+            "current_checkpoint": "merge",
+            "associated_artifacts": [],
+        }
+        loom_flow.spec_suite_validation_payload = lambda _context: {
+            "schema_version": "loom-suite-validation-consumption/v1",
+            "command": "suite validate",
+            "result": "pass",
+            "summary": "Suite validate found a minimal suite path decision.",
+            "missing_inputs": [],
+            "blocking_gaps": [],
+            "payload": {
+                "suite_path": "minimal",
+                "spec_locator": ".loom/specs/WI-minimal/spec.md",
+                "plan_locator": ".loom/specs/WI-minimal/plan.md",
+            },
+        }
+        minimal_spec_gate = loom_flow.spec_review_gate_payload(minimal_context)
+        if (
+            minimal_spec_gate.get("result") != "pass"
+            or minimal_spec_gate.get("required") is not True
+            or any("implementation-contract.md" in str(message) for message in minimal_spec_gate.get("missing_inputs", []))
+            or not loom_flow.spec_review_gate_ready_for_implementation_review(minimal_spec_gate)
+        ):
+            raise AssertionError(f"minimal suite spec review gate blocked full-only artifact absence: {minimal_spec_gate}")
+
         loom_flow.spec_suite_validation_payload = lambda _context: {
             "schema_version": "loom-suite-validation-consumption/v1",
             "command": "suite validate",
@@ -4595,6 +4664,7 @@ def assert_workstation_registry_fixture_contract() -> None:
         "loom workstation list --json",
         "loom workstation unregister --json",
         "loom workstation upgrade --plan --json",
+        "loom workstation upgrade --apply --json",
     } - command_surface:
         raise AssertionError("workstation registry fixtures must name the future workstation command surface")
     forbidden_truth_fields = set(fixture_data.get("forbidden_repository_truth_fields", []))
@@ -4728,6 +4798,39 @@ def assert_workstation_registry_cli_contract(tmp: Path) -> None:
             if listed.get("eligible_for_plan") != [entry["id"]]:
                 raise AssertionError("workstation list did not mark the opted-in registered repo as eligible")
 
+            _, machine_apply = run_json(
+                ["workstation", "upgrade", "--apply", "--to", "0.27.0", "--json"],
+                expect=0,
+                env_overrides={"LOOM_TEST_WORKSTATION_APPLY": "record"},
+            )
+            if machine_apply.get("plan_only") is not False or machine_apply.get("mutates") is not True:
+                raise AssertionError("workstation upgrade --apply must execute a mutating machine-level refresh")
+            machine_apply_result = machine_apply.get("machine_apply")
+            if not isinstance(machine_apply_result, dict) or machine_apply_result.get("result") != "pass":
+                raise AssertionError(f"workstation upgrade --apply did not report a passing machine apply: {machine_apply_result}")
+            applied_step_ids = {
+                step.get("id")
+                for step in machine_apply_result.get("applied_steps", [])
+                if isinstance(step, dict)
+            }
+            if {"upgrade-cli", "refresh-codex-plugin", "verify-host"} - applied_step_ids:
+                raise AssertionError(f"workstation upgrade --apply missed machine refresh steps: {applied_step_ids}")
+            if machine_apply.get("repository_apply") is not None:
+                raise AssertionError("machine-only workstation upgrade --apply must not mutate repositories without explicit --target")
+
+            _, explicit_repo_apply = run_json(
+                ["workstation", "upgrade", "--apply", "--to", "0.27.0", "--target", str(target), "--json"],
+                expect=0,
+                env_overrides={"LOOM_TEST_WORKSTATION_APPLY": "record"},
+            )
+            repo_apply = explicit_repo_apply.get("repository_apply")
+            if not isinstance(repo_apply, dict) or repo_apply.get("result") != "pass":
+                raise AssertionError(f"explicit single-repo workstation apply did not pass: {repo_apply}")
+            if repo_apply.get("classification") != "repo_auto_commit_candidate":
+                raise AssertionError("explicit single-repo apply must be limited to repo_auto_commit_candidate")
+            if (target / "plugins" / "loom").exists() or (target / ".agents" / "skills").exists() or (target / ".loom" / "bin").exists():
+                raise AssertionError("explicit single-repo workstation apply wrote forbidden plugin/runtime payload")
+
             noop_target = tmp / "noop-repo"
             auto_target = tmp / "auto-repo"
             pr_target = tmp / "pr-repo"
@@ -4750,6 +4853,27 @@ def assert_workstation_registry_cli_contract(tmp: Path) -> None:
                 raise AssertionError(f"workstation upgrade --plan missing classifications: {sorted(missing_classes)}")
             if upgrade_plan.get("machine_plan", {}).get("classification") != "machine_only":
                 raise AssertionError("workstation upgrade --plan must include a machine_only machine plan")
+            machine_steps = {
+                step.get("id"): step
+                for step in upgrade_plan.get("machine_plan", {}).get("steps", [])
+                if isinstance(step, dict)
+            }
+            if {"upgrade-cli", "refresh-codex-plugin", "verify-host"} - set(machine_steps):
+                raise AssertionError(f"workstation upgrade --plan missing machine refresh steps: {sorted(machine_steps)}")
+            plugin_step = machine_steps.get("refresh-codex-plugin", {})
+            marketplace_upgrade = plugin_step.get("marketplace_upgrade")
+            if not isinstance(marketplace_upgrade, dict) or marketplace_upgrade.get("source") != "MC-and-his-Agents/Loom":
+                raise AssertionError("workstation upgrade plan must expose Codex marketplace plugin refresh guidance")
+            if plugin_step.get("required") is not True:
+                raise AssertionError("workstation upgrade plan must refresh Codex plugin when the CLI target version changes")
+            freshness_cache = upgrade_plan.get("freshness_cache")
+            if (
+                not isinstance(freshness_cache, dict)
+                or freshness_cache.get("read_count") != 1
+                or freshness_cache.get("reused_for_repository_count") != len(plans)
+                or "target_version_change" not in freshness_cache.get("invalidates_on", [])
+            ):
+                raise AssertionError(f"workstation upgrade plan did not expose batch freshness cache semantics: {freshness_cache}")
             if upgrade_plan.get("mutates") is not False:
                 raise AssertionError("workstation upgrade --plan must not mutate while reporting blocked repositories")
             for unexpected in forbidden_target_writes:

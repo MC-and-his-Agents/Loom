@@ -74,9 +74,9 @@
     "mode": "active",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1943",
-      "work_item": ".loom/work-items/WI-1943.md",
-      "recovery_entry": ".loom/progress/WI-1943.md",
+      "current_item_id": "WI-1904",
+      "work_item": ".loom/work-items/WI-1904.md",
+      "recovery_entry": ".loom/progress/WI-1904.md",
       "status_surface": ".loom/status/current.md"
     }
   },
@@ -128,7 +128,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "0e51550e4c4e1475640bf4e052f5e1859289b88f4bacd481f88b1cc5be842dfc"
+      "sha256": "5464e5cb6ef83e08925ff7e6f292c7ab502ace2c9663b58cf2058301eafbc7a7"
     },
     {
       "path": ".loom/bin/loom_status.py",
