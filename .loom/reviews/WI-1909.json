@@ -2,11 +2,11 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-1909",
   "decision": "allow",
-  "kind": "general_review",
-  "summary": "FR-5 legacy migration batch is approved for PR creation: it adds `loom migrate-global-cache plan/apply`, moves only ignored/untracked repo-local runtime/tmp cache into the workstation global cache, registers migrated repositories, detects tracked legacy residue as PR-required cleanup, classifies repo change strategy, and verifies the post-migration validation package without deferring #1909/#1910/#1911/#1912/#1913.",
+  "kind": "code_review",
+  "summary": "Carrier-only closeout review passed for FR-5 terminal sync after PR #1950 merged at c58b3a9402910193845ccc6f27e7c4e3c210a1be and issues #1908-#1913 closed. This review approves only progress/status/task-carrier/shadow terminal carrier updates and does not approve new product implementation behavior.",
   "reviewer": "codex-main",
-  "authored_at": "2026-07-03T18:32:00Z",
-  "reviewed_head": "b448537db1455cdb69e1b0167dd204b963ca490e",
+  "authored_at": "2026-07-03T19:15:18Z",
+  "reviewed_head": "0f45b0576acfab0dffd566c426b0eacbb943e326",
   "reviewed_validation_summary": "2026-07-03T18:30Z on branch `work/1909-1913-legacy-migration-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface legacy-migration`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/loom.py suite validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1909 --json`, `python3 tools/check_npm_package.py --surface aggregate`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` (495.78s).",
   "fallback_to": null,
   "findings": [],
@@ -32,29 +32,10 @@
     },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null,
-    "covered_work_items": [
-      "WI-1909",
-      "WI-1910",
-      "WI-1911",
-      "WI-1912",
-      "WI-1913"
-    ],
-    "covered_issues": [
-      "https://github.com/MC-and-his-Agents/Loom/issues/1909",
-      "https://github.com/MC-and-his-Agents/Loom/issues/1910",
-      "https://github.com/MC-and-his-Agents/Loom/issues/1911",
-      "https://github.com/MC-and-his-Agents/Loom/issues/1912",
-      "https://github.com/MC-and-his-Agents/Loom/issues/1913"
-    ]
+    "normalized_findings": null
   },
-  "semantic_review_disposition": {
+  "carrier_only_closeout_review": {
     "status": "passed",
-    "reason": "Authored implementation review approved the FR-5 legacy migration batch implementation head for merge checkpoint consumption.",
-    "change_class": "mixed",
-    "substitute_validation": "2026-07-03T18:30Z on branch `work/1909-1913-legacy-migration-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface legacy-migration`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/loom.py suite validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1909 --json`, `python3 tools/check_npm_package.py --surface aggregate`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` (495.78s).",
-    "authority": "codex-main",
-    "risk_acceptance": "Bounded to the FR-5 legacy migration batch: plan/apply CLI, fixtures, docs, validation package, and Loom carriers. No release, multi-repo automatic mutation, or tracked legacy payload deletion is approved.",
-    "one_shot": true
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
   }
 }
