@@ -1,0 +1,28 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1943",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Code review passed for WI-1943 at head e9ddc9090a28954610e7bd99b586943a7470d517. The change lets controlled merge consume retained terminal closeout PR gate evidence and lets closeout readback use implementation PR host checks as legacy merge-ready evidence for final closeout carrier PRs with no retained merge-ready attempt. It preserves ordinary implementation PR merge checkpoint requirements and does not mutate GitHub host policy.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-07-03T14:09:00Z",
+  "reviewed_head": "e9ddc9090a28954610e7bd99b586943a7470d517",
+  "reviewed_validation_summary": "2026-07-03T12:29Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface controlled-merge`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `python3 tools/loom.py merge check 1942 ... --pr-gate-result-file .loom/tmp/pr/pr-1942-gate-retained-154cc46e.json --json`, `python3 tools/loom.py closeout --target . --item WI-1903 --issue 1903 --pr 1942 ... --json`, `python3 tools/check_npm_package.py --surface aggregate`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Track the unrelated demo consumer profile failure separately; it is outside WI-1943."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1943.md",
+    "recovery_entry": ".loom/progress/WI-1943.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1943 --json"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current implementation head for merge checkpoint consumption."
+  }
+}
