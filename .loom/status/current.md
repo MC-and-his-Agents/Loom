@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1903.json
 - Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py; git diff --check; python3 tools/check_cli_contract.py --surface workstation-registry; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .
 - Closing Condition: Plan-only workstation upgrade CLI is merged, #1903 is closed, and follow-up apply/freshness/adoption-classification WIs remain separate.
-- Current Checkpoint: merge
-- Current Stop: Implementation and local validation are complete on `work/1903-workstation-upgrade-plan`; review, PR metadata, hosted checks, merge, and closeout remain.
-- Next Step: Commit the implementation/carrier baseline, author review records against that head, refresh shadow hashes, create PR, and run PR gate/hosted checks.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1903 closed out by closeout run: PR #1941 merged at 1eb6b966468137023c695dc073c5e5a1cd162bf4, issue #1903 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
+- Next Step: No further WI-1903 implementation work remains.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-07-03T11:39Z on head 4a0c6169935cac566f34dcb44a57a73d97b3532a, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/skills_surface.py check --surface generated-tree-drift`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, `python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .`, `python3 tools/check_npm_package.py --surface plugin-payload-hash`, `python3 tools/check_npm_package.py --surface aggregate`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`.
 - Recovery Boundary: Continue from the WI-1903 diff for `tools/loom.py`, `tools/check_cli_contract.py`, workstation registry docs, synchronized `loom_check.py` runtime copies, bootstrap hash carriers, and WI-1903 suite carriers only.
-- Current Lane: workstation-upgrade-plan
+- Current Lane: post-merge-closeout-run
 
 ## Runtime Evidence
 
