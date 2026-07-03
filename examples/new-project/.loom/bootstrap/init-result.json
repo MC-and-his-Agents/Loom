@@ -439,7 +439,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "c681d3f65897f9ad95493ffc3e0db02845985dadf1d1d6321e76ff8aeed59859"
+      "sha256": "bd4fe9dd68462fcfc93aa21761046dc56db931a8f2c4b12a24691644a9083945"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -1239,7 +1239,7 @@
       "adversarial_adoption_evidence": {
         "schema_version": "loom-adversarial-adoption-evidence-consumption/v1",
         "evidence_locator": ".loom/companion/adversarial-adoption.json",
-        "current_head": "31d3ee171423d75d7c4d5a9c3e361a1821d78c3c",
+        "current_head": "0c519b9c07b35a65d7ff90d90d3becb3ce36205d",
         "head_sha": null,
         "generated_at": null,
         "status": "missing",

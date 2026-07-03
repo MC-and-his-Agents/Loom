@@ -9393,6 +9393,58 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         or "optional-pending" not in pending_triggered_payload.get("triggered_check_rollup", {}).get("pending", [])
     ):
         raise AssertionError("controlled-merge did not block pending triggered check")
+    terminal_closeout_gate = json.loads(json.dumps(merge_pass_payload))
+    terminal_closeout_gate["merge_checkpoint"] = {
+        "command": "checkpoint",
+        "checkpoint": "merge",
+        "result": "fallback",
+        "fallback_to": "closed_out",
+        "summary": "fixture terminal closeout PR cannot rerun implementation merge checkpoint after closeout.",
+    }
+    terminal_closeout_gate["terminal_closeout_consumption"] = {
+        "result": "pass",
+        "surface": "closeout",
+        "checkpoint": "closed_out",
+        "missing_inputs": [],
+    }
+    terminal_closeout_gate["closeout_specific_gate"] = {
+        "schema_version": "loom-closeout-specific-gate/v1",
+        "result": "pass",
+        "closeout_pr_allowed": True,
+    }
+    terminal_closeout_gate_file = fixture_dir / "pr-gate-terminal-closeout-pass.json"
+    terminal_closeout_gate_file.write_text(json.dumps(terminal_closeout_gate, indent=2) + "\n", encoding="utf-8")
+    _, terminal_closeout_merge_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+            "--pr-gate-result-file",
+            ".loom/fixtures/WI-1287/pr-gate-terminal-closeout-pass.json",
+        ],
+        expect=0,
+    )
+    if (
+        terminal_closeout_merge_payload.get("result") != "pass"
+        or terminal_closeout_merge_payload.get("retained_results", {}).get("pr_gate", {}).get("consumption", {}).get("result") != "pass"
+        or terminal_closeout_merge_payload.get("retained_results", {}).get("pr_gate", {}).get("consumption", {}).get("bindings", {}).get("terminal_closeout_consumption", {}).get("result") != "pass"
+    ):
+        raise AssertionError("controlled-merge did not consume terminal closeout retained pr-gate pass")
     retained_gate_file = fixture_dir / "pr-gate-pass.json"
     retained_gate_file.write_text(json.dumps(merge_pass_payload, indent=2) + "\n", encoding="utf-8")
     (merge_target / "retained-gate-drift.txt").write_text("drift after retained pr-gate\n", encoding="utf-8")
@@ -9655,6 +9707,34 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
         or role_backlink.get("merge_commit_sha") != carrier_merge
     ):
         raise AssertionError("carrier-sync closeout role did not bind retained merge-ready evidence to implementation PR head while preserving carrier PR host evidence")
+    shutil.rmtree(pass_target / ".loom" / "runtime" / "attempts" / fixture["item"])
+    terminal_role_subchecks = loom_flow.closeout_backlink_subchecks(
+        target_root=pass_target,
+        context=context,
+        profile="closeout-contract",
+        owner="owner",
+        repo_name="repo",
+        pr_number=1200,
+        pr_payload=carrier_pr,
+        merge_ready_pr_number=int(fixture["pr"]),
+        merge_ready_pr_payload=implementation_pr,
+        merge_ready_pr_errors=[],
+        merge_commit_sha=carrier_merge,
+        merge_commit_in_target=True,
+        pr_payload_file=None,
+        status_checks_file=fixture["checks_file"],
+        branch_protection_file=fixture["branch_protection_file"],
+        ruleset_file=fixture["ruleset_file"],
+    )
+    terminal_role_subchecks_by_id = {entry.get("id"): entry for entry in terminal_role_subchecks if isinstance(entry, dict)}
+    terminal_merge_ready = terminal_role_subchecks_by_id.get("merge_ready_attempt", {})
+    if (
+        terminal_merge_ready.get("result") != "pass"
+        or terminal_merge_ready.get("source") != "implementation_pr_host_checks"
+        or terminal_merge_ready.get("head_sha") != fixture["head_sha"]
+        or terminal_merge_ready.get("fallback_reason") != "terminal_closeout_carrier_pr"
+    ):
+        raise AssertionError("terminal closeout carrier PR did not consume implementation PR host checks when merge-ready attempt was absent")
 
     auto_lookup_command = command.copy()
     item_index = auto_lookup_command.index("--item")
