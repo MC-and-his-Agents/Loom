@@ -325,12 +325,19 @@ def runtime_payload_from_agent_safe_output(payload: dict[str, Any]) -> dict[str,
     locator = full_output.get("artifact_locator") if isinstance(full_output, dict) else None
     if not isinstance(locator, str) or not locator.strip():
         raise AssertionError("agent-safe output envelope did not expose full output artifact locator")
+    expected_sha256 = full_output.get("artifact_sha256") if isinstance(full_output, dict) else None
+    if not isinstance(expected_sha256, str) or not expected_sha256.strip():
+        raise AssertionError("agent-safe output envelope did not expose full output artifact sha256")
     path = Path(locator)
     if not path.is_absolute():
         artifact_base_raw = payload.get("_loom_contract_artifact_base")
         artifact_base = Path(artifact_base_raw) if isinstance(artifact_base_raw, str) and artifact_base_raw else REPO_ROOT
         path = runtime_locator_path(artifact_base, locator) or (artifact_base / path)
-    artifact = json.loads(path.read_text(encoding="utf-8"))
+    artifact_bytes = path.read_bytes()
+    actual_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise AssertionError("agent-safe full output artifact sha256 did not match envelope metadata")
+    artifact = json.loads(artifact_bytes.decode("utf-8"))
     runtime_payload = artifact.get("payload")
     if not isinstance(runtime_payload, dict):
         raise AssertionError("agent-safe full output artifact did not contain a runtime payload")
