@@ -3,10 +3,10 @@
   "item_id": "WI-1904",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "FR-4 workstation upgrade batch #1904/#1905/#1906/#1907 remains approved at fixture sync head d889dffb. The additional change synchronizes the demo bootstrap fixture for the already-reviewed minimal-suite gate behavior and passes targeted fixture/package validation without deferring #1906 or changing FR-5 scope.",
+  "summary": "FR-4 post-merge closeout carrier sync is approved: PR #1948 is merged at aa3ce1d9aa8a8ba7dd9ca366b3105789c6b3fd2a, issues #1904/#1905/#1906/#1907 are closed with closeout evidence, and this review is limited to terminal carrier/status/shadow/task-carrier synchronization without implementation or FR-5 scope.",
   "reviewer": "codex-main",
-  "authored_at": "2026-07-03T17:19:51Z",
-  "reviewed_head": "d889dffbaecd564e8cebd6a91825cb99f99ca9e3",
+  "authored_at": "2026-07-03T17:41:47Z",
+  "reviewed_head": "aa3ce1d9aa8a8ba7dd9ca366b3105789c6b3fd2a",
   "reviewed_validation_summary": "2026-07-03T17:18Z on branch `work/1904-1907-workstation-upgrade-batch`, passed demo bootstrap fixture sync validation (`make loom-demo-new-project-check`), `git diff --check`, `python3 tools/py_compile_clean.py examples/new-project/.loom/bin/loom_flow.py`, and `python3 tools/check_npm_package.py --surface aggregate` after FR-4 batch validation and PR #1948 metadata/readback.",
   "fallback_to": null,
   "findings": [],
@@ -32,26 +32,10 @@
     },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1904 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1904 --json",
-    "suite_evidence_map": ".loom/specs/WI-1904/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1904/task-carrier.md"
-    ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "normalized_findings": null
   },
-  "semantic_review_disposition": {
+  "carrier_only_closeout_review": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
   }
 }
