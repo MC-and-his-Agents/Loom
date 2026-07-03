@@ -9426,6 +9426,16 @@ def workstation_registry_block(command: str, path: Path, reason: str) -> dict[st
     )
 
 
+def workstation_registry_classification_guidance(classification: str) -> list[str]:
+    guidance = {
+        "path_missing": ["loom workstation unregister --target <repo> --json", "loom workstation register --target <repo> --json"],
+        "remote_hash_drift": ["confirm the repository identity", "loom workstation register --target <repo> --json"],
+        "repo_id_conflict": ["manually repair ~/.loom/repositories.json", "loom workstation list --json"],
+        "schema_unsupported": ["repair or remove ~/.loom/repositories.json", "loom workstation list --json"],
+    }
+    return guidance.get(classification, ["loom workstation list --json"])
+
+
 def canonical_git_remote(target: Path) -> str:
     completed = run_readback_command(["git", "config", "--get", "remote.origin.url"], cwd=target)
     if completed.returncode != 0:
@@ -9512,22 +9522,83 @@ def workstation_registry_classifications(registry: dict[str, Any]) -> list[dict[
     classifications: list[dict[str, Any]] = []
     repositories = registry.get("repositories")
     if not isinstance(repositories, list):
-        return [{"classification": "schema_unsupported", "entry_id": None, "blocking": True}]
+        return [
+            {
+                "classification": "schema_unsupported",
+                "entry_id": None,
+                "blocking": True,
+                "repair_guidance": workstation_registry_classification_guidance("schema_unsupported"),
+            }
+        ]
     seen_ids: dict[str, tuple[str | None, str | None]] = {}
     for entry in repositories:
         if not isinstance(entry, dict):
-            classifications.append({"classification": "schema_unsupported", "entry_id": None, "blocking": True})
+            classifications.append(
+                {
+                    "classification": "schema_unsupported",
+                    "entry_id": None,
+                    "blocking": True,
+                    "repair_guidance": workstation_registry_classification_guidance("schema_unsupported"),
+                }
+            )
             continue
         entry_id = entry.get("id")
+        path_value = entry.get("path")
         remote = entry.get("remote") if isinstance(entry.get("remote"), dict) else {}
-        identity = (entry.get("path"), remote.get("hash"))
+        stored_remote_hash = remote.get("hash")
+        identity = (path_value, stored_remote_hash)
         if isinstance(entry_id, str):
             previous = seen_ids.get(entry_id)
             if previous is not None and previous != identity:
-                classifications.append({"classification": "repo_id_conflict", "entry_id": entry_id, "blocking": True})
+                classifications.append(
+                    {
+                        "classification": "repo_id_conflict",
+                        "entry_id": entry_id,
+                        "blocking": True,
+                        "repair_guidance": workstation_registry_classification_guidance("repo_id_conflict"),
+                    }
+                )
             seen_ids[entry_id] = identity
-        if entry.get("path_state") != "present":
-            classifications.append({"classification": "path_missing", "entry_id": entry_id, "blocking": True})
+        path_missing = entry.get("path_state") != "present"
+        target_path: Path | None = None
+        if isinstance(path_value, str) and path_value.startswith("/"):
+            target_path = Path(path_value)
+            if not target_path.exists():
+                path_missing = True
+        else:
+            classifications.append(
+                {
+                    "classification": "schema_unsupported",
+                    "entry_id": entry_id,
+                    "blocking": True,
+                    "repair_guidance": workstation_registry_classification_guidance("schema_unsupported"),
+                }
+            )
+        if path_missing:
+            classifications.append(
+                {
+                    "classification": "path_missing",
+                    "entry_id": entry_id,
+                    "blocking": True,
+                    "path": path_value,
+                    "repair_guidance": workstation_registry_classification_guidance("path_missing"),
+                }
+            )
+        elif target_path is not None:
+            observed_remote = canonical_git_remote(target_path)
+            observed_remote_hash = remote_hash(observed_remote)
+            if observed_remote_hash != stored_remote_hash:
+                classifications.append(
+                    {
+                        "classification": "remote_hash_drift",
+                        "entry_id": entry_id,
+                        "blocking": True,
+                        "path": path_value,
+                        "stored_remote_hash": stored_remote_hash,
+                        "observed_remote_hash": observed_remote_hash,
+                        "repair_guidance": workstation_registry_classification_guidance("remote_hash_drift"),
+                    }
+                )
         opt_in = entry.get("opt_in") if isinstance(entry.get("opt_in"), dict) else {}
         if opt_in.get("enabled") is False:
             classifications.append({"classification": "opted_out", "entry_id": entry_id, "blocking": False})
@@ -9552,29 +9623,53 @@ def handle_workstation(argv: list[str]) -> int:
     if args.action == "list":
         repositories = registry.get("repositories", [])
         classifications = workstation_registry_classifications(registry)
+        blocking_classifications = [item for item in classifications if item.get("blocking") is True]
+        blocked_entry_ids = {item.get("entry_id") for item in blocking_classifications if item.get("entry_id") is not None}
         eligible = [
             entry.get("id")
             for entry in repositories
             if isinstance(entry, dict)
             and entry.get("path_state") == "present"
+            and entry.get("id") not in blocked_entry_ids
             and isinstance(entry.get("opt_in"), dict)
             and entry["opt_in"].get("enabled") is True
         ]
         return emit(
             output(
                 command,
-                "pass",
+                "block" if blocking_classifications else "pass",
                 schema=WORKSTATION_CONTROL_SCHEMA,
-                summary="Workstation repository registry listed.",
+                summary=(
+                    "Workstation repository registry contains blocking entries."
+                    if blocking_classifications
+                    else "Workstation repository registry listed."
+                ),
                 registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
                 registry_path=str(registry_path),
                 logical_registry_path=registry.get("registry_path"),
                 mutates=False,
+                failed_layer="workstation-registry" if blocking_classifications else None,
+                fail_closed_reason=(
+                    "registry contains entries that are ambiguous for mutation planning"
+                    if blocking_classifications
+                    else None
+                ),
                 repositories=repositories,
                 repository_count=len(repositories),
                 eligible_for_plan=eligible,
                 classifications=classifications,
-                fallback_to=None,
+                fallback_to=(
+                    sorted(
+                        {
+                            guidance
+                            for item in blocking_classifications
+                            for guidance in item.get("repair_guidance", [])
+                            if isinstance(guidance, str)
+                        }
+                    )
+                    if blocking_classifications
+                    else None
+                ),
             )
         )
 
@@ -9613,6 +9708,32 @@ def handle_workstation(argv: list[str]) -> int:
             )
         )
     repositories = [entry for entry in raw_repositories if isinstance(entry, dict)]
+    blocking_classifications = [
+        item for item in workstation_registry_classifications(registry) if item.get("blocking") is True
+    ]
+    if args.action == "register" and blocking_classifications:
+        return emit(
+            output(
+                command,
+                "block",
+                schema=WORKSTATION_CONTROL_SCHEMA,
+                summary="Workstation registry contains blocking entries; refusing to register until it is repaired.",
+                registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+                registry_path=str(registry_path),
+                mutates=False,
+                failed_layer="workstation-registry",
+                fail_closed_reason="registry contains entries that are ambiguous for mutation planning",
+                classifications=blocking_classifications,
+                fallback_to=sorted(
+                    {
+                        guidance
+                        for item in blocking_classifications
+                        for guidance in item.get("repair_guidance", [])
+                        if isinstance(guidance, str)
+                    }
+                ),
+            )
+        )
     matched: list[dict[str, Any]]
     if args.id:
         matched = [entry for entry in repositories if entry.get("id") == args.id]
