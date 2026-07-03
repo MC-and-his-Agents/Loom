@@ -9312,6 +9312,73 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     ):
         raise AssertionError("governance chain closeout pass fixture did not consume PR, issue, Project, target branch, merge commit, review, and merge-ready evidence together")
 
+    loom_flow = load_loom_flow_module()
+    carrier_branch = "work/1153-carrier-sync"
+    subprocess.run(["git", "checkout", "-b", carrier_branch, "main"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    carrier_shadow_path = pass_target / ".loom" / "shadow" / "review-carrier-sync.json"
+    carrier_shadow_path.parent.mkdir(parents=True, exist_ok=True)
+    carrier_shadow_path.write_text(
+        json.dumps({"schema_version": "fixture/v1", "source_files": [f".loom/reviews/{fixture['item']}.json"]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", str(carrier_shadow_path.relative_to(pass_target))], cwd=pass_target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture carrier sync"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    carrier_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=pass_target, text=True).strip()
+    subprocess.run(["git", "checkout", "main"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "merge", "--no-ff", carrier_branch, "-m", "fixture carrier merge"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    carrier_merge = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=pass_target, text=True).strip()
+    context, context_errors = loom_flow.load_retained_item_context(
+        pass_target,
+        ".loom/bootstrap/init-result.json",
+        fixture["item"],
+        f".loom/work-items/{fixture['item']}.md",
+    )
+    if context_errors:
+        raise AssertionError(f"governance chain fixture context failed: {context_errors}")
+    implementation_pr = json.loads((pass_target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    carrier_pr = {
+        **implementation_pr,
+        "number": 1200,
+        "body": f"Loom Work Item: {fixture['item']}\nIssue: #{fixture['issue']}\nBranch: {carrier_branch}\nHead SHA: {carrier_head}\n",
+        "headRefName": carrier_branch,
+        "headRefOid": carrier_head,
+        "mergeCommit": {"oid": carrier_merge},
+        "mergedAt": "2026-05-31T00:00:00Z",
+    }
+    role_subchecks = loom_flow.closeout_backlink_subchecks(
+        target_root=pass_target,
+        context=context,
+        profile="closeout-contract",
+        owner="owner",
+        repo_name="repo",
+        pr_number=1200,
+        pr_payload=carrier_pr,
+        merge_ready_pr_number=int(fixture["pr"]),
+        merge_ready_pr_payload=implementation_pr,
+        merge_ready_pr_errors=[],
+        merge_commit_sha=carrier_merge,
+        merge_commit_in_target=True,
+        pr_payload_file=None,
+        status_checks_file=fixture["checks_file"],
+        branch_protection_file=fixture["branch_protection_file"],
+        ruleset_file=fixture["ruleset_file"],
+    )
+    role_subchecks_by_id = {entry.get("id"): entry for entry in role_subchecks if isinstance(entry, dict)}
+    role_merge_ready = role_subchecks_by_id.get("merge_ready_attempt", {})
+    role_host_checks = role_subchecks_by_id.get("host_pr_checks", {})
+    role_backlink = role_subchecks_by_id.get("pr_merge_backlink", {})
+    if (
+        role_merge_ready.get("result") != "pass"
+        or role_merge_ready.get("head_sha") != fixture["head_sha"]
+        or role_merge_ready.get("expected_head_sha") != fixture["head_sha"]
+        or role_merge_ready.get("expected_pr_number") != int(fixture["pr"])
+        or role_merge_ready.get("expected_pr_role") != "implementation_pr"
+        or role_host_checks.get("head_sha") != carrier_head
+        or role_backlink.get("head_sha") != carrier_head
+        or role_backlink.get("merge_commit_sha") != carrier_merge
+    ):
+        raise AssertionError("carrier-sync closeout role did not bind retained merge-ready evidence to implementation PR head while preserving carrier PR host evidence")
+
     auto_lookup_command = command.copy()
     item_index = auto_lookup_command.index("--item")
     del auto_lookup_command[item_index : item_index + 2]
