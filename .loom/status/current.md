@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1943
-- Goal: Let controlled merge and closeout consume terminal closeout carrier PR gates.
-- Scope: When PR gate already passed terminal closeout consumption for a closeout-only carrier PR, controlled merge and closeout readback must not require a normal merge checkpoint after the Work Item is already `closed_out`.
-- Execution Path: issue #1943 -> branch work/1943-terminal-closeout-gate -> PR -> review/merge-ready/closeout
+- Item ID: WI-1904
+- Goal: Deliver FR-4 Workstation Upgrade Orchestrator batch for issues #1904, #1905, #1906, and #1907.
+- Scope: Implement workstation upgrade machine refresh planning, per-repo adoption classification, machine-level --apply refresh, and batch freshness cache within one validation boundary.
+- Execution Path: issue #1904 anchor -> branch work/1904-1907-workstation-upgrade-batch -> batch PR covering #1904/#1905/#1906/#1907 -> review/merge/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1943.md
-- Review Entry: .loom/reviews/WI-1943.json
-- Validation Entry: python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; git diff --check; python3 tools/check_cli_contract.py --surface controlled-merge --surface governance-closeout; python3 tools/check_npm_package.py --surface aggregate; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json
-- Closing Condition: PR gate/controlled merge/closeout pass for terminal closeout carrier PR consumption without weakening implementation PR merge checkpoint requirements.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1943 is closed out: implementation PR #1944, corrective PR #1946, and final closeout carrier PR #1945 are merged; issue #1943 is closed; terminal repo-local carrier metadata is recorded.
-- Next Step: No further WI-1943 work remains.
+- Recovery Entry: .loom/progress/WI-1904.md
+- Review Entry: .loom/reviews/WI-1904.json
+- Validation Entry: python3 tools/py_compile_clean.py src/loom_cli.py tools/loom.py tests; git diff --check; targeted workstation upgrade contract tests
+- Closing Condition: Batch PR covering #1904/#1905/#1906/#1907 is merged; local and hosted gates pass; closeout evidence is recorded for each covered issue without deferring #1906 or FR-5 scope.
+- Current Checkpoint: admission
+- Current Stop: Work item scaffolded and waiting for the first execution pass.
+- Next Step: Write the first recovery update for this work item.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T14:21Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/loom.py suite validate --target . --item WI-1943 --json`, `git diff --check`, and `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; earlier implementation checks and PR #1942 replay remain passing. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.
-- Recovery Boundary: Continue from the WI-1943 diff only: `loom_flow.py` terminal closeout consumption, focused CLI contract fixtures, runtime copies, and plugin payload hash.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: No validation recorded yet.
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-1904.md`.
+- Current Lane: not yet assigned
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1943.md
-- Dynamic Truth: .loom/progress/WI-1943.md
+- Static Truth: .loom/work-items/WI-1904.md
+- Dynamic Truth: .loom/progress/WI-1904.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

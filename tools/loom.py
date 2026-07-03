@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -9696,7 +9697,15 @@ def workstation_upgrade_machine_plan(target_version: str) -> dict[str, Any]:
                 "id": "refresh-codex-plugin",
                 "kind": "codex-user-plugin",
                 "commands": plugin_commands,
-                "required": freshness.get("plugin_payload", {}).get("action") != "already_current",
+                "marketplace_upgrade": {
+                    "source": "MC-and-his-Agents/Loom",
+                    "summary": "If Codex installed Loom from the Loom marketplace source, refresh through Codex marketplace update; otherwise use loom host install/register.",
+                    "fallback_commands": [
+                        "loom host install --host codex --scope user --apply --json",
+                        "loom host register --host codex --scope user --apply --json",
+                    ],
+                },
+                "required": freshness.get("action") == "upgrade_cli" or freshness.get("plugin_payload", {}).get("action") != "already_current",
                 "mutates_when_applied": "user Codex marketplace/config/plugin cache",
             },
             {
@@ -9706,6 +9715,34 @@ def workstation_upgrade_machine_plan(target_version: str) -> dict[str, Any]:
                 "required": True,
                 "mutates_when_applied": False,
             },
+        ],
+    }
+
+
+def workstation_upgrade_freshness_cache_plan(target_version: str, repository_count: int) -> dict[str, Any]:
+    return {
+        "schema": "loom-workstation-upgrade-freshness-cache/v1",
+        "scope": "single_invocation",
+        "status": "primed",
+        "read_count": 1,
+        "reused_for_repository_count": repository_count,
+        "cache_key": hashlib.sha256(
+            json.dumps(
+                {
+                    "target_version": normalized_version(target_version),
+                    "source_package": "@mc-and-his-agents/loom",
+                    "host": "codex",
+                    "plugin_source": str(global_codex_plugin_source()),
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "invalidates_on": [
+            "target_version_change",
+            "source_package_version_change",
+            "codex_plugin_payload_hash_change",
+            "codex_marketplace_or_runtime_cache_change",
+            "host_doctor_failure",
         ],
     }
 
@@ -9823,6 +9860,7 @@ def workstation_upgrade_plan_payload(
         registry_path=str(registry_path),
         logical_registry_path=registry.get("registry_path"),
         machine_plan=workstation_upgrade_machine_plan(target_version),
+        freshness_cache=workstation_upgrade_freshness_cache_plan(target_version, len(plans)),
         repository_plans=plans,
         repository_count=len(repositories),
         classification_counts=counts or {"machine_only": 1},
@@ -9848,13 +9886,210 @@ def workstation_upgrade_plan_payload(
     )
 
 
+def apply_workstation_shell_command(command: str) -> dict[str, Any]:
+    if os.environ.get("LOOM_TEST_WORKSTATION_APPLY") == "record":
+        return {
+            "command": command,
+            "result": "pass",
+            "simulated": True,
+        }
+    completed = subprocess.run(
+        shlex.split(command),
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return {
+        "command": command,
+        "result": "pass" if completed.returncode == 0 else "block",
+        "returncode": completed.returncode,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    }
+
+
+def apply_workstation_machine_plan(machine_plan: dict[str, Any]) -> dict[str, Any]:
+    applied_steps: list[dict[str, Any]] = []
+    source = global_codex_plugin_source()
+    for step in machine_plan.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        step_id = step.get("id")
+        if step.get("required") is not True and step_id != "verify-host":
+            applied_steps.append({"id": step_id, "result": "skipped", "reason": "step is not required"})
+            continue
+        if step_id == "upgrade-cli":
+            applied_steps.append({"id": step_id, **apply_workstation_shell_command(str(step.get("command") or ""))})
+        elif step_id == "refresh-codex-plugin":
+            writes = register_codex_workstation(source)
+            applied_steps.append({"id": step_id, "result": "pass", "writes": writes})
+        elif step_id == "verify-host":
+            registration = codex_workstation_registration_status(source)
+            applied_steps.append(
+                {
+                    "id": step_id,
+                    "result": registration.get("result"),
+                    "workstation_registration": registration,
+                }
+            )
+        else:
+            applied_steps.append({"id": step_id, "result": "skipped", "reason": "unsupported machine plan step"})
+    blocking = [step for step in applied_steps if step.get("result") == "block"]
+    return {
+        "schema": "loom-workstation-machine-upgrade-apply/v1",
+        "result": "block" if blocking else "pass",
+        "mutates": True,
+        "applied_steps": applied_steps,
+    }
+
+
+def apply_workstation_repository_plan(plan: dict[str, Any], *, target_version: str) -> dict[str, Any]:
+    classification = plan.get("classification")
+    path_value = plan.get("path")
+    if classification == "repo_noop":
+        return {
+            "schema": "loom-workstation-repository-upgrade-apply/v1",
+            "result": "pass",
+            "classification": classification,
+            "mutates": False,
+            "reason": plan.get("reason"),
+        }
+    if classification != "repo_auto_commit_candidate":
+        return {
+            "schema": "loom-workstation-repository-upgrade-apply/v1",
+            "result": "block",
+            "classification": classification,
+            "mutates": False,
+            "failed_layer": "repository-adoption",
+            "fail_closed_reason": "only repo_auto_commit_candidate supports explicit single-repository apply",
+            "fallback_to": ["open a repository-scoped PR", "loom upgrade-plan --target <repo> --json"],
+        }
+    if not isinstance(path_value, str) or not path_value:
+        return {
+            "schema": "loom-workstation-repository-upgrade-apply/v1",
+            "result": "block",
+            "classification": classification,
+            "mutates": False,
+            "failed_layer": "repository-adoption",
+            "fail_closed_reason": "repository path is unavailable",
+            "fallback_to": ["loom workstation register --target <repo> --json"],
+        }
+    command = [sys.executable, str(Path(__file__).resolve()), "install", "--target", path_value, "--apply", "--json"]
+    completed = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        payload = {"stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()}
+    return {
+        "schema": "loom-workstation-repository-upgrade-apply/v1",
+        "result": "pass" if completed.returncode == 0 else "block",
+        "classification": classification,
+        "target_version": target_version,
+        "mutates": completed.returncode == 0,
+        "command": "loom install --target <repo> --apply --json",
+        "payload": payload,
+        "failed_layer": None if completed.returncode == 0 else "repository-adoption",
+        "fail_closed_reason": None if completed.returncode == 0 else "repo-local metadata refresh failed",
+    }
+
+
+def workstation_upgrade_apply_payload(
+    *,
+    command: str,
+    registry_path: Path,
+    registry: dict[str, Any],
+    target_version: str,
+    target: Path | None,
+) -> dict[str, Any]:
+    plan = workstation_upgrade_plan_payload(
+        command=command,
+        registry_path=registry_path,
+        registry=registry,
+        target_version=target_version,
+    )
+    machine_apply = apply_workstation_machine_plan(plan.get("machine_plan", {}))
+    repository_apply = None
+    if target is not None:
+        target_path = str(target.resolve())
+        matches = [
+            repo_plan
+            for repo_plan in plan.get("repository_plans", [])
+            if isinstance(repo_plan, dict) and repo_plan.get("path") == target_path
+        ]
+        if len(matches) != 1:
+            repository_apply = {
+                "schema": "loom-workstation-repository-upgrade-apply/v1",
+                "result": "block",
+                "mutates": False,
+                "failed_layer": "workstation-registry",
+                "fail_closed_reason": "explicit repository apply requires exactly one registered target match",
+                "fallback_to": ["loom workstation register --target <repo> --json"],
+            }
+        else:
+            repository_apply = apply_workstation_repository_plan(matches[0], target_version=target_version)
+    blocking = [machine_apply.get("result") == "block", repository_apply is not None and repository_apply.get("result") == "block"]
+    return output(
+        command,
+        "block" if any(blocking) else "pass",
+        schema=WORKSTATION_UPGRADE_PLAN_SCHEMA,
+        summary=(
+            "Workstation upgrade apply completed."
+            if not any(blocking)
+            else "Workstation upgrade apply blocked before all requested writes completed."
+        ),
+        target_version=target_version,
+        plan_only=False,
+        mutates=True,
+        registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+        registry_path=str(registry_path),
+        logical_registry_path=registry.get("registry_path"),
+        machine_plan=plan.get("machine_plan"),
+        freshness_cache=plan.get("freshness_cache"),
+        repository_plans=plan.get("repository_plans"),
+        repository_count=plan.get("repository_count"),
+        classification_counts=plan.get("classification_counts"),
+        classifications=plan.get("classifications"),
+        machine_apply=machine_apply,
+        repository_apply=repository_apply,
+        failed_layer=(
+            "workstation-machine-refresh"
+            if machine_apply.get("result") == "block"
+            else "repository-adoption"
+            if repository_apply is not None and repository_apply.get("result") == "block"
+            else None
+        ),
+        fail_closed_reason=(
+            "machine-level workstation refresh failed"
+            if machine_apply.get("result") == "block"
+            else repository_apply.get("fail_closed_reason")
+            if repository_apply is not None and repository_apply.get("result") == "block"
+            else None
+        ),
+        fallback_to=(
+            repository_apply.get("fallback_to")
+            if repository_apply is not None and repository_apply.get("result") == "block"
+            else None
+        ),
+    )
+
+
 def handle_workstation(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom workstation")
     parser.add_argument("action", choices=("register", "list", "unregister", "upgrade"))
-    parser.add_argument("--target", default=".")
+    parser.add_argument("--target")
     parser.add_argument("--id")
     parser.add_argument("--keep-entry", action="store_true")
     parser.add_argument("--plan", action="store_true")
+    parser.add_argument("--apply", action="store_true")
     parser.add_argument("--to", dest="target_version")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -9862,16 +10097,27 @@ def handle_workstation(argv: list[str]) -> int:
     command = f"workstation {args.action}"
     if args.action == "upgrade":
         command = "workstation upgrade"
-        if not args.plan:
-            parser.error("workstation upgrade currently requires --plan")
+        if args.plan == args.apply:
+            parser.error("workstation upgrade requires exactly one of --plan or --apply")
         if not args.target_version:
-            parser.error("workstation upgrade --plan requires --to <version>")
+            parser.error("workstation upgrade requires --to <version>")
     registry_path = workstation_registry_path()
     registry, error = load_workstation_registry(registry_path)
     if error or registry is None:
         return emit(workstation_registry_block(command, registry_path, error or "workstation registry is unavailable"))
 
     if args.action == "upgrade":
+        if args.apply:
+            explicit_target = resolve_target(args.target) if args.target else None
+            return emit(
+                workstation_upgrade_apply_payload(
+                    command=command,
+                    registry_path=registry_path,
+                    registry=registry,
+                    target_version=args.target_version,
+                    target=explicit_target,
+                )
+            )
         return emit(
             workstation_upgrade_plan_payload(
                 command=command,
@@ -9934,7 +10180,7 @@ def handle_workstation(argv: list[str]) -> int:
             )
         )
 
-    target = resolve_target(args.target)
+    target = resolve_target(args.target or ".")
     if args.action == "register" and not target.exists():
         return emit(
             output(

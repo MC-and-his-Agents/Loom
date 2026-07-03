@@ -146,6 +146,8 @@ The #1895 command slice implements the minimum registry read/write surface:
 loom workstation register --target <repo> --json
 loom workstation list --json
 loom workstation upgrade --plan --to <version> --json
+loom workstation upgrade --apply --to <version> --json
+loom workstation upgrade --apply --to <version> --target <repo> --json
 loom workstation unregister --target <repo> --json
 loom workstation unregister --id <repo-id> --json
 loom workstation unregister --target <repo> --keep-entry --json
@@ -160,6 +162,24 @@ repository.
 `list` is read-only. It may report stored-entry diagnostics such as `opted_out`
 or malformed stored entries, but it does not replace repository-local adoption
 validation.
+
+`upgrade --plan` is read-only. Its machine plan must include the npm CLI
+upgrade command, Codex user plugin refresh guidance, and a host doctor readback.
+When the workstation uses a Codex marketplace source for Loom, the plugin
+refresh guidance may point at that marketplace update path; otherwise it falls
+back to `loom host install|register --host codex --scope user`.
+
+`upgrade --apply` performs the machine-level refresh only unless `--target
+<repo>` is supplied. Repository mutation is deliberately single-repository and
+explicit in the first version: only a registered `repo_auto_commit_candidate`
+may be refreshed directly. `repo_pr_required`, `blocked`, unknown, or ambiguous
+entries must remain PR/manual flows.
+
+Within one `workstation upgrade` invocation, host/plugin freshness readback is a
+single-invocation cache. It may be reused across repository classifications, but
+it must be invalidated when the target version, source package version, Codex
+plugin payload hash, Codex marketplace/runtime cache, or host doctor result
+changes.
 
 `unregister` removes the matching entry by target path or id. With
 `--keep-entry`, it leaves the entry visible for diagnostics and sets
