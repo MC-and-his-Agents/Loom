@@ -2302,6 +2302,7 @@ def output_envelope(
     failed_layer: str | None = None,
     fail_closed_reason: str | None = None,
     artifact_locator: str | None = None,
+    artifact_sha256: str | None = None,
     full_output_available: bool = False,
     full_output_truncated: bool = False,
     sensitive: bool = False,
@@ -2325,6 +2326,7 @@ def output_envelope(
         full_output={
             "available": full_output_available,
             "artifact_locator": artifact_locator,
+            "artifact_sha256": artifact_sha256,
             "truncated": full_output_truncated,
             "sensitive": sensitive,
         },
@@ -2332,13 +2334,13 @@ def output_envelope(
     )
 
 
-def write_output_artifact(
+def write_output_artifact_metadata(
     payload: dict[str, Any],
     *,
     artifact_dir: Path | None = None,
     target_root: Path | None = None,
     sensitive: bool = False,
-) -> str:
+) -> dict[str, str]:
     configured = artifact_dir or Path(os.environ.get("LOOM_OUTPUT_ARTIFACT_DIR", DEFAULT_OUTPUT_ARTIFACT_DIR))
     configured_locator = configured.as_posix()
     if configured.is_absolute() or target_root is None or not is_global_runtime_locator(configured_locator):
@@ -2358,15 +2360,34 @@ def write_output_artifact(
         "sensitive": sensitive,
         "payload": payload,
     }
-    path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    artifact_bytes = (json.dumps(artifact, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    path.write_bytes(artifact_bytes)
+    artifact_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+    locator = str(path)
     if target_root is not None and not configured.is_absolute():
         if is_global_runtime_locator(configured_locator):
-            return f"{configured_locator.rstrip('/')}/{path.name}"
+            locator = f"{configured_locator.rstrip('/')}/{path.name}"
+            return {"artifact_locator": locator, "artifact_sha256": artifact_sha256}
         try:
-            return str(path.relative_to(target_root))
+            locator = str(path.relative_to(target_root))
         except ValueError:
             pass
-    return str(path)
+    return {"artifact_locator": locator, "artifact_sha256": artifact_sha256}
+
+
+def write_output_artifact(
+    payload: dict[str, Any],
+    *,
+    artifact_dir: Path | None = None,
+    target_root: Path | None = None,
+    sensitive: bool = False,
+) -> str:
+    return write_output_artifact_metadata(
+        payload,
+        artifact_dir=artifact_dir,
+        target_root=target_root,
+        sensitive=sensitive,
+    )["artifact_locator"]
 
 
 def agent_safe_payload(
@@ -2394,7 +2415,12 @@ def agent_safe_payload(
     over_budget = len(rendered.encode("utf-8")) > stdout_budget_bytes
     if not over_budget and not should_use_actionable_envelope(payload, actionable_findings):
         return payload
-    locator = write_output_artifact(payload, artifact_dir=artifact_dir, target_root=target_root, sensitive=sensitive)
+    artifact_metadata = write_output_artifact_metadata(
+        payload,
+        artifact_dir=artifact_dir,
+        target_root=target_root,
+        sensitive=sensitive,
+    )
     summary = truncate_utf8(
         str(payload.get("summary") or "Full output exceeded the agent-safe stdout budget."),
         summary_target_bytes,
@@ -2421,7 +2447,8 @@ def agent_safe_payload(
         key_gaps=output_key_gaps(payload),
         failed_layer=payload.get("failed_layer"),
         fail_closed_reason=payload.get("fail_closed_reason"),
-        artifact_locator=locator,
+        artifact_locator=artifact_metadata["artifact_locator"],
+        artifact_sha256=artifact_metadata["artifact_sha256"],
         full_output_available=True,
         full_output_truncated=True,
         sensitive=sensitive,

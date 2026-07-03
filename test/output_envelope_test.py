@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -26,6 +27,14 @@ class OutputEnvelopeTest(unittest.TestCase):
         os.environ.pop("LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES", None)
         os.environ.pop("LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES", None)
         os.environ.pop("LOOM_OUTPUT_ARTIFACT_DIR", None)
+
+    def artifact_path(self, target: Path, locator: str) -> Path:
+        path = Path(locator)
+        if path.is_absolute():
+            return path
+        if loom_cli.is_global_runtime_locator(locator):
+            return loom_cli.global_runtime_path(target, locator)
+        return target / path
 
     def test_output_envelope_contains_agent_safe_fields(self) -> None:
         envelope = loom_cli.output_envelope(
@@ -79,6 +88,10 @@ class OutputEnvelopeTest(unittest.TestCase):
             self.assertEqual(safe["key_gaps"], [f"gap-{index}" for index in range(10)])
             self.assertEqual(safe["full_output"]["available"], True)
             self.assertEqual(safe["full_output"]["truncated"], True)
+            self.assertEqual(
+                safe["full_output"]["artifact_sha256"],
+                hashlib.sha256(locator.read_bytes()).hexdigest(),
+            )
             self.assertEqual(safe["stdout_budget_bytes"], 512)
             self.assertTrue(locator.exists())
             self.assertNotIn('"diagnostic":', json.dumps(safe))
@@ -93,7 +106,7 @@ class OutputEnvelopeTest(unittest.TestCase):
 
             locator = Path(safe["full_output"]["artifact_locator"])
             self.assertFalse(locator.is_absolute())
-            self.assertTrue((target / locator).is_file())
+            self.assertTrue(self.artifact_path(target, locator.as_posix()).is_file())
 
     def test_relative_artifact_dir_env_is_target_relative_when_target_root_is_set(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
@@ -230,7 +243,7 @@ class OutputEnvelopeTest(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tempdir:
                 os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
-                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1200"
 
                 def fake_payload(*_args, **_kwargs):
                     return loom_cli.output(
@@ -339,7 +352,7 @@ class OutputEnvelopeTest(unittest.TestCase):
                 locator = Path(payload["full_output"]["artifact_locator"])
                 self.assertEqual(code, 1)
                 self.assertFalse(locator.is_absolute())
-                self.assertTrue((target / locator).is_file())
+                self.assertTrue(self.artifact_path(target, locator.as_posix()).is_file())
         finally:
             loom_cli.flow_payload = original
 
@@ -348,7 +361,7 @@ class OutputEnvelopeTest(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tempdir:
                 os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
-                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1200"
 
                 def fake_payload(*_args, **_kwargs):
                     return {
@@ -376,7 +389,7 @@ class OutputEnvelopeTest(unittest.TestCase):
                 rendered = stream.getvalue()
                 payload = json.loads(rendered)
                 self.assertEqual(code, 1)
-                self.assertLessEqual(len(rendered.encode("utf-8")), 1024)
+                self.assertLessEqual(len(rendered.encode("utf-8")), 1200)
                 self.assertEqual(payload["envelope_schema"], loom_cli.OUTPUT_ENVELOPE_SCHEMA)
                 self.assertEqual(payload["diagnostic_counts"]["reports"], 1)
                 self.assertEqual(payload["diagnostic_counts"]["non_passing_reports"], 1)
@@ -391,7 +404,7 @@ class OutputEnvelopeTest(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tempdir:
                 os.environ["LOOM_OUTPUT_ARTIFACT_DIR"] = tempdir
-                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1024"
+                os.environ["LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES"] = "1200"
 
                 def fake_payload(*_args, **_kwargs):
                     return loom_cli.output(
@@ -499,7 +512,7 @@ class OutputEnvelopeTest(unittest.TestCase):
                 locator = Path(payload["full_output"]["artifact_locator"])
                 self.assertEqual(code, 1)
                 self.assertFalse(locator.is_absolute())
-                self.assertTrue((target / locator).is_file())
+                self.assertTrue(self.artifact_path(target, locator.as_posix()).is_file())
         finally:
             loom_cli.flow_payload = original
 
