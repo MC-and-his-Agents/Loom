@@ -12,10 +12,10 @@
 - Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py tools/loom_flow.py skills/shared/scripts/runtime_paths.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/runtime_paths.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/runtime_paths.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/runtime_paths.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/runtime_paths.py examples/new-project/.loom/bin/loom_flow.py; python3 tools/check_cli_contract.py --surface runtime-paths --surface pr-metadata --surface runtime-upgrade --surface pr-gate-target-readback; python3 tools/check_cli_contract.py --surface governance-closeout; git diff --check
 - Closing Condition: Runtime/tmp outputs default to global workstation cache, repo-local truth carriers remain repo-local, focused runtime path and gate/metadata fixtures pass, PR is merged, and #1899 is closed.
 - Current Checkpoint: build
-- Current Stop: Runtime path resolver implementation and focused validation completed locally on `work/1899-global-runtime-paths`; review/PR metadata are pending commit and PR creation.
-- Next Step: Commit WI-1899 implementation, bind review to the committed head, create/update PR metadata, and run merge-ready gates.
+- Current Stop: Runtime path resolver implementation committed at b84dcf11e5e0272fd7d019e04df6ec415d02adf0 and implementation review record authored for that head.
+- Next Step: Commit review carrier, create/update PR metadata, push branch, open PR, and run merge-ready gates.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T06:14Z local validation passed: `python3 -m py_compile ...`; `python3 tools/check_cli_contract.py --surface runtime-paths --surface pr-metadata --surface runtime-upgrade --surface pr-gate-target-readback`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `git diff --check`.
+- Latest Validation Summary: 2026-07-03T06:14Z local validation passed: `python3 -m py_compile ...`; `python3 tools/check_cli_contract.py --surface runtime-paths --surface pr-metadata --surface runtime-upgrade --surface pr-gate-target-readback`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `git diff --check`. 2026-07-03T06:18Z suite validate/evidence/carrier validate passed for WI-1899 after carrier mapping fixes.
 - Recovery Boundary: WI-1899 covers runtime/tmp output path resolution and focused consumers only. Repo carrier slimdown (#1900), gate independence validation beyond focused fixtures (#1901), workstation upgrade orchestration (#1902), and legacy migration (#1908) remain separate Work Items.
 - Current Lane: implementation-validation
 
@@ -24,7 +24,7 @@
 - Run Entry: 2026-07-03T06:14Z WI-1899 work is active in `/Users/mc/dev/Loom` on branch `work/1899-global-runtime-paths`.
 - Logs Entry: Runtime path resolver and focused CLI contract fixtures were authored locally.
 - Diagnostics Entry: WI-1899 changes runtime/tmp output placement only; repo carrier slimdown, full gate independence validation, workstation upgrade orchestration, and legacy migration remain out of scope.
-- Verification Entry: 2026-07-03T06:14Z local validation passed: py_compile for touched Python runtime copies; runtime-paths/pr-metadata/runtime-upgrade/pr-gate-target-readback surfaces; governance-closeout surface; git diff --check.
+- Verification Entry: 2026-07-03T06:14Z local validation passed: py_compile for touched Python runtime copies; runtime-paths/pr-metadata/runtime-upgrade/pr-gate-target-readback surfaces; governance-closeout surface; git diff --check. 2026-07-03T06:18Z suite validate/evidence/carrier validate passed for WI-1899.
 - Lane Entry: implementation-validation
 
 ## Sources

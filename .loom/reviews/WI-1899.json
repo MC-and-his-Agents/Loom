@@ -1,0 +1,37 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1899",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allow: runtime/tmp output path resolution now writes workstation-only artifacts to global cache while preserving logical locators and repo-local truth carriers. Focused fixtures cover resolver behavior, PR metadata/intent artifacts, runtime-upgrade PR bodies, PR gate body readback, closeout/gate-freeze consumers, legacy repo-local execution-attempt fallback, and CLI agent-safe .loom/tmp artifacts.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-03T06:19:39Z",
+  "reviewed_head": "b84dcf11e5e0272fd7d019e04df6ec415d02adf0",
+  "reviewed_validation_summary": "2026-07-03T06:14Z local validation passed: python3 -m py_compile for touched Python runtime copies; python3 tools/check_cli_contract.py --surface runtime-paths --surface pr-metadata --surface runtime-upgrade --surface pr-gate-target-readback; python3 tools/check_cli_contract.py --surface governance-closeout; git diff --check. 2026-07-03T06:18Z suite validate/evidence/carrier validate passed for WI-1899 after carrier mapping fixes.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1900 owns repo carrier summary slimming after the global runtime path exists.",
+    "#1901 owns broader gate independence validation beyond the focused consumer fixtures.",
+    "#1908/#1910 own legacy repo-local cache migration and residue cleanup."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1899.md",
+    "recovery_entry": ".loom/progress/WI-1899.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1899/spec.md",
+    "plan": ".loom/specs/WI-1899/plan.md",
+    "implementation_contract": ".loom/specs/WI-1899/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1899/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1899/task-carrier.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Review consumed implementation head b84dcf11e5e0272fd7d019e04df6ec415d02adf0, focused runtime path validation, suite validation, and synchronized runtime payload copies."
+  }
+}
