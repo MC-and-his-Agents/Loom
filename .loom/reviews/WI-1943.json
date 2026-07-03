@@ -3,10 +3,10 @@
   "item_id": "WI-1943",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review passed for WI-1943 corrective follow-up at head d6e638777b49479cc3d064ca66562b19c88dcce6. The change narrows controlled merge retained PR-gate consumption so terminal closeout retained reviews are accepted only when terminal closeout consumption and the closeout-specific gate both pass; ordinary implementation PRs still require authored semantic review disposition. Runtime copies, plugin payload hash, and demo bootstrap fixture are synchronized.",
+  "summary": "Implementation review passed for WI-1943 corrective follow-up at head 8fd1fc4cb735e85a0361c4fb2cb7b0d7bc177386. The change allows controlled merge to consume terminal closeout retained review payloads only when terminal closeout consumption and closeout-specific gate both pass, keeps ordinary implementation PR semantic review requirements intact, and synchronizes runtime copies, plugin payload hash, root carrier hash, and demo bootstrap fixture.",
   "reviewer": "codex-main",
-  "authored_at": "2026-07-03T15:26:13Z",
-  "reviewed_head": "d6e638777b49479cc3d064ca66562b19c88dcce6",
+  "authored_at": "2026-07-03T15:30:28Z",
+  "reviewed_head": "8fd1fc4c729e44328c7a02baed4f8fae85711b32",
   "reviewed_validation_summary": "2026-07-03T14:21Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/loom.py suite validate --target . --item WI-1943 --json`, `git diff --check`, and `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; earlier implementation checks and PR #1942 replay remain passing. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.",
   "fallback_to": null,
   "findings": [],
@@ -19,15 +19,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": unexpected EOF; github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": net/http: TLS handshake timeout; github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": net/http: TLS handshake timeout",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 3
       }
     },
     "engine_adapter": null,
