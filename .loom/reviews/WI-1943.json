@@ -3,10 +3,10 @@
   "item_id": "WI-1943",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review passed for WI-1943 corrective follow-up at head 8fd1fc4cb735e85a0361c4fb2cb7b0d7bc177386. The change allows controlled merge to consume terminal closeout retained review payloads only when terminal closeout consumption and closeout-specific gate both pass, keeps ordinary implementation PR semantic review requirements intact, and synchronizes runtime copies, plugin payload hash, root carrier hash, and demo bootstrap fixture.",
+  "summary": "Carrier-only closeout review passed for WI-1943 final repo-local sync after corrective PR #1946 merged at 4f4eee97535da6e106b526dc61497377d1676a66. This review approves only progress/status/shadow closeout carrier updates for PR #1945 and does not approve new product implementation behavior.",
   "reviewer": "codex-main",
-  "authored_at": "2026-07-03T15:30:28Z",
-  "reviewed_head": "8fd1fc4c729e44328c7a02baed4f8fae85711b32",
+  "authored_at": "2026-07-03T15:52:15Z",
+  "reviewed_head": "4f4eee97535da6e106b526dc61497377d1676a66",
   "reviewed_validation_summary": "2026-07-03T14:21Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/loom.py suite validate --target . --item WI-1943 --json`, `git diff --check`, and `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; earlier implementation checks and PR #1942 replay remain passing. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.",
   "fallback_to": null,
   "findings": [],
@@ -24,35 +24,19 @@
       "highest_risk": "none",
       "risk_dimensions": [],
       "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": unexpected EOF; github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": net/http: TLS handshake timeout; github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": net/http: TLS handshake timeout",
+      "budget_summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": net/http: TLS handshake timeout",
       "adapter_evidence_locator": "",
       "provenance": {
         "source": "github_control_plane",
-        "error_count": 3
+        "error_count": 1
       }
     },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1943 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1943 --json",
-    "suite_evidence_map": ".loom/specs/WI-1943/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1943/task-carrier.md"
-    ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "normalized_findings": null
   },
-  "semantic_review_disposition": {
+  "carrier_only_closeout_review": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
   }
 }
