@@ -4687,6 +4687,83 @@ def assert_workstation_registry_cli_contract(tmp: Path) -> None:
         if final_list.get("repository_count") != 0:
             raise AssertionError("workstation list still reports entries after unregister")
 
+        missing_target = tmp / "missing-registered-repo"
+        write_workstation_registry_target(missing_target)
+        _, missing_registered = run_json(["workstation", "register", "--target", str(missing_target), "--json"], expect=0)
+        missing_id = missing_registered.get("repository", {}).get("id")
+        shutil.rmtree(missing_target)
+        _, missing_list = run_json(["workstation", "list", "--json"], expect=1)
+        assert_workstation_registry_cli_blocks(missing_list, "path_missing", missing_id)
+        registry_path.unlink()
+
+        remote_target = tmp / "remote-drift-repo"
+        write_workstation_registry_target(remote_target)
+        _, remote_registered = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=0)
+        remote_id = remote_registered.get("repository", {}).get("id")
+        subprocess.run(
+            ["git", "remote", "set-url", "origin", "git@github.com:owner/ChangedRepo.git"],
+            cwd=remote_target,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _, remote_list = run_json(["workstation", "list", "--json"], expect=1)
+        assert_workstation_registry_cli_blocks(remote_list, "remote_hash_drift", remote_id)
+        _, blocked_register = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=1)
+        if blocked_register.get("failed_layer") != "workstation-registry":
+            raise AssertionError("workstation register must fail closed while registry has blocking drift")
+        registry_path.unlink()
+
+        conflict_a = tmp / "conflict-a"
+        conflict_b = tmp / "conflict-b"
+        write_workstation_registry_target(conflict_a)
+        write_workstation_registry_target(conflict_b)
+        subprocess.run(
+            ["git", "remote", "set-url", "origin", "git@github.com:owner/ConflictB.git"],
+            cwd=conflict_b,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _, conflict_registered = run_json(["workstation", "register", "--target", str(conflict_a), "--json"], expect=0)
+        conflict_entry = conflict_registered.get("repository")
+        if not isinstance(conflict_entry, dict):
+            raise AssertionError("workstation register did not provide conflict fixture base entry")
+        conflict_b_remote = "git@github.com:owner/ConflictB.git"
+        conflict_b_entry = json.loads(json.dumps(conflict_entry))
+        conflict_b_entry["path"] = str(conflict_b.resolve())
+        conflict_b_entry["remote"]["canonical_url"] = conflict_b_remote
+        conflict_b_entry["remote"]["hash"] = "sha256:" + hashlib.sha256(conflict_b_remote.encode("utf-8")).hexdigest()
+        conflict_b_entry["remote"]["observed_at"] = conflict_entry["remote"]["observed_at"]
+        conflict_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        conflict_registry["repositories"] = [conflict_entry, conflict_b_entry]
+        registry_path.write_text(json.dumps(conflict_registry, indent=2) + "\n", encoding="utf-8")
+        _, conflict_list = run_json(["workstation", "list", "--json"], expect=1)
+        assert_workstation_registry_cli_blocks(conflict_list, "repo_id_conflict", conflict_entry.get("id"))
+
+
+def assert_workstation_registry_cli_blocks(payload: dict[str, Any], classification: str, entry_id: Any) -> None:
+    if payload.get("result") != "block" or payload.get("failed_layer") != "workstation-registry":
+        raise AssertionError(f"workstation registry {classification} did not fail closed: {payload}")
+    classifications = payload.get("classifications")
+    if not isinstance(classifications, list):
+        raise AssertionError(f"workstation registry {classification} did not expose classifications")
+    matched = [
+        item
+        for item in classifications
+        if isinstance(item, dict)
+        and item.get("classification") == classification
+        and item.get("entry_id") == entry_id
+        and item.get("blocking") is True
+    ]
+    if not matched:
+        raise AssertionError(f"workstation registry {classification} blocking classification missing: {classifications}")
+    guidance = matched[0].get("repair_guidance")
+    if not isinstance(guidance, list) or not guidance:
+        raise AssertionError(f"workstation registry {classification} must include repair guidance")
+    if entry_id in payload.get("eligible_for_plan", []):
+        raise AssertionError(f"workstation registry {classification} entry must not be eligible for planning")
+
 
 def valid_state(target: Path) -> dict[str, Any]:
     return global_cli_state(target)
