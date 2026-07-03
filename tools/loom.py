@@ -51,8 +51,14 @@ SKILLS_ROOT = REPO_ROOT / "skills"
 PLUGIN_MANIFEST = REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
 PLUGIN_SKILLS_ROOT = REPO_ROOT / "plugins" / "loom" / "skills"
 SHARED_SCRIPTS_ROOT = SKILLS_ROOT / "shared" / "scripts"
-if SHARED_SCRIPTS_ROOT.is_dir() and str(SHARED_SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(SHARED_SCRIPTS_ROOT))
+SHARED_SCRIPT_CANDIDATES = (
+    SHARED_SCRIPTS_ROOT,
+    REPO_ROOT / "src" / "skills" / "shared" / "scripts",
+    PLUGIN_SKILLS_ROOT / "shared" / "scripts",
+)
+for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
+    if shared_scripts_root.is_dir() and str(shared_scripts_root) not in sys.path:
+        sys.path.insert(0, str(shared_scripts_root))
 from runtime_paths import global_runtime_path, is_global_runtime_locator
 
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
