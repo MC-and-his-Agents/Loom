@@ -87,6 +87,13 @@ does not prove that a repository is adopted, upgraded, merge-ready, reviewed, or
 closed out. Before any repository mutation, Loom must still read that
 repository's installed-state and run the relevant repository-local validation.
 
+Runtime and diagnostic cache associated with registered repositories follows
+the repo/global artifact contract in
+[repo-global-artifact-classification.md](../methodology/harness/repo-global-artifact-classification.md):
+global cache may store long outputs and per-repo planning accelerators under
+`~/.loom/repos/<repo-id>/`, while repository carriers keep only summaries,
+hashes, and locators when a versioned evidence link is needed.
+
 ## Codex User-Level Plugin Target
 
 `loom host install --host codex --scope user --apply --json` installs the Codex
@@ -172,6 +179,10 @@ workstation plugin payload and must redirect that intent to `loom host ...`.
 Codex marketplace plugin update is also workstation truth; it must not be
 reported as repository adoption success unless the target repository's Loom
 installed-state, host verify, skills check, doctor, and closeout evidence pass.
+
+Likewise, global runtime cache freshness is workstation truth. A fresh global
+cache may make repeated checks faster, but repository adoption or upgrade
+success still requires repository-local validation and host/readback evidence.
 
 If a target repository contains `.agents/plugins/marketplace.json`, Loom must
 classify it as repository-local marketplace state unless a source-repository

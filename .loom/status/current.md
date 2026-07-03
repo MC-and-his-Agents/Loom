@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1896
-- Goal: Add fail-closed workstation registry validation for missing repository paths, remote hash drift, and duplicate workstation repo ids.
-- Scope: Only `loom workstation` registry classification, repair guidance, mutation-planning eligibility, and focused CLI contract fixtures. Do not implement workstation upgrade orchestration, global runtime cache migration, or release behavior.
-- Execution Path: issue #1896 -> branch work/1896-registry-fail-closed -> PR -> review/merge-ready/closeout
+- Item ID: WI-1898
+- Goal: Freeze the repo/global Loom artifact classification contract for global runtime cache migration.
+- Scope: Define which Loom artifacts remain repository truth and which workstation-only runtime/tmp/check/artifact payloads may move to ~/.loom/repos/<repo-id>/. Do not implement runtime path resolver, migration apply, or gate behavior changes.
+- Execution Path: issue #1898 -> branch work/1898-repo-global-artifact-contract -> PR -> review/merge-ready/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1896.md
-- Review Entry: .loom/reviews/WI-1896.json
-- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface workstation-registry; git diff --check
-- Closing Condition: registry fail-closed validation is merged, #1896 is closed, and FR #1893 can consume #1894/#1895/#1896 completion evidence.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1896 closed out by closeout run: PR #1927 merged at 2bad51c65604ab51de477c7975a3778f28e718f9, issue #1896 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1896 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1898.md
+- Review Entry: .loom/reviews/WI-1898.json
+- Validation Entry: python3 tools/loom.py suite validate --target . --item WI-1898 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1898 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1898 --json; git diff --check
+- Closing Condition: Repo/global artifact classification contract is merged, #1898 is closed, and FR #1897 can consume the contract for runtime path resolver and carrier slimdown work.
+- Current Checkpoint: review
+- Current Stop: Repo/global artifact classification contract and adoption/host cross-links are authored on branch `work/1898-repo-global-artifact-contract`; local suite/evidence/carrier/diff validation passed.
+- Next Step: Record spec/review evidence, then prepare commit, PR metadata, hosted checks, merge-ready, and closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T03:53Z local/host-input pass at head 4e8945c9d9bb20df7eb4aa9a8f06ac8989cd2e70: PR #1927 metadata readback passed for current head; review/shadow carrier-only drift classified and repaired after hosted gate fallback; `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py --surface workstation-registry`; `python3 tools/loom.py suite validate --target . --item WI-1896 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1896 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1896 --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface merge_ready --blocking`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface closeout --blocking`; `git diff --check`.
-- Recovery Boundary: WI-1896 only validates workstation registry ambiguity and repair guidance. Workstation upgrade planning/apply, global runtime cache, and legacy repo migration remain separate Work Items.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-07-03T04:54:16Z on head f2998aa640bbe0e8cbb108ae31271dbb2077f04b: `python3 tools/loom.py suite validate --target . --item WI-1898 --json` pass; `python3 tools/loom.py suite evidence validate --target . --item WI-1898 --json` pass; `python3 tools/loom.py suite carrier validate --target . --item WI-1898 --json` pass; `git diff --check` pass.
+- Recovery Boundary: WI-1898 only freezes repo/global artifact classification. Runtime path resolver, repo carrier implementation, gate independence validation, legacy migration, and release behavior remain separate Work Items.
+- Current Lane: repo-global-artifact-contract
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-03T03:21Z WI-1896 work is active in `/Users/mc/dev/Loom` on branch `work/1896-registry-fail-closed`.
-- Logs Entry: workstation registry live path/remote/id classification and focused temp HOME contract fixtures were authored locally.
-- Diagnostics Entry: #1926 post-merge closeout carrier sync completed before starting WI-1896; origin/main is at 3eda6afcda2599be43e5b3005a9146529e7a520f.
-- Verification Entry: 2026-07-03T03:53Z local and host-input validation passed at head 4e8945c9d9bb20df7eb4aa9a8f06ac8989cd2e70 for touched-file py compile, workstation-registry contract surface, suite validate/evidence/carrier validate, PR #1927 metadata readback, review carriers, shadow parity, and diff hygiene.
-- Lane Entry: registry-fail-closed
+- Run Entry: 2026-07-03T04:40Z WI-1898 work is active in `/Users/mc/dev/Loom` on branch `work/1898-repo-global-artifact-contract`.
+- Logs Entry: repo/global artifact classification contract and adoption/host cross-links were authored locally.
+- Diagnostics Entry: WI-1898 is a docs-only contract freeze for FR #1897; no runtime path resolver, migration apply, or gate behavior changes are in scope.
+- Verification Entry: 2026-07-03T04:54:16Z local validation passed for suite/evidence/carrier and diff hygiene on head f2998aa640bbe0e8cbb108ae31271dbb2077f04b.
+- Lane Entry: repo-global-artifact-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1896.md
-- Dynamic Truth: .loom/progress/WI-1896.md
+- Static Truth: .loom/work-items/WI-1898.md
+- Dynamic Truth: .loom/progress/WI-1898.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

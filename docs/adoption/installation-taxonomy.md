@@ -37,6 +37,12 @@ global CLI runtime provider, repository truth may declare that dependency, but
 it must not copy user/workstation provider state, provider cache paths, or
 registration outcomes into versioned repository truth.
 
+Runtime cache, long diagnostics artifacts, and batch-planning accelerators use
+the repo/global artifact boundary defined in
+[repo-global-artifact-classification.md](../methodology/harness/repo-global-artifact-classification.md).
+That contract decides which `.loom/` artifacts may move to `~/.loom/repos/<repo-id>/`
+and which repository carriers must remain versioned truth.
+
 A published plugin marketplace catalog is source distribution metadata, not an
 installed-state record. The Loom source repository may version a deterministic
 catalog only when it points the `loom` plugin at the source payload
@@ -62,6 +68,7 @@ diagnosing them:
 | Full Loom skills bundle export | Compatibility export | Compatibility/discovery surface | Explicit opt-in; never the default metadata-only surface. |
 | Single Loom skill export | Compatibility export | Legacy compatibility surface | Not a supported downstream install shape for the milestone #14 target. |
 | Runtime carrier | Repository or external runtime | Runtime carrier policy | `.loom/bin` and `.loom/bootstrap` are unsupported legacy residue unless a migration issue explicitly classifies them. |
+| Global runtime cache | User/workstation | Workstation cache | Runtime/tmp/check/artifact payloads that only speed local recovery, diagnostics, or batch planning; repository carriers may keep only summaries, hashes, and locators. |
 
 ## Repository Adoption Modes
 
@@ -252,3 +259,6 @@ Migration, `doctor`, and `verify` therefore need a stable target-state rule:
   do not become repository truth;
 - compatibility mode remains visible until residue, wrapper delegation, and
   provider gaps are either explicitly accepted or retired.
+- workstation/global cache can accelerate discovery, resume, diagnostics, and
+  upgrade planning, but it never replaces repository adoption, review,
+  merge-ready, closeout, or release truth.
