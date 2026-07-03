@@ -101,6 +101,7 @@ WORKSTATION_SCHEMA = "loom-workstation-registration/v1"
 WORKSTATION_CONTROL_SCHEMA = "loom-workstation-control/v1"
 WORKSTATION_REPOSITORIES_SCHEMA = "loom-workstation-repositories/v1"
 WORKSTATION_UPGRADE_PLAN_SCHEMA = "loom-workstation-upgrade-plan/v1"
+GLOBAL_CACHE_MIGRATION_SCHEMA = "loom-global-cache-migration/v1"
 SKILLS_SCHEMA = "loom-skills-surface/v1"
 SCENARIO_SCHEMA = "loom-scenario-control/v1"
 PROFILE_SCHEMA = "loom-governance-profile-control/v1"
@@ -242,6 +243,20 @@ COMMANDS: list[dict[str, Any]] = [
         "status": "implemented",
         "json": True,
         "summary": "Read merged runtime upgrade PR/issue facts and orchestrate carrier-only closeout sync.",
+    },
+    {
+        "command": "migrate-global-cache plan",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan explicit migration of legacy repo-local Loom cache/residue to workstation global cache.",
+    },
+    {
+        "command": "migrate-global-cache apply",
+        "domain": "delivery",
+        "status": "implemented",
+        "json": True,
+        "summary": "Move ignored repo-local Loom runtime/tmp cache to workstation global cache and register the repository.",
     },
     {"command": "upgrade", "domain": "delivery", "status": "implemented", "json": True},
     {"command": "rollback", "domain": "delivery", "status": "implemented", "json": True},
@@ -10082,6 +10097,501 @@ def workstation_upgrade_apply_payload(
     )
 
 
+LEGACY_RESIDUE_LOCATORS = (
+    ".loom/bin",
+    "plugins/loom",
+    ".agents/skills",
+    ".agents/plugins/marketplace.json",
+)
+REPO_LOCAL_CACHE_LOCATORS = (".loom/runtime", ".loom/tmp")
+
+
+def git_list_files(target: Path, locator: str, *, others: bool = False, ignored: bool = False) -> list[str]:
+    args = ["git", "ls-files"]
+    if others:
+        args.extend(["--others", "--exclude-standard"])
+    if ignored:
+        args.extend(["--ignored", "--others", "--exclude-standard"])
+    args.extend(["--", locator])
+    completed = run_readback_command(args, cwd=target)
+    if completed.returncode != 0:
+        return []
+    return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+
+
+def git_is_ignored(target: Path, locator: str) -> bool:
+    completed = run_readback_command(["git", "check-ignore", "-q", "--", locator], cwd=target)
+    return completed.returncode == 0
+
+
+def path_sample(entries: list[str], limit: int = 25) -> dict[str, Any]:
+    return {
+        "count": len(entries),
+        "sample": entries[:limit],
+        "truncated": len(entries) > limit,
+    }
+
+
+def installed_state_readback(target: Path) -> dict[str, Any]:
+    path = installed_state_path(target)
+    if path is None:
+        return {
+            "status": "missing",
+            "locator": ".loom/installed-state.json",
+            "valid": False,
+            "blocking": True,
+            "reason": "installed-state is missing",
+        }
+    try:
+        payload = read_json(path)
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "status": "malformed",
+            "locator": ".loom/installed-state.json",
+            "valid": False,
+            "blocking": True,
+            "reason": f"installed-state is unreadable: {exc}",
+        }
+    if not isinstance(payload, dict) or payload.get("schema_version") != INSTALLED_STATE_SCHEMA:
+        return {
+            "status": "unsupported",
+            "locator": ".loom/installed-state.json",
+            "valid": False,
+            "blocking": True,
+            "reason": f"expected {INSTALLED_STATE_SCHEMA}",
+        }
+    repo_payload = payload.get("repo_payload") if isinstance(payload.get("repo_payload"), dict) else {}
+    return {
+        "status": "present",
+        "locator": ".loom/installed-state.json",
+        "valid": True,
+        "blocking": False,
+        "schema_version": payload.get("schema_version"),
+        "repo_payload_mode": repo_payload.get("mode"),
+        "version_context": payload.get("version_context") if isinstance(payload.get("version_context"), dict) else {},
+    }
+
+
+def migration_cache_entry(target: Path, locator: str) -> dict[str, Any]:
+    path = target / locator
+    tracked = git_list_files(target, locator)
+    ignored_entries = git_list_files(target, locator, ignored=True)
+    untracked_entries = git_list_files(target, locator, others=True)
+    exists = path.exists()
+    movable = exists and not tracked
+    blocking = bool(tracked)
+    if path.is_file() or path.is_symlink():
+        file_count = 1
+    elif path.is_dir():
+        file_count = sum(1 for child in path.rglob("*") if child.is_file() or child.is_symlink())
+    else:
+        file_count = 0
+    return {
+        "locator": locator,
+        "exists": exists,
+        "tracked_entries": path_sample(tracked),
+        "untracked_entries": path_sample(untracked_entries),
+        "ignored_entries": path_sample(ignored_entries),
+        "ignored": git_is_ignored(target, locator) or bool(ignored_entries),
+        "file_count": file_count,
+        "movable": movable,
+        "blocking": blocking,
+        "classification": "tracked_cache_blocked" if blocking else "movable_cache" if movable else "absent",
+        "global_locator": f"~/.loom/repos/<repo-id>/{locator.removeprefix('.loom/')}" if exists else None,
+    }
+
+
+def legacy_residue_entry(target: Path, locator: str) -> dict[str, Any]:
+    path = target / locator
+    tracked = git_list_files(target, locator)
+    ignored_entries = git_list_files(target, locator, ignored=True)
+    untracked_entries = git_list_files(target, locator, others=True)
+    exists = path.exists()
+    if tracked:
+        classification = "tracked_legacy_residue"
+        strategy = "pr_required"
+    elif exists:
+        classification = "untracked_legacy_residue"
+        strategy = "auto_commit_candidate"
+    else:
+        classification = "absent"
+        strategy = "no_op"
+    return {
+        "locator": locator,
+        "exists": exists,
+        "tracked_entries": path_sample(tracked),
+        "untracked_entries": path_sample(untracked_entries),
+        "ignored_entries": path_sample(ignored_entries),
+        "classification": classification,
+        "ownership": "tracked_repo_payload" if tracked else "untracked_or_ignored_residue" if exists else "absent",
+        "strategy": strategy,
+        "blocking": False,
+        "apply_action": "diagnose_only" if tracked else "leave_in_place" if exists else "none",
+    }
+
+
+def migration_strategy(installed_state: dict[str, Any], cache_entries: list[dict[str, Any]], residue_entries: list[dict[str, Any]]) -> dict[str, Any]:
+    blocking_reasons: list[str] = []
+    if installed_state.get("blocking"):
+        blocking_reasons.append(str(installed_state.get("reason") or "installed-state is not valid"))
+    for entry in cache_entries:
+        if entry.get("blocking"):
+            blocking_reasons.append(f"{entry.get('locator')} contains tracked cache entries")
+    if blocking_reasons:
+        return {
+            "classification": "blocked",
+            "display": "blocked",
+            "reason": "; ".join(blocking_reasons),
+            "requires_pr": False,
+            "apply_allowed": False,
+        }
+    if any((entry.get("tracked_entries") or {}).get("count") for entry in residue_entries):
+        return {
+            "classification": "pr_required",
+            "display": "PR required",
+            "reason": "tracked legacy residue requires repository-scoped review before deletion or rewrite",
+            "requires_pr": True,
+            "apply_allowed": False,
+        }
+    if any(entry.get("movable") for entry in cache_entries) or any(entry.get("exists") for entry in residue_entries):
+        return {
+            "classification": "auto_commit_candidate",
+            "display": "auto-commit candidate",
+            "reason": "only untracked or ignored Loom cache/residue was detected",
+            "requires_pr": False,
+            "apply_allowed": True,
+        }
+    return {
+        "classification": "no_op",
+        "display": "no-op",
+        "reason": "no repo-local Loom cache or legacy residue was detected",
+        "requires_pr": False,
+        "apply_allowed": True,
+    }
+
+
+def migration_plan_payload(command: str, target: Path) -> dict[str, Any]:
+    if not target.exists():
+        return output(
+            command,
+            "block",
+            schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
+            summary="Legacy migration target does not exist.",
+            target=str(target),
+            plan_only=True,
+            mutates=False,
+            failed_layer="target",
+            fail_closed_reason="target path does not exist",
+            fallback_to=["loom migrate-global-cache plan --target <repo> --json"],
+        )
+    installed_state = installed_state_readback(target)
+    cache_entries = [migration_cache_entry(target, locator) for locator in REPO_LOCAL_CACHE_LOCATORS]
+    residue_entries = [legacy_residue_entry(target, locator) for locator in LEGACY_RESIDUE_LOCATORS]
+    strategy = migration_strategy(installed_state, cache_entries, residue_entries)
+    return output(
+        command,
+        "block" if strategy["classification"] == "blocked" else "pass",
+        schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
+        summary=(
+            "Legacy global cache migration plan is blocked."
+            if strategy["classification"] == "blocked"
+            else "Legacy global cache migration plan generated without mutating state."
+        ),
+        target=str(target),
+        plan_only=True,
+        mutates=False,
+        installed_state=installed_state,
+        cache_entries=cache_entries,
+        legacy_residue=residue_entries,
+        repo_change_strategy=strategy,
+        strategy=strategy["classification"],
+        strategy_display=strategy["display"],
+        validation_package=None,
+        failed_layer="legacy-migration" if strategy["classification"] == "blocked" else None,
+        fail_closed_reason=strategy["reason"] if strategy["classification"] == "blocked" else None,
+        fallback_to=(
+            ["repair installed-state", "open a repository-scoped PR for tracked cache entries"]
+            if strategy["classification"] == "blocked"
+            else None
+        ),
+    )
+
+
+def move_cache_file_to_global(target: Path, source: Path) -> dict[str, Any]:
+    relative = source.relative_to(target).as_posix()
+    destination = global_runtime_path(target, relative)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        if destination.is_dir():
+            shutil.rmtree(destination)
+        else:
+            destination.unlink()
+    shutil.move(str(source), str(destination))
+    return {
+        "source": relative,
+        "global_path": str(destination),
+        "global_locator": relative,
+        "sha256": sha256_path(destination) if destination.is_file() else None,
+    }
+
+
+def sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def prune_empty_directories(root: Path) -> None:
+    if not root.exists():
+        return
+    directories = [path for path in root.rglob("*") if path.is_dir()]
+    for directory in sorted(directories, key=lambda path: len(path.parts), reverse=True):
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+    try:
+        root.rmdir()
+    except OSError:
+        pass
+
+
+def apply_global_cache_moves(target: Path, cache_entries: list[dict[str, Any]]) -> dict[str, Any]:
+    moved: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for entry in cache_entries:
+        locator = entry.get("locator")
+        if not isinstance(locator, str) or not entry.get("exists"):
+            skipped.append({"locator": locator, "reason": "absent"})
+            continue
+        if (entry.get("tracked_entries") or {}).get("count"):
+            return {
+                "result": "block",
+                "moved": moved,
+                "skipped": skipped,
+                "failed_layer": "legacy-cache",
+                "fail_closed_reason": f"{locator} contains tracked entries",
+            }
+        root = target / locator
+        if root.is_file() or root.is_symlink():
+            moved.append(move_cache_file_to_global(target, root))
+            continue
+        if not root.is_dir():
+            skipped.append({"locator": locator, "reason": "not a regular file or directory"})
+            continue
+        files = [path for path in root.rglob("*") if path.is_file() or path.is_symlink()]
+        for path in files:
+            moved.append(move_cache_file_to_global(target, path))
+        prune_empty_directories(root)
+    return {
+        "result": "pass",
+        "moved": moved,
+        "skipped": skipped,
+        "failed_layer": None,
+        "fail_closed_reason": None,
+    }
+
+
+def register_migrated_repository(target: Path) -> dict[str, Any]:
+    path = workstation_registry_path()
+    registry, error = load_workstation_registry(path)
+    if error or registry is None:
+        return {
+            "result": "block",
+            "registry_path": str(path),
+            "failed_layer": "workstation-registry",
+            "fail_closed_reason": error or "workstation registry is unavailable",
+        }
+    raw_repositories = registry.get("repositories", [])
+    if not all(isinstance(entry, dict) for entry in raw_repositories):
+        return {
+            "result": "block",
+            "registry_path": str(path),
+            "failed_layer": "workstation-registry",
+            "fail_closed_reason": "repository entries must be JSON objects before mutation",
+        }
+    blocking = [
+        item for item in workstation_registry_classifications(registry) if item.get("blocking") is True
+    ]
+    if blocking:
+        return {
+            "result": "block",
+            "registry_path": str(path),
+            "failed_layer": "workstation-registry",
+            "fail_closed_reason": "registry contains blocking identity or path drift",
+            "classifications": blocking,
+        }
+    repositories = [entry for entry in raw_repositories if isinstance(entry, dict)]
+    entry = workstation_registry_entry(target, source="loom migrate-global-cache apply")
+    retained = [
+        existing
+        for existing in repositories
+        if existing.get("id") != entry["id"] and existing.get("path") != entry["path"]
+    ]
+    retained.append(entry)
+    registry["repositories"] = sorted(retained, key=lambda item: str(item.get("path", "")))
+    registry["updated_at"] = now_iso()
+    write_json(path, registry)
+    return {
+        "result": "pass",
+        "registry_path": str(path),
+        "repository": entry,
+        "repository_count": len(registry["repositories"]),
+        "writes": [str(path)],
+    }
+
+
+def run_json_command_step(step_id: str, command: list[str], *, cwd: Path) -> dict[str, Any]:
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    try:
+        payload: Any = json.loads(completed.stdout) if completed.stdout.strip() else None
+    except json.JSONDecodeError:
+        payload = None
+    return {
+        "id": step_id,
+        "command": " ".join(shlex.quote(part) for part in command),
+        "result": "pass" if completed.returncode == 0 else "block",
+        "returncode": completed.returncode,
+        "payload_result": payload.get("result") if isinstance(payload, dict) else None,
+        "stdout_sha256": hashlib.sha256(completed.stdout.encode("utf-8")).hexdigest() if completed.stdout else None,
+        "stderr": completed.stderr.strip(),
+    }
+
+
+def migration_validation_package(target: Path) -> dict[str, Any]:
+    loom = [sys.executable, str(Path(__file__).resolve())]
+    steps = [
+        run_json_command_step("installed-state-validate", [*loom, "installed-state", "validate", "--target", str(target), "--json"], cwd=REPO_ROOT),
+        run_json_command_step("host-verify", [*loom, "host", "verify", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], cwd=REPO_ROOT),
+        run_json_command_step("skills-check", [*loom, "skills", "check", "--target", str(target), "--json"], cwd=REPO_ROOT),
+        run_json_command_step("doctor", [*loom, "doctor", "--target", str(target), "--json"], cwd=REPO_ROOT),
+    ]
+    git_status = run_readback_command(["git", "status", "--short"], cwd=target)
+    git_step = {
+        "id": "git-status",
+        "command": "git status --short",
+        "result": "pass" if git_status.returncode == 0 else "block",
+        "returncode": git_status.returncode,
+        "porcelain": git_status.stdout.splitlines(),
+        "stderr": git_status.stderr.strip(),
+    }
+    steps.append(git_step)
+    blocking = [step for step in steps if step.get("result") != "pass"]
+    return {
+        "schema": "loom-legacy-migration-validation-package/v1",
+        "result": "block" if blocking else "pass",
+        "steps": steps,
+        "blocking_step_ids": [str(step.get("id")) for step in blocking],
+    }
+
+
+def migration_apply_payload(command: str, target: Path) -> dict[str, Any]:
+    plan = migration_plan_payload(command, target)
+    strategy = plan.get("repo_change_strategy") if isinstance(plan.get("repo_change_strategy"), dict) else {}
+    if plan.get("result") == "block":
+        return {**plan, "plan_only": False, "mutates": False}
+    if strategy.get("classification") == "pr_required":
+        return output(
+            command,
+            "block",
+            schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
+            summary="Legacy migration apply stopped before tracked repository payload changes.",
+            target=str(target),
+            plan_only=False,
+            mutates=False,
+            installed_state=plan.get("installed_state"),
+            cache_entries=plan.get("cache_entries"),
+            legacy_residue=plan.get("legacy_residue"),
+            repo_change_strategy=strategy,
+            strategy=strategy.get("classification"),
+            strategy_display=strategy.get("display"),
+            failed_layer="legacy-residue",
+            fail_closed_reason=strategy.get("reason"),
+            fallback_to=["open a repository-scoped PR for tracked legacy residue"],
+        )
+    cache_entries = [entry for entry in plan.get("cache_entries", []) if isinstance(entry, dict)]
+    cache_apply = apply_global_cache_moves(target, cache_entries)
+    registry_apply = register_migrated_repository(target) if cache_apply.get("result") == "pass" else None
+    validation = (
+        migration_validation_package(target)
+        if cache_apply.get("result") == "pass" and isinstance(registry_apply, dict) and registry_apply.get("result") == "pass"
+        else None
+    )
+    blocking = [
+        cache_apply.get("result") == "block",
+        isinstance(registry_apply, dict) and registry_apply.get("result") == "block",
+        isinstance(validation, dict) and validation.get("result") == "block",
+    ]
+    return output(
+        command,
+        "block" if any(blocking) else "pass",
+        schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
+        summary=(
+            "Legacy global cache migration apply completed."
+            if not any(blocking)
+            else "Legacy global cache migration apply blocked before all validation passed."
+        ),
+        target=str(target),
+        plan_only=False,
+        mutates=bool(cache_apply.get("moved") or (isinstance(registry_apply, dict) and registry_apply.get("writes"))),
+        installed_state=plan.get("installed_state"),
+        cache_entries=cache_entries,
+        legacy_residue=plan.get("legacy_residue"),
+        repo_change_strategy=strategy,
+        strategy=strategy.get("classification"),
+        strategy_display=strategy.get("display"),
+        cache_apply=cache_apply,
+        registry_apply=registry_apply,
+        validation_package=validation,
+        failed_layer=(
+            cache_apply.get("failed_layer")
+            if cache_apply.get("result") == "block"
+            else registry_apply.get("failed_layer")
+            if isinstance(registry_apply, dict) and registry_apply.get("result") == "block"
+            else "legacy-migration-validation"
+            if isinstance(validation, dict) and validation.get("result") == "block"
+            else None
+        ),
+        fail_closed_reason=(
+            cache_apply.get("fail_closed_reason")
+            if cache_apply.get("result") == "block"
+            else registry_apply.get("fail_closed_reason")
+            if isinstance(registry_apply, dict) and registry_apply.get("result") == "block"
+            else "post-migration validation package failed"
+            if isinstance(validation, dict) and validation.get("result") == "block"
+            else None
+        ),
+        fallback_to=(
+            ["repair validation package findings and rerun loom migrate-global-cache plan --json"]
+            if any(blocking)
+            else None
+        ),
+    )
+
+
+def handle_migrate_global_cache(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom migrate-global-cache")
+    parser.add_argument("action", choices=("plan", "apply"))
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    command = f"migrate-global-cache {args.action}"
+    target = resolve_target(args.target)
+    if args.action == "plan":
+        return emit(migration_plan_payload(command, target))
+    return emit(migration_apply_payload(command, target))
+
+
 def handle_workstation(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom workstation")
     parser.add_argument("action", choices=("register", "list", "unregister", "upgrade"))
@@ -13748,6 +14258,9 @@ def main(argv: list[str]) -> int:
     if command == "runtime-upgrade" or command.startswith("runtime-upgrade "):
         runtime_upgrade_args = command.split()[1:] + forwarded if command.startswith("runtime-upgrade ") else forwarded
         return handle_runtime_upgrade(runtime_upgrade_args)
+    if command == "migrate-global-cache" or command.startswith("migrate-global-cache "):
+        migrate_args = command.split()[1:] + forwarded if command.startswith("migrate-global-cache ") else forwarded
+        return handle_migrate_global_cache(migrate_args)
     if command == "workspace" or command.startswith("workspace "):
         workspace_args = command.split()[1:] + forwarded if command.startswith("workspace ") else forwarded
         return handle_workspace(workspace_args)
