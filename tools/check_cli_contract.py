@@ -9412,6 +9412,16 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         "result": "pass",
         "closeout_pr_allowed": True,
     }
+    terminal_closeout_gate["review_approval"] = {
+        **terminal_closeout_gate.get("review_approval", {}),
+        "status": "terminal_closeout_retained",
+        "decision": "allow",
+        "kind": "code_review",
+        "semantic_review_disposition": {
+            "status": "missing",
+            "consumable": False,
+        },
+    }
     terminal_closeout_gate_file = fixture_dir / "pr-gate-terminal-closeout-pass.json"
     terminal_closeout_gate_file.write_text(json.dumps(terminal_closeout_gate, indent=2) + "\n", encoding="utf-8")
     _, terminal_closeout_merge_payload = run_flow_json(

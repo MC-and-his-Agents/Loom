@@ -21489,6 +21489,11 @@ def retained_pr_gate_consumption(
         and closeout_specific_gate.get("result") == "pass"
         and closeout_specific_gate.get("closeout_pr_allowed") is True
     )
+    terminal_closeout_review_retained = (
+        terminal_closeout_allowed
+        and review_approval.get("status") == "terminal_closeout_retained"
+        and review_approval.get("decision") == "allow"
+    )
 
     if not isinstance(retained, dict):
         missing_inputs.append("retained pr-gate result is unreadable")
@@ -21505,11 +21510,20 @@ def retained_pr_gate_consumption(
             missing_inputs.append("retained pr-gate PR head does not match current PR head")
         if expected_item and retained_item != expected_item:
             missing_inputs.append("retained pr-gate Work Item does not match expected item")
-        if review_approval.get("status") != "approved" or review_approval.get("decision") != "allow":
+        if (
+            not terminal_closeout_review_retained
+            and (review_approval.get("status") != "approved" or review_approval.get("decision") != "allow")
+        ):
             missing_inputs.append("retained pr-gate does not carry authored allow review approval")
         if review_approval.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
             missing_inputs.append("retained pr-gate review kind cannot satisfy implementation approval")
-        if semantic_disposition.get("status") not in {"passed", "not_applicable", "waived"} or semantic_disposition.get("consumable") is not True:
+        if (
+            not terminal_closeout_review_retained
+            and (
+                semantic_disposition.get("status") not in {"passed", "not_applicable", "waived"}
+                or semantic_disposition.get("consumable") is not True
+            )
+        ):
             missing_inputs.append("retained pr-gate semantic_review_disposition is not consumable")
         if (
             isinstance(retained_head, str)
