@@ -99,6 +99,7 @@ HOST_SCHEMA = "loom-host-orchestration/v1"
 WORKSTATION_SCHEMA = "loom-workstation-registration/v1"
 WORKSTATION_CONTROL_SCHEMA = "loom-workstation-control/v1"
 WORKSTATION_REPOSITORIES_SCHEMA = "loom-workstation-repositories/v1"
+WORKSTATION_UPGRADE_PLAN_SCHEMA = "loom-workstation-upgrade-plan/v1"
 SKILLS_SCHEMA = "loom-skills-surface/v1"
 SCENARIO_SCHEMA = "loom-scenario-control/v1"
 PROFILE_SCHEMA = "loom-governance-profile-control/v1"
@@ -529,6 +530,13 @@ COMMANDS: list[dict[str, Any]] = [
         "status": "implemented",
         "json": True,
         "summary": "Remove or opt out a target repository entry from ~/.loom/repositories.json.",
+    },
+    {
+        "command": "workstation upgrade",
+        "domain": "workstation",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan a machine-level Loom CLI/plugin refresh plus per-repository adoption classifications without mutating state.",
     },
     {
         "command": "skills list",
@@ -9649,20 +9657,229 @@ def workstation_registry_classifications(registry: dict[str, Any]) -> list[dict[
     return classifications
 
 
+def normalized_version(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    return text[1:] if text.startswith("v") else text
+
+
+def workstation_upgrade_machine_plan(target_version: str) -> dict[str, Any]:
+    freshness = version_freshness()
+    freshness_action = version_freshness_action(freshness)
+    cli_command = f"npm install -g @mc-and-his-agents/loom@{target_version}"
+    plugin_commands = [
+        command
+        for command in freshness_action.get("apply_commands", [])
+        if isinstance(command, str) and command != "npm install -g @mc-and-his-agents/loom@latest"
+    ]
+    if not plugin_commands:
+        plugin_commands = [
+            "loom host install --host codex --scope user --apply --json",
+            "loom host register --host codex --scope user --apply --json",
+        ]
+    return {
+        "schema": "loom-workstation-machine-upgrade-plan/v1",
+        "classification": "machine_only",
+        "target_version": target_version,
+        "mutates": False,
+        "freshness": freshness,
+        "steps": [
+            {
+                "id": "upgrade-cli",
+                "kind": "npm-cli",
+                "command": cli_command,
+                "required": freshness.get("action") in {"upgrade_cli", "check_cli_latest"},
+                "mutates_when_applied": "global npm package",
+            },
+            {
+                "id": "refresh-codex-plugin",
+                "kind": "codex-user-plugin",
+                "commands": plugin_commands,
+                "required": freshness.get("plugin_payload", {}).get("action") != "already_current",
+                "mutates_when_applied": "user Codex marketplace/config/plugin cache",
+            },
+            {
+                "id": "verify-host",
+                "kind": "host-doctor",
+                "command": "loom host doctor --host codex --scope user --json",
+                "required": True,
+                "mutates_when_applied": False,
+            },
+        ],
+    }
+
+
+def workstation_upgrade_repo_plan(entry: dict[str, Any], *, target_version: str, blocked: dict[Any, list[dict[str, Any]]]) -> dict[str, Any]:
+    entry_id = entry.get("id")
+    path_value = entry.get("path")
+    adoption = entry.get("adoption") if isinstance(entry.get("adoption"), dict) else {}
+    opt_in = entry.get("opt_in") if isinstance(entry.get("opt_in"), dict) else {}
+    blocking = blocked.get(entry_id, [])
+    base = {
+        "entry_id": entry_id,
+        "path": path_value,
+        "adoption": adoption,
+        "target_version": target_version,
+        "mutates": False,
+    }
+    if opt_in.get("enabled") is False:
+        return {
+            **base,
+            "classification": "repo_noop",
+            "reason": "repository is opted out of workstation upgrade planning",
+            "commands": [],
+        }
+    if blocking:
+        return {
+            **base,
+            "classification": "blocked",
+            "reason": "workstation registry entry has blocking identity or path drift",
+            "blocking_classifications": blocking,
+            "commands": [],
+        }
+    if not isinstance(path_value, str) or not path_value:
+        return {
+            **base,
+            "classification": "blocked",
+            "reason": "repository path is unavailable",
+            "commands": [],
+        }
+
+    mode = adoption.get("mode") if isinstance(adoption.get("mode"), str) else "unknown"
+    last_seen_version = adoption.get("last_seen_version") if isinstance(adoption.get("last_seen_version"), str) else None
+    if mode == "metadata-only" and normalized_version(last_seen_version) == normalized_version(target_version):
+        return {
+            **base,
+            "classification": "repo_noop",
+            "reason": "metadata-only adoption is already at the requested target version",
+            "commands": ["loom doctor --target <repo> --json"],
+        }
+    if mode == "metadata-only":
+        return {
+            **base,
+            "classification": "repo_auto_commit_candidate",
+            "reason": "metadata-only adoption can refresh repo-local adoption metadata with low risk",
+            "commands": [
+                f"loom install --target {path_value} --apply --json",
+                f"loom doctor --target {path_value} --json",
+            ],
+        }
+    if mode in {"repo-local-wrapper", "legacy-embedded"}:
+        return {
+            **base,
+            "classification": "repo_pr_required",
+            "reason": f"{mode} adoption may remove or rewrite tracked repository surfaces",
+            "commands": [
+                f"loom upgrade-plan --target {path_value} --json",
+                f"open a repository-scoped PR for {path_value}",
+            ],
+        }
+    return {
+        **base,
+        "classification": "blocked",
+        "reason": "repository adoption mode is unknown",
+        "commands": [f"loom doctor --target {path_value} --json"],
+    }
+
+
+def workstation_upgrade_plan_payload(
+    *,
+    command: str,
+    registry_path: Path,
+    registry: dict[str, Any],
+    target_version: str,
+) -> dict[str, Any]:
+    repositories = [entry for entry in registry.get("repositories", []) if isinstance(entry, dict)]
+    classifications = workstation_registry_classifications(registry)
+    blocking_classifications = [item for item in classifications if item.get("blocking") is True]
+    blocked_by_id: dict[Any, list[dict[str, Any]]] = {}
+    for item in blocking_classifications:
+        blocked_by_id.setdefault(item.get("entry_id"), []).append(item)
+    plans = [
+        workstation_upgrade_repo_plan(entry, target_version=target_version, blocked=blocked_by_id)
+        for entry in repositories
+    ]
+    counts: dict[str, int] = {}
+    for plan in plans:
+        classification = str(plan.get("classification") or "blocked")
+        counts[classification] = counts.get(classification, 0) + 1
+    result = "block" if any(plan.get("classification") == "blocked" for plan in plans) else "pass"
+    if not plans:
+        summary = "Workstation upgrade plan contains machine-level refresh steps and no registered repositories."
+    elif result == "pass":
+        summary = "Workstation upgrade plan classified registered repositories without mutating state."
+    else:
+        summary = "Workstation upgrade plan found blocked repository entries; repair registry drift before applying repository changes."
+    return output(
+        command,
+        result,
+        schema=WORKSTATION_UPGRADE_PLAN_SCHEMA,
+        summary=summary,
+        target_version=target_version,
+        plan_only=True,
+        mutates=False,
+        registry_schema=WORKSTATION_REPOSITORIES_SCHEMA,
+        registry_path=str(registry_path),
+        logical_registry_path=registry.get("registry_path"),
+        machine_plan=workstation_upgrade_machine_plan(target_version),
+        repository_plans=plans,
+        repository_count=len(repositories),
+        classification_counts=counts or {"machine_only": 1},
+        classifications=classifications,
+        failed_layer="workstation-registry" if result == "block" else None,
+        fail_closed_reason=(
+            "registry contains entries that are ambiguous for mutation planning"
+            if result == "block"
+            else None
+        ),
+        fallback_to=(
+            sorted(
+                {
+                    guidance
+                    for item in blocking_classifications
+                    for guidance in item.get("repair_guidance", [])
+                    if isinstance(guidance, str)
+                }
+            )
+            if result == "block"
+            else None
+        ),
+    )
+
+
 def handle_workstation(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom workstation")
-    parser.add_argument("action", choices=("register", "list", "unregister"))
+    parser.add_argument("action", choices=("register", "list", "unregister", "upgrade"))
     parser.add_argument("--target", default=".")
     parser.add_argument("--id")
     parser.add_argument("--keep-entry", action="store_true")
+    parser.add_argument("--plan", action="store_true")
+    parser.add_argument("--to", dest="target_version")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
     command = f"workstation {args.action}"
+    if args.action == "upgrade":
+        command = "workstation upgrade"
+        if not args.plan:
+            parser.error("workstation upgrade currently requires --plan")
+        if not args.target_version:
+            parser.error("workstation upgrade --plan requires --to <version>")
     registry_path = workstation_registry_path()
     registry, error = load_workstation_registry(registry_path)
     if error or registry is None:
         return emit(workstation_registry_block(command, registry_path, error or "workstation registry is unavailable"))
+
+    if args.action == "upgrade":
+        return emit(
+            workstation_upgrade_plan_payload(
+                command=command,
+                registry_path=registry_path,
+                registry=registry,
+                target_version=args.target_version,
+            )
+        )
 
     if args.action == "list":
         repositories = registry.get("repositories", [])

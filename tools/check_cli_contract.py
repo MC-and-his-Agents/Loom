@@ -123,6 +123,7 @@ REQUIRED_COMMANDS = {
     "workstation register",
     "workstation list",
     "workstation unregister",
+    "workstation upgrade",
     "workspace create",
     "workspace locate",
     "workspace check",
@@ -4651,7 +4652,7 @@ def assert_workstation_registry_fixture_contract() -> None:
             raise AssertionError("opted-out fixture must be list-only and ineligible for upgrade apply planning")
 
 
-def write_workstation_registry_target(target: Path) -> None:
+def write_workstation_registry_target(target: Path, *, mode: str = "metadata-only", version: str = "v0.26.0") -> None:
     target.mkdir(parents=True)
     subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(
@@ -4663,8 +4664,8 @@ def write_workstation_registry_target(target: Path) -> None:
     )
     installed_state = {
         "schema_version": "loom-installed-state/v2",
-        "repo_payload": {"mode": "metadata-only"},
-        "version_context": {"repo_version": "v0.26.0"},
+        "repo_payload": {"mode": mode},
+        "version_context": {"repo_version": version},
     }
     installed_state_path = target / ".loom" / "installed-state.json"
     installed_state_path.parent.mkdir(parents=True)
@@ -4679,109 +4680,157 @@ def assert_workstation_registry_cli_contract(tmp: Path) -> None:
     registry_path = home / ".loom" / "repositories.json"
     forbidden_target_writes = ("plugins/loom", "skills", ".agents/skills", ".loom/bin")
 
-    with isolated_codex_workstation(home):
-        _, empty = run_json(["workstation", "list", "--json"], expect=0)
-        if empty.get("result") != "pass" or empty.get("repository_count") != 0:
-            raise AssertionError("workstation list did not return an empty registry for a fresh HOME")
-        if registry_path.exists():
-            raise AssertionError("workstation list must not create ~/.loom/repositories.json")
+    old_latest = os.environ.get("LOOM_TEST_NPM_LATEST_VERSION")
+    os.environ["LOOM_TEST_NPM_LATEST_VERSION"] = "0.27.0"
+    try:
+        with isolated_codex_workstation(home):
+            _, machine_only_plan = run_json(["workstation", "upgrade", "--plan", "--to", "0.27.0", "--json"], expect=0)
+            if machine_only_plan.get("schema") != "loom-workstation-upgrade-plan/v1":
+                raise AssertionError("workstation upgrade --plan did not expose the upgrade plan schema")
+            if machine_only_plan.get("mutates") is not False or machine_only_plan.get("plan_only") is not True:
+                raise AssertionError("workstation upgrade --plan must be non-mutating")
+            if machine_only_plan.get("classification_counts") != {"machine_only": 1}:
+                raise AssertionError("empty workstation upgrade plan must be classified as machine_only")
+            if machine_only_plan.get("repository_plans") != []:
+                raise AssertionError("machine_only workstation upgrade plan must not invent repository plans")
 
-        _, registered = run_json(["workstation", "register", "--target", str(target), "--json"], expect=0)
-        entry = registered.get("repository")
-        if registered.get("result") != "pass" or not isinstance(entry, dict):
-            raise AssertionError("workstation register did not return the registered repository entry")
-        if registered.get("registry_schema") != "loom-workstation-repositories/v1":
-            raise AssertionError("workstation register did not expose the registry schema")
-        if not registry_path.exists():
-            raise AssertionError("workstation register did not write ~/.loom/repositories.json")
-        if entry.get("path") != str(target.resolve()):
-            raise AssertionError("workstation register did not store the absolute target path")
-        if entry.get("remote", {}).get("canonical_url") != "git@github.com:owner/TargetRepo.git":
-            raise AssertionError("workstation register did not read the canonical origin remote")
-        if not str(entry.get("remote", {}).get("hash")).startswith("sha256:"):
-            raise AssertionError("workstation register did not hash the canonical remote")
-        if entry.get("adoption", {}).get("mode") != "metadata-only":
-            raise AssertionError("workstation register did not snapshot metadata-only adoption mode")
-        for unexpected in forbidden_target_writes:
-            if (target / unexpected).exists():
-                raise AssertionError(f"workstation register wrote unsupported repository payload: {unexpected}")
+            _, empty = run_json(["workstation", "list", "--json"], expect=0)
+            if empty.get("result") != "pass" or empty.get("repository_count") != 0:
+                raise AssertionError("workstation list did not return an empty registry for a fresh HOME")
+            if registry_path.exists():
+                raise AssertionError("workstation list must not create ~/.loom/repositories.json")
 
-        registry = json.loads(registry_path.read_text(encoding="utf-8"))
-        if registry.get("schema_version") != "loom-workstation-repositories/v1" or len(registry.get("repositories", [])) != 1:
-            raise AssertionError("workstation register persisted an invalid registry shape")
+            _, registered = run_json(["workstation", "register", "--target", str(target), "--json"], expect=0)
+            entry = registered.get("repository")
+            if registered.get("result") != "pass" or not isinstance(entry, dict):
+                raise AssertionError("workstation register did not return the registered repository entry")
+            if registered.get("registry_schema") != "loom-workstation-repositories/v1":
+                raise AssertionError("workstation register did not expose the registry schema")
+            if not registry_path.exists():
+                raise AssertionError("workstation register did not write ~/.loom/repositories.json")
+            if entry.get("path") != str(target.resolve()):
+                raise AssertionError("workstation register did not store the absolute target path")
+            if entry.get("remote", {}).get("canonical_url") != "git@github.com:owner/TargetRepo.git":
+                raise AssertionError("workstation register did not read the canonical origin remote")
+            if not str(entry.get("remote", {}).get("hash")).startswith("sha256:"):
+                raise AssertionError("workstation register did not hash the canonical remote")
+            if entry.get("adoption", {}).get("mode") != "metadata-only":
+                raise AssertionError("workstation register did not snapshot metadata-only adoption mode")
+            for unexpected in forbidden_target_writes:
+                if (target / unexpected).exists():
+                    raise AssertionError(f"workstation register wrote unsupported repository payload: {unexpected}")
 
-        _, listed = run_json(["workstation", "list", "--json"], expect=0)
-        if listed.get("eligible_for_plan") != [entry["id"]]:
-            raise AssertionError("workstation list did not mark the opted-in registered repo as eligible")
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            if registry.get("schema_version") != "loom-workstation-repositories/v1" or len(registry.get("repositories", [])) != 1:
+                raise AssertionError("workstation register persisted an invalid registry shape")
 
-        _, opted_out = run_json(["workstation", "unregister", "--target", str(target), "--keep-entry", "--json"], expect=0)
-        if opted_out.get("updated_count") != 1 or opted_out.get("removed_count") != 0:
-            raise AssertionError("workstation unregister --keep-entry did not update exactly one entry")
-        _, list_opted_out = run_json(["workstation", "list", "--json"], expect=0)
-        classifications = {item.get("classification") for item in list_opted_out.get("classifications", [])}
-        if list_opted_out.get("eligible_for_plan") != [] or "opted_out" not in classifications:
-            raise AssertionError("workstation list did not expose opted-out list-only diagnostics")
+            _, listed = run_json(["workstation", "list", "--json"], expect=0)
+            if listed.get("eligible_for_plan") != [entry["id"]]:
+                raise AssertionError("workstation list did not mark the opted-in registered repo as eligible")
 
-        _, removed = run_json(["workstation", "unregister", "--id", entry["id"], "--json"], expect=0)
-        if removed.get("removed_count") != 1 or removed.get("repository_count") != 0:
-            raise AssertionError("workstation unregister --id did not remove the registered entry")
-        _, final_list = run_json(["workstation", "list", "--json"], expect=0)
-        if final_list.get("repository_count") != 0:
-            raise AssertionError("workstation list still reports entries after unregister")
+            noop_target = tmp / "noop-repo"
+            auto_target = tmp / "auto-repo"
+            pr_target = tmp / "pr-repo"
+            blocked_target = tmp / "blocked-repo"
+            write_workstation_registry_target(noop_target, version="v0.27.0")
+            write_workstation_registry_target(auto_target, version="v0.26.0")
+            write_workstation_registry_target(pr_target, mode="legacy-embedded", version="v0.26.0")
+            write_workstation_registry_target(blocked_target, version="v0.26.0")
+            for plan_target in (noop_target, auto_target, pr_target, blocked_target):
+                run_json(["workstation", "register", "--target", str(plan_target), "--json"], expect=0)
+            shutil.rmtree(blocked_target)
+            _, upgrade_plan = run_json(["workstation", "upgrade", "--plan", "--to", "0.27.0", "--json"], expect=1)
+            plans = upgrade_plan.get("repository_plans")
+            if not isinstance(plans, list):
+                raise AssertionError("workstation upgrade --plan must expose repository_plans")
+            plan_classes = {plan.get("classification") for plan in plans if isinstance(plan, dict)}
+            expected_plan_classes = {"repo_noop", "repo_auto_commit_candidate", "repo_pr_required", "blocked"}
+            missing_classes = expected_plan_classes - plan_classes
+            if missing_classes:
+                raise AssertionError(f"workstation upgrade --plan missing classifications: {sorted(missing_classes)}")
+            if upgrade_plan.get("machine_plan", {}).get("classification") != "machine_only":
+                raise AssertionError("workstation upgrade --plan must include a machine_only machine plan")
+            if upgrade_plan.get("mutates") is not False:
+                raise AssertionError("workstation upgrade --plan must not mutate while reporting blocked repositories")
+            for unexpected in forbidden_target_writes:
+                if (auto_target / unexpected).exists() or (pr_target / unexpected).exists():
+                    raise AssertionError(f"workstation upgrade --plan wrote unsupported repository payload: {unexpected}")
+            registry_path.unlink()
+            run_json(["workstation", "register", "--target", str(target), "--json"], expect=0)
 
-        missing_target = tmp / "missing-registered-repo"
-        write_workstation_registry_target(missing_target)
-        _, missing_registered = run_json(["workstation", "register", "--target", str(missing_target), "--json"], expect=0)
-        missing_id = missing_registered.get("repository", {}).get("id")
-        shutil.rmtree(missing_target)
-        _, missing_list = run_json(["workstation", "list", "--json"], expect=1)
-        assert_workstation_registry_cli_blocks(missing_list, "path_missing", missing_id)
-        registry_path.unlink()
+            _, opted_out = run_json(["workstation", "unregister", "--target", str(target), "--keep-entry", "--json"], expect=0)
+            if opted_out.get("updated_count") != 1 or opted_out.get("removed_count") != 0:
+                raise AssertionError("workstation unregister --keep-entry did not update exactly one entry")
+            _, list_opted_out = run_json(["workstation", "list", "--json"], expect=0)
+            classifications = {item.get("classification") for item in list_opted_out.get("classifications", [])}
+            if list_opted_out.get("eligible_for_plan") != [] or "opted_out" not in classifications:
+                raise AssertionError("workstation list did not expose opted-out list-only diagnostics")
 
-        remote_target = tmp / "remote-drift-repo"
-        write_workstation_registry_target(remote_target)
-        _, remote_registered = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=0)
-        remote_id = remote_registered.get("repository", {}).get("id")
-        subprocess.run(
-            ["git", "remote", "set-url", "origin", "git@github.com:owner/ChangedRepo.git"],
-            cwd=remote_target,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        _, remote_list = run_json(["workstation", "list", "--json"], expect=1)
-        assert_workstation_registry_cli_blocks(remote_list, "remote_hash_drift", remote_id)
-        _, blocked_register = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=1)
-        if blocked_register.get("failed_layer") != "workstation-registry":
-            raise AssertionError("workstation register must fail closed while registry has blocking drift")
-        registry_path.unlink()
+            _, removed = run_json(["workstation", "unregister", "--id", entry["id"], "--json"], expect=0)
+            if removed.get("removed_count") != 1 or removed.get("repository_count") != 0:
+                raise AssertionError("workstation unregister --id did not remove the registered entry")
+            _, final_list = run_json(["workstation", "list", "--json"], expect=0)
+            if final_list.get("repository_count") != 0:
+                raise AssertionError("workstation list still reports entries after unregister")
 
-        conflict_a = tmp / "conflict-a"
-        conflict_b = tmp / "conflict-b"
-        write_workstation_registry_target(conflict_a)
-        write_workstation_registry_target(conflict_b)
-        subprocess.run(
-            ["git", "remote", "set-url", "origin", "git@github.com:owner/ConflictB.git"],
-            cwd=conflict_b,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        _, conflict_registered = run_json(["workstation", "register", "--target", str(conflict_a), "--json"], expect=0)
-        conflict_entry = conflict_registered.get("repository")
-        if not isinstance(conflict_entry, dict):
-            raise AssertionError("workstation register did not provide conflict fixture base entry")
-        conflict_b_remote = "git@github.com:owner/ConflictB.git"
-        conflict_b_entry = json.loads(json.dumps(conflict_entry))
-        conflict_b_entry["path"] = str(conflict_b.resolve())
-        conflict_b_entry["remote"]["canonical_url"] = conflict_b_remote
-        conflict_b_entry["remote"]["hash"] = "sha256:" + hashlib.sha256(conflict_b_remote.encode("utf-8")).hexdigest()
-        conflict_b_entry["remote"]["observed_at"] = conflict_entry["remote"]["observed_at"]
-        conflict_registry = json.loads(registry_path.read_text(encoding="utf-8"))
-        conflict_registry["repositories"] = [conflict_entry, conflict_b_entry]
-        registry_path.write_text(json.dumps(conflict_registry, indent=2) + "\n", encoding="utf-8")
-        _, conflict_list = run_json(["workstation", "list", "--json"], expect=1)
-        assert_workstation_registry_cli_blocks(conflict_list, "repo_id_conflict", conflict_entry.get("id"))
+            missing_target = tmp / "missing-registered-repo"
+            write_workstation_registry_target(missing_target)
+            _, missing_registered = run_json(["workstation", "register", "--target", str(missing_target), "--json"], expect=0)
+            missing_id = missing_registered.get("repository", {}).get("id")
+            shutil.rmtree(missing_target)
+            _, missing_list = run_json(["workstation", "list", "--json"], expect=1)
+            assert_workstation_registry_cli_blocks(missing_list, "path_missing", missing_id)
+            registry_path.unlink()
+
+            remote_target = tmp / "remote-drift-repo"
+            write_workstation_registry_target(remote_target)
+            _, remote_registered = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=0)
+            remote_id = remote_registered.get("repository", {}).get("id")
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", "git@github.com:owner/ChangedRepo.git"],
+                cwd=remote_target,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _, remote_list = run_json(["workstation", "list", "--json"], expect=1)
+            assert_workstation_registry_cli_blocks(remote_list, "remote_hash_drift", remote_id)
+            _, blocked_register = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=1)
+            if blocked_register.get("failed_layer") != "workstation-registry":
+                raise AssertionError("workstation register must fail closed while registry has blocking drift")
+            registry_path.unlink()
+
+            conflict_a = tmp / "conflict-a"
+            conflict_b = tmp / "conflict-b"
+            write_workstation_registry_target(conflict_a)
+            write_workstation_registry_target(conflict_b)
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", "git@github.com:owner/ConflictB.git"],
+                cwd=conflict_b,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _, conflict_registered = run_json(["workstation", "register", "--target", str(conflict_a), "--json"], expect=0)
+            conflict_entry = conflict_registered.get("repository")
+            if not isinstance(conflict_entry, dict):
+                raise AssertionError("workstation register did not provide conflict fixture base entry")
+            conflict_b_remote = "git@github.com:owner/ConflictB.git"
+            conflict_b_entry = json.loads(json.dumps(conflict_entry))
+            conflict_b_entry["path"] = str(conflict_b.resolve())
+            conflict_b_entry["remote"]["canonical_url"] = conflict_b_remote
+            conflict_b_entry["remote"]["hash"] = "sha256:" + hashlib.sha256(conflict_b_remote.encode("utf-8")).hexdigest()
+            conflict_b_entry["remote"]["observed_at"] = conflict_entry["remote"]["observed_at"]
+            conflict_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            conflict_registry["repositories"] = [conflict_entry, conflict_b_entry]
+            registry_path.write_text(json.dumps(conflict_registry, indent=2) + "\n", encoding="utf-8")
+            _, conflict_list = run_json(["workstation", "list", "--json"], expect=1)
+            assert_workstation_registry_cli_blocks(conflict_list, "repo_id_conflict", conflict_entry.get("id"))
+    finally:
+        if old_latest is None:
+            os.environ.pop("LOOM_TEST_NPM_LATEST_VERSION", None)
+        else:
+            os.environ["LOOM_TEST_NPM_LATEST_VERSION"] = old_latest
 
 
 def assert_workstation_registry_cli_blocks(payload: dict[str, Any], classification: str, entry_id: Any) -> None:
