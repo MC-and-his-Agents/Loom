@@ -3,10 +3,10 @@
   "item_id": "WI-1924",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allow: closeout status separates the current carrier/final PR evidence head from the implementation PR merge-ready evidence head, plugin payload hash metadata is refreshed, and the adversarial closeout backlink fixture now supplies the role-aware merge-ready PR inputs. Root and demo bootstrap manifests are hash-aligned after the generated loom_check runtime sync.",
+  "summary": "Closeout carrier-only review allow: PR #1926 only syncs terminal Loom carrier/shadow evidence after implementation PR #1925 merged; it does not approve product implementation behavior.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-03T02:45:17Z",
-  "reviewed_head": "e5a2c7f97a85bfa8ed802f54aa44813bbbe345c9",
+  "authored_at": "2026-07-03T03:09:44Z",
+  "reviewed_head": "f3b79d439514a390dccb76ebef6c83d461dc8b22",
   "reviewed_validation_summary": "2026-07-03T02:41Z local pass: `python3 tools/py_compile_clean.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 .loom/bin/loom_flow.py runtime-parity validate --target .`; `python3 examples/new-project/.loom/bin/loom_flow.py runtime-parity validate --target examples/new-project`; `python3 tools/loom_check.py --profile source --source-surface installed-runtime .`; `python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .`; `python3 tools/check_npm_package.py`; `python3 tools/loom.py skills release-check --json`; `python3 tools/loom_check.py --profile source --source-surface source-self-fixture .`.",
   "fallback_to": null,
   "findings": [],
@@ -32,27 +32,10 @@
     },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite validate --target /Users/mc/dev/Loom --item WI-1924 --json",
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1924 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1924 --json",
-    "suite_evidence_map": ".loom/specs/WI-1924/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1924/task-carrier.md"
-    ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "normalized_findings": null
   },
-  "semantic_review_disposition": {
+  "carrier_only_closeout_review": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
   }
 }
