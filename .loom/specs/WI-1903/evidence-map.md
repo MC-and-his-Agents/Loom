@@ -6,7 +6,7 @@
 - FR / parent locator: #1902 / #1888
 - Scope: plan-only workstation upgrade CLI and focused validation drift repair.
 - Suite path: minimal
-- Current `HEAD`: 4f4363660e5fc286a1fe6959cfecfcccc17e254b before implementation commit; refresh after commit before review.
+- Current `HEAD`: 27041cc764b78c30d353e179eaedfa3c2c7f5ead after implementation baseline commit.
 - PR locator: pending
 - Host state locator: issue #1903 readback.
 

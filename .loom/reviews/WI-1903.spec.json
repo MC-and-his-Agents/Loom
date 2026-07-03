@@ -1,0 +1,31 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1903",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review passed for WI-1903 at head 27041cc764b78c30d353e179eaedfa3c2c7f5ead. The minimal suite is scoped to the plan-only workstation upgrade CLI, repository classification contract, focused fixture evidence, and validation drift repair; apply, multi-repo mutation, freshness cache, release, and legacy migration remain deferred to later Work Items.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-07-03T11:17:00Z",
+  "reviewed_head": "27041cc764b78c30d353e179eaedfa3c2c7f5ead",
+  "reviewed_validation_summary": "2026-07-03T11:16Z on head 27041cc764b78c30d353e179eaedfa3c2c7f5ead, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/skills_surface.py check --surface generated-tree-drift`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, and `python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1903.md",
+    "recovery_entry": ".loom/progress/WI-1903.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1903 --json",
+    "suite_spec": ".loom/specs/WI-1903/spec.md",
+    "suite_plan": ".loom/specs/WI-1903/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1903/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1903/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
