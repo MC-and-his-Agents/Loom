@@ -13,7 +13,7 @@
 - Produces:
   - Validation strategy by scenario: py compile, focused governance-closeout contract surface, closeout-wrapper surface, generated-tree drift check, live WI-1895 closeout status regression, and diff hygiene.
   - Test strategy by acceptance: synthetic split-head carrier-sync fixture plus live WI-1895 carrier-sync status readback.
-  - Implementation contract locator: not_applicable; rationale: spec and plan are sufficient for this bounded gate repair; consumer boundary: review and PR gate; recheck condition: require implementation-contract.md if the fix expands beyond closeout role evidence binding.
+  - Implementation contract locator: `.loom/specs/WI-1924/implementation-contract.md`
   - Fresh verification evidence expectation: `.loom/progress/WI-1924.md` latest validation summary and evidence map.
 - Locator:
   - Plan locator: `.loom/specs/WI-1924/plan.md`
