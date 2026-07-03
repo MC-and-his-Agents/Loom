@@ -2,10 +2,10 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-1943",
   "decision": "allow",
-  "kind": "code_review",
-  "summary": "Code review passed for WI-1943 at head 6bc5476f9e8ca774a463decbec048f9fa255492c. The change lets controlled merge consume retained terminal closeout PR gate evidence and lets closeout readback use implementation PR host checks as legacy merge-ready evidence for final closeout carrier PRs with no retained merge-ready attempt. It preserves ordinary implementation PR merge checkpoint requirements, includes the minimal implementation contract and task carrier binding, and does not mutate GitHub host policy.",
-  "reviewer": "codex-main",
-  "authored_at": "2026-07-03T14:23:00Z",
+  "kind": "spec_review",
+  "summary": "Spec review allow: WI-1943 is a bounded terminal closeout carrier gate fix with minimal suite rationale, scenarios S1-S2, acceptance A1-A2, and focused validation mapped in plan/evidence carriers.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-03T14:25:00Z",
   "reviewed_head": "6bc5476f9e8ca774a463decbec048f9fa255492c",
   "reviewed_validation_summary": "2026-07-03T14:21Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/loom.py suite validate --target . --item WI-1943 --json`, `git diff --check`, and `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; earlier implementation checks and PR #1942 replay remain passing. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.",
   "fallback_to": null,
@@ -19,10 +19,19 @@
     "recovery_entry": ".loom/progress/WI-1943.md",
     "status_surface": ".loom/status/current.md",
     "build_checkpoint": "pass",
-    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1943 --json"
-  },
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored implementation review approved the current implementation head for merge checkpoint consumption."
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1943/spec.md",
+    "suite_plan": ".loom/specs/WI-1943/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1943/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1943/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
   }
 }
