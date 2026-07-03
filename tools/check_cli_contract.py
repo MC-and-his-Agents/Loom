@@ -27,6 +27,7 @@ LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
 RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "release-readback-fixtures.json"
 WORKSTATION_REGISTRY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "workstation-registry-fixtures.json"
+RUNTIME_PATHS = REPO_ROOT / "skills" / "shared" / "scripts" / "runtime_paths.py"
 CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS = 60
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
@@ -328,12 +329,33 @@ def runtime_payload_from_agent_safe_output(payload: dict[str, Any]) -> dict[str,
     if not path.is_absolute():
         artifact_base_raw = payload.get("_loom_contract_artifact_base")
         artifact_base = Path(artifact_base_raw) if isinstance(artifact_base_raw, str) and artifact_base_raw else REPO_ROOT
-        path = artifact_base / path
+        path = runtime_locator_path(artifact_base, locator) or (artifact_base / path)
     artifact = json.loads(path.read_text(encoding="utf-8"))
     runtime_payload = artifact.get("payload")
     if not isinstance(runtime_payload, dict):
         raise AssertionError("agent-safe full output artifact did not contain a runtime payload")
     return runtime_payload
+
+
+def runtime_paths_module() -> Any:
+    spec = importlib.util.spec_from_file_location("loom_runtime_paths_contract", RUNTIME_PATHS)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load runtime_paths.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def runtime_locator_path(target_root: Path, locator: str) -> Path | None:
+    module = runtime_paths_module()
+    if not module.is_global_runtime_locator(locator):
+        return None
+    return module.global_runtime_path(target_root, locator)
+
+
+def runtime_locator_exists(target_root: Path, locator: str) -> bool:
+    path = runtime_locator_path(target_root, locator)
+    return bool(path is not None and path.exists())
 
 
 def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
@@ -2911,6 +2933,19 @@ def isolated_codex_workstation(home: Path):
             os.environ["CODEX_HOME"] = old_codex_home
 
 
+@contextmanager
+def isolated_loom_workstation(root: Path):
+    old_root = os.environ.get("LOOM_WORKSTATION_ROOT")
+    os.environ["LOOM_WORKSTATION_ROOT"] = str(root)
+    try:
+        yield
+    finally:
+        if old_root is None:
+            os.environ.pop("LOOM_WORKSTATION_ROOT", None)
+        else:
+            os.environ["LOOM_WORKSTATION_ROOT"] = old_root
+
+
 def register_fixture_codex_plugin() -> None:
     run_json(
         [
@@ -4765,6 +4800,46 @@ def assert_workstation_registry_cli_blocks(payload: dict[str, Any], classificati
         raise AssertionError(f"workstation registry {classification} entry must not be eligible for planning")
 
 
+def assert_global_runtime_path_resolver_contract(tmp: Path) -> None:
+    target = tmp / "runtime-path-resolver"
+    target.mkdir()
+    workstation = tmp / "workstation"
+    runtime_paths = runtime_paths_module()
+    with isolated_loom_workstation(workstation):
+        runtime_locator = ".loom/runtime/pr/body.md"
+        tmp_locator = ".loom/tmp/session/output.json"
+        truth_locator = ".loom/status/current.md"
+        runtime_path = runtime_paths.global_runtime_path(target, runtime_locator)
+        tmp_path = runtime_paths.global_runtime_path(target, tmp_locator)
+        if runtime_path == target / runtime_locator or tmp_path == target / tmp_locator:
+            raise AssertionError("global runtime path resolver returned repo-local cache paths")
+        if workstation.resolve() not in runtime_path.resolve().parents or workstation.resolve() not in tmp_path.resolve().parents:
+            raise AssertionError("global runtime path resolver did not place artifacts under LOOM_WORKSTATION_ROOT")
+        if runtime_path.parts[-3:] != ("runtime", "pr", "body.md"):
+            raise AssertionError(f"runtime locator mapped to unexpected path: {runtime_path}")
+        if tmp_path.parts[-3:] != ("tmp", "session", "output.json"):
+            raise AssertionError(f"tmp locator mapped to unexpected path: {tmp_path}")
+        if runtime_paths.global_runtime_locator_for_path(target, runtime_path) != runtime_locator:
+            raise AssertionError("global runtime path resolver could not round-trip a runtime locator")
+        if runtime_paths.global_runtime_locator_for_path(target, tmp_path) != tmp_locator:
+            raise AssertionError("global runtime path resolver could not round-trip a tmp locator")
+        if runtime_paths.is_global_runtime_locator(truth_locator):
+            raise AssertionError("repo truth carrier was misclassified as a global runtime locator")
+
+        loom_flow = load_loom_flow_module()
+        resolved_runtime, runtime_errors = loom_flow.resolve_artifact_write_path(target, runtime_locator, label="runtime artifact")
+        resolved_truth, truth_errors = loom_flow.resolve_artifact_write_path(target, truth_locator, label="truth carrier")
+        if runtime_errors or resolved_runtime != runtime_path:
+            raise AssertionError(f"loom_flow did not use global runtime resolver: {runtime_errors}, {resolved_runtime}")
+        if truth_errors or resolved_truth != (target / truth_locator).resolve():
+            raise AssertionError("loom_flow moved a repo truth carrier out of the repository")
+
+        resolved_runtime.parent.mkdir(parents=True, exist_ok=True)
+        resolved_runtime.write_text("runtime\n", encoding="utf-8")
+        if (target / runtime_locator).exists():
+            raise AssertionError("runtime resolver created a repo-local .loom/runtime artifact")
+
+
 def valid_state(target: Path) -> dict[str, Any]:
     return global_cli_state(target)
 
@@ -6429,7 +6504,12 @@ def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
     )
     if write_payload.get("write_artifact", {}).get("locator") != write_path:
         raise AssertionError("closeout freeze write must retain the closeout snapshot under .loom/runtime/gate-freeze")
-    written = json.loads((target / write_path).read_text(encoding="utf-8"))
+    written_path = runtime_locator_path(target, write_path)
+    if written_path is None or not written_path.exists():
+        raise AssertionError("closeout freeze write did not store the snapshot in the global runtime cache")
+    if (target / write_path).exists():
+        raise AssertionError("closeout freeze write must not create repo-local .loom/runtime cache artifacts")
+    written = json.loads(written_path.read_text(encoding="utf-8"))
     if written.get("schema_version") != "loom-closeout-freeze/v1":
         raise AssertionError("closeout freeze write artifact must preserve loom-closeout-freeze/v1")
 
@@ -7324,83 +7404,87 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
 
-    _, render_payload = run_flow_json(
-        [
-            "pr-metadata",
-            "render",
-            "--target",
-            str(target),
-            "--surface",
-            "closeout",
-            "--item",
-            "WI-1541",
-            "--issue",
-            "1541",
-            "--head-sha",
-            head_sha,
-            "--branch",
-            "work/1541-render",
-            "--output-file",
-            ".loom/runtime/pr/rendered.md",
-        ]
-    )
+    with isolated_loom_workstation(tmp / "workstation"):
+        _, render_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "render",
+                "--target",
+                str(target),
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--issue",
+                "1541",
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1541-render",
+                "--output-file",
+                ".loom/runtime/pr/rendered.md",
+            ]
+        )
+        rendered = runtime_locator_path(target, ".loom/runtime/pr/rendered.md")
+        if rendered is None:
+            raise AssertionError("rendered runtime locator did not resolve to a global cache path")
+        repo_local_rendered = target / ".loom" / "runtime" / "pr" / "rendered.md"
+        if repo_local_rendered.exists():
+            raise AssertionError("render wrote the PR body artifact into repo-local .loom/runtime")
+        _, readback_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "readback",
+                "--target",
+                str(target),
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--issue",
+                "1541",
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1541-render",
+                "--body-file",
+                ".loom/runtime/pr/rendered.md",
+            ]
+        )
+        _, update_dry_run_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "update",
+                "--target",
+                str(target),
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--issue",
+                "1541",
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1541-render",
+                "--output-file",
+                ".loom/runtime/pr/update-rendered.md",
+            ]
+        )
     if render_payload.get("result") != "pass":
         raise AssertionError(f"render payload failed: {render_payload.get('missing_inputs')}")
     if render_payload.get("effective_carrier_surface") != "closeout":
         raise AssertionError("closeout render should emit closeout carrier surface")
-    rendered = target / ".loom" / "runtime" / "pr" / "rendered.md"
     if not rendered.exists():
-        raise AssertionError("render did not write the repo-relative body artifact")
+        raise AssertionError("render did not write the global runtime PR body artifact")
     rendered_body = rendered.read_text(encoding="utf-8")
     if "- Issue: #1541" not in rendered_body or "- Loom Work Item: WI-1541" not in rendered_body:
         raise AssertionError("render did not normalize human PR binding line spacing")
-
-    _, readback_payload = run_flow_json(
-        [
-            "pr-metadata",
-            "readback",
-            "--target",
-            str(target),
-            "--surface",
-            "closeout",
-            "--item",
-            "WI-1541",
-            "--issue",
-            "1541",
-            "--head-sha",
-            head_sha,
-            "--branch",
-            "work/1541-render",
-            "--body-file",
-            ".loom/runtime/pr/rendered.md",
-        ]
-    )
     if readback_payload.get("result") != "pass":
         raise AssertionError(f"readback payload failed: {readback_payload.get('missing_inputs')}")
     governance_fields = readback_payload.get("governance_fields")
     if not isinstance(governance_fields, dict) or governance_fields.get("head_sha") != head_sha:
         raise AssertionError("readback did not expose parsed governance fields")
-
-    _, update_dry_run_payload = run_flow_json(
-        [
-            "pr-metadata",
-            "update",
-            "--target",
-            str(target),
-            "--surface",
-            "closeout",
-            "--item",
-            "WI-1541",
-            "--issue",
-            "1541",
-            "--head-sha",
-            head_sha,
-            "--branch",
-            "work/1541-render",
-            "--output-file",
-            ".loom/runtime/pr/update-rendered.md",
-        ]
-    )
     if (
         update_dry_run_payload.get("result") != "pass"
         or update_dry_run_payload.get("dry_run") is not True
@@ -7775,7 +7859,7 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
         or docs_prepare.get("profile", {}).get("intent") != "docs-governance-only"
         or docs_prepare.get("profile", {}).get("suite_path") != "not_applicable"
         or not (target / ".loom/specs/WI-1806/spec.md").exists()
-        or not (target / docs_body).exists()
+        or not runtime_locator_exists(target, docs_body)
     ):
         raise AssertionError(f"docs-pr prepare did not produce the docs-governance carrier set: {docs_prepare.get('missing_inputs')}")
 
@@ -7839,8 +7923,12 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
     ):
         raise AssertionError("docs-pr check did not fail closed on scope drift")
 
-    stale_body = target / ".loom/runtime/pr/WI-1806-docs-stale.md"
-    stale_body.write_text((target / docs_body).read_text(encoding="utf-8").replace(head_sha, "0" * 40), encoding="utf-8")
+    stale_body = runtime_locator_path(target, ".loom/runtime/pr/WI-1806-docs-stale.md")
+    docs_body_path = runtime_locator_path(target, docs_body)
+    if stale_body is None or docs_body_path is None:
+        raise AssertionError("runtime PR body locators did not resolve to global cache paths")
+    stale_body.parent.mkdir(parents=True, exist_ok=True)
+    stale_body.write_text(docs_body_path.read_text(encoding="utf-8").replace(head_sha, "0" * 40), encoding="utf-8")
     _, stale_check = run_json(
         [
             "docs-pr",
@@ -7904,7 +7992,7 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
             or prepare_payload.get("profile", {}).get("suite_path") != "not_applicable"
             or prepare_payload.get("readiness", {}).get("ready_for_hosted_gate") is not False
             or not prepare_payload.get("metadata_preflight")
-            or not (target / body_file).exists()
+            or not runtime_locator_exists(target, body_file)
         ):
             raise AssertionError(f"{intent} prepare did not produce the shared not_applicable carrier set")
         _, check_payload = run_json(
@@ -8040,7 +8128,7 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
             or prepare_payload.get("profile", {}).get("intent") != intent
             or prepare_payload.get("profile", {}).get("suite_path") != "minimal"
             or prepare_payload.get("profile", {}).get("release_judgment") != expected_release
-            or not (target / body_file).exists()
+            or not runtime_locator_exists(target, body_file)
         ):
             raise AssertionError(f"{intent} prepare did not preserve the minimal suite carrier set")
         _, check_payload = run_json(
@@ -9057,9 +9145,10 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("pr-gate did not consume passed semantic_review_disposition")
     if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
-    assert_gate_freeze_review_binding_fixture(tmp)
-    assert_hosted_freeze_admission_pr_gate_fixture(tmp)
-    assert_closeout_freeze_profile_fixture(tmp)
+    with isolated_loom_workstation(tmp / "workstation"):
+        assert_gate_freeze_review_binding_fixture(tmp)
+        assert_hosted_freeze_admission_pr_gate_fixture(tmp)
+        assert_closeout_freeze_profile_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_governance_intensity_pr_gate_positive_variants(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
@@ -11245,6 +11334,12 @@ def run_workstation_registry_surface() -> None:
     print("workstation registry surface checks passed")
 
 
+def run_runtime_paths_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-runtime-paths-") as raw_tmp:
+        assert_global_runtime_path_resolver_contract(Path(raw_tmp))
+    print("runtime path resolver checks passed")
+
+
 def run_merge_wrapper_surface() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_merge_closeout_run_wrapper_contract()
@@ -11671,9 +11766,10 @@ def run_pr_metadata_surface() -> None:
     assert_pr_metadata_wrapper_argument_contract()
     with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-") as raw_tmp:
         tmp = Path(raw_tmp)
-        assert_governance_metadata_render_readback_fixture(tmp)
-        assert_governance_intensity_metadata_preflight_fixture(tmp)
-        assert_pr_intent_profile_fixture(tmp)
+        with isolated_loom_workstation(tmp / "workstation"):
+            assert_governance_metadata_render_readback_fixture(tmp)
+            assert_governance_intensity_metadata_preflight_fixture(tmp)
+            assert_pr_intent_profile_fixture(tmp)
 
     print("pr metadata surface checks passed")
 
@@ -11732,6 +11828,8 @@ def run_runtime_upgrade_surface() -> None:
 
     with tempfile.TemporaryDirectory(prefix="loom-runtime-upgrade-") as raw_tmp:
         target = Path(raw_tmp)
+        old_workstation_root = os.environ.get("LOOM_WORKSTATION_ROOT")
+        os.environ["LOOM_WORKSTATION_ROOT"] = str(target / "workstation")
         write_governance_metadata_contract_fixture(target)
         workflow = target / ".github" / "workflows" / "loom-check.yml"
         workflow.parent.mkdir(parents=True)
@@ -11829,7 +11927,7 @@ def run_runtime_upgrade_surface() -> None:
             pr_intent_prepare.get("result") != "pass"
             or pr_intent_prepare.get("profile", {}).get("intent") != "runtime-upgrade-only"
             or not (target / ".loom/specs/WI-1834/spec.md").exists()
-            or not (target / ".loom/runtime/pr/WI-1834-runtime-upgrade.md").exists()
+            or not runtime_locator_exists(target, ".loom/runtime/pr/WI-1834-runtime-upgrade.md")
         ):
             raise AssertionError("runtime-upgrade prepare --apply must generate the runtime-upgrade-only carrier set")
 
@@ -11936,6 +12034,10 @@ def run_runtime_upgrade_surface() -> None:
         )
         if closeout_payload.get("result") != "pass" or "loom carrier closeout-sync" not in str(closeout_payload.get("carrier_closeout_sync_command")):
             raise AssertionError("runtime-upgrade closeout must expose carrier closeout-sync command")
+        if old_workstation_root is None:
+            os.environ.pop("LOOM_WORKSTATION_ROOT", None)
+        else:
+            os.environ["LOOM_WORKSTATION_ROOT"] = old_workstation_root
 
     spec = importlib.util.spec_from_file_location("loom_runtime_upgrade_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -14188,6 +14290,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="workstation-registry",
             fixture_group="workstation-registry",
             run=run_workstation_registry_surface,
+        ),
+        SurfaceCheck(
+            name="runtime-paths",
+            fixture_group="runtime-paths",
+            run=run_runtime_paths_surface,
         ),
         SurfaceCheck(
             name="merge-wrapper",
