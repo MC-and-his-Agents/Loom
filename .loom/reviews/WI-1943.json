@@ -3,26 +3,55 @@
   "item_id": "WI-1943",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Code review passed for WI-1943 at head 6bc5476f9e8ca774a463decbec048f9fa255492c. The change lets controlled merge consume retained terminal closeout PR gate evidence and lets closeout readback use implementation PR host checks as legacy merge-ready evidence for final closeout carrier PRs with no retained merge-ready attempt. It preserves ordinary implementation PR merge checkpoint requirements, includes the minimal implementation contract and task carrier binding, and does not mutate GitHub host policy.",
+  "summary": "Implementation review passed for WI-1943 corrective follow-up at head d6e638777b49479cc3d064ca66562b19c88dcce6. The change narrows controlled merge retained PR-gate consumption so terminal closeout retained reviews are accepted only when terminal closeout consumption and the closeout-specific gate both pass; ordinary implementation PRs still require authored semantic review disposition. Runtime copies, plugin payload hash, and demo bootstrap fixture are synchronized.",
   "reviewer": "codex-main",
-  "authored_at": "2026-07-03T14:23:00Z",
-  "reviewed_head": "6bc5476f9e8ca774a463decbec048f9fa255492c",
+  "authored_at": "2026-07-03T15:26:13Z",
+  "reviewed_head": "d6e638777b49479cc3d064ca66562b19c88dcce6",
   "reviewed_validation_summary": "2026-07-03T14:21Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/loom.py suite validate --target . --item WI-1943 --json`, `git diff --check`, and `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; earlier implementation checks and PR #1942 replay remain passing. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "Track the unrelated demo consumer profile failure separately; it is outside WI-1943."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1943.md",
     "recovery_entry": ".loom/progress/WI-1943.md",
     "status_surface": ".loom/status/current.md",
     "build_checkpoint": "pass",
-    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1943 --json"
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1943 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1943 --json",
+    "suite_evidence_map": ".loom/specs/WI-1943/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1943/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current implementation head for merge checkpoint consumption."
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
