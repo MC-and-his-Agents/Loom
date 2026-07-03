@@ -1,39 +1,48 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1898",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "f2998aa640bbe0e8cbb108ae31271dbb2077f04b",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head semantic review passed for WI-1898. The change freezes a docs-only repo/global artifact classification contract, links adoption and host docs to that contract, preserves repository truth boundaries, and does not implement runtime path resolver, migration apply, gate behavior, release behavior, or host/plugin installation behavior. Formal suite artifacts are correctly marked not_applicable with review/PR/closeout gates still required.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-03T05:04:42Z",
+  "reviewed_head": "e330a5db385ff9be473c6e11b3366460ebf4e4b5",
+  "reviewed_validation_summary": "2026-07-03T05:01:28Z on head e330a5db385ff9be473c6e11b3366460ebf4e4b5: `python3 tools/loom.py suite validate --target . --item WI-1898 --json` not_applicable; `python3 tools/loom.py suite evidence validate --target . --item WI-1898 --json` pass; `python3 tools/loom.py suite carrier validate --target . --item WI-1898 --json` pass; `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1898` pass; `git diff --check` pass. 2026-07-03T05:03Z `python3 .loom/bin/loom_flow.py flow review --target . --item WI-1898 --issue 1898 --pr 1931 --branch work/1898-repo-global-artifact-contract` pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1898.md",
+    "recovery_entry": ".loom/progress/WI-1898.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
