@@ -5,9 +5,9 @@
   "kind": "code_review",
   "summary": "Closeout carrier-only review allow: this PR only records WI-1898 terminal carrier state after PR #1931 merge; allowed paths are limited to WI-1898 progress/status/review and Loom shadow hash files, with no contract, runtime, migration, or gate behavior changes.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-03T05:28:43Z",
-  "reviewed_head": "11f77e72f8bed339e3ad0817d179c9f5fb4f2454",
-  "reviewed_validation_summary": "2026-07-03T05:28Z closeout carrier validation passed: PR #1931 merged at 49e01acfb3785b422cf1aa57c44e938e6dc8bb68; issue #1898 closed at 2026-07-03T05:25:25Z; terminal metadata written by `python3 .loom/bin/loom_flow.py carrier closeout-sync --target . --item WI-1898 --apply ...`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface closeout --blocking` pass; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface merge_ready --blocking` pass; `git diff --check` pass.",
+  "authored_at": "2026-07-03T05:32:59Z",
+  "reviewed_head": "79c9c21018012517b5e63103f8bbf9a29f0bd4cc",
+  "reviewed_validation_summary": "2026-07-03T05:23Z merge-ready and controlled-merge passed for head fe4aaf785623b54f4d148a1217105ff2b08a15be; hosted loom-pr-merge-gate rerun passed after PR metadata refresh; PR #1931 merged to main at 49e01acfb3785b422cf1aa57c44e938e6dc8bb68; issue #1898 closed at 2026-07-03T05:25:25Z; closeout carrier sync wrote terminal metadata.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -37,5 +37,9 @@
   "carrier_only_closeout_review": {
     "status": "passed",
     "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored closeout review approved the current carrier-only closeout PR for terminal metadata consumption. Implementation semantics remain covered by the pre-merge review and controlled merge evidence for PR #1931."
   }
 }
