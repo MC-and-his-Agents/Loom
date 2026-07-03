@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1909
-- Goal: Deliver FR-5 Legacy Repo Migration batch for issues #1909, #1910, #1911, #1912, and #1913.
-- Scope: Implement `loom migrate-global-cache plan/apply`, legacy residue detection, repo change strategy classification, and post-migration validation package within one validation boundary.
-- Execution Path: issue #1909 anchor -> branch work/1909-1913-legacy-migration-batch -> batch PR covering #1909/#1910/#1911/#1912/#1913 -> review/merge/closeout
+- Item ID: WI-1914
+- Goal: Publish v0.27.0 and complete Workstation Upgrade and Repo Slimdown milestone closeout.
+- Scope: bump root Loom CLI release authority to v0.27.0, align npm package and Codex plugin payload release metadata/hash, add v0.27.0 release readiness evidence, activate WI-1914 carriers, record spec/release review evidence, perform minimal stale carrier sync needed to unblock release gate purity, prepare and merge release PR, then read back GitHub Release/npm/tag/workflow and close out #1914, Phase #1888, and milestone #25 after terminal carrier closeout.
+- Execution Path: issue #1914 -> branch work/1914-v0.27.0-release -> release readiness evidence -> release PR -> main push release workflow -> release readback -> #1914/#1888/milestone #25 closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1909.md
-- Review Entry: .loom/reviews/WI-1909.json
-- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; git diff --check; targeted legacy migration contract tests
-- Closing Condition: Batch PR covering #1909/#1910/#1911/#1912/#1913 is merged; local and hosted gates pass; closeout evidence is recorded for each covered issue without reducing FR-5 scope.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1909 closed out by closeout sync: PR #1950 merged at c58b3a9402910193845ccc6f27e7c4e3c210a1be, issues #1909/#1910/#1911/#1912/#1913 and FR #1908 closed with closeout evidence, host reconciliation consumed, terminal carrier metadata written, and closeout sync/check passed.
-- Next Step: No further FR-5 legacy migration implementation work remains; proceed to #1914 release/milestone closeout.
+- Recovery Entry: .loom/progress/WI-1914.md
+- Review Entry: .loom/reviews/WI-1914.json
+- Validation Entry: release readback, release/package checks, CLI contract checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
+- Closing Condition: v0.27.0 tag, GitHub Release, npm @mc-and-his-agents/loom@0.27.0, plugin payload metadata/hash, #1914/Phase #1888 closeout evidence, and milestone #25 readback are consistent.
+- Current Checkpoint: build
+- Current Stop: v0.27.0 release candidate prepared on branch `work/1914-v0.27.0-release`; root version authority and plugin payload metadata/hash are updated; pre-release validation is in progress.
+- Next Step: Finalize carrier/review evidence, open the release PR, run PR metadata readback, hosted checks, controlled merge, then wait for main-push release workflow and release readback before closing #1914/#1888/milestone #25.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T18:30Z on branch `work/1909-1913-legacy-migration-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface legacy-migration`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/loom.py suite validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1909 --json`, `python3 tools/check_npm_package.py --surface aggregate`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` (495.78s).
-- Recovery Boundary: FR-5 legacy migration batch is closed out; next scope is #1914 release/milestone closeout only.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-07-03T19:56Z on branch `work/1914-v0.27.0-release`: passed `py_compile_clean` for release tools, `git diff --check`, release/version/npm package checks, `npm pack --dry-run --json --ignore-scripts`, `tools/loom.py skills release-check --target . --json`, `tools/check_cli_contract.py --surface aggregate` (408.42s), suite validate/evidence/carrier validate for WI-1914, fact-chain for WI-1914, carrier refresh, shadow parity, purity-check, and build checkpoint; pre-release readback for v0.27.0 returned missing/unpublished with no tag, GitHub Release, npm version, or matching release workflow run occupying the release path. WI-1900 stale progress checkpoint was reconciled to its existing terminal closeout metadata so release gate purity has one active WI-1914 owner.
+- Recovery Boundary: WI-1914 owns v0.27.0 root release authority, package/plugin payload metadata/hash, release readiness evidence, release PR metadata, publication readback, terminal carrier closeout, and #1914/Phase #1888/milestone #25 closeout. It does not add new runtime behavior beyond FR-1 through FR-5, does not publish legacy installer, does not change plugin surface compatibility, and does not close issues before release readback plus terminal carrier closeout.
+- Current Lane: release-readiness
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-03T18:05Z FR-5 batch branch initialized in `/Users/mc/dev/Loom` on branch `work/1909-1913-legacy-migration-batch`.
-- Logs Entry: FR-5 legacy migration implementation merged through PR #1950; host reconciliation closed #1908-#1913 and removed stale native dependency edges.
-- Diagnostics Entry: Targeted legacy migration, workstation registry, runtime paths, adoption host metadata, package aggregate, suite validate/evidence/carrier validate, skills release check, aggregate CLI contract, local PR gate, hosted checks, controlled merge, reconciliation audit, and closeout sync/check passed by 2026-07-03T19:02Z.
-- Verification Entry: Terminal closeout readback passed for PR #1950, merge commit c58b3a9402910193845ccc6f27e7c4e3c210a1be, closed issues #1908-#1913, required checks, suite evidence/carrier, review record, and target branch main.
-- Lane Entry: post-merge-closeout-run
+- Run Entry: 2026-07-03T19:26Z v0.27.0 release branch initialized in `/Users/mc/dev/Loom` on branch `work/1914-v0.27.0-release`.
+- Logs Entry: v0.27.0 release candidate prepared by bumping `VERSION`, `package.json`, and plugin payload release metadata/hash.
+- Diagnostics Entry: Release surface, version surface, npm package aggregate, npm pack dry-run, aggregate CLI contract, skills release check, and pre-release readback passed by 2026-07-03T19:35Z.
+- Verification Entry: Pre-release readback confirmed v0.27.0 tag, GitHub Release, and npm package version are unoccupied; npm latest remains 0.26.3.
+- Lane Entry: release-readiness
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1909.md
-- Dynamic Truth: .loom/progress/WI-1909.md
+- Static Truth: .loom/work-items/WI-1914.md
+- Dynamic Truth: .loom/progress/WI-1914.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
