@@ -66,5 +66,9 @@
   "semantic_review_disposition": {
     "status": "passed",
     "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  },
+  "carrier_only_closeout_review": {
+    "status": "passed",
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption for PR #1936; it does not approve product implementation behavior."
   }
 }
