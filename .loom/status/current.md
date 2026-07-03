@@ -11,12 +11,12 @@
 - Review Entry: .loom/reviews/WI-1904.json
 - Validation Entry: python3 tools/py_compile_clean.py src/loom_cli.py tools/loom.py tests; git diff --check; targeted workstation upgrade contract tests
 - Closing Condition: Batch PR covering #1904/#1905/#1906/#1907 is merged; local and hosted gates pass; closeout evidence is recorded for each covered issue without deferring #1906 or FR-5 scope.
-- Current Checkpoint: build
-- Current Stop: FR-4 batch implementation for #1904/#1905/#1906/#1907 is implemented and locally validated on branch `work/1904-1907-workstation-upgrade-batch`; PR creation and hosted gates remain.
-- Next Step: Push branch, create the batch PR, update PR metadata, run PR gate/hosted checks, then controlled merge and close out #1904/#1905/#1906/#1907.
+- Current Checkpoint: merge
+- Current Stop: FR-4 batch PR #1948 is open at head 76fd6af8 with PR metadata readback passing; awaiting PR gate and hosted checks.
+- Next Step: Run PR gate for #1948, rerun hosted checks if prior failures were caused by pre-metadata timing, then controlled merge and close out #1904/#1905/#1906/#1907.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T17:04Z on branch `work/1904-1907-workstation-upgrade-batch`, passed FR-4 batch checks (`python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/loom.py suite validate --target . --item WI-1904 --json`, `python3 tools/check_cli_contract.py --surface workstation-registry --surface adoption-host-metadata`, `python3 tools/check_cli_contract.py --surface aggregate`, `python3 tools/check_npm_package.py --surface aggregate`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`), minimal-suite gate repair checks (`python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `git diff --check`, and runtime-copy SHA parity for `loom_flow.py`), plus final plugin/package checks after payload hash refresh (`python3 tools/check_npm_package.py --surface aggregate` and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`).
-- Recovery Boundary: Continue from implementation commit `2c21d4ae803cec5fe553ccfb91b362443239c36e`; scope is limited to FR-4 workstation upgrade batch #1904/#1905/#1906/#1907 and final PR/closeout carriers.
+- Latest Validation Summary: 2026-07-03T17:10Z on branch `work/1904-1907-workstation-upgrade-batch`, PR #1948 metadata update/readback passed at head 76fd6af8 after local FR-4 validation, carrier refresh, shadow parity, package checks, and skills release-check.
+- Recovery Boundary: Continue from implementation commit 2c21d4ae803cec5fe553ccfb91b362443239c36e and carrier head 76fd6af8bba09fac4ac91b116395d0312b1750d7; scope is limited to FR-4 workstation upgrade batch #1904/#1905/#1906/#1907 and PR/closeout carriers.
 - Current Lane: fr4-workstation-upgrade-batch
 
 ## Runtime Evidence
