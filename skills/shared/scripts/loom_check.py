@@ -38,7 +38,7 @@ from loom_flow import (
     review_head_binding,
     review_head_binding_for_head,
 )
-from runtime_paths import repo_local_root
+from runtime_paths import global_runtime_path, is_global_runtime_locator, repo_local_root
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
@@ -1114,6 +1114,24 @@ def load_json_file(path: Path) -> object:
         return json.load(handle)
 
 
+def runtime_fixture_path(target_root: Path, locator: str | Path) -> Path:
+    if is_global_runtime_locator(locator):
+        return global_runtime_path(target_root, locator)
+    return target_root / locator
+
+
+def runtime_fixture_read_path(target_root: Path, locator: str | Path) -> Path:
+    if is_global_runtime_locator(locator):
+        global_path = global_runtime_path(target_root, locator)
+        if global_path.exists():
+            return global_path
+        legacy_path = target_root / locator
+        if legacy_path.exists():
+            return legacy_path
+        return global_path
+    return target_root / locator
+
+
 def load_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -1209,6 +1227,20 @@ def unique_missing_path(prefix: str) -> Path:
     path = Path(tempfile.mkdtemp(prefix=prefix))
     shutil.rmtree(path)
     return path
+
+
+@contextmanager
+def temporary_environment(values: Mapping[str, str]):
+    saved = {key: os.environ.get(key) for key in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 @contextmanager
@@ -7503,7 +7535,9 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         example_target = root / "examples/new-project"
     if not example_target.exists():
         return failures
-    with loom_check_temporary_directory(prefix="loom-check-review-run-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-review-run-") as tmp, temporary_environment(
+        {"LOOM_WORKSTATION_ROOT": str(Path(tmp) / "workstation")}
+    ):
         source_snapshot = Path(tmp) / "source-snapshot"
         review_target = Path(tmp) / "new-project"
         fake_bin = Path(tmp) / "bin"
@@ -7874,15 +7908,16 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 evidence = payload.get("engine", {}).get("evidence") if isinstance(payload.get("engine"), dict) else None
                 context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
                 prompt_path = evidence.get("prompt") if isinstance(evidence, dict) else None
-                if not isinstance(context_pack_path, str) or not (review_target / context_pack_path).exists():
+                context_pack_file = runtime_fixture_read_path(review_target, context_pack_path) if isinstance(context_pack_path, str) else None
+                if context_pack_file is None or not context_pack_file.exists():
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` positive chain must write context pack evidence"))
                 else:
-                    context_pack = json.loads((review_target / context_pack_path).read_text(encoding="utf-8"))
+                    context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
                     if context_pack.get("schema_version") != "loom-review-context-pack/v1":
                         failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` context pack must use the stable schema"))
                     if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
                         failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` context pack must include repeated blocker signal"))
-                prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
+                prompt_file = runtime_fixture_read_path(review_target, prompt_path) if isinstance(prompt_path, str) else None
                 prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file is not None and prompt_file.exists() else ""
                 if not prompt_text or "Recent Review Context Pack" not in prompt_text:
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` prompt must include recent review context pack guidance"))
@@ -7981,7 +8016,8 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 evidence = shadow_engine.get("evidence") if isinstance(shadow_engine.get("evidence"), dict) else {}
                 for key in ("raw_review", "normalized_findings", "metadata", "parity_diff"):
                     value = evidence.get(key)
-                    if not isinstance(value, str) or not (shadow_target / value).exists():
+                    evidence_file = runtime_fixture_read_path(shadow_target, value) if isinstance(value, str) else None
+                    if evidence_file is None or not evidence_file.exists():
                         failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` shadow adapter must write {key} evidence"))
                 if shadow_engine.get("authoritative") is not False or shadow_engine.get("blocking") is not False:
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow adapter must stay non-authoritative and non-blocking"))
@@ -8564,7 +8600,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         )
         repeated_target = Path(tmp) / "repeated-blocker-context"
         copy_review_target(repeated_target, "review run repeated blocker context")
-        history_root = repeated_target / ".loom/runtime/review/INIT-0001"
+        history_root = runtime_fixture_path(repeated_target, ".loom/runtime/review/INIT-0001")
         for attempt in ("attempt-a", "attempt-b"):
             attempt_root = history_root / attempt
             attempt_root.mkdir(parents=True, exist_ok=True)
@@ -8624,13 +8660,17 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             if not isinstance(context_pack_path, str):
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must expose context pack evidence"))
             else:
-                context_pack = json.loads((repeated_target / context_pack_path).read_text(encoding="utf-8"))
-                signal = context_pack.get("repeated_blocker_signal")
-                if not isinstance(signal, dict) or signal.get("result") != "present":
-                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must identify repeated blocker candidates"))
-                candidates = signal.get("candidates") if isinstance(signal, dict) else None
-                if not isinstance(candidates, list) or not candidates:
-                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must include candidate details"))
+                context_pack_file = runtime_fixture_read_path(repeated_target, context_pack_path)
+                if not context_pack_file.exists():
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must write context pack evidence"))
+                else:
+                    context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
+                    signal = context_pack.get("repeated_blocker_signal")
+                    if not isinstance(signal, dict) or signal.get("result") != "present":
+                        failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must identify repeated blocker candidates"))
+                    candidates = signal.get("candidates") if isinstance(signal, dict) else None
+                    if not isinstance(candidates, list) or not candidates:
+                        failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must include candidate details"))
 
         start_review_run_fixture_group(
             failures,
@@ -10952,7 +10992,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                     return result.stdout.strip()
 
                 def write_json_fixture(target: Path, relative: str, payload: object) -> str:
-                    path = target / relative
+                    path = runtime_fixture_path(target, relative)
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                     return relative
@@ -11408,10 +11448,16 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                 raw_review_path = raw_only_target / ".loom/reviews/INIT-0001.json"
                 if raw_review_path.exists():
                     raw_review_path.unlink()
-                write_json_fixture(
-                    raw_only_target,
-                    ".loom/runtime/review/INIT-0001/raw-only-head/engine-result.json",
-                    {"decision": "allow", "summary": "Raw evidence must not satisfy the PR gate.", "findings": []},
+                raw_engine_path = raw_only_target / ".loom/runtime/review/INIT-0001/raw-only-head/engine-result.json"
+                raw_engine_path.parent.mkdir(parents=True, exist_ok=True)
+                raw_engine_path.write_text(
+                    json.dumps(
+                        {"decision": "allow", "summary": "Raw evidence must not satisfy the PR gate.", "findings": []},
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
                 )
                 git_add = run_command(root, ["git", "add", "-f", "-A", ".loom/reviews/INIT-0001.json", ".loom/runtime/review"], cwd=raw_only_target)
                 git_commit = run_command(root, ["git", "commit", "-m", "leave only raw review evidence for pr gate fixture"], cwd=raw_only_target)
@@ -21072,7 +21118,7 @@ def check_execution_attempt_contract(root: Path) -> list[Failure]:
         if not any("authored progress field" in error for error in poison_errors):
             failures.append(Failure("execution-attempt", "attempt envelope must reject copied recovery progress fields"))
 
-        latest_path = target / ".loom/runtime/attempts/INIT-0001/latest.json"
+        latest_path = runtime_fixture_path(target, ".loom/runtime/attempts/INIT-0001/latest.json")
         latest_path.unlink()
         missing = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
         if missing.get("status") != "missing" or missing.get("freshness") != "missing":

@@ -8571,7 +8571,7 @@ def target_relative_label(target_root: Path, path: Path) -> str:
 
 
 def load_findings_file(target_root: Path, findings_file: str) -> tuple[list[dict[str, Any]] | None, list[str]]:
-    findings_path, locator_errors = resolve_repo_relative_path(target_root, findings_file, label="findings file locator")
+    findings_path, locator_errors = resolve_artifact_read_path(target_root, findings_file, label="findings file locator")
     if locator_errors:
         return None, locator_errors
     assert findings_path is not None
