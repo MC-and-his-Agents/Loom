@@ -128,6 +128,16 @@ validation before repo mutation. A registry entry can say "this machine saw a
 repo here"; it cannot say "that repo is merge-ready", "that issue is done", or
 "that repository has successfully upgraded".
 
+The plan output is read-only and classifies work at two levels:
+
+| Classification | Meaning |
+| --- | --- |
+| `machine_only` | Machine-level CLI/plugin refresh and host doctor steps; no repository mutation. |
+| `repo_noop` | Repository is opted out or already appears current for the requested target version. |
+| `repo_auto_commit_candidate` | Metadata-only adoption can be refreshed with low-risk repo-local metadata changes. |
+| `repo_pr_required` | Legacy or repo-local-wrapper adoption may rewrite tracked surfaces and needs a repo-scoped PR. |
+| `blocked` | Registry identity/path drift or unknown adoption state blocks planning until repaired. |
+
 ## CLI Surface
 
 The #1895 command slice implements the minimum registry read/write surface:
@@ -135,6 +145,7 @@ The #1895 command slice implements the minimum registry read/write surface:
 ```bash
 loom workstation register --target <repo> --json
 loom workstation list --json
+loom workstation upgrade --plan --to <version> --json
 loom workstation unregister --target <repo> --json
 loom workstation unregister --id <repo-id> --json
 loom workstation unregister --target <repo> --keep-entry --json

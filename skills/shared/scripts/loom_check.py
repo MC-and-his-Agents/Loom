@@ -21118,8 +21118,11 @@ def check_execution_attempt_contract(root: Path) -> list[Failure]:
         if not any("authored progress field" in error for error in poison_errors):
             failures.append(Failure("execution-attempt", "attempt envelope must reject copied recovery progress fields"))
 
-        latest_path = runtime_fixture_path(target, ".loom/runtime/attempts/INIT-0001/latest.json")
-        latest_path.unlink()
+        latest_path = loom_flow_module.execution_attempt_directory(target, "INIT-0001") / "latest.json"
+        legacy_latest_path = target / ".loom/runtime/attempts/INIT-0001/latest.json"
+        for candidate in {latest_path, legacy_latest_path}:
+            if candidate.exists():
+                candidate.unlink()
         missing = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
         if missing.get("status") != "missing" or missing.get("freshness") != "missing":
             failures.append(Failure("execution-attempt", "missing latest attempt evidence must be marked missing"))
