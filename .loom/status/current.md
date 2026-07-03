@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1903
-- Goal: Implement `loom workstation upgrade --plan --to <version> --json` as a non-mutating workstation upgrade planner.
-- Scope: Add the plan-only workstation CLI surface, machine-level refresh plan output, per-repository adoption classifications, focused CLI contract coverage, and the small runtime fixture/hash sync required by validation. Do not implement `--apply`, multi-repository writes, release behavior, or legacy migration apply.
-- Execution Path: issue #1903 -> branch work/1903-workstation-upgrade-plan -> PR -> review/merge-ready/closeout
+- Item ID: WI-1943
+- Goal: Let controlled merge and closeout consume terminal closeout carrier PR gates.
+- Scope: When PR gate already passed terminal closeout consumption for a closeout-only carrier PR, controlled merge and closeout readback must not require a normal merge checkpoint after the Work Item is already `closed_out`.
+- Execution Path: issue #1943 -> branch work/1943-terminal-closeout-gate -> PR -> review/merge-ready/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1903.md
-- Review Entry: .loom/reviews/WI-1903.json
-- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py; git diff --check; python3 tools/check_cli_contract.py --surface workstation-registry; python3 tools/skills_surface.py check --surface generated-tree-drift; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .
-- Closing Condition: Plan-only workstation upgrade CLI is merged, #1903 is closed, and follow-up apply/freshness/adoption-classification WIs remain separate.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1903 closed out by closeout run: PR #1941 merged at 1eb6b966468137023c695dc073c5e5a1cd162bf4, issue #1903 closed, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1903 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1943.md
+- Review Entry: .loom/reviews/WI-1943.json
+- Validation Entry: python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py; git diff --check; python3 tools/check_cli_contract.py --surface controlled-merge --surface governance-closeout; python3 tools/check_npm_package.py --surface aggregate; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json
+- Closing Condition: PR gate/controlled merge/closeout pass for terminal closeout carrier PR consumption without weakening implementation PR merge checkpoint requirements.
+- Current Checkpoint: build
+- Current Stop: Controlled merge and closeout readback now consume terminal closeout carrier PR evidence; targeted contract checks and real PR #1942 replay pass.
+- Next Step: Record review, commit, open PR, and run PR/merge gates.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T11:39Z on head 4a0c6169935cac566f34dcb44a57a73d97b3532a, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/skills_surface.py check --surface generated-tree-drift`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, `python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .`, `python3 tools/check_npm_package.py --surface plugin-payload-hash`, `python3 tools/check_npm_package.py --surface aggregate`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`.
-- Recovery Boundary: Continue from the WI-1903 diff for `tools/loom.py`, `tools/check_cli_contract.py`, workstation registry docs, synchronized `loom_check.py` runtime copies, bootstrap hash carriers, and WI-1903 suite carriers only.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-07-03T12:29Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface controlled-merge`, `python3 tools/check_cli_contract.py --surface governance-closeout`, `python3 tools/loom.py merge check 1942 ... --pr-gate-result-file .loom/tmp/pr/pr-1942-gate-retained-154cc46e.json --json`, `python3 tools/loom.py closeout --target . --item WI-1903 --issue 1903 --pr 1942 ... --json`, `python3 tools/check_npm_package.py --surface aggregate`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.
+- Recovery Boundary: Continue from the WI-1943 diff only: `loom_flow.py` terminal closeout consumption, focused CLI contract fixtures, runtime copies, and plugin payload hash.
+- Current Lane: terminal-closeout-gate-fix
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-03T11:16Z WI-1903 plan-only workstation fixture validated in `/Users/mc/dev/Loom` on branch `work/1903-workstation-upgrade-plan`.
-- Logs Entry: Workstation upgrade plan fixture covers empty registry `machine_only` plus `repo_noop`, `repo_auto_commit_candidate`, `repo_pr_required`, and `blocked` repository classifications.
-- Diagnostics Entry: WI-1903 changes plan-only workstation CLI, focused fixtures, registry docs, synchronized runtime `loom_check.py` copies, bootstrap hashes, and WI-1903 carriers only; `--apply`, repo mutation, release, and legacy migration remain out of scope.
-- Verification Entry: 2026-07-03T11:16Z local checks passed: py_compile_clean, git diff --check, workstation-registry, generated-tree-drift, contract-only, and daily-execution-cli-fast.
-- Lane Entry: workstation-upgrade-plan
+- Run Entry: 2026-07-03T12:22Z WI-1943 targeted contract checks ran in `/Users/mc/dev/Loom` on branch `work/1943-terminal-closeout-gate`.
+- Logs Entry: Real PR #1942 retained gate replay changed from controlled-merge block to pass, and post-merge closeout readback changed from missing merge-ready attempt block to pass.
+- Diagnostics Entry: Change is limited to terminal closeout carrier PR consumption; implementation PRs still require normal merge checkpoint evidence.
+- Verification Entry: 2026-07-03T12:29Z local checks passed: py_compile_clean, diff check, controlled-merge, governance-closeout, package aggregate, and skills release-check.
+- Lane Entry: terminal-closeout-gate-fix
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1903.md
-- Dynamic Truth: .loom/progress/WI-1903.md
+- Static Truth: .loom/work-items/WI-1943.md
+- Dynamic Truth: .loom/progress/WI-1943.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

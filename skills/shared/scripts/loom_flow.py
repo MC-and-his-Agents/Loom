@@ -5462,6 +5462,41 @@ def closeout_backlink_subchecks(
         merge_ready_evidence_locator = status_subcheck.get("evidence_locator") if isinstance(status_subcheck.get("evidence_locator"), str) else None
         merge_ready_head = pr_head
         merge_ready_fallback_reason = "missing_versioned_execution_attempt"
+    if (
+        merge_ready_missing
+        and merge_ready_expected_head
+        and merge_ready_expected_source == "implementation_pr"
+        and missing_versioned_execution_attempt(merge_ready_errors, "merge-ready")
+        and merge_ready_pr_number is not None
+        and merge_ready_pr_payload is not None
+    ):
+        implementation_status_subcheck = closeout_required_status_subcheck(
+            target_root=target_root,
+            profile=profile,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=merge_ready_pr_number,
+            pr_payload=merge_ready_pr_payload,
+            pr_head=merge_ready_expected_head,
+            pr_payload_file=None,
+            status_checks_file=status_checks_file,
+            branch_protection_file=branch_protection_file,
+            ruleset_file=ruleset_file,
+        )
+        if implementation_status_subcheck.get("result") == "pass":
+            merge_ready_missing = []
+            merge_ready_source = "implementation_pr_host_checks"
+            merge_ready_trigger_reason = (
+                "terminal closeout carrier PR consumes fresh implementation PR host required checks "
+                "as legacy merge-ready evidence when no versioned execution_attempt was retained"
+            )
+            merge_ready_evidence_locator = (
+                implementation_status_subcheck.get("evidence_locator")
+                if isinstance(implementation_status_subcheck.get("evidence_locator"), str)
+                else None
+            )
+            merge_ready_head = merge_ready_expected_head
+            merge_ready_fallback_reason = "terminal_closeout_carrier_pr"
     subchecks.append(
         closeout_subcheck(
             check_id="merge_ready_attempt",
@@ -21439,6 +21474,21 @@ def retained_pr_gate_consumption(
         if isinstance(review_approval.get("semantic_review_disposition"), dict)
         else {}
     )
+    terminal_closeout_consumption = (
+        retained.get("terminal_closeout_consumption")
+        if isinstance(retained, dict) and isinstance(retained.get("terminal_closeout_consumption"), dict)
+        else {}
+    )
+    closeout_specific_gate = (
+        retained.get("closeout_specific_gate")
+        if isinstance(retained, dict) and isinstance(retained.get("closeout_specific_gate"), dict)
+        else {}
+    )
+    terminal_closeout_allowed = (
+        terminal_closeout_consumption.get("result") == "pass"
+        and closeout_specific_gate.get("result") == "pass"
+        and closeout_specific_gate.get("closeout_pr_allowed") is True
+    )
 
     if not isinstance(retained, dict):
         missing_inputs.append("retained pr-gate result is unreadable")
@@ -21473,7 +21523,7 @@ def retained_pr_gate_consumption(
             )
         ):
             missing_inputs.append("retained pr-gate reviewed_head does not bind to retained PR head")
-        if merge_checkpoint.get("result") not in {None, "pass"}:
+        if merge_checkpoint.get("result") not in {None, "pass"} and not terminal_closeout_allowed:
             missing_inputs.append("retained pr-gate merge checkpoint is not pass")
 
     result = "pass" if not missing_inputs else "block"
@@ -21499,6 +21549,10 @@ def retained_pr_gate_consumption(
             "reviewed_head": review_approval.get("reviewed_head"),
             "reviewed_validation_summary": review_approval.get("reviewed_validation_summary"),
             "semantic_review_disposition": semantic_disposition,
+            "terminal_closeout_consumption": {
+                "result": terminal_closeout_consumption.get("result"),
+                "closeout_pr_allowed": closeout_specific_gate.get("closeout_pr_allowed"),
+            },
         },
     }
 
