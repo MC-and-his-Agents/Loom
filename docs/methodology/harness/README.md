@@ -89,6 +89,8 @@
   - 定义 closeout / reconciliation 统一状态面的 drift 审计合同
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
+- [repo-global-artifact-classification.md](./repo-global-artifact-classification.md)
+  - 定义 repo truth、workstation registry、global runtime cache、diagnostic artifact 与 repo carrier 摘要/locator 的分类边界
 - [review-execution.md](./review-execution.md)
   - 定义正式 review 执行层、review record 与 merge checkpoint 的对接边界
 - [automation-frontload.md](./automation-frontload.md)

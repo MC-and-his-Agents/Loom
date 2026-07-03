@@ -16,6 +16,12 @@ Repo-local plugin payload, repo-local runtime payload, single-skill payload
 consumption, and installer-driven plugin installation are legacy behavior and
 must not be described as default or compatible current paths.
 
+Host adapters may use global Loom cache for local recovery, diagnostics, and
+batch upgrade planning only through the boundary in
+[repo-global-artifact-classification.md](../methodology/harness/repo-global-artifact-classification.md).
+Adapter verification must still read repository truth and host control-plane
+state; global cache presence is never a host verification result.
+
 For Codex, repository adoption truth and Codex Desktop workstation registration
 state are separate. In metadata-only mode, repository truth is
 `.loom/installed-state.json` plus repo-owned governance residue; the user-level
