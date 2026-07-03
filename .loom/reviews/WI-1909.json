@@ -50,6 +50,11 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the FR-5 legacy migration batch implementation head for merge checkpoint consumption."
+    "reason": "Authored implementation review approved the FR-5 legacy migration batch implementation head for merge checkpoint consumption.",
+    "change_class": "mixed",
+    "substitute_validation": "2026-07-03T18:30Z on branch `work/1909-1913-legacy-migration-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface legacy-migration`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/loom.py suite validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1909 --json`, `python3 tools/check_npm_package.py --surface aggregate`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` (495.78s).",
+    "authority": "codex-main",
+    "risk_acceptance": "Bounded to the FR-5 legacy migration batch: plan/apply CLI, fixtures, docs, validation package, and Loom carriers. No release, multi-repo automatic mutation, or tracked legacy payload deletion is approved.",
+    "one_shot": true
   }
 }
