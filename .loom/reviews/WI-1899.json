@@ -3,36 +3,16 @@
   "item_id": "WI-1899",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review allow: runtime/tmp output path resolution writes workstation-only artifacts to global cache while preserving logical locators and repo-local truth carriers. Final implementation also fixes installed npm CLI runtime_paths import resolution, refreshes plugin payload hash, demo bootstrap fixture hashes, and shadow source hashes. Focused fixtures cover resolver behavior, PR metadata/intent artifacts, runtime-upgrade PR bodies, PR gate body readback, closeout/gate-freeze consumers, legacy repo-local execution-attempt fallback, CLI agent-safe .loom/tmp artifacts, installed release surface, npm package payload/hash, demo bootstrap fixture, and shadow parity.",
+  "summary": "Implementation review allow: global runtime cache migration now includes checker and review-record consumers for runtime artifact locators. Review-run and installed-runtime surfaces pass with a shared scoped workstation root, normalized findings files resolve through artifact read paths, repo-local raw-evidence bypass fixtures remain negative, and distribution/bootstrap hashes are synchronized.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-03T06:43:45Z",
-  "reviewed_head": "c499dbb4b63c4a6d12422f56663544c1550311e6",
-  "reviewed_validation_summary": "2026-07-03T06:14Z local validation passed: `python3 -m py_compile ...`; `python3 tools/check_cli_contract.py --surface runtime-paths --surface pr-metadata --surface runtime-upgrade --surface pr-gate-target-readback`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `git diff --check`. 2026-07-03T06:18Z suite validate/evidence/carrier validate passed for WI-1899 after carrier mapping fixes. 2026-07-03T06:29Z bootstrap carrier repaired for WI-1899 current item and `.loom/bin` runtime hashes; suite validate/evidence/carrier and `git diff --check` passed. 2026-07-03T06:43Z final local validation passed after installed npm CLI import-path fix and carrier refresh: `make loom-demo-new-project-check`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all`; `python3 tools/loom.py suite validate --target . --item WI-1899 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1899 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1899 --json`; `git diff --check`.",
+  "authored_at": "2026-07-03T07:26:41Z",
+  "reviewed_head": "49805a8e103d34268eb4b6f408d6ff9115157206",
+  "reviewed_validation_summary": "2026-07-03T07:25Z local validation passed at head 49805a8e103d34268eb4b6f408d6ff9115157206: `python3 -m py_compile ...`; `git diff --check`; `python3 tools/loom_check.py --source-surface review-run .`; `python3 tools/loom_check.py --source-surface installed-runtime .`; `python3 tools/check_cli_contract.py --surface runtime-paths --surface pr-metadata --surface runtime-upgrade --surface pr-gate-target-readback`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/check_npm_package.py`; `python3 tools/check_release_surface.py`; `make loom-demo-new-project-check`; `python3 tools/loom.py suite validate --target . --item WI-1899 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1899 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1899 --json`.",
   "fallback_to": null,
   "findings": [
     {
       "id": "compat-follow-up-1",
-      "summary": "#1900 owns repo carrier summary slimming after the global runtime path exists.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-2",
-      "summary": "#1901 owns broader gate independence validation beyond focused consumer fixtures.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    },
-    {
-      "id": "compat-follow-up-3",
-      "summary": "#1908/#1910 own legacy repo-local cache migration and residue cleanup.",
+      "summary": "Continue to PR metadata refresh, local PR gate, hosted checks, merge-ready, and closeout for WI-1899.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
@@ -43,9 +23,7 @@
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "#1900 owns repo carrier summary slimming after the global runtime path exists.",
-    "#1901 owns broader gate independence validation beyond focused consumer fixtures.",
-    "#1908/#1910 own legacy repo-local cache migration and residue cleanup."
+    "Continue to PR metadata refresh, local PR gate, hosted checks, merge-ready, and closeout for WI-1899."
   ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1899.md",
