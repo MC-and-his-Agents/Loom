@@ -4847,6 +4847,61 @@ def assert_global_runtime_path_resolver_contract(tmp: Path) -> None:
             raise AssertionError("runtime resolver created a repo-local .loom/runtime artifact")
 
 
+def assert_cache_absent_gate_contract(tmp: Path) -> None:
+    target = tmp / "cache-absent-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1901")
+    write_state(target, valid_state(target))
+    subprocess.run(["git", "add", ".loom/installed-state.json"], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture installed state"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["reviewed_head"] = reviewed_head
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture review refresh"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    update_fixture_pr_head(target, fixture)
+
+    workstation = tmp / "cache-absent-workstation"
+    with isolated_loom_workstation(workstation):
+        shutil.rmtree(target / ".loom" / "runtime", ignore_errors=True)
+        shutil.rmtree(target / ".loom" / "tmp", ignore_errors=True)
+
+        _, doctor_payload = run_json(["doctor", "--target", str(target), "--json"], expect=0)
+        if doctor_payload.get("result") != "pass":
+            raise AssertionError("doctor must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        _, resume_payload = run_json(["resume", "--target", str(target), "--item", fixture["item"], "--json"], expect=0)
+        if resume_payload.get("result") != "pass":
+            raise AssertionError("resume must not depend on repo-local .loom/runtime or .loom/tmp")
+        full_output = resume_payload.get("full_output")
+        resume_locator = full_output.get("artifact_locator") if isinstance(full_output, dict) else None
+        if not isinstance(resume_locator, str):
+            raise AssertionError("resume did not expose an artifact locator for cache-absent diagnostics")
+        resume_artifact = runtime_locator_path(target, resume_locator)
+        if resume_artifact is None or not resume_artifact.exists():
+            raise AssertionError("resume artifact was not written to the global runtime cache")
+        if (target / resume_locator).exists():
+            raise AssertionError("resume wrote diagnostics to repo-local .loom/tmp")
+        runtime_payload_from_agent_safe_output(resume_payload)
+
+        _, review_payload = run_flow_json(["review", "read", "--target", str(target), "--item", fixture["item"]], expect=0)
+        if review_payload.get("result") != "pass":
+            raise AssertionError("review read must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+        if pr_gate_payload.get("result") != "pass":
+            raise AssertionError("pr gate must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        _, merge_ready_payload = run_json(["merge-ready", "--target", str(target), "--item", fixture["item"], "--json"], expect=0)
+        if merge_ready_payload.get("result") != "pass":
+            raise AssertionError("merge-ready must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        if (target / ".loom" / "runtime").exists() or (target / ".loom" / "tmp").exists():
+            raise AssertionError("cache-absent gate checks recreated repo-local runtime cache directories")
+
+
 def valid_state(target: Path) -> dict[str, Any]:
     return global_cli_state(target)
 
@@ -11343,7 +11398,9 @@ def run_workstation_registry_surface() -> None:
 
 def run_runtime_paths_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-runtime-paths-") as raw_tmp:
-        assert_global_runtime_path_resolver_contract(Path(raw_tmp))
+        tmp = Path(raw_tmp)
+        assert_global_runtime_path_resolver_contract(tmp)
+        assert_cache_absent_gate_contract(tmp)
     print("runtime path resolver checks passed")
 
 
