@@ -3,10 +3,10 @@
   "item_id": "WI-1943",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Carrier-only closeout review passed for WI-1943 final repo-local sync after corrective PR #1946 merged at 4f4eee97535da6e106b526dc61497377d1676a66. This review approves only progress/status/shadow closeout carrier updates for PR #1945 and does not approve new product implementation behavior.",
+  "summary": "Carrier-only closeout review passed for WI-1943 final terminal sync after issue #1943 closed and final closeout PR #1945 merged at 7793ae15c60b5adfc32d5063c2f244ca24c213cb. This review approves only progress/status/shadow terminal carrier updates and does not approve new product implementation behavior.",
   "reviewer": "codex-main",
-  "authored_at": "2026-07-03T15:52:15Z",
-  "reviewed_head": "4f4eee97535da6e106b526dc61497377d1676a66",
+  "authored_at": "2026-07-03T16:05:37Z",
+  "reviewed_head": "7793ae15c60b5adfc32d5063c2f244ca24c213cb",
   "reviewed_validation_summary": "2026-07-03T14:21Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/loom.py suite validate --target . --item WI-1943 --json`, `git diff --check`, and `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; earlier implementation checks and PR #1942 replay remain passing. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.",
   "fallback_to": null,
   "findings": [],
@@ -19,16 +19,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": net/http: TLS handshake timeout",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
