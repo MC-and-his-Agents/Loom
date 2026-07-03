@@ -11659,6 +11659,100 @@ def run_workstation_registry_surface() -> None:
     print("workstation registry surface checks passed")
 
 
+def commit_all(target: Path, message: str) -> None:
+    subprocess.run(["git", "add", "-A"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "commit", "-m", message], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def prepare_legacy_migration_target(target: Path) -> None:
+    target.mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=target, check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", f"git@github.com:owner/{target.name}.git"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    (target / ".gitignore").write_text(".loom/runtime/\n.loom/tmp/\n", encoding="utf-8")
+    _, installed = run_json(["install", "--target", str(target), "--apply", "--json"], expect=0)
+    if installed.get("result") != "pass":
+        raise AssertionError("legacy migration fixture install did not pass")
+    commit_all(target, "fixture metadata-only install")
+
+
+def assert_legacy_migration_surface(tmp: Path) -> None:
+    no_op = tmp / "legacy-no-op"
+    prepare_legacy_migration_target(no_op)
+    _, no_op_plan = run_json(["migrate-global-cache", "plan", "--target", str(no_op), "--json"], expect=0)
+    if no_op_plan.get("strategy") != "no_op" or no_op_plan.get("mutates") is not False:
+        raise AssertionError(f"legacy migration no-op plan drifted: {no_op_plan}")
+
+    apply_target = tmp / "legacy-apply"
+    prepare_legacy_migration_target(apply_target)
+    runtime_file = apply_target / ".loom" / "runtime" / "session" / "run.json"
+    tmp_file = apply_target / ".loom" / "tmp" / "logs" / "run.log"
+    runtime_file.parent.mkdir(parents=True)
+    tmp_file.parent.mkdir(parents=True)
+    runtime_file.write_text('{"ok": true}\n', encoding="utf-8")
+    tmp_file.write_text("ok\n", encoding="utf-8")
+    home = tmp / "home"
+    home.mkdir()
+    with isolated_codex_workstation(home), isolated_loom_workstation(home / ".loom"):
+        register_fixture_codex_plugin()
+        _, apply_plan = run_json(["migrate-global-cache", "plan", "--target", str(apply_target), "--json"], expect=0)
+        if apply_plan.get("strategy") != "auto_commit_candidate":
+            raise AssertionError(f"legacy migration apply fixture did not classify cache as auto_commit_candidate: {apply_plan}")
+        _, applied = run_json(["migrate-global-cache", "apply", "--target", str(apply_target), "--json"], expect=0)
+        if applied.get("result") != "pass" or applied.get("strategy") != "auto_commit_candidate":
+            raise AssertionError(f"legacy migration apply did not pass: {applied}")
+        moved = applied.get("cache_apply", {}).get("moved", [])
+        if len(moved) != 2:
+            raise AssertionError(f"legacy migration apply did not move runtime/tmp files: {moved}")
+        if runtime_file.exists() or tmp_file.exists():
+            raise AssertionError("legacy migration apply left repo-local runtime/tmp files behind")
+        registry = home / ".loom" / "repositories.json"
+        if not registry.exists():
+            raise AssertionError("legacy migration apply did not write workstation registry")
+        validation = applied.get("validation_package", {})
+        if validation.get("result") != "pass":
+            raise AssertionError(f"legacy migration validation package did not pass: {validation}")
+        step_ids = {step.get("id") for step in validation.get("steps", []) if isinstance(step, dict)}
+        expected_steps = {"installed-state-validate", "host-verify", "skills-check", "doctor", "git-status"}
+        if not expected_steps.issubset(step_ids):
+            raise AssertionError(f"legacy migration validation package missed steps: {step_ids}")
+
+    tracked_target = tmp / "legacy-tracked-residue"
+    prepare_legacy_migration_target(tracked_target)
+    residue = tracked_target / "plugins" / "loom" / "payload.txt"
+    residue.parent.mkdir(parents=True)
+    residue.write_text("legacy\n", encoding="utf-8")
+    commit_all(tracked_target, "fixture tracked legacy residue")
+    _, tracked_plan = run_json(["migrate-global-cache", "plan", "--target", str(tracked_target), "--json"], expect=0)
+    if tracked_plan.get("strategy") != "pr_required":
+        raise AssertionError(f"tracked legacy residue must require PR: {tracked_plan}")
+    status, tracked_apply = run_json(["migrate-global-cache", "apply", "--target", str(tracked_target), "--json"])
+    if status == 0 or tracked_apply.get("result") != "block" or tracked_apply.get("failed_layer") != "legacy-residue":
+        raise AssertionError("tracked legacy residue apply did not fail closed")
+    if not residue.exists():
+        raise AssertionError("tracked legacy residue was deleted by apply")
+
+    missing_state = tmp / "legacy-missing-state"
+    missing_state.mkdir()
+    subprocess.run(["git", "init"], cwd=missing_state, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    status, missing_plan = run_json(["migrate-global-cache", "plan", "--target", str(missing_state), "--json"])
+    if status == 0 or missing_plan.get("strategy") != "blocked":
+        raise AssertionError("missing installed-state migration plan did not block")
+
+
+def run_legacy_migration_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-legacy-migration-") as raw_tmp:
+        assert_legacy_migration_surface(Path(raw_tmp))
+    print("legacy migration surface checks passed")
+
+
 def run_runtime_paths_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-runtime-paths-") as raw_tmp:
         tmp = Path(raw_tmp)
@@ -14617,6 +14711,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="workstation-registry",
             fixture_group="workstation-registry",
             run=run_workstation_registry_surface,
+        ),
+        SurfaceCheck(
+            name="legacy-migration",
+            fixture_group="legacy-migration",
+            run=run_legacy_migration_surface,
         ),
         SurfaceCheck(
             name="runtime-paths",

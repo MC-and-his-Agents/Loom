@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1904
-- Goal: Deliver FR-4 Workstation Upgrade Orchestrator batch for issues #1904, #1905, #1906, and #1907.
-- Scope: Implement workstation upgrade machine refresh planning, per-repo adoption classification, machine-level --apply refresh, and batch freshness cache within one validation boundary.
-- Execution Path: issue #1904 anchor -> branch work/1904-1907-workstation-upgrade-batch -> batch PR covering #1904/#1905/#1906/#1907 -> review/merge/closeout
+- Item ID: WI-1909
+- Goal: Deliver FR-5 Legacy Repo Migration batch for issues #1909, #1910, #1911, #1912, and #1913.
+- Scope: Implement `loom migrate-global-cache plan/apply`, legacy residue detection, repo change strategy classification, and post-migration validation package within one validation boundary.
+- Execution Path: issue #1909 anchor -> branch work/1909-1913-legacy-migration-batch -> batch PR covering #1909/#1910/#1911/#1912/#1913 -> review/merge/closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1904.md
-- Review Entry: .loom/reviews/WI-1904.json
-- Validation Entry: python3 tools/py_compile_clean.py src/loom_cli.py tools/loom.py tests; git diff --check; targeted workstation upgrade contract tests
-- Closing Condition: Batch PR covering #1904/#1905/#1906/#1907 is merged; local and hosted gates pass; closeout evidence is recorded for each covered issue without deferring #1906 or FR-5 scope.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1904 closed out by closeout run: PR #1948 merged at aa3ce1d9aa8a8ba7dd9ca366b3105789c6b3fd2a, issues #1904/#1905/#1906/#1907 closed with closeout evidence, host reconciliation consumed, terminal carrier metadata written, status/shadow refresh completed, and final closeout check passed.
-- Next Step: No further WI-1904 implementation work remains.
+- Recovery Entry: .loom/progress/WI-1909.md
+- Review Entry: .loom/reviews/WI-1909.json
+- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; git diff --check; targeted legacy migration contract tests
+- Closing Condition: Batch PR covering #1909/#1910/#1911/#1912/#1913 is merged; local and hosted gates pass; closeout evidence is recorded for each covered issue without reducing FR-5 scope.
+- Current Checkpoint: review
+- Current Stop: FR-5 batch implementation head `b448537db1455cdb69e1b0167dd204b963ca490e` passed local validation; spec and general review records are being written as carrier-only review evidence.
+- Next Step: Push the branch and open the batch PR covering #1909/#1910/#1911/#1912/#1913, then read back PR metadata before hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-03T17:18Z on branch `work/1904-1907-workstation-upgrade-batch`, passed demo bootstrap fixture sync validation (`make loom-demo-new-project-check`), `git diff --check`, `python3 tools/py_compile_clean.py examples/new-project/.loom/bin/loom_flow.py`, and `python3 tools/check_npm_package.py --surface aggregate` after FR-4 batch validation and PR #1948 metadata/readback.
-- Recovery Boundary: Continue from implementation commit 2c21d4ae803cec5fe553ccfb91b362443239c36e and fixture sync head d889dffbaecd564e8cebd6a91825cb99f99ca9e3; scope is limited to FR-4 workstation upgrade batch #1904/#1905/#1906/#1907, fixture sync, and PR/closeout carriers.
-- Current Lane: post-merge-closeout-run
+- Latest Validation Summary: 2026-07-03T18:30Z on branch `work/1909-1913-legacy-migration-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface legacy-migration`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/loom.py suite validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1909 --json`, `python3 tools/check_npm_package.py --surface aggregate`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` (495.78s).
+- Recovery Boundary: Continue from branch `work/1909-1913-legacy-migration-batch`; scope is limited to FR-5 legacy migration batch #1909/#1910/#1911/#1912/#1913 and required runtime/fixture/docs copies.
+- Current Lane: fr5-legacy-migration-batch
 
 ## Runtime Evidence
 
-- Run Entry: 2026-07-03T16:34Z FR-4 batch local checks ran in `/Users/mc/dev/Loom` on branch `work/1904-1907-workstation-upgrade-batch`.
-- Logs Entry: Workstation registry surface covers machine plan, repo classifications, machine apply, explicit single-repo apply, freshness cache, and marketplace refresh guidance.
-- Diagnostics Entry: Package aggregate and skills release-check pass; `check_cli_contract --surface aggregate` passed in 686.05s.
-- Verification Entry: 2026-07-03T17:04Z local checks passed: py_compile_clean, diff check, suite validate/evidence/carrier validate, workstation/adoption host surfaces, aggregate CLI contract, npm package aggregate, skills release-check, governance-closeout surface, shadow parity, review carrier readback, and loom_flow runtime-copy SHA parity.
-- Lane Entry: fr4-workstation-upgrade-batch
+- Run Entry: 2026-07-03T18:05Z FR-5 batch branch initialized in `/Users/mc/dev/Loom` on branch `work/1909-1913-legacy-migration-batch`.
+- Logs Entry: Legacy migration implementation, fixtures, docs, and carrier refresh are in progress in one FR-5 batch branch.
+- Diagnostics Entry: Targeted legacy migration, workstation registry, runtime paths, adoption host metadata, package aggregate, suite validate/evidence/carrier validate, skills release check, and CLI contract aggregate passed by 2026-07-03T18:30Z.
+- Verification Entry: Local verification is ready for suite evidence refresh, review records, PR metadata readback, and hosted checks.
+- Lane Entry: fr5-legacy-migration-batch
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1904.md
-- Dynamic Truth: .loom/progress/WI-1904.md
+- Static Truth: .loom/work-items/WI-1909.md
+- Dynamic Truth: .loom/progress/WI-1909.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

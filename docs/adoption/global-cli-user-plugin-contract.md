@@ -94,6 +94,22 @@ global cache may store long outputs and per-repo planning accelerators under
 `~/.loom/repos/<repo-id>/`, while repository carriers keep only summaries,
 hashes, and locators when a versioned evidence link is needed.
 
+Legacy repositories can opt into a one-repository migration with:
+
+```bash
+loom migrate-global-cache plan --target <repo> --json
+loom migrate-global-cache apply --target <repo> --json
+```
+
+`plan` is read-only. `apply` may move only untracked or ignored
+`.loom/runtime/**` and `.loom/tmp/**` cache into the workstation global cache
+and may refresh the workstation registry entry. It must not delete tracked
+legacy payloads such as `.loom/bin`, `plugins/loom`, `.agents/skills`, or
+`.agents/plugins/marketplace.json`; those are reported as PR-required cleanup.
+Running this migration is not an upgrade prerequisite: ordinary `doctor`,
+`status`, `resume`, and per-repo adoption validation must keep working before a
+repository migrates its local cache.
+
 ## Codex User-Level Plugin Target
 
 `loom host install --host codex --scope user --apply --json` installs the Codex

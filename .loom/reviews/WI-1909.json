@@ -1,0 +1,60 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1909",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "FR-5 legacy migration batch is approved for PR creation: it adds `loom migrate-global-cache plan/apply`, moves only ignored/untracked repo-local runtime/tmp cache into the workstation global cache, registers migrated repositories, detects tracked legacy residue as PR-required cleanup, classifies repo change strategy, and verifies the post-migration validation package without deferring #1909/#1910/#1911/#1912/#1913.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-07-03T18:32:00Z",
+  "reviewed_head": "b448537db1455cdb69e1b0167dd204b963ca490e",
+  "reviewed_validation_summary": "2026-07-03T18:30Z on branch `work/1909-1913-legacy-migration-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface legacy-migration`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/loom.py suite validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1909 --json`, `python3 tools/check_npm_package.py --surface aggregate`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` (495.78s).",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1909.md",
+    "recovery_entry": ".loom/progress/WI-1909.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "covered_work_items": [
+      "WI-1909",
+      "WI-1910",
+      "WI-1911",
+      "WI-1912",
+      "WI-1913"
+    ],
+    "covered_issues": [
+      "https://github.com/MC-and-his-Agents/Loom/issues/1909",
+      "https://github.com/MC-and-his-Agents/Loom/issues/1910",
+      "https://github.com/MC-and-his-Agents/Loom/issues/1911",
+      "https://github.com/MC-and-his-Agents/Loom/issues/1912",
+      "https://github.com/MC-and-his-Agents/Loom/issues/1913"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the FR-5 legacy migration batch implementation head for merge checkpoint consumption.",
+    "change_class": "mixed",
+    "substitute_validation": "2026-07-03T18:30Z on branch `work/1909-1913-legacy-migration-batch`, passed `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`, `git diff --check`, `python3 tools/check_cli_contract.py --surface legacy-migration`, `python3 tools/check_cli_contract.py --surface workstation-registry`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/check_cli_contract.py --surface adoption-host-metadata`, `python3 tools/loom.py suite validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1909 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1909 --json`, `python3 tools/check_npm_package.py --surface aggregate`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` (495.78s).",
+    "authority": "codex-main",
+    "risk_acceptance": "Bounded to the FR-5 legacy migration batch: plan/apply CLI, fixtures, docs, validation package, and Loom carriers. No release, multi-repo automatic mutation, or tracked legacy payload deletion is approved.",
+    "one_shot": true
+  }
+}
