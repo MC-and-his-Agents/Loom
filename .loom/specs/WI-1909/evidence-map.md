@@ -1,0 +1,7 @@
+# WI-1909 Evidence Map
+
+| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | .loom/specs/WI-1909/spec.md | S1 S2 S3 S4 S5 / A1 A2 A3 A4 A5 A6 A7 | WI-1909 / FR-5 legacy migration batch #1909-#1913 | present | Review, PR gate, merge-ready, and closeout may consume this only as scenario and acceptance mapping evidence. | Re-run legacy-migration and workstation-registry checks after legacy migration CLI, registry schema, global cache, residue ownership, or validation package changes. |
+| EV-002 | test_evidence | .loom/specs/WI-1909/plan.md | validation strategy / acceptance test mapping | WI-1909 / focused CLI contract and package validation | present | Review, PR gate, merge-ready, and closeout may consume this only as planned validation coverage. | Re-run the listed validation commands after modifying tools, fixtures, docs, runtime copies, or package surfaces in this batch. |
+| EV-003 | fresh_verification_input | .loom/progress/WI-1909.md | EV-001 EV-002 / latest validation summary | WI-1909 / branch work/1909-1913-legacy-migration-batch | initial | Review, PR gate, merge-ready, and closeout may consume this as the current local validation summary after final validation refresh. | Refresh progress/status and rerun affected checks after implementation, carrier, or review-gate changes stabilize. |
