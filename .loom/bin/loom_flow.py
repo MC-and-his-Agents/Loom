@@ -8116,6 +8116,16 @@ def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
     suite, missing_suite_paths = formal_spec_suite_status(context)
     suite_validation = spec_suite_validation_payload(context)
     suite_not_applicable = suite_validation.get("result") == "not_applicable"
+    suite_validation_payload = suite_validation.get("payload")
+    suite_path = (
+        str(suite_validation_payload.get("suite_path") or "").lower()
+        if isinstance(suite_validation_payload, dict)
+        else ""
+    )
+    if suite_path == "minimal" and suite_validation_ready(suite_validation):
+        missing_suite_paths = [
+            path for path in missing_suite_paths if path != suite["implementation_contract"]
+        ]
     spec_path = suite["spec"] if not missing_suite_paths else formal_spec_path(context)
     payload = review_gate_payload(
         context,

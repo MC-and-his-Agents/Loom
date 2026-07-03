@@ -3576,6 +3576,75 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
                 raise AssertionError("suite not_applicable gate must not require evidence/carrier fallback inputs")
         loom_flow.suite_gate_validation_payload = original_suite_gate_validation_payload
 
+        minimal_target = tmp / "minimal-suite-spec-review"
+        (minimal_target / ".loom/specs/WI-minimal").mkdir(parents=True)
+        (minimal_target / ".loom/reviews").mkdir(parents=True)
+        (minimal_target / ".loom/specs/WI-minimal/spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts not_applicable: rationale: minimal suite review gate fixture does not use full-only artifacts; "
+            "consumer boundary: suite validate and spec review consume spec.md and plan.md only while implementation review remains required; "
+            "recheck condition: scope expands beyond minimal suite.\n",
+            encoding="utf-8",
+        )
+        (minimal_target / ".loom/specs/WI-minimal/plan.md").write_text(
+            "# Plan\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts not_applicable: rationale: minimal suite review gate fixture does not use full-only artifacts; "
+            "consumer boundary: suite validate and spec review consume spec.md and plan.md only while implementation review remains required; "
+            "recheck condition: scope expands beyond minimal suite.\n",
+            encoding="utf-8",
+        )
+        (minimal_target / ".loom/reviews/WI-minimal.spec.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": "WI-minimal",
+                    "decision": "allow",
+                    "kind": "spec_review",
+                    "summary": "minimal suite spec review approved",
+                    "reviewer": "contract-check",
+                    "reviewed_head": "current-head",
+                    "reviewed_validation_summary": "minimal suite fixture validation passed",
+                    "fallback_to": None,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "follow_ups": [],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        minimal_context = {
+            "target_root": minimal_target,
+            "item_id": "WI-minimal",
+            "review_entry": ".loom/reviews/WI-minimal.json",
+            "current_checkpoint": "merge",
+            "associated_artifacts": [],
+        }
+        loom_flow.spec_suite_validation_payload = lambda _context: {
+            "schema_version": "loom-suite-validation-consumption/v1",
+            "command": "suite validate",
+            "result": "pass",
+            "summary": "Suite validate found a minimal suite path decision.",
+            "missing_inputs": [],
+            "blocking_gaps": [],
+            "payload": {
+                "suite_path": "minimal",
+                "spec_locator": ".loom/specs/WI-minimal/spec.md",
+                "plan_locator": ".loom/specs/WI-minimal/plan.md",
+            },
+        }
+        minimal_spec_gate = loom_flow.spec_review_gate_payload(minimal_context)
+        if (
+            minimal_spec_gate.get("result") != "pass"
+            or minimal_spec_gate.get("required") is not True
+            or any("implementation-contract.md" in str(message) for message in minimal_spec_gate.get("missing_inputs", []))
+            or not loom_flow.spec_review_gate_ready_for_implementation_review(minimal_spec_gate)
+        ):
+            raise AssertionError(f"minimal suite spec review gate blocked full-only artifact absence: {minimal_spec_gate}")
+
         loom_flow.spec_suite_validation_payload = lambda _context: {
             "schema_version": "loom-suite-validation-consumption/v1",
             "command": "suite validate",
