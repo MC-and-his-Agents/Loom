@@ -3315,6 +3315,16 @@ def load_loom_flow_module() -> Any:
     return module
 
 
+def load_governance_surface_module() -> Any:
+    module_path = REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "governance_surface.py"
+    spec = importlib.util.spec_from_file_location("governance_surface_contract", module_path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load governance_surface module for suite path decision checks")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def assert_gate_freeze_carrier_shadow_bindings_contract() -> None:
     loom_flow = load_loom_flow_module()
     with tempfile.TemporaryDirectory(prefix="loom-freeze-shadow-") as raw_tmp:
@@ -6589,6 +6599,230 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("hosted snapshot mismatch must carry classifier next action")
 
 
+def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "pr-metadata-suite-not-applicable"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1957")
+    write_hosted_freeze_admission_inputs(target)
+    suite_dir = target / ".loom" / "specs" / fixture["item"]
+    shutil.rmtree(suite_dir)
+    subprocess.run(["git", "add", "-A", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture remove repo suite"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload.update(
+        {
+            "reviewed_head": reviewed_head,
+            "reviewed_validation_summary": fixture["validation_summary"],
+            "reviewed_validation_summary_hash": None,
+            "validation_summary_source": "recovery.latest_validation_summary",
+            "validation_summary_locator": f".loom/progress/{fixture['item']}.md",
+            "summary": "Fixture implementation review approves metadata-declared suite not_applicable without repo-local spec files.",
+            "semantic_review_disposition": {
+                "status": "passed",
+                "reason": "Authored implementation review approved the current head; PR metadata supplies the formal suite not_applicable decision.",
+            },
+            "consumed_inputs": {
+                "work_item": f".loom/work-items/{fixture['item']}.md",
+                "recovery_entry": f".loom/progress/{fixture['item']}.md",
+                "suite_evidence_validation": "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable",
+                "suite_carrier_validation": "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable",
+            },
+        }
+    )
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture metadata suite review"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "reinforced",
+            "change_class": "runtime",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "batch implementation is validated by targeted contract checks instead of repo-local formal suite files",
+                "consumer_boundary": "PR gate, review, merge-ready, and closeout consume this only as formal suite non-applicability",
+                "recheck_condition": "scope expands beyond the declared runtime batch or validation evidence changes",
+                "scope_proof": "fixture intentionally removes .loom/specs/<WI> and relies on PR metadata machine carrier",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    body_file = f".loom/fixtures/{fixture['item']}/body.md"
+    (target / body_file).write_text(str(pr_payload.get("body") or ""), encoding="utf-8")
+    payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+    )
+    if payload.get("result") != "pass":
+        raise AssertionError(f"PR metadata suite_not_applicable fixture blocked: {payload.get('missing_inputs')}")
+    serialized_missing = "\n".join(str(message) for message in payload.get("missing_inputs", []))
+    forbidden_fragments = ("missing formal spec suite file", "suite_path_decision", "missing_evidence_map", "missing_task_carrier_locator")
+    if any(fragment in serialized_missing for fragment in forbidden_fragments):
+        raise AssertionError(f"PR metadata suite_not_applicable leaked repo-local suite requirements: {serialized_missing}")
+    spec_review = payload.get("merge_checkpoint", {}).get("spec_review", {})
+    if spec_review.get("result") != "not_applicable":
+        raise AssertionError(f"merge checkpoint did not consume PR metadata suite not_applicable: {spec_review}")
+    governance_gate = next(
+        (
+            step.get("governance_intensity_gate")
+            for step in payload.get("steps", [])
+            if isinstance(step, dict) and step.get("name") == "governance-intensity-gate"
+        ),
+        {},
+    )
+    if governance_gate.get("suite_path_decision", {}).get("source") != "pr_metadata":
+        raise AssertionError(f"governance gate did not identify PR metadata as suite decision source: {governance_gate}")
+    freeze_suite = payload.get("hosted_freeze_admission", {}).get("input_bindings", {}).get("suite_validation", {})
+    if (
+        freeze_suite.get("result") != "not_applicable"
+        or freeze_suite.get("source_locator") != "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable"
+    ):
+        raise AssertionError(f"hosted freeze did not consume PR metadata suite not_applicable: {freeze_suite}")
+
+
+def assert_suite_not_applicable_marker_parser_contract(tmp: Path) -> None:
+    target = tmp / "suite-not-applicable-marker-parser"
+    target.mkdir()
+    accepted = target / "accepted.md"
+    accepted.write_text(
+        "- Suite path: not_applicable\n"
+        "- Plan Locator: not_applicable (suite path: not_applicable)\n",
+        encoding="utf-8",
+    )
+    rejected = target / "rejected.md"
+    rejected.write_text(
+        "- Note: no suite path: not_applicable evidence yet\n"
+        "- Latest Validation Summary: previous fixture mentioned suite path: not_applicable while debugging.\n"
+        "- Plan Locator: .loom/specs/WI-1957/plan.md (suite path: not_applicable)\n",
+        encoding="utf-8",
+    )
+
+    loom_flow = load_loom_flow_module()
+    context = {"target_root": target}
+    accepted_present, accepted_values = loom_flow.suite_path_decision_presence_from_paths(context, ["accepted.md"])
+    if not accepted_present or accepted_values != {"not_applicable"}:
+        raise AssertionError(f"structured suite_not_applicable marker was not consumed: {accepted_values}")
+    rejected_present, rejected_values = loom_flow.suite_path_decision_presence_from_paths(context, ["rejected.md"])
+    if rejected_present or rejected_values:
+        raise AssertionError(f"unstructured suite_not_applicable prose was consumed: {rejected_values}")
+
+    governance_surface = load_governance_surface_module()
+    if governance_surface.suite_path_decision(accepted) != "not_applicable":
+        raise AssertionError("governance surface did not consume structured suite_not_applicable marker")
+    if governance_surface.suite_path_decision(rejected):
+        raise AssertionError("governance surface consumed unstructured suite_not_applicable prose")
+
+
+def assert_runtime_carrier_suite_not_applicable_adoption_fixture(tmp: Path) -> None:
+    target = tmp / "runtime-carrier-suite-not-applicable"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1957")
+    item = fixture["item"]
+    shutil.rmtree(target / ".loom" / "specs" / item)
+    (target / ".loom" / "reviews" / f"{item}.spec.json").unlink()
+    progress_path = target / ".loom" / "progress" / f"{item}.md"
+    progress_text = progress_path.read_text(encoding="utf-8")
+    if "suite path: not_applicable" not in progress_text:
+        progress_text = progress_text.replace(
+            f"- Plan Locator: .loom/specs/{item}/plan.md\n",
+            f"- Plan Locator: not_applicable (suite path: not_applicable)\n",
+            1,
+        )
+    progress_path.write_text(progress_text, encoding="utf-8")
+    subprocess.run(["git", "add", "-A", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture runtime suite not applicable"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload.update(
+        {
+            "reviewed_head": reviewed_head,
+            "reviewed_validation_summary": fixture["validation_summary"],
+            "summary": "Fixture implementation review approves runtime-carrier suite not_applicable without repo-local spec files.",
+            "semantic_review_disposition": {
+                "status": "passed",
+                "reason": "Authored implementation review approved the current head; progress/status declare the formal suite not_applicable decision.",
+            },
+            "consumed_inputs": {
+                "work_item": f".loom/work-items/{item}.md",
+                "recovery_entry": f".loom/progress/{item}.md",
+                "suite_path_decision": f".loom/progress/{item}.md",
+            },
+        }
+    )
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture runtime suite review"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+
+    loom_flow = load_loom_flow_module()
+    context, context_errors = loom_flow.load_retained_item_context(
+        target,
+        ".loom/bootstrap/init-result.json",
+        item,
+        f".loom/work-items/{item}.md",
+    )
+    if context_errors:
+        raise AssertionError(f"runtime carrier suite_not_applicable context failed: {context_errors}")
+    spec_gate = loom_flow.spec_review_gate_payload(context)
+    if spec_gate.get("result") != "not_applicable":
+        raise AssertionError(f"runtime carrier suite_not_applicable did not reach spec gate: {spec_gate}")
+    suite_validation = spec_gate.get("suite_validation", {})
+    if suite_validation.get("validator_mode") != "active-fact-chain-marker":
+        raise AssertionError(f"runtime carrier suite_not_applicable did not use the active fact-chain marker: {suite_validation}")
+
+    status_code, adoption = run_flow_json(["adopt", "verify", "--target", str(target), "--item", item])
+    missing = "\n".join(str(entry) for entry in adoption.get("missing_inputs", []))
+    if "Spec Review Record" in missing or "missing spec review artifact" in missing:
+        raise AssertionError(f"runtime carrier suite_not_applicable still required a spec review artifact: {missing}")
+    if adoption.get("reviews", {}).get("spec", {}).get("status") != "not_applicable":
+        raise AssertionError(f"adoption verify did not classify spec review as not_applicable: {adoption.get('reviews')}")
+    consumer = adoption.get("producer_consumer_roundtrip", {}).get("consumer", {})
+    if consumer.get("review_artifacts", {}).get("Spec Review Record", {}).get("status") != "not_applicable":
+        raise AssertionError(f"adoption PR body did not render Spec Review Record as not_applicable: {consumer}")
+    if status_code not in {0, 1}:
+        raise AssertionError(f"adoption verify returned unexpected status {status_code}: {adoption}")
+
+    _, profile = run_flow_json(["governance-profile", "status", "--target", str(target)], expect=0)
+    missing_by_level = profile.get("maturity", {}).get("missing_by_level", {})
+    standard_missing = set(missing_by_level.get("standard", [])) if isinstance(missing_by_level, dict) else set()
+    forbidden = {"spec_path", "plan_path", "spec_gate"} & standard_missing
+    if forbidden:
+        raise AssertionError(f"runtime carrier suite_not_applicable did not satisfy maturity spec facts: {sorted(forbidden)}")
+
+
 def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
     target = tmp / "closeout-freeze-profile"
     target.mkdir()
@@ -9632,6 +9866,8 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     with isolated_loom_workstation(tmp / "workstation"):
         assert_gate_freeze_review_binding_fixture(tmp)
         assert_hosted_freeze_admission_pr_gate_fixture(tmp)
+        assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp)
+        assert_runtime_carrier_suite_not_applicable_adoption_fixture(tmp)
         assert_closeout_freeze_profile_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_governance_intensity_pr_gate_positive_variants(tmp)
@@ -12445,6 +12681,15 @@ def run_pr_metadata_surface() -> None:
     print("pr metadata surface checks passed")
 
 
+def run_pr_metadata_suite_not_applicable_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-suite-not-applicable-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_suite_not_applicable_marker_parser_contract(tmp)
+        assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp)
+
+    print("pr metadata suite_not_applicable surface checks passed")
+
+
 def run_pr_gate_target_readback_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-pr-gate-target-readback-") as raw_tmp:
         assert_pr_gate_target_readback_contract(Path(raw_tmp))
@@ -15002,6 +15247,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="pr-metadata",
             fixture_group="pr-metadata",
             run=run_pr_metadata_surface,
+        ),
+        SurfaceCheck(
+            name="pr-metadata-suite-not-applicable",
+            fixture_group="pr-metadata-suite-not-applicable",
+            run=run_pr_metadata_suite_not_applicable_surface,
         ),
         SurfaceCheck(
             name="pr-gate-target-readback",

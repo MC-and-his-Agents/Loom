@@ -3356,6 +3356,27 @@ def bootstrap_host_binding_branch(root: Path) -> str:
     return ""
 
 
+SUITE_PATH_DECISION_FIELD_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?suite path(?: consumed)?\s*:\s*([A-Za-z0-9_-]+)\b",
+    re.IGNORECASE,
+)
+SUITE_PATH_DECISION_PLAN_LOCATOR_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?plan locator\s*:\s*not_applicable\s*\([^)]*\bsuite path(?: consumed)?\s*:\s*([A-Za-z0-9_-]+)\b[^)]*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def suite_path_decision_from_line(line: str) -> str:
+    for pattern in (SUITE_PATH_DECISION_FIELD_RE, SUITE_PATH_DECISION_PLAN_LOCATOR_RE):
+        match = pattern.search(line)
+        if not match:
+            continue
+        value = match.group(1).strip().lower().replace("-", "_")
+        if value in {"full", "minimal", "not_applicable"}:
+            return value
+    return ""
+
+
 def suite_path_decision(path: Path) -> str:
     if not path.exists():
         return ""
@@ -3364,12 +3385,26 @@ def suite_path_decision(path: Path) -> str:
     except OSError:
         return ""
     for line in text.splitlines():
-        match = re.match(r"\s*-\s*Suite path:\s*([A-Za-z0-9_-]+)\s*$", line)
-        if match:
-            value = match.group(1).strip()
-            if value in {"full", "minimal", "not_applicable"}:
-                return value
+        value = suite_path_decision_from_line(line)
+        if value:
+            return value
     return ""
+
+
+def active_suite_path_decision(root: Path, active_item_id: str) -> tuple[str, str]:
+    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
+    suite_path = suite_path_decision(spec_path)
+    if suite_path:
+        return suite_path, relative_locator(spec_path, root)
+    active = active_entry_points(root)
+    for relative in (active.get("recovery_entry"), active.get("status_surface")):
+        if not isinstance(relative, str) or not relative.strip() or relative == NOT_APPLICABLE:
+            continue
+        path = root / relative
+        suite_path = suite_path_decision(path)
+        if suite_path:
+            return suite_path, relative
+    return "", ""
 
 
 def approved_spec_review_locator(root: Path, active_item_id: str) -> str:
@@ -3398,14 +3433,16 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
     status_locator = active.get("status_surface") or ".loom/status/current.md"
     spec_path = root / f".loom/specs/{active_item_id}/spec.md"
     plan_path = root / f".loom/specs/{active_item_id}/plan.md"
+    suite_path, suite_locator = active_suite_path_decision(root, active_item_id)
+    suite_not_applicable = suite_path == NOT_APPLICABLE
 
     present_locators = {
         "work_item": "" if idle else active_or_first(root, active.get("work_item"), item_dir, ".md"),
         "recovery": "" if idle else active_or_first(root, active.get("recovery_entry"), recovery_dir, ".md"),
         "review": "" if idle else current_review_locator(root, review_dir, active_item_id),
         "status_surface": existing_locator(root, status_locator),
-        "spec_path": "" if idle else relative_locator(spec_path, root) if spec_path.exists() else "",
-        "plan_path": "" if idle else relative_locator(plan_path, root) if plan_path.exists() else "",
+        "spec_path": "" if idle else relative_locator(spec_path, root) if spec_path.exists() else suite_locator if suite_not_applicable else "",
+        "plan_path": "" if idle else relative_locator(plan_path, root) if plan_path.exists() else suite_locator if suite_not_applicable else "",
     }
 
     summary: dict[str, dict[str, str]] = {}
@@ -3426,9 +3463,8 @@ def detect_spec_gate_inputs(root: Path, active_item_id: str) -> dict[str, dict[s
             "suite_path_decision": carrier_entry(NOT_APPLICABLE, NOT_APPLICABLE, "idle fact chain"),
             "spec_review": carrier_entry(NOT_APPLICABLE, NOT_APPLICABLE, "idle fact chain"),
         }
-    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
-    suite_path = suite_path_decision(spec_path)
-    suite_locator = relative_locator(spec_path, root) if suite_path == "not_applicable" else ""
+    suite_path, suite_locator = active_suite_path_decision(root, active_item_id)
+    suite_locator = suite_locator if suite_path == NOT_APPLICABLE else ""
     spec_review = approved_spec_review_locator(root, active_item_id)
     return {
         "suite_path_decision": carrier_entry(
@@ -3877,9 +3913,10 @@ def maturity_status(
         for key, value in (spec_gate_inputs or {}).items()
     }
     formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or spec_gate_present_inputs.get("suite_path_decision", False)
+    spec_path_present = carrier_present.get("spec_path", False) or spec_gate_present_inputs.get("suite_path_decision", False)
     spec_gate_present = (
         carrier_present.get("review", False)
-        and carrier_present.get("spec_path", False)
+        and spec_path_present
         and formal_spec_or_not_applicable_present
     )
     repo_interface_present = repo_interface.get("availability") == "present"

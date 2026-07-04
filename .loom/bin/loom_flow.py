@@ -7461,15 +7461,30 @@ def suite_validate_cli_invocations(context: dict[str, Any]) -> list[dict[str, An
     return invocations
 
 
-def suite_path_decision_presence(context: dict[str, Any]) -> tuple[bool, set[str]]:
-    suite = spec_suite_paths(context)
-    candidates = [
-        suite["spec"],
-        suite["plan"],
-    ]
+SUITE_PATH_DECISION_FIELD_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?suite path(?: consumed)?\s*:\s*([A-Za-z_][A-Za-z_-]*)\b",
+    re.IGNORECASE,
+)
+SUITE_PATH_DECISION_PLAN_LOCATOR_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?plan locator\s*:\s*not_applicable\s*\([^)]*\bsuite path(?: consumed)?\s*:\s*([A-Za-z_][A-Za-z_-]*)\b[^)]*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def suite_path_decision_value_from_line(line: str) -> str:
+    for pattern in (SUITE_PATH_DECISION_FIELD_RE, SUITE_PATH_DECISION_PLAN_LOCATOR_RE):
+        match = pattern.search(line)
+        if match:
+            return match.group(1).lower().replace("-", "_")
+    return ""
+
+
+def suite_path_decision_presence_from_paths(context: dict[str, Any], candidates: list[str | None]) -> tuple[bool, set[str]]:
     marker_present = False
     values: set[str] = set()
     for relative in candidates:
+        if not isinstance(relative, str) or not relative.strip() or relative == "not_applicable":
+            continue
         path = context["target_root"] / relative
         if not path.is_file():
             continue
@@ -7479,16 +7494,39 @@ def suite_path_decision_presence(context: dict[str, Any]) -> tuple[bool, set[str
             marker_present = True
             continue
         for line in text.splitlines():
-            match = re.match(
-                r"^\s*(?:[-*]\s*)?suite path(?: consumed)?\s*:\s*([A-Za-z_][A-Za-z_-]*)\b",
-                line,
-                re.IGNORECASE,
-            )
-            if not match:
+            value = suite_path_decision_value_from_line(line)
+            if not value:
                 continue
             marker_present = True
-            values.add(match.group(1).lower().replace("-", "_"))
+            values.add(value)
     return marker_present, values
+
+
+def suite_path_decision_presence(context: dict[str, Any]) -> tuple[bool, set[str]]:
+    suite = spec_suite_paths(context)
+    return suite_path_decision_presence_from_paths(
+        context,
+        [
+            suite["spec"],
+            suite["plan"],
+        ],
+    )
+
+
+def adoption_suite_path_decision_presence(context: dict[str, Any]) -> tuple[bool, set[str]]:
+    marker_present, values = suite_path_decision_presence(context)
+    if marker_present:
+        return marker_present, values
+    entry_points = context.get("report", {}).get("fact_chain", {}).get("entry_points", {})
+    if not isinstance(entry_points, dict):
+        return False, set()
+    return suite_path_decision_presence_from_paths(
+        context,
+        [
+            entry_points.get("recovery_entry"),
+            entry_points.get("status_surface"),
+        ],
+    )
 
 
 def suite_gate_required_for_surface(context: dict[str, Any], *, surface: str) -> bool:
@@ -7602,6 +7640,38 @@ def governance_metadata_fields_from_preflight(pr_metadata_preflight: dict[str, A
     return fields if isinstance(fields, dict) else {}
 
 
+def governance_metadata_declares_suite_not_applicable(pr_metadata_preflight: dict[str, Any] | None) -> bool:
+    fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+    if fields.get("suite_path") != "not_applicable":
+        return False
+    suite_not_applicable = fields.get("suite_not_applicable")
+    if not isinstance(suite_not_applicable, dict):
+        return False
+    required_fields = ("rationale", "consumer_boundary", "recheck_condition", "scope_proof", "review_requirement")
+    return all(isinstance(suite_not_applicable.get(field), str) and suite_not_applicable.get(field, "").strip() for field in required_fields)
+
+
+def metadata_suite_not_applicable_payload(
+    context: dict[str, Any],
+    pr_metadata_preflight: dict[str, Any] | None,
+    *,
+    surface: str,
+) -> dict[str, Any] | None:
+    if not governance_metadata_declares_suite_not_applicable(pr_metadata_preflight):
+        return None
+    fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+    payload = suite_gate_not_applicable_payload(context, surface=surface)
+    payload["summary"] = "suite evidence and carrier validation are not applicable because PR metadata declares a complete suite_not_applicable decision."
+    payload["source_locator"] = "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable"
+    payload["payload"] = {
+        "suite_path": "not_applicable",
+        "path_decision_locator": "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable",
+        "not_applicable_rationale": fields.get("suite_not_applicable"),
+        "authority_boundary": "PR metadata may declare formal suite non-applicability; review, PR gate, closeout, release judgment, and host checks remain required.",
+    }
+    return payload
+
+
 def governance_intensity_authority_boundary() -> dict[str, Any]:
     return {
         "role": "classification_and_formal_suite_boundary",
@@ -7614,6 +7684,7 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
     missing_inputs: list[str] = []
     upgrade_reasons: list[str] = []
     marker_present, suite_values = suite_path_decision_presence(context)
+    metadata_suite_not_applicable = governance_metadata_declares_suite_not_applicable(pr_metadata_preflight)
     authority_boundary = governance_intensity_authority_boundary()
 
     if not fields:
@@ -7667,10 +7738,10 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
             if fields.get(required_bool) is not True:
                 missing_inputs.append(f"light governance requires {required_bool}")
     if fields.get("suite_path") == "not_applicable":
-        if not marker_present:
-            missing_inputs.append("repo suite path decision is missing")
-        elif suite_values != {"not_applicable"}:
+        if marker_present and suite_values != {"not_applicable"}:
             missing_inputs.append("repo suite path decision does not match metadata suite_path not_applicable")
+        elif not marker_present and not metadata_suite_not_applicable:
+            missing_inputs.append("repo suite path decision is missing")
 
     if missing_inputs:
         result = "block"
@@ -7703,10 +7774,12 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
         "consumed_locators": {
             "metadata_carrier": True,
             "suite_path_decision": marker_present,
+            "metadata_suite_not_applicable": metadata_suite_not_applicable,
         },
         "suite_path_decision": {
-            "marker_present": marker_present,
-            "values": sorted(suite_values),
+            "marker_present": marker_present or metadata_suite_not_applicable,
+            "values": sorted(suite_values or ({"not_applicable"} if metadata_suite_not_applicable else set())),
+            "source": "repo_suite_marker" if marker_present else "pr_metadata" if metadata_suite_not_applicable else "missing",
         },
         "authority_boundary": authority_boundary,
     }
@@ -7802,7 +7875,61 @@ def suite_validation_ready(payload: dict[str, Any]) -> bool:
     return payload.get("result") in SPEC_REVIEW_SUITE_READY_RESULTS
 
 
+def active_suite_not_applicable_validation_payload(context: dict[str, Any]) -> dict[str, Any] | None:
+    marker_present, values = adoption_suite_path_decision_presence(context)
+    if not marker_present or values != {"not_applicable"}:
+        return None
+    entry_points = context.get("report", {}).get("fact_chain", {}).get("entry_points", {})
+    path_decision_locator = None
+    if isinstance(entry_points, dict):
+        for relative in (entry_points.get("recovery_entry"), entry_points.get("status_surface")):
+            if not isinstance(relative, str) or not relative.strip() or relative == "not_applicable":
+                continue
+            present, path_values = suite_path_decision_presence_from_paths(context, [relative])
+            if present and path_values == {"not_applicable"}:
+                path_decision_locator = relative
+                break
+    return {
+        "schema_version": "loom-suite-validation-consumption/v1",
+        "command": "suite validate",
+        "result": "not_applicable",
+        "generated_at": current_iso_timestamp(),
+        "target": str(context["target_root"]),
+        "item_id": context["item_id"],
+        "summary": "Suite validate consumed an active not_applicable suite path decision from the Loom fact chain.",
+        "mutates": False,
+        "validator": None,
+        "validator_mode": "active-fact-chain-marker",
+        "missing_inputs": [],
+        "blocking_gaps": [],
+        "advisory_gaps": [],
+        "fallback_to": None,
+        "payload": {
+            "suite_path": "not_applicable",
+            "suite_locator": path_decision_locator,
+            "path_decision_locator": path_decision_locator,
+            "path_decisions": [
+                {
+                    "value": "not_applicable",
+                    "locator": path_decision_locator,
+                    "source": "active_fact_chain",
+                }
+            ],
+            "not_applicable_rationale": [
+                "Active Loom fact chain declares the formal suite path as not_applicable for this low-friction host batch."
+            ],
+            "deferred_items": [],
+            "missing_inputs": [],
+            "advisory_gaps": [],
+        },
+    }
+
+
 def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
+    active_not_applicable = active_suite_not_applicable_validation_payload(context)
+    if active_not_applicable is not None:
+        return active_not_applicable
+
     errors: list[str] = []
     for invocation in suite_validate_cli_invocations(context):
         try:
@@ -8133,9 +8260,9 @@ def review_gate_payload(
     }
 
 
-def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
+def spec_review_gate_payload(context: dict[str, Any], suite_validation_override: dict[str, Any] | None = None) -> dict[str, Any]:
     suite, missing_suite_paths = formal_spec_suite_status(context)
-    suite_validation = spec_suite_validation_payload(context)
+    suite_validation = suite_validation_override or spec_suite_validation_payload(context)
     suite_not_applicable = suite_validation.get("result") == "not_applicable"
     suite_validation_payload = suite_validation.get("payload")
     suite_path = (
@@ -9571,7 +9698,7 @@ def check_pr_template(target_root: Path) -> tuple[dict[str, Any], list[str]]:
 def render_adoption_pr_body(context: dict[str, Any]) -> str:
     item_id = context["item_id"]
     review_record = context["review_entry"]
-    _, suite_path_values = suite_path_decision_presence(context)
+    _, suite_path_values = adoption_suite_path_decision_presence(context)
     suite_not_applicable = bool(suite_path_values) and suite_path_values <= {"not_applicable"}
     spec_review_record = "not_applicable" if suite_not_applicable else default_spec_review_path(item_id)
     spec_plan_locator = (
@@ -13317,7 +13444,7 @@ def workspace_profile_from_context(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
+def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_override: dict[str, Any] | None = None) -> dict[str, Any]:
     purity = purity_report_from_context(context)
     missing_inputs: list[str] = []
     result = "pass"
@@ -13410,7 +13537,7 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
             missing_inputs.extend(pr_template_errors)
             if result == "pass":
                 result = "block"
-        spec_review = spec_review_gate_payload(context)
+        spec_review = spec_review_gate_payload(context, suite_validation_override=suite_validation_override)
         if spec_review["result"] in {"block", "fallback"}:
             missing_inputs.extend(spec_review["missing_inputs"])
             if spec_review["result"] == "fallback" and result == "pass":
@@ -14523,7 +14650,7 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
     bypass_validation = validate_adoption_pr_body(bypass_body, target_root=target_root)
 
     review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
-    _, suite_path_values = suite_path_decision_presence(context)
+    _, suite_path_values = adoption_suite_path_decision_presence(context)
     suite_not_applicable = bool(suite_path_values) and suite_path_values <= {"not_applicable"}
     if suite_not_applicable:
         spec_review_record = None
@@ -19489,9 +19616,19 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
         expected_head_sha=head_sha,
         expected_branch=branch_name,
     )
-    suite_validation = spec_suite_validation_payload(context)
-    suite_evidence_validation = suite_validation_command_payload(context, domain="evidence")
-    suite_carrier_validation = suite_validation_command_payload(context, domain="carrier")
+    metadata_suite_not_applicable = metadata_suite_not_applicable_payload(
+        context,
+        pr_metadata,
+        surface=args.surface,
+    )
+    if metadata_suite_not_applicable is not None:
+        suite_validation = metadata_suite_not_applicable
+        suite_evidence_validation = metadata_suite_not_applicable
+        suite_carrier_validation = metadata_suite_not_applicable
+    else:
+        suite_validation = spec_suite_validation_payload(context)
+        suite_evidence_validation = suite_validation_command_payload(context, domain="evidence")
+        suite_carrier_validation = suite_validation_command_payload(context, domain="carrier")
     work_item_binding = gate_freeze_file_binding(target_root, relative_to_root(context["work_item_path"], target_root), label="work item")
     progress_binding = gate_freeze_file_binding(target_root, relative_to_root(context["recovery_path"], target_root), label="progress carrier")
     status_binding = gate_freeze_file_binding(target_root, relative_to_root(context["status_path"], target_root), label="status surface")
@@ -19758,6 +19895,7 @@ def hosted_freeze_admission_payload(
         "missing_inputs": missing_inputs,
         "fallback_to": None if result == "pass" else "refresh_gate_inputs",
         "recomputed_freeze": recomputed,
+        "input_bindings": input_bindings,
         "carrier_refresh": input_bindings.get("carrier_refresh"),
         "shadow_freshness": input_bindings.get("shadow_freshness"),
         "readback": input_bindings.get("pr_body_pin"),
@@ -20743,6 +20881,34 @@ def pr_gate_payload(
         effective_branch_name = pr_payload["headRefName"]
 
     metadata_surface = surface or body_surface or "merge_ready"
+    governance_surface = build_governance_surface(target_root)
+    pr_metadata_preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface=metadata_surface,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=pr_head,
+        branch_name=effective_branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=body_file,
+        compare_body_file=compare_body_file,
+        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
+        effective_pr=effective_pr,
+        governance_surface=governance_surface,
+        expected_item=effective_item,
+        expected_head_sha=pr_head,
+        expected_branch=effective_branch_name,
+    )
+    suite_validation_override = (
+        metadata_suite_not_applicable_payload(
+            context,
+            pr_metadata_preflight,
+            surface=metadata_surface,
+        )
+        if context
+        else None
+    )
     hosted_admission = hosted_freeze_admission_payload(
         target_root=target_root,
         output_relative=output_relative,
@@ -20797,7 +20963,7 @@ def pr_gate_payload(
     timing_review_record: dict[str, Any] | None = None
     timing_review_path: str | None = None
     if context:
-        merge_checkpoint = checkpoint_payload("merge", context)
+        merge_checkpoint = checkpoint_payload("merge", context, suite_validation_override=suite_validation_override)
         review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
         timing_review_record = review_record
         timing_review_path = review_path
@@ -20942,20 +21108,6 @@ def pr_gate_payload(
     else:
         raw_evidence_present = False
 
-    governance_surface = build_governance_surface(target_root)
-    pr_metadata_preflight = pr_metadata_preflight_payload(
-        target_root=target_root,
-        surface=metadata_surface,
-        owner=owner,
-        repo_name=repo_name,
-        pr_number=effective_pr,
-        head_sha=pr_head,
-        branch_name=branch_name,
-        pr_payload_file=pr_payload_file,
-        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
-        effective_pr=effective_pr,
-        governance_surface=governance_surface,
-    )
     if pr_metadata_preflight.get("result") == "block":
         missing_inputs.extend(str(message) for message in pr_metadata_preflight.get("missing_inputs", []))
     steps.append(
