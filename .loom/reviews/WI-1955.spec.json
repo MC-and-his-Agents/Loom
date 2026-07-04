@@ -1,0 +1,34 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1955",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1955 minimal spec/plan is approved for v0.27.1 release Work Item execution at release candidate head 0606fd86. The omitted full-suite artifacts are explicitly bounded by full-suite-artifacts not_applicable rationale in spec and plan; scenarios S1-S3 and acceptance A1-A5 map to release metadata validation, PR/hosted gates, and post-merge release readback/closeout. The scope remains limited to the #1928/#1930 host friction patch release and excludes #1933, #1935/v0.28.0, downstream repo-local tools/loom.py shim requirements, release workflow rewrites, and plugin surface/host adapter version bumps.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-04T04:45:59Z",
+  "reviewed_head": "0606fd86ccccc3a877015d4d9684708e07a1d8aa",
+  "reviewed_validation_summary": "2026-07-04T04:46Z on branch `work/1955-v0.27.1-release` at head `0606fd86ccccc3a877015d4d9684708e07a1d8aa`: fact-chain, suite validate, suite evidence validate, and suite carrier validate passed for WI-1955. Earlier release validation on the same release candidate passed py_compile_clean, git diff --check, version surface, release surface, npm package check, npm pack dry-run, skills release-check, and pre-release readback returned missing/unpublished for v0.27.1 with no tag, GitHub Release, or npm version occupying the release path.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1955.md",
+    "recovery_entry": ".loom/progress/WI-1955.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/67aa/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1955/spec.md",
+    "suite_plan": ".loom/specs/WI-1955/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1955/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1955/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
