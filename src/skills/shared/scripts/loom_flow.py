@@ -5372,7 +5372,7 @@ def closeout_backlink_subchecks(
             review_missing.append("review decision is not allow")
         if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
             review_missing.append("review kind is not an implementation review")
-        if review_record.get("reviewed_validation_summary") != validation_summary:
+        if not review_validation_summary_binding(review_record, validation_summary)["matches"]:
             review_missing.append("reviewed_validation_summary does not match retained validation summary")
         if pr_head:
             review_head_binding_payload, review_head_errors = review_head_binding_for_head(
@@ -13441,7 +13441,7 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
                 )
                 if result == "pass":
                     result = "block"
-            if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
+            if not review_validation_summary_binding(review_record, context["latest_validation_summary"])["matches"]:
                 missing_inputs.append("review artifact does not match the latest validation summary")
                 if result == "pass":
                     result = "block"
@@ -16889,7 +16889,7 @@ def pr_metadata_diagnostic_next_action(
         surface = expected_surface or "the requested surface"
         return f"rerender the PR metadata machine block for surface `{surface}` and replace the stale carrier before rerunning preflight."
     if classifier == "head_sha_drift":
-        return "refresh `Head SHA` in both the PR body bindings and machine block from the current PR head, or rerun with `--head-sha <40-hex>`, then rerun preflight."
+        return "remove stale authored `Head SHA` from the PR metadata carrier; PR head is read from host readback during gate consumption."
     if classifier == "branch_drift":
         return "refresh `Branch` in both the PR body bindings and machine block from the current `work/...` branch, or rerun with `--branch <work/...>`, then rerun preflight."
     if classifier == "enum_violation":
@@ -16975,7 +16975,6 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     missing_fields: list[str] = []
     work_item = governance_metadata_string_field(fields, "loom_work_item", missing_fields)
     branch = governance_metadata_string_field(fields, "branch", missing_fields)
-    head_sha = governance_metadata_string_field(fields, "head_sha", missing_fields)
     governance_intensity = governance_metadata_string_field(fields, "governance_intensity", missing_fields)
     change_class = governance_metadata_string_field(fields, "change_class", missing_fields)
     suite_path = governance_metadata_string_field(fields, "suite_path", missing_fields)
@@ -16989,8 +16988,6 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
         missing_fields.append("fields.loom_work_item")
     if branch and not branch.startswith("work/"):
         missing_fields.append("fields.branch")
-    if head_sha and not re.fullmatch(r"[0-9a-f]{40}", head_sha):
-        missing_fields.append("fields.head_sha")
     if governance_intensity and governance_intensity not in GOVERNANCE_INTENSITY_VALUES:
         missing_fields.append("fields.governance_intensity")
     if change_class and change_class not in GOVERNANCE_CHANGE_CLASS_VALUES:
@@ -17104,6 +17101,8 @@ def validate_pr_metadata_envelope(
     if isinstance(required_fields, list):
         for required_field in required_fields:
             if isinstance(required_field, str) and required_field.strip():
+                if contract_id == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID and required_field == "head_sha":
+                    continue
                 if required_field not in fields or fields.get(required_field) in (None, ""):
                     missing_fields.append(f"fields.{required_field}")
     if contract_id == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID and isinstance(fields, dict):
@@ -17279,16 +17278,13 @@ def pr_metadata_contract_preflight(
             if contract_id == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID:
                 normalized_fields = normalized.get("fields") if isinstance(normalized.get("fields"), dict) else {}
                 body_item = pr_work_item_from_body(body)
-                body_head = pr_body_field_value(body, "Head SHA")
                 body_branch = pr_body_field_value(body, "Branch")
                 expected_bindings = {
                     "loom_work_item": expected_item or body_item,
-                    "head_sha": expected_head_sha or body_head,
                     "branch": expected_branch or body_branch,
                 }
                 body_bindings = {
                     "loom_work_item": body_item,
-                    "head_sha": body_head,
                     "branch": body_branch,
                 }
                 for field_name, expected_value in expected_bindings.items():
@@ -17317,7 +17313,7 @@ def pr_metadata_contract_preflight(
                         **base,
                         "effective_carrier_surface": matched_surface,
                         "result": "block",
-                        "summary": "PR metadata machine block is present but its governance binding conflicts with PR body or PR head inputs.",
+                        "summary": "PR metadata machine block is present but its governance binding conflicts with stable PR body or branch inputs.",
                         "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
                         "fallback_to": "update_pr_body",
                         "diagnostics": diagnostics,
@@ -17449,7 +17445,6 @@ def pr_metadata_preflight_payload(
             body=body if isinstance(body, str) else None,
             surface=surface,
             expected_item=expected_item or body_item,
-            expected_head_sha=expected_head_sha or (pr_head if isinstance(pr_head, str) and pr_head else body_head),
             expected_branch=expected_branch or (pr_branch if isinstance(pr_branch, str) and pr_branch else body_branch),
         )
         for field in applicable_contracts
@@ -17534,7 +17529,7 @@ def render_governance_intensity_metadata_body(
     requested_surface: str,
     item_id: str,
     branch_name: str,
-    head_sha: str,
+    head_sha: str | None,
     governance_intensity: str,
     change_class: str,
     suite_path: str,
@@ -17551,7 +17546,6 @@ def render_governance_intensity_metadata_body(
     fields = {
         "loom_work_item": item_id,
         "branch": branch_name,
-        "head_sha": head_sha,
         "governance_intensity": governance_intensity,
         "governance_mode": "host-enforced",
         "governance_assurance": "strong",
@@ -17584,7 +17578,6 @@ def render_governance_intensity_metadata_body(
     if issue_reference:
         updated = pr_metadata_replace_or_insert_binding_line(updated, label="Issue", value=issue_reference, insert_after="Loom Work Item")
     updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
-    updated = pr_metadata_replace_or_insert_binding_line(updated, label="Head SHA", value=head_sha, insert_after="Branch")
     updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
     return updated, envelope, []
 
@@ -17634,8 +17627,6 @@ def pr_metadata_render_payload(
         missing_inputs.append("pass --item <path-safe-work-item-id> or provide a readable current Loom Work Item carrier")
     if not current_branch:
         missing_inputs.append("branch is unavailable; pass --branch <work/...>")
-    if not current_head:
-        missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
 
     suite_not_applicable: dict[str, str] | None = None
     if suite_path == "not_applicable":
@@ -17675,7 +17666,7 @@ def pr_metadata_render_payload(
         requested_surface=surface,
         item_id=effective_item or "",
         branch_name=current_branch or "",
-        head_sha=current_head or "",
+        head_sha=current_head,
         governance_intensity=governance_intensity,
         change_class=change_class,
         suite_path=suite_path,
@@ -17705,7 +17696,6 @@ def pr_metadata_render_payload(
         surface=surface,
         body_file=relative_output,
         expected_item=effective_item,
-        expected_head_sha=current_head,
         expected_branch=current_branch,
         governance_surface=governance_surface,
         issue_number=issue_number,
@@ -17732,8 +17722,8 @@ def pr_metadata_render_payload(
             "legacy_bindings": {
                 "loom_work_item": effective_item,
                 "branch": current_branch,
-                "head_sha": current_head,
             },
+            "host_readback": {"observed_head_sha": current_head},
         },
         "metadata_contract_id": envelope.get("metadata_contract_id"),
         "effective_carrier_surface": envelope.get("surface"),
@@ -18822,11 +18812,6 @@ def closeout_freeze_terminal_subject_binding(
         payload_branch = pr_payload.get("headRefName")
         if body_branch and isinstance(payload_branch, str) and payload_branch and body_branch != payload_branch:
             missing_inputs.append("implementation PR body Branch does not match PR headRefName")
-        body_head = pr_body_binding_value(pr_body, label="Head SHA", metadata_field="head_sha")
-        payload_head = pr_payload.get("headRefOid")
-        if body_head and isinstance(payload_head, str) and payload_head and body_head != payload_head:
-            missing_inputs.append("implementation PR body Head SHA does not match PR headRefOid")
-
     issue_ref = f"#{issue_number}" if issue_number is not None else None
     pr_ref = f"#{pr_number}" if pr_number is not None else None
     linked_by_pr_body = bool(issue_ref and isinstance(pr_body, str) and re.search(rf"(?<![A-Z0-9-]){re.escape(issue_ref)}(?![0-9])", pr_body))
@@ -20232,6 +20217,39 @@ def approval_boundary_payload(*, raw_evidence_present: bool) -> dict[str, Any]:
     }
 
 
+def validation_summary_hash(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def review_validation_summary_binding(review_record: dict[str, Any], current_validation_summary: str | None) -> dict[str, Any]:
+    current_hash = validation_summary_hash(current_validation_summary)
+    reviewed_summary = review_record.get("reviewed_validation_summary")
+    reviewed_hash = None
+    for field in ("reviewed_validation_summary_hash", "validation_summary_hash"):
+        value = review_record.get(field)
+        if isinstance(value, str) and value.strip():
+            reviewed_hash = value.strip()
+            break
+    raw_matches = (
+        isinstance(current_validation_summary, str)
+        and bool(current_validation_summary)
+        and isinstance(reviewed_summary, str)
+        and reviewed_summary == current_validation_summary
+    )
+    hash_matches = bool(current_hash and reviewed_hash and current_hash == reviewed_hash)
+    return {
+        "current_validation_summary_hash": current_hash,
+        "reviewed_validation_summary_hash": reviewed_hash,
+        "raw_summary_matches": raw_matches,
+        "hash_matches": hash_matches,
+        "matches": current_hash is None or raw_matches or hash_matches,
+        "source": review_record.get("validation_summary_source") or review_record.get("reviewed_validation_summary_source"),
+        "locator": review_record.get("validation_summary_locator") or review_record.get("reviewed_validation_summary_locator"),
+    }
+
+
 def semantic_review_disposition_payload(
     *,
     review_record: dict[str, Any],
@@ -20242,6 +20260,7 @@ def semantic_review_disposition_payload(
 ) -> tuple[dict[str, Any], list[str]]:
     raw_disposition = review_record.get("semantic_review_disposition")
     errors: list[str] = []
+    validation_binding = review_validation_summary_binding(review_record, current_validation_summary)
     base = {
         "status": "missing",
         "source": "review_record",
@@ -20250,6 +20269,7 @@ def semantic_review_disposition_payload(
         "pr_head": pr_head,
         "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
         "current_validation_summary": current_validation_summary,
+        "validation_summary_hash": validation_binding,
         "head_binding": head_binding,
         "consumable": False,
         "details": {},
@@ -20285,11 +20305,7 @@ def semantic_review_disposition_payload(
             "carrier-and-generated-only",
         }:
             errors.append("semantic_review_disposition passed is not bound to the current PR head")
-        if (
-            isinstance(current_validation_summary, str)
-            and current_validation_summary
-            and review_record.get("reviewed_validation_summary") != current_validation_summary
-        ):
+        if not validation_binding["matches"]:
             errors.append("semantic_review_disposition passed validation summary does not match current recovery")
         payload["consumable"] = not errors
         return payload, errors
@@ -20310,12 +20326,7 @@ def semantic_review_disposition_payload(
             errors.append("semantic_review_disposition waived missing `expiry` or one-shot true")
     if head_binding.get("stale") is True:
         errors.append(f"semantic_review_disposition {status} is not bound to the current PR head")
-    if (
-        isinstance(current_validation_summary, str)
-        and current_validation_summary
-        and isinstance(review_record.get("reviewed_validation_summary"), str)
-        and review_record.get("reviewed_validation_summary") != current_validation_summary
-    ):
+    if not validation_binding["matches"]:
         errors.append(f"semantic_review_disposition {status} validation summary does not match current recovery")
     payload["consumable"] = not errors
     return payload, errors
@@ -20331,6 +20342,7 @@ def carrier_only_closeout_review_payload(
 ) -> tuple[dict[str, Any], list[str]]:
     raw_disposition = review_record.get("carrier_only_closeout_review")
     errors: list[str] = []
+    validation_binding = review_validation_summary_binding(review_record, current_validation_summary)
     base = {
         "status": "missing",
         "source": "review_record",
@@ -20339,6 +20351,7 @@ def carrier_only_closeout_review_payload(
         "pr_head": pr_head,
         "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
         "current_validation_summary": current_validation_summary,
+        "validation_summary_hash": validation_binding,
         "head_binding": head_binding,
         "consumable": False,
         "does_not_approve_product_implementation": True,
@@ -20363,11 +20376,7 @@ def carrier_only_closeout_review_payload(
         "carrier-and-generated-only",
     }:
         errors.append("carrier_only_closeout_review passed is not bound to the current PR head")
-    if (
-        isinstance(current_validation_summary, str)
-        and current_validation_summary
-        and review_record.get("reviewed_validation_summary") != current_validation_summary
-    ):
+    if not validation_binding["matches"]:
         errors.append("carrier_only_closeout_review passed validation summary does not match current recovery")
     payload["consumable"] = not errors
     return payload, errors
@@ -20718,11 +20727,6 @@ def pr_gate_payload(
             missing_inputs.append("PR is draft")
         if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
             missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
-        body_head = pr_body_binding_value(pr_payload.get("body"), label="Head SHA", metadata_field="head_sha")
-        if not body_head:
-            missing_inputs.append("PR body Head SHA is missing from PR machine carrier")
-        elif pr_head and body_head != pr_head:
-            missing_inputs.append("PR body Head SHA does not match PR payload headRefOid")
         body_branch = pr_body_binding_value(pr_payload.get("body"), label="Branch", metadata_field="branch")
         payload_branch = pr_payload.get("headRefName")
         expected_branch = payload_branch if isinstance(payload_branch, str) and payload_branch else branch_name
@@ -20897,6 +20901,12 @@ def pr_gate_payload(
                 "kind": review_kind,
                 "reviewed_head": review_record.get("reviewed_head"),
                 "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
+                "reviewed_validation_summary_hash": (
+                    review_record.get("reviewed_validation_summary_hash")
+                    or validation_summary_hash(review_record.get("reviewed_validation_summary"))
+                ),
+                "validation_summary_source": review_record.get("validation_summary_source"),
+                "validation_summary_locator": review_record.get("validation_summary_locator"),
                 "head_binding": head_binding_payload,
                 "semantic_review_disposition": disposition,
                 "missing_inputs": approval_errors,
@@ -21657,13 +21667,7 @@ def retained_merge_gate_consumption(
             missing_inputs.append("retained merge-gate Work Item does not match expected item")
         if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
             missing_inputs.append("retained merge-gate merge checkpoint is not pass")
-        if (
-            isinstance(reviewed_validation_summary, str)
-            and reviewed_validation_summary
-            and isinstance(retained_validation_summary, str)
-            and retained_validation_summary
-            and reviewed_validation_summary != retained_validation_summary
-        ):
+        if not review_validation_summary_binding(review_approval, retained_validation_summary)["matches"]:
             missing_inputs.append("retained merge-gate validation summary drifts from retained pr-gate review")
 
     result = "pass" if not missing_inputs else "block"
@@ -26785,6 +26789,8 @@ def handle_review(args: argparse.Namespace) -> int:
         else None
     )
     budget_risk = derive_execution_budget_risk(execution_budget)
+    latest_validation_summary = context["latest_validation_summary"]
+    validation_locator = str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"])
     review_payload = {
         "schema_version": "loom-review/v1",
         "item_id": context["item_id"],
@@ -26794,7 +26800,10 @@ def handle_review(args: argparse.Namespace) -> int:
         "reviewer": args.reviewer,
         "authored_at": utc_now_iso(),
         "reviewed_head": git_head_sha(target_root) or "unknown",
-        "reviewed_validation_summary": context["latest_validation_summary"],
+        "reviewed_validation_summary": latest_validation_summary,
+        "reviewed_validation_summary_hash": validation_summary_hash(latest_validation_summary),
+        "validation_summary_source": "recovery.latest_validation_summary",
+        "validation_summary_locator": validation_locator,
         "fallback_to": args.fallback_to,
         "findings": findings,
         "blocking_issues": blocking_issues,

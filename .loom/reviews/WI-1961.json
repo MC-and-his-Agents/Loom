@@ -1,0 +1,60 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1961",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review passed for PR #1970 at head db7491a6: stable PR metadata no longer authors head_sha, validation summary matching is digest/source/locator based, host-consumer and carrier-only profiles avoid source checks, portable bootstrap output masks current_head, repo-local wrappers avoid bytecode cache payload drift, runtime carrier hashes and plugin payload metadata are synced, carrier-only validation artifacts are current, and local targeted validation passed.",
+  "reviewer": "codex",
+  "authored_at": "2026-07-04T07:19:13Z",
+  "reviewed_head": "db7491a662f179a3148754447ec766e3ea060786",
+  "reviewed_validation_summary": "2026-07-04T07:07Z-07:20Z gate stabilizer post-commit validation: git diff --check passed; py_compile_clean passed for modified wrappers/runtime; demo bootstrap fixture-drift, canonicalization, aggregate passed; check_cli_contract surfaces pr-metadata and ship-wrapper passed; check_loom_check_runtime_regressions --surface demo-fixture-cleanliness passed; make repo-local-cli-fast GROUP=init-runtime passed; tools/loom.py skills release-check --json passed with plugin_payload_hash d0aa5b2419cad648e2729af859484b6c6d1e457b014c6040e1623d6201255a94; carrier refresh --write then --dry-run passed; shadow-parity --surface merge_ready passed; purity-check passed clean at db7491a6; no tools/__pycache__ remained after wrapper execution.",
+  "reviewed_validation_summary_hash": "8636d0ab97d695773203dae2a7a755e61e99ba7734bf2c99690cb499ac680f5b",
+  "validation_summary_source": "recovery.latest_validation_summary",
+  "validation_summary_locator": ".loom/progress/WI-1961.md",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1961.md",
+    "recovery_entry": ".loom/progress/WI-1961.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1961 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1961 --json",
+    "suite_evidence_map": ".loom/specs/WI-1961/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1961/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

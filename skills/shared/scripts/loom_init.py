@@ -2383,6 +2383,22 @@ def git_branch_name(target_root: Path) -> str | None:
     return branch
 
 
+def git_head_sha(target_root: Path) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(target_root), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    head = completed.stdout.strip()
+    if completed.returncode != 0 or not head:
+        return None
+    return head
+
+
 def portable_bootstrap_value(
     value: object,
     replacements: list[tuple[str, str]],
@@ -2411,6 +2427,7 @@ def portable_bootstrap_result(result: dict[str, object], target_root: Path) -> d
         (str(target_root.resolve()), "${TARGET_ROOT}"),
         (os.environ.get("LOOM_SOURCE_REPO_ROOT", ""), "${SOURCE_REPO_ROOT}"),
         (os.environ.get("LOOM_INSTALLED_SKILLS_ROOT", ""), "${INSTALLED_SKILLS_ROOT}"),
+        (git_head_sha(target_root) or "", "${CURRENT_HEAD}"),
     ]
     replacements = sorted(
         [(source, replacement) for source, replacement in replacement_inputs if source],
@@ -2426,6 +2443,7 @@ def portable_bootstrap_result(result: dict[str, object], target_root: Path) -> d
             "source_repo_root": "${SOURCE_REPO_ROOT}",
             "installed_skills_root": "${INSTALLED_SKILLS_ROOT}",
             "current_branch": "${CURRENT_BRANCH}",
+            "current_head": "${CURRENT_HEAD}",
         },
     }
     return portable

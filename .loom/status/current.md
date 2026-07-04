@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1955
-- Goal: Publish v0.27.1 and complete the host friction patch milestone closeout.
-- Scope: bump root Loom release authority to v0.27.1, align npm package and Codex plugin payload release metadata/hash, add v0.27.1 release readiness evidence, activate WI-1955 carriers, record spec/release review evidence, prepare and merge the release PR, then read back Git tag, GitHub Release, npm package, release workflow, issue closeout, and milestone #26 state.
-- Execution Path: issue #1955 -> branch work/1955-v0.27.1-release -> release readiness evidence -> release PR -> main push release workflow -> release readback -> #1928/#1930/#1955/#1954/milestone #26 closeout.
+- Item ID: WI-1961
+- Goal: Stabilize PR metadata and host consumer validation profiles for v0.28.0.
+- Scope: Remove authored PR body head_sha as a merge-gate source of truth, bind review validation summaries by digest/source/locator, add host-consumer and carrier-only validation profile behavior, and sync generated runtime/plugin payload surfaces for PR #1970 covering #1961 and #1963.
+- Execution Path: issue #1961 + #1963 -> branch work/1961-1963-gate-stabilizer -> PR #1970 -> hosted gate -> controlled merge -> GitHub issue closeout evidence.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1955.md
-- Review Entry: .loom/reviews/WI-1955.json
-- Validation Entry: release readback, release/package checks, npm package dry-run, suite/fact-chain, hosted checks, and post-merge release readback.
-- Closing Condition: v0.27.1 tag, GitHub Release, npm @mc-and-his-agents/loom@0.27.1, plugin payload metadata/hash, #1928/#1930/#1955/#1954 closeout evidence, and milestone #26 readback are consistent.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1955 release closeout synced for v0.27.1: release PR #1968 merged at c38b1f04aedba0d4c8c9d84a2cc062ead1d41299; published release readback consumed into terminal repo carrier state.
-- Next Step: None.
+- Recovery Entry: .loom/progress/WI-1961.md
+- Review Entry: .loom/reviews/WI-1961.json
+- Validation Entry: py_compile_clean; git diff --check; check_cli_contract pr-metadata/ship-wrapper/pr-gate-target-readback/controlled-merge/governance-closeout/merge-wrapper/aggregate; skills release-check; PR metadata readback; hosted checks.
+- Closing Condition: PR #1970 merged, #1961 and #1963 closed with evidence, and v0.28.0 gate stabilizer no longer requires authored PR body head_sha or source-repo validation for host-consumer/carrier-only profiles.
+- Current Checkpoint: pre_review
+- Current Stop: Gate stabilizer implementation, runtime carrier hash sync, and validation carrier sync are complete on branch work/1961-1963-gate-stabilizer for PR #1970; final review metadata is being rebound to head db7491a6.
+- Next Step: Record current-head review, refresh shadow evidence, push PR #1970, then rerun PR gate and hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-04T05:21Z closeout validation on branch `work/1955-v0.27.1-closeout`: `git diff --check` passed; `python3 tools/loom.py release readback --target . --version v0.27.1 --commit c38b1f04aedba0d4c8c9d84a2cc062ead1d41299 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` returned published; `python3 tools/loom.py suite evidence validate --target . --item WI-1955 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1955 --json` passed; release workflow `loom-cli-release` run 28695863790 succeeded; tag v0.27.1 resolves to c38b1f04aedba0d4c8c9d84a2cc062ead1d41299; GitHub Release https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.27.1 is published; npm @mc-and-his-agents/loom@0.27.1 exists with latest=0.27.1.
-- Recovery Boundary: WI-1955 owns only the v0.27.1 release carrier, release metadata, readiness evidence, release PR, post-merge publication readback, and closeout for #1928, #1930, #1955, #1954, and milestone #26. Do not add #1933 temporary hardcoding, #1935/v0.28.0 host adoption tax, downstream repo-local `tools/loom.py` requirements, plugin surface version bumps, host adapter version bumps, release workflow rewrites, or manual tag/npm overwrites.
-- Current Lane: release-closeout-sync
+- Latest Validation Summary: 2026-07-04T07:07Z-07:20Z gate stabilizer post-commit validation: git diff --check passed; py_compile_clean passed for modified wrappers/runtime; demo bootstrap fixture-drift, canonicalization, aggregate passed; check_cli_contract surfaces pr-metadata and ship-wrapper passed; check_loom_check_runtime_regressions --surface demo-fixture-cleanliness passed; make repo-local-cli-fast GROUP=init-runtime passed; tools/loom.py skills release-check --json passed with plugin_payload_hash d0aa5b2419cad648e2729af859484b6c6d1e457b014c6040e1623d6201255a94; carrier refresh --write then --dry-run passed; shadow-parity --surface merge_ready passed; purity-check passed clean at db7491a6; no tools/__pycache__ remained after wrapper execution.
+- Recovery Boundary: WI-1961 owns only PR #1970 gate stabilizer scope for #1961/#1963: stable PR metadata, review validation summary binding, host-consumer/carrier-only validation profiles, generated runtime/plugin sync, local/hosted validation, and issue closeout evidence. Do not add #1957/#1958/#1959/#1960 host tax core, #1962 batch closeout, #1964 migration, #1965 taxonomy mapping, #1966 release, WebEnvoy-specific label hardcoding, or downstream repo-local tools/loom.py shim requirements.
+- Current Lane: gate-stabilizer
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1955.md
-- Dynamic Truth: .loom/progress/WI-1955.md
+- Static Truth: .loom/work-items/WI-1961.md
+- Dynamic Truth: .loom/progress/WI-1961.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
