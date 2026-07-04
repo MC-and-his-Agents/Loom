@@ -369,6 +369,7 @@ def runtime_locator_exists(target_root: Path, locator: str) -> bool:
 def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["LOOM_SOURCE_REPO_ROOT"] = str(REPO_ROOT)
     try:
         completed = subprocess.run(
             [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
@@ -2870,7 +2871,13 @@ def active_work_item_id() -> str:
     return item_id
 
 
-def run_json_preserving_attempts(args: list[str], *, item: str, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+def run_json_preserving_attempts(
+    args: list[str],
+    *,
+    item: str,
+    expect: int | None = None,
+    env_overrides: dict[str, str] | None = None,
+) -> tuple[int, dict[str, Any]]:
     attempt_root = REPO_ROOT / ".loom" / "runtime" / "attempts" / item
     with tempfile.TemporaryDirectory(prefix="loom-attempt-backup-") as raw_backup:
         backup = Path(raw_backup) / "attempts"
@@ -2878,7 +2885,7 @@ def run_json_preserving_attempts(args: list[str], *, item: str, expect: int | No
         if existed:
             shutil.copytree(attempt_root, backup)
         try:
-            return run_json(args, expect=expect)
+            return run_json(args, expect=expect, env_overrides=env_overrides)
         finally:
             if attempt_root.exists():
                 shutil.rmtree(attempt_root)
@@ -3015,24 +3022,110 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
     suite_validation = payload.get("suite_validation")
     if not isinstance(suite_validation, dict):
         raise AssertionError("build did not expose suite validation")
+    validator_mode = suite_validation.get("validator_mode")
     if (
         suite_validation.get("command") != "suite validate"
-        or suite_validation.get("validator_mode") != "repo-local-cli"
+        or validator_mode not in {"repo-local-cli", "global-cli"}
         or suite_validation.get("mutates") is not False
     ):
-        raise AssertionError("build suite validation did not consume repo-local CLI JSON")
+        raise AssertionError("build suite validation did not consume Loom CLI JSON")
     carrier_validation = payload.get("suite_carrier_validation")
     if not isinstance(carrier_validation, dict):
         raise AssertionError("build did not expose suite carrier validation")
     if (
         "suite carrier validate" not in str(carrier_validation.get("command", ""))
-        or carrier_validation.get("validator_mode") != "repo-local-cli"
+        or carrier_validation.get("validator_mode") not in {"repo-local-cli", "global-cli"}
         or not isinstance(carrier_validation.get("payload"), dict)
     ):
-        raise AssertionError("build suite carrier validation did not consume repo-local CLI JSON")
+        raise AssertionError("build suite carrier validation did not consume Loom CLI JSON")
     step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
     if {"suite-validate", "suite-carrier-validate"} - step_names:
         raise AssertionError("build did not expose suite validation steps")
+
+
+def assert_work_item_activate_from_idle_syncs_fact_chain_mode(tmp: Path) -> None:
+    target = tmp / "idle-activate"
+    target.mkdir()
+    write_idle_fact_chain_target(target)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "skills" / "shared" / "scripts" / "loom_flow.py"),
+            "work-item",
+            "create",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1928",
+            "--goal",
+            "Prove idle to active activation syncs fact-chain mode.",
+            "--scope",
+            "Regression fixture for #1928.",
+            "--execution-path",
+            "issue #1928 -> work-item activation regression",
+            "--workspace-entry",
+            ".",
+            "--validation-entry",
+            "work-item create --activate regression",
+            "--closing-condition",
+            "fact-chain passes after activation",
+            "--init-recovery",
+            "--activate",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    payload = json.loads(completed.stdout)
+    if completed.returncode != 0:
+        raise AssertionError(f"work-item create --activate failed\n{completed.stderr}\n{completed.stdout}")
+    if payload.get("result") != "pass":
+        raise AssertionError("work-item create --activate did not pass from idle")
+    init_result = json.loads((target / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
+    fact_chain = init_result.get("fact_chain", {})
+    if fact_chain.get("mode") != "work-item + recovery-entry + derived status-surface":
+        raise AssertionError("work-item activation did not sync fact_chain.mode from idle to active")
+    _, fact_chain_payload = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0)
+    if (
+        fact_chain_payload.get("result") != "pass"
+        or fact_chain_payload.get("report", {}).get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "WI-1928"
+    ):
+        raise AssertionError("fact-chain did not pass after idle-to-active activation")
+
+
+def assert_build_consumes_global_suite_without_repo_local_tools(tmp: Path) -> None:
+    target = tmp / "global-suite-build"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1930")
+    if (target / "tools" / "loom.py").exists():
+        raise AssertionError("global suite fixture unexpectedly has repo-local tools/loom.py")
+    fake_bin = tmp / "fake-bin"
+    fake_bin.mkdir()
+    fake_loom = fake_bin / "loom"
+    fake_loom.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import subprocess\n"
+        "import sys\n"
+        f"sys.exit(subprocess.run([{sys.executable!r}, {str(LOOM)!r}, *sys.argv[1:]], cwd={str(REPO_ROOT)!r}, env=os.environ.copy()).returncode)\n",
+        encoding="utf-8",
+    )
+    fake_loom.chmod(0o755)
+    status, payload = run_json_preserving_attempts(
+        ["build", "--target", str(target), "--item", fixture["item"], "--json"],
+        item=fixture["item"],
+        env_overrides={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "LOOM_SOURCE_REPO_ROOT": "",
+        },
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if status == 0:
+        raise AssertionError("build fixture unexpectedly reached readiness without build evidence")
+    assert_suite_build_consumption(payload)
 
 
 def assert_review_record_consumed_locators(tmp: Path) -> None:
@@ -14004,6 +14097,8 @@ def run_aggregate_cli_contract() -> None:
         )
         active_build = runtime_payload_from_agent_safe_output(active_build)
         assert_suite_build_consumption(active_build)
+        assert_work_item_activate_from_idle_syncs_fact_chain_mode(tmp)
+        assert_build_consumes_global_suite_without_repo_local_tools(tmp)
         assert_review_record_consumed_locators(tmp)
         _, active_pre_review = run_json_preserving_attempts(
             ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],

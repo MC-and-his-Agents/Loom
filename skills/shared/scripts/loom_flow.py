@@ -4804,10 +4804,9 @@ def suite_validation_command_payload(
         }
 
     errors: list[str] = []
-    for loom_cli in suite_validate_command_candidates(context):
+    for invocation in suite_validate_cli_invocations(context):
         command = [
-            sys.executable,
-            str(loom_cli),
+            *invocation["argv"],
             "suite",
             domain,
             "validate",
@@ -4817,16 +4816,16 @@ def suite_validation_command_payload(
             item_id,
             "--json",
         ]
-        completed = run_process(command, loom_cli.parents[1], timeout_seconds=60)
+        completed = run_process(command, invocation["cwd"], timeout_seconds=60)
         raw_output = completed.stdout.strip()
         try:
             payload = json.loads(raw_output) if raw_output else {}
         except json.JSONDecodeError as exc:
-            errors.append(f"{loom_cli}: {command_label} emitted non-JSON output: {exc.msg}")
+            errors.append(f"{invocation['label']}: {command_label} emitted non-JSON output: {exc.msg}")
             continue
         if not isinstance(payload, dict) or payload.get("command") != command_label:
             detail = completed.stderr.strip() or raw_output or f"exit {completed.returncode}"
-            errors.append(f"{loom_cli}: {detail}")
+            errors.append(f"{invocation['label']}: {detail}")
             continue
 
         result = payload.get("result") if payload.get("result") in {"pass", "block", "fallback"} else "block"
@@ -4853,8 +4852,8 @@ def suite_validation_command_payload(
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "command": " ".join(command),
-            "validator": str(loom_cli),
-            "validator_mode": "repo-local-cli",
+            "validator": str(invocation["label"]),
+            "validator_mode": str(invocation["mode"]),
             "returncode": completed.returncode,
             "payload": payload,
         }
@@ -7439,6 +7438,29 @@ def suite_validate_command_candidates(context: dict[str, Any]) -> list[Path]:
     return candidates
 
 
+def suite_validate_cli_invocations(context: dict[str, Any]) -> list[dict[str, Any]]:
+    invocations: list[dict[str, Any]] = []
+    for command in suite_validate_command_candidates(context):
+        invocations.append(
+            {
+                "label": str(command),
+                "mode": "repo-local-cli",
+                "argv": [sys.executable, str(command)],
+                "cwd": command.parents[1],
+            }
+        )
+    if shutil.which("loom"):
+        invocations.append(
+            {
+                "label": "loom",
+                "mode": "global-cli",
+                "argv": ["loom"],
+                "cwd": context["target_root"],
+            }
+        )
+    return invocations
+
+
 def suite_path_decision_presence(context: dict[str, Any]) -> tuple[bool, set[str]]:
     suite = spec_suite_paths(context)
     candidates = [
@@ -7782,12 +7804,11 @@ def suite_validation_ready(payload: dict[str, Any]) -> bool:
 
 def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
-    for command in suite_validate_command_candidates(context):
+    for invocation in suite_validate_cli_invocations(context):
         try:
             completed = run_process(
                 [
-                    sys.executable,
-                    str(command),
+                    *invocation["argv"],
                     "suite",
                     "validate",
                     "--target",
@@ -7796,26 +7817,26 @@ def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
                     str(context["item_id"]),
                     "--json",
                 ],
-                cwd=command.parents[1],
+                cwd=invocation["cwd"],
                 timeout_seconds=30.0,
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            errors.append(f"{command}: {exc}")
+            errors.append(f"{invocation['label']}: {exc}")
             continue
         stdout = completed.stdout.strip()
         try:
             payload = json.loads(stdout) if stdout else {}
         except json.JSONDecodeError:
-            errors.append(f"{command}: emitted non-JSON suite validate output")
+            errors.append(f"{invocation['label']}: emitted non-JSON suite validate output")
             continue
         if isinstance(payload, dict) and payload.get("command") == "suite validate":
             return normalize_suite_validate_payload(
                 payload,
-                validator=str(command),
-                mode="repo-local-cli",
+                validator=str(invocation["label"]),
+                mode=str(invocation["mode"]),
             )
         detail = completed.stderr.strip() or stdout or f"exit {completed.returncode}"
-        errors.append(f"{command}: {detail}")
+        errors.append(f"{invocation['label']}: {detail}")
 
     missing_inputs = ["suite validate CLI JSON unavailable"]
     missing_inputs.extend(f"suite validator unavailable: {error}" for error in errors)
@@ -26983,6 +27004,8 @@ def update_active_entry_points(
     entry_points["work_item"] = work_item
     entry_points["recovery_entry"] = recovery_entry
     entry_points["status_surface"] = status_surface
+    if item_id != NO_ACTIVE_ITEM_ID:
+        fact_chain["mode"] = "work-item + recovery-entry + derived status-surface"
     output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1954",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review passed for v0.27.1 host friction batch at head dd633913efe65f2105a5917f78e4fb91d001c618. Review covers #1928 fact-chain mode sync, #1930 global CLI suite JSON consumption, runtime copy parity, demo fixture sync, focused regression coverage, WI-1954 carrier binding, minimal suite, evidence map, task carrier, and spec review carrier sync; #1933, #1935, v0.28.0 host adoption tax, and downstream repo-local tools/loom.py shims remain out of scope.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-04T04:18:21Z",
+  "reviewed_head": "dd633913fee09adb403f84b826c568fac194eb3a",
+  "reviewed_validation_summary": "2026-07-04T04:16Z on branch `work/1954-v0.27.1-host-friction` at carrier head `c94e3ee9d291d4a5f8988ae362f2fc1fbe008949`, passed `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py examples/new-project/.loom/bin/loom_flow.py`, `git diff --check`, targeted #1928/#1930 regression assertions, `make loom-demo-new-project-check`, `python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-1954 --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json` after removing ignored Python cache artifacts; hosted `loom-check`, `repo-local-cli`, and `node-installer-pr` had passed on PR head `65d704d2bb91cd8b3e9889f88e895ebaac874ac6` before carrier sync.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1954.md",
+    "recovery_entry": ".loom/progress/WI-1954.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/67aa/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/67aa/Loom --item WI-1954 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/67aa/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/67aa/Loom --item WI-1954 --json",
+    "suite_evidence_map": ".loom/specs/WI-1954/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1954/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
