@@ -7517,6 +7517,52 @@ def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
             f"pr-gate did not consume machine-carrier-only PR binding: {machine_only_pr_gate_payload.get('missing_inputs')}"
         )
 
+    work_item_path = target / ".loom" / "work-items" / f"{fixture['item']}.md"
+    work_item_path.write_text(
+        work_item_path.read_text(encoding="utf-8").rstrip()
+        + "\n"
+        + f"- `.loom/bootstrap/init-result.json` refreshed for {fixture['item']} final carrier binding.\n",
+        encoding="utf-8",
+    )
+    init_result_path = target / ".loom" / "bootstrap" / "init-result.json"
+    init_result_payload = json.loads(init_result_path.read_text(encoding="utf-8"))
+    init_result_payload["final_carrier_binding_fixture"] = fixture["item"]
+    init_result_path.write_text(json.dumps(init_result_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", f".loom/work-items/{fixture['item']}.md", ".loom/bootstrap/init-result.json"],
+        cwd=target,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture final batch carrier binding"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    batch_carrier_payload = gate_freeze_fixture_payload(target, fixture)
+    batch_carrier_binding = batch_carrier_payload.get("input_bindings", {}).get("review_binding")
+    batch_carrier_head = batch_carrier_binding.get("head_binding", {}) if isinstance(batch_carrier_binding, dict) else {}
+    if (
+        not isinstance(batch_carrier_binding, dict)
+        or batch_carrier_binding.get("result") != "pass"
+        or batch_carrier_binding.get("binding_status") != "carrier-and-generated-only"
+        or f".loom/work-items/{fixture['item']}.md" not in batch_carrier_head.get("carrier_only_paths", [])
+        or ".loom/bootstrap/init-result.json" not in batch_carrier_head.get("generated_only_paths", [])
+        or batch_carrier_head.get("disallowed_paths") != []
+    ):
+        raise AssertionError(f"gate freeze did not accept final batch carrier binding drift: {batch_carrier_binding}")
+    batch_carrier_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        batch_carrier_pr_gate_payload.get("result") != "pass"
+        or batch_carrier_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status")
+        != "carrier-and-generated-only"
+    ):
+        raise AssertionError(
+            f"pr-gate did not consume final batch carrier binding drift: {batch_carrier_pr_gate_payload.get('missing_inputs')}"
+        )
+
     generated_path = "skills/README.md"
     (target / "skills").mkdir(parents=True, exist_ok=True)
     (target / generated_path).write_text("# Generated fixture drift\n", encoding="utf-8")

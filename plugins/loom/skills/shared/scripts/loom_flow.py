@@ -7326,10 +7326,12 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
     item_id = context.get("item_id")
     spec_review_path = f".loom/reviews/{item_id}.spec.json" if isinstance(item_id, str) and item_id.strip() else None
+    fact_chain_entry_points = context["report"]["fact_chain"]["entry_points"]
     source_paths = {
         *review_paths,
-        str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
-        str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
+        str(fact_chain_entry_points["work_item"]),
+        str(fact_chain_entry_points["recovery_entry"]),
+        str(fact_chain_entry_points["status_surface"]),
     }
     if spec_review_path:
         source_paths.add(spec_review_path)
@@ -8076,6 +8078,11 @@ def review_head_binding_for_head(
 
 
 def review_generated_only_path_metadata(path: str) -> dict[str, str] | None:
+    if path == ".loom/bootstrap/init-result.json":
+        return {
+            "kind": "bootstrap-init-result-pointer",
+            "validation_action": "python3 .loom/bin/loom_init.py verify --target .",
+        }
     if path.startswith(".loom/bin/") and path.endswith(".py"):
         return {
             "kind": "repo-local-runtime-copy",
