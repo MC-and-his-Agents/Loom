@@ -8417,6 +8417,99 @@ def assert_batch_pr_metadata_fixture(tmp: Path) -> None:
         raise AssertionError("batch metadata render did not write human excluded scope bindings")
 
 
+def assert_active_workspace_carrier_boundary_fixture(tmp: Path) -> None:
+    target = tmp / "active-workspace-carrier-boundary"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-2003")
+    loom_flow = load_loom_flow_module()
+
+    context = loom_flow.extract_github_host_context(
+        target,
+        ["- Execution Path: issue #2002 -> branch work/2003-boundary -> PR #2003."],
+        default_owner="owner",
+        default_repo="repo",
+    )
+    if not isinstance(context, dict) or context.get("issue_number") != 2002 or context.get("pr_number") != 2003:
+        raise AssertionError(f"bare issue/PR host references were not parsed: {context}")
+
+    live_item = "STALE-0002"
+    (target / ".loom" / "work-items" / f"{live_item}.md").write_text(
+        f"# {live_item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {live_item}\n"
+        "- Goal: Fixture proves live same-workspace carriers still block.\n"
+        "- Scope: retained carrier only.\n"
+        "- Execution Path: live same workspace fixture\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{live_item}.md\n"
+        f"- Review Entry: .loom/reviews/{live_item}.json\n"
+        "- Validation Entry: not_applicable\n"
+        "- Closing Condition: not_applicable\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{live_item}.md`\n"
+        f"- `.loom/progress/{live_item}.md`\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "progress" / f"{live_item}.md").write_text(
+        f"# {live_item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {live_item}\n"
+        "- Current Checkpoint: pre_review\n"
+        "- Current Stop: Live same-workspace carrier should block.\n"
+        "- Next Step: not_applicable\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: not_applicable\n"
+        "- Recovery Boundary: fixture only.\n"
+        "- Current Lane: live-conflict\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = loom_flow.active_workspace_diagnostics(target, fixture["item"], ".")
+    by_item = {entry.get("item_id"): entry for entry in diagnostics if isinstance(entry, dict)}
+    historical = by_item.get("WI-historical-active")
+    if not isinstance(historical, dict) or historical.get("blocking") is not False or historical.get("classification") != "stale_carrier":
+        raise AssertionError(f"tracked historical active carrier should be nonblocking: {historical}")
+    live = by_item.get(live_item)
+    if not isinstance(live, dict) or live.get("blocking") is not True or live.get("classification") != "shared_workspace_conflict":
+        raise AssertionError(f"untracked live same-workspace carrier should block: {live}")
+
+
+def assert_post_review_carrier_paths_partial_context_fixture(tmp: Path) -> None:
+    target = tmp / "post-review-carrier-partial-context"
+    target.mkdir()
+    loom_flow = load_loom_flow_module()
+    review_path = ".loom/reviews/WI-2003.json"
+    (target / review_path).parent.mkdir(parents=True, exist_ok=True)
+    (target / review_path).write_text('{"decision":"allow"}\n', encoding="utf-8")
+
+    allowed = loom_flow.allowed_post_review_carrier_paths(
+        {
+            "target_root": target,
+            "item_id": "WI-2003",
+            "report": {
+                "fact_chain": {
+                    "entry_points": {
+                        "recovery_entry": ".loom/progress/WI-2003.md",
+                        "status_surface": ".loom/status/current.md",
+                    }
+                }
+            },
+        },
+        review_path,
+    )
+    if review_path not in allowed or ".loom/progress/WI-2003.md" not in allowed or ".loom/status/current.md" not in allowed:
+        raise AssertionError(f"partial post-review carrier context did not preserve known locators: {allowed}")
+    if ".loom/reviews/WI-2003.spec.json" not in allowed:
+        raise AssertionError("partial post-review carrier context did not include the expected spec review locator")
+
+
 def assert_batch_host_only_closeout_contract() -> None:
     spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
     if spec is None or spec.loader is None:
@@ -12987,6 +13080,8 @@ def run_batch_implementation_closeout_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-batch-implementation-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)
         assert_batch_pr_metadata_fixture(tmp)
+        assert_active_workspace_carrier_boundary_fixture(tmp)
+        assert_post_review_carrier_paths_partial_context_fixture(tmp)
         assert_batch_host_only_closeout_contract()
 
     print("batch implementation closeout surface checks passed")

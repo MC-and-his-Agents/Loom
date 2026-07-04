@@ -128,8 +128,8 @@ TERMINAL_CLOSEOUT_STATES = {
 
 GITHUB_ISSUE_URL_RE = re.compile(r"github\.com/(?P<owner>[^/\s`]+)/(?P<repo>[^/\s`]+)/issues/(?P<number>\d+)")
 GITHUB_PR_URL_RE = re.compile(r"github\.com/(?P<owner>[^/\s`]+)/(?P<repo>[^/\s`]+)/pull/(?P<number>\d+)")
-GITHUB_ISSUE_REF_RE = re.compile(r"(?i)\bgithub\s+issue\s+#?(?P<number>\d+)\b")
-GITHUB_PR_REF_RE = re.compile(r"(?i)\b(?:github\s+pr|github\s+pull\s+request|pull\s+request)\s+#?(?P<number>\d+)\b")
+GITHUB_ISSUE_REF_RE = re.compile(r"(?i)\b(?:github\s+issue|issue)\s+#?(?P<number>\d+)\b")
+GITHUB_PR_REF_RE = re.compile(r"(?i)\b(?:github\s+pr|github\s+pull\s+request|pull\s+request|pr)\s+#?(?P<number>\d+)\b")
 
 RUNTIME_EVIDENCE_FIELDS = (
     "run_entry",
@@ -7326,13 +7326,15 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
     item_id = context.get("item_id")
     spec_review_path = f".loom/reviews/{item_id}.spec.json" if isinstance(item_id, str) and item_id.strip() else None
-    fact_chain_entry_points = context["report"]["fact_chain"]["entry_points"]
-    source_paths = {
-        *review_paths,
-        str(fact_chain_entry_points["work_item"]),
-        str(fact_chain_entry_points["recovery_entry"]),
-        str(fact_chain_entry_points["status_surface"]),
-    }
+    report = context.get("report")
+    fact_chain = report.get("fact_chain") if isinstance(report, dict) else None
+    fact_chain_entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+    source_paths = {str(path) for path in review_paths if isinstance(path, str) and path.strip()}
+    if isinstance(fact_chain_entry_points, dict):
+        for key in ("work_item", "recovery_entry", "status_surface"):
+            locator = fact_chain_entry_points.get(key)
+            if isinstance(locator, str) and locator.strip():
+                source_paths.add(locator)
     if spec_review_path:
         source_paths.add(spec_review_path)
     allowed = {
@@ -9681,7 +9683,7 @@ def render_recovery_entry(item_id: str, values: dict[str, str]) -> str:
         f"- Current Lane: {values['current_lane']}\n\n"
         "## Execution Ledger\n\n"
         "- Ledger Binding: recovery_entry\n"
-        "- Plan Locator: not_applicable\n"
+        "- Plan Locator: not_applicable (suite path: not_applicable)\n"
         "- Acceptance Locator: not_applicable\n"
         "- Validation Evidence Locator: not_applicable\n"
         "- Handoff Notes Locator: not_applicable\n"
@@ -10174,6 +10176,7 @@ def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entr
     diagnostics: list[dict[str, Any]] = []
     default_owner, default_repo = detect_github_repo(target_root)
     host_truth_cache: dict[tuple[str, str, int | None, int | None], dict[str, Any]] = {}
+    dirty_paths = {entry["path"] for entry in git_dirty_entries(target_root)}
     for candidate in sorted(work_items_dir.glob("*.md")):
         work_item_locator = relative_to_root(candidate, target_root)
         diagnostic: dict[str, Any] = {
@@ -10271,12 +10274,24 @@ def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entr
                     "run carrier closeout sync for this Work Item so versioned recovery/status truth consumes the completed host issue or merged PR before treating the same workspace binding as a live conflict."
                 )
                 diagnostic["next_command"] = carrier_closeout_sync_command(target_root, other_item_id, host_truth)
-            else:
+            elif (
+                git_tracked_files(target_root, work_item_locator)
+                and git_tracked_files(target_root, recovery_rel)
+                and work_item_locator not in dirty_paths
+                and recovery_rel not in dirty_paths
+            ):
                 diagnostic["freshness"] = "historical_active"
                 diagnostic["classification"] = "stale_carrier"
                 diagnostic["blocking"] = False
                 diagnostic["recommended_remediation"] = (
                     "leave this unrelated historical active carrier out of the current Work Item; reconcile it through its own issue flow if it still matters."
+                )
+            else:
+                diagnostic["freshness"] = "active"
+                diagnostic["classification"] = "shared_workspace_conflict"
+                diagnostic["blocking"] = True
+                diagnostic["recommended_remediation"] = (
+                    "finish, retire, or move this same-workspace active carrier before continuing the current workspace gate."
                 )
         diagnostics.append(diagnostic)
     return diagnostics

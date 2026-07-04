@@ -45,6 +45,8 @@ ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
 BOOTSTRAP_TIMEOUT_SECONDS = 120.0
 REVIEW_RUN_TIMEOUT_SECONDS = 120.0
 SHADOW_PARITY_TIMEOUT_SECONDS = 120.0
+RUNTIME_PARITY_TIMEOUT_SECONDS = 120.0
+FLOW_COMMAND_TIMEOUT_SECONDS = 120.0
 LOOM_CHECK_RUN_ID_ENV = "LOOM_CHECK_RUN_ID"
 
 SOURCE_PROFILE = "source"
@@ -1297,6 +1299,10 @@ def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | 
         return ADOPT_VERIFY_TIMEOUT_SECONDS
     if "review" in normalized and "run" in normalized:
         return REVIEW_RUN_TIMEOUT_SECONDS
+    if "flow" in normalized:
+        return FLOW_COMMAND_TIMEOUT_SECONDS
+    if "runtime-parity" in normalized:
+        return RUNTIME_PARITY_TIMEOUT_SECONDS
     if "shadow-parity" in normalized:
         return SHADOW_PARITY_TIMEOUT_SECONDS
     return DEFAULT_COMMAND_TIMEOUT_SECONDS
@@ -1310,9 +1316,13 @@ def check_command_timeout_budget() -> list[Failure]:
         failures.append(Failure("command-timeout-budget", "adopt verify commands must keep the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "review", "run"], None) != REVIEW_RUN_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "review run commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "runtime-parity", "validate"], None) != RUNTIME_PARITY_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "runtime parity commands must keep the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "shadow-parity"], None) != SHADOW_PARITY_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "shadow-parity commands must keep the extended loom_check timeout budget"))
-    if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != FLOW_COMMAND_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "flow commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "workspace", "locate"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "ordinary commands must keep the default loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap"], 5.0) != 5.0:
         failures.append(Failure("command-timeout-budget", "explicit command timeout overrides must be honored"))
