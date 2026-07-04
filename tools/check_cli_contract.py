@@ -3064,12 +3064,21 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
     if not isinstance(suite_validation, dict):
         raise AssertionError("build did not expose suite validation")
     validator_mode = suite_validation.get("validator_mode")
-    if (
-        suite_validation.get("command") != "suite validate"
-        or validator_mode not in {"repo-local-cli", "global-cli"}
-        or suite_validation.get("mutates") is not False
-    ):
-        raise AssertionError("build suite validation did not consume Loom CLI JSON")
+    cli_json_consumed = (
+        suite_validation.get("command") == "suite validate"
+        and validator_mode in {"repo-local-cli", "global-cli"}
+        and suite_validation.get("mutates") is False
+    )
+    active_marker_consumed = (
+        suite_validation.get("command") == "suite validate"
+        and suite_validation.get("result") == "not_applicable"
+        and validator_mode == "active-fact-chain-marker"
+        and suite_validation.get("mutates") is False
+        and isinstance(suite_validation.get("payload"), dict)
+        and suite_validation["payload"].get("suite_path") == "not_applicable"
+    )
+    if not cli_json_consumed and not active_marker_consumed:
+        raise AssertionError("build suite validation did not consume CLI JSON or an active not_applicable fact-chain marker")
     carrier_validation = payload.get("suite_carrier_validation")
     if not isinstance(carrier_validation, dict):
         raise AssertionError("build did not expose suite carrier validation")
