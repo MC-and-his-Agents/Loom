@@ -15091,6 +15091,7 @@ def carrier_refresh_payload(
     actions.extend(runtime_artifact_updates(target_root, manifest_payload, source="manifest"))
     actions.extend(runtime_artifact_updates(target_root, init_payload, source="init-result"))
     actions.extend(refresh_shadow_evidence_actions(target_root))
+    refresh_needed_actions = [action for action in actions if action.get("status") == "refresh-needed"]
     for action in actions:
         if action.get("status") == "block":
             missing_inputs.extend(str(message) for message in action.get("missing_inputs", []))
@@ -15140,19 +15141,46 @@ def carrier_refresh_payload(
                     else "post-review carrier paths only"
                 ),
             }
-            if binding.get("status") in {"implementation-drift-only", "stale"}:
-                review_status["status"] = "advisory"
-                review_status["reason"] = (
-                    "carrier refresh reports stale review metadata but does not use it as merge approval; "
-                    "PR gate/review surfaces enforce semantic approval separately."
-                )
+            if binding.get("status") == "implementation-drift-only":
+                review_status["status"] = "block"
+                missing_inputs.append("review artifact is stale because non-carrier drift is present")
+            elif binding.get("status") == "stale":
+                carrier_only_paths = binding.get("carrier_only_paths") if isinstance(binding.get("carrier_only_paths"), list) else []
+                generated_only_paths = binding.get("generated_only_paths") if isinstance(binding.get("generated_only_paths"), list) else []
+                refresh_managed_paths = [
+                    str(path)
+                    for path in [*carrier_only_paths, *generated_only_paths]
+                    if isinstance(path, str) and path
+                ]
+                semantic_drift_paths = binding.get("semantic_drift_paths") if isinstance(binding.get("semantic_drift_paths"), list) else []
+                semantic_drift_paths = [
+                    str(path)
+                    for path in semantic_drift_paths
+                    if isinstance(path, str) and path
+                ]
+                if semantic_drift_paths:
+                    review_status["status"] = "block"
+                    missing_inputs.append("review artifact is stale because non-carrier drift is present")
+                elif refresh_managed_paths:
+                    review_status["status"] = "advisory"
+                    review_status["reason"] = (
+                        "carrier refresh reports stale review metadata but does not use it as merge approval; "
+                        "PR gate/review surfaces enforce semantic approval separately."
+                    )
+                    review_status["refresh_scope"] = {
+                        "pending_actions": len(refresh_needed_actions),
+                        "refresh_managed_paths": refresh_managed_paths,
+                    }
+                else:
+                    review_status["status"] = "block"
+                    missing_inputs.append("review artifact is stale because non-carrier drift is present")
             elif binding.get("status") == "carrier-only":
                 review_status["status"] = "refresh-needed"
             else:
                 review_status["status"] = "current"
 
     if not dry_run and not missing_inputs:
-        fixed = [action for action in actions if action.get("status") == "refresh-needed"]
+        fixed = refresh_needed_actions
         if manifest_path is not None:
             apply_runtime_artifact_updates(manifest_payload, actions, source="manifest")
             write_json_file(manifest_path, manifest_payload)
@@ -15182,7 +15210,7 @@ def carrier_refresh_payload(
             "remaining_refresh": readback_payload.get("refresh_needed", []),
         }
 
-    refresh_needed = [action for action in actions if action.get("status") == "refresh-needed"]
+    refresh_needed = refresh_needed_actions
     result = "block" if missing_inputs else "pass"
     return {
         "command": "carrier",
