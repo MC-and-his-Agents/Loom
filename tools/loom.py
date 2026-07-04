@@ -21,6 +21,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+
 try:
     import tomllib as _tomllib
 except ModuleNotFoundError:
@@ -6602,8 +6605,10 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
     }
 
 
-SHIP_VALIDATION_PROFILE_CHOICES = ("auto", "light", "standard", "full", "release")
+SHIP_VALIDATION_PROFILE_CHOICES = ("auto", "host-consumer", "carrier-only", "light", "standard", "full", "release")
 SHIP_VALIDATION_SOURCE_SURFACES = {
+    "host-consumer": None,
+    "carrier-only": None,
     "light": "contract-only",
     "standard": "source-self-fixture",
     "full": "daily-execution-cli-full",
@@ -7215,8 +7220,6 @@ def pr_intent_consistency_validation(
     }
     if branch:
         expected["branch"] = branch
-    if head_sha:
-        expected["head_sha"] = head_sha
     for key, value in expected.items():
         if fields.get(key) != value:
             missing.append(f"metadata.{key}")
@@ -7241,9 +7244,9 @@ def pr_intent_consistency_validation(
         "suite_result": suite_result,
         "missing_inputs": missing,
         "summary": (
-            "Metadata, suite path, head binding, and profile intent agree."
+            "Metadata, suite path, branch binding, and profile intent agree."
             if not missing
-            else "Metadata, suite path, head binding, or profile intent drifted across carriers."
+            else "Metadata, suite path, branch binding, or profile intent drifted across carriers."
         ),
     }
 
@@ -7592,9 +7595,9 @@ def pr_intent_check_payload(
     if result == "pass" and not pr:
         readiness_reasons = ["pr_metadata_stale"]
     next_command = (
-        f"loom pr gate {pr} --target {target} --surface {profile['surface']} --work-item {item or '<item>'} --head-sha {current_head or '<head-sha>'} --json"
+        f"loom pr gate {pr} --target {target} --surface {profile['surface']} --work-item {item or '<item>'} --json"
         if ready_for_hosted_gate
-        else f"loom pr metadata-update <pr> --target {target} --surface {profile['surface']} --item {item or '<item>'} --branch {current_branch or '<branch>'} --head-sha {current_head or '<head-sha>'} --apply --json"
+        else f"loom pr metadata-update <pr> --target {target} --surface {profile['surface']} --item {item or '<item>'} --branch {current_branch or '<branch>'} --apply --json"
     )
     return output(
         command_name,
@@ -7605,7 +7608,7 @@ def pr_intent_check_payload(
         intent=profile_id,
         mutates=False,
         summary=(
-            "PR intent check passed across suite, metadata, scope, head binding, and carrier consistency."
+            "PR intent check passed across suite, metadata, scope, branch binding, and carrier consistency."
             if result == "pass"
             else "PR intent check found missing, stale, partial, or cross-surface drift."
         ),
@@ -7775,9 +7778,11 @@ def ship_validation_profile_payload(
             reasons = ["changed_paths_unavailable_default_standard"]
             selected = "standard"
     source_surface = SHIP_VALIDATION_SOURCE_SURFACES[selected]
-    validation_commands = [
-        f"python3 tools/loom_check.py --profile source --source-surface {source_surface} .",
-    ]
+    validation_commands = (
+        []
+        if source_surface is None
+        else [f"python3 tools/loom_check.py --profile source --source-surface {source_surface} ."]
+    )
     if selected == "release":
         validation_commands.extend([
             "python3 tools/check_release_surface.py",
@@ -7967,12 +7972,12 @@ def ship_binding_inference_payload(args: argparse.Namespace, target: Path) -> di
         "schema_version": "loom-ship-binding-inference/v1",
         "result": result,
         "summary": (
-            "ship inferred branch, head SHA, and target branch bindings from explicit inputs, PR readback, and checkout state."
+            "ship inferred branch, observed PR head, and target branch bindings from explicit inputs, PR readback, and checkout state."
             if result == "pass"
-            else "ship could not safely infer branch, head SHA, or target branch bindings."
+            else "ship could not safely infer branch, observed PR head, or target branch bindings."
         ),
         "missing_inputs": missing_inputs,
-        "fallback_to": None if result == "pass" else "rerun loom ship with explicit --branch, --head-sha, or --target-branch",
+        "fallback_to": None if result == "pass" else "fix PR readback or rerun loom ship with explicit stable bindings",
         "inputs": {
             "branch": args.branch,
             "head_sha": args.head_sha,
@@ -7998,7 +8003,7 @@ def ship_binding_inference_payload(args: argparse.Namespace, target: Path) -> di
 
 
 def ship_metadata_update_args(args: argparse.Namespace, target: Path, *, branch: str | None, head_sha: str | None) -> list[str] | None:
-    if args.issue is None or not branch or not head_sha:
+    if args.issue is None or not branch:
         return None
     flow_args = [
         "pr-metadata",
@@ -8015,10 +8020,10 @@ def ship_metadata_update_args(args: argparse.Namespace, target: Path, *, branch:
         str(args.issue),
         "--branch",
         branch,
-        "--head-sha",
-        head_sha,
         "--apply",
     ]
+    if args.head_sha:
+        flow_args.extend(["--head-sha", args.head_sha])
     if args.intensity != "auto":
         flow_args.extend(["--governance-intensity", args.intensity])
     return flow_args
@@ -8309,6 +8314,13 @@ def handle_ship(argv: list[str]) -> int:
     if binding_inference.get("result") != "pass":
         closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
         next_action = binding_inference.get("fallback_to") or "rerun loom ship with explicit host bindings"
+        skipped_profile = "standard" if args.validation_profile == "auto" else args.validation_profile
+        skipped_source_surface = SHIP_VALIDATION_SOURCE_SURFACES[skipped_profile]
+        skipped_validation_commands = (
+            []
+            if skipped_source_surface is None
+            else [f"python3 tools/loom_check.py --profile source --source-surface {skipped_source_surface} ."]
+        )
         return emit(
             agent_safe_payload(
                 output(
@@ -8329,13 +8341,11 @@ def handle_ship(argv: list[str]) -> int:
                         "schema_version": "loom-ship-validation-profile/v1",
                         "result": "skipped",
                         "requested_profile": args.validation_profile,
-                        "selected_profile": "standard" if args.validation_profile == "auto" else args.validation_profile,
-                        "source_surface": SHIP_VALIDATION_SOURCE_SURFACES["standard" if args.validation_profile == "auto" else args.validation_profile],
+                        "selected_profile": skipped_profile,
+                        "source_surface": skipped_source_surface,
                         "selection_reasons": ["binding_inference_blocked"],
                         "changed_paths": [],
-                        "validation_commands": [
-                            f"python3 tools/loom_check.py --profile source --source-surface {SHIP_VALIDATION_SOURCE_SURFACES['standard' if args.validation_profile == 'auto' else args.validation_profile]} ."
-                        ],
+                        "validation_commands": skipped_validation_commands,
                     },
                     merge_method=args.merge_method,
                     closeout_policy=closeout_policy,
@@ -8356,12 +8366,12 @@ def handle_ship(argv: list[str]) -> int:
             steps.append(
                 ship_step(
                     "safe-metadata-repair",
-                    {"result": "skipped", "summary": "safe metadata repair requires --issue plus inferred or explicit branch and head SHA."},
+                    {"result": "skipped", "summary": "safe metadata repair requires --issue plus inferred or explicit branch."},
                     skipped_reason="not enough binding inputs for safe PR metadata repair",
                 )
             )
         else:
-            repair = flow_payload(command, repair_args, fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --head-sha <sha> --apply --json"])
+            repair = flow_payload(command, repair_args, fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --apply --json"])
             steps.append(ship_step("safe-metadata-repair", repair, mutates=True))
             if repair.get("result") != "pass":
                 closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
@@ -8373,7 +8383,7 @@ def handle_ship(argv: list[str]) -> int:
                     closeout_policy=closeout_policy,
                     summary="ship --apply stopped before merge because safe PR metadata repair did not pass.",
                     missing_inputs=[str(value) for value in repair.get("missing_inputs", [])],
-                    fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --head-sha <sha> --apply --json"],
+                    fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --apply --json"],
                 )
 
         carrier_refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--apply"]
@@ -8413,22 +8423,22 @@ def handle_ship(argv: list[str]) -> int:
         metadata_args.extend(["--issue", str(args.issue)])
     if effective_branch:
         metadata_args.extend(["--branch", effective_branch])
-    if effective_head_sha:
-        metadata_args.extend(["--head-sha", effective_head_sha])
+    if args.head_sha:
+        metadata_args.extend(["--head-sha", args.head_sha])
     if args.pr_payload_file:
         metadata_args.extend(["--pr-payload-file", args.pr_payload_file])
-    metadata = flow_payload(command, metadata_args, fallback_to=["loom pr metadata-update <pr> --item <id> --head-sha <sha> --apply --json"])
+    metadata = flow_payload(command, metadata_args, fallback_to=["loom pr metadata-update <pr> --item <id> --apply --json"])
 
     pr_gate_args = ["pr-gate", "check", *common, "--pr", str(args.pr), "--item", args.item]
-    if effective_head_sha:
-        pr_gate_args.extend(["--head-sha", effective_head_sha])
+    if args.head_sha:
+        pr_gate_args.extend(["--head-sha", args.head_sha])
     if args.pr_payload_file:
         pr_gate_args.extend(["--pr-payload-file", args.pr_payload_file])
     pr_gate = flow_payload(command, pr_gate_args, fallback_to=["loom pr gate <pr> --work-item <id> --json"])
 
     merge_args = ["controlled-merge", "check", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method]
-    if effective_head_sha:
-        merge_args.extend(["--head-sha", effective_head_sha])
+    if args.head_sha:
+        merge_args.extend(["--head-sha", args.head_sha])
     for flag, value in (
         ("--pr-payload-file", args.pr_payload_file),
         ("--status-checks-file", args.status_checks_file),
@@ -8535,8 +8545,8 @@ def handle_ship(argv: list[str]) -> int:
         )
     if args.apply:
         merge_apply_args = ["controlled-merge", "merge", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method, "--execute"]
-        if effective_head_sha:
-            merge_apply_args.extend(["--head-sha", effective_head_sha])
+        if args.head_sha:
+            merge_apply_args.extend(["--head-sha", args.head_sha])
         for flag, value in (
             ("--pr-payload-file", args.pr_payload_file),
             ("--status-checks-file", args.status_checks_file),

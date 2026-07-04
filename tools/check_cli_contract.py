@@ -981,8 +981,8 @@ def assert_ship_infers_pr_bindings_contract() -> None:
         if tuple(flow_args[:2]) in {("pr-metadata", "preflight"), ("pr-gate", "check"), ("controlled-merge", "check")}:
             if "--branch" in flow_args and flow_args[flow_args.index("--branch") + 1] != inferred_branch:
                 raise AssertionError("ship did not pass inferred branch to delegated gate")
-            if "--head-sha" not in flow_args or flow_args[flow_args.index("--head-sha") + 1] != inferred_head:
-                raise AssertionError("ship did not pass inferred head SHA to delegated gate")
+            if "--head-sha" in flow_args:
+                raise AssertionError("ship must not pass inferred head SHA to delegated gate")
         if flow_args[:2] == ["pr-metadata", "preflight"]:
             return {
                 "command": "pr-metadata",
@@ -1280,6 +1280,15 @@ def assert_ship_validation_profile_selection_contract() -> None:
     explicit_full = payload(["README.md"], requested="full")
     if explicit_full.get("selected_profile") != "full" or explicit_full.get("source_surface") != "daily-execution-cli-full":
         raise AssertionError(f"explicit full validation profile override was not preserved: {explicit_full}")
+
+    for requested in ("host-consumer", "carrier-only"):
+        consumer_profile = payload(["README.md"], requested=requested)
+        if (
+            consumer_profile.get("selected_profile") != requested
+            or consumer_profile.get("source_surface") is not None
+            or consumer_profile.get("validation_commands") != []
+        ):
+            raise AssertionError(f"{requested} validation profile must not run Loom source checks: {consumer_profile}")
 
 
 def assert_ship_apply_wrapper_contract() -> None:
@@ -2553,8 +2562,8 @@ def assert_closeout_sync_status_contract() -> None:
                 return {
                     "command": command,
                     "result": "block",
-                    "summary": "metadata head drift",
-                    "missing_inputs": ["fields.head_sha"],
+                    "summary": "metadata branch drift",
+                    "missing_inputs": ["fields.branch"],
                     "fallback_to": "update_pr_body",
                 }
             return {"command": command, "result": "pass", "summary": "metadata readback pass", "missing_inputs": [], "fallback_to": None}
@@ -5920,7 +5929,7 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
         "number": int(pr_number),
         "state": "MERGED",
         "title": "PR fixture",
-        "body": f"Loom Work Item: {item}\nBranch: {branch}\nHead SHA: {head_sha}\n",
+        "body": f"Loom Work Item: {item}\nBranch: {branch}\n",
         "url": f"https://github.com/owner/repo/pull/{pr_number}",
         "isDraft": False,
         "mergedAt": "2026-05-30T00:00:00Z",
@@ -5984,7 +5993,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
     (suite_dir / "implementation-contract.md").write_text(
         "# Implementation Contract\n\n"
         "- Contract: pr-gate consumes semantic_review_disposition from the authored review record.\n"
-        "- Boundary: PR payload fixture binds only Work Item, branch, and head SHA.\n",
+        "- Boundary: PR payload fixture binds stable Work Item and branch fields; PR head is read from host payload.\n",
         encoding="utf-8",
     )
     (target / ".github").mkdir(parents=True, exist_ok=True)
@@ -6163,7 +6172,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
         "number": 1288,
         "state": "OPEN",
         "title": "semantic review disposition fixture",
-        "body": f"Loom Work Item: {item}\nBranch: {branch}\nHead SHA: {head_sha}\n",
+        "body": f"Loom Work Item: {item}\nBranch: {branch}\n",
         "url": "https://github.com/owner/repo/pull/1288",
         "isDraft": False,
         "headRefName": branch,
@@ -6194,7 +6203,7 @@ def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str 
     head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
     payload["state"] = state
     payload["headRefOid"] = head_sha
-    payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\nHead SHA: {head_sha}\n"
+    payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\n"
     if extra:
         payload.update(extra)
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -7471,7 +7480,6 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                 "repo_specific_field_set": [
                                     "loom_work_item",
                                     "branch",
-                                    "head_sha",
                                     "governance_intensity",
                                     "change_class",
                                     "suite_path",
@@ -7487,7 +7495,6 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                 "required_fields": [
                                     "loom_work_item",
                                     "branch",
-                                    "head_sha",
                                     "governance_intensity",
                                     "change_class",
                                     "suite_path",
@@ -7530,7 +7537,6 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                         "issue_conflict",
                                         "pr_conflict",
                                         "branch_conflict",
-                                        "head_sha_conflict",
                                         "release_judgment_conflict",
                                         "closeout_policy_conflict",
                                     ],
@@ -7562,7 +7568,6 @@ def governance_metadata_body(
     fields: dict[str, Any] = {
         "loom_work_item": item,
         "branch": branch,
-        "head_sha": head_sha,
         "governance_intensity": "standard",
         "change_class": "contract",
         "suite_path": "minimal",
@@ -7590,8 +7595,7 @@ def governance_metadata_body(
     }
     legacy_binding = (
         f"Loom Work Item: {item}\n"
-        f"Branch: {branch}\n"
-        f"Head SHA: {head_sha}\n\n"
+        f"Branch: {branch}\n\n"
         if include_legacy_bindings
         else f"Loom Work Item: {item}\n\n"
     )
@@ -7643,8 +7647,6 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
                 "WI-1541",
                 "--issue",
                 "1687",
-                "--head-sha",
-                "1" * 40,
                 "--branch",
                 "work/1541-pr-metadata-update-v2",
                 "--output-file",
@@ -7678,7 +7680,6 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
             "--surface": "closeout",
             "--item": "WI-1541",
             "--issue": "1687",
-            "--head-sha": "1" * 40,
             "--branch": "work/1541-pr-metadata-update-v2",
             "--output-file": ".loom/runtime/pr/rendered.md",
             "--readback-file": ".loom/runtime/pr/readback.md",
@@ -7745,8 +7746,6 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
                 "WI-1541",
                 "--issue",
                 "1541",
-                "--head-sha",
-                head_sha,
                 "--branch",
                 "work/1541-render",
                 "--output-file",
@@ -7771,8 +7770,6 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
                 "WI-1541",
                 "--issue",
                 "1541",
-                "--head-sha",
-                head_sha,
                 "--branch",
                 "work/1541-render",
                 "--body-file",
@@ -7791,8 +7788,6 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
                 "WI-1541",
                 "--issue",
                 "1541",
-                "--head-sha",
-                head_sha,
                 "--branch",
                 "work/1541-render",
                 "--output-file",
@@ -7811,7 +7806,7 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     if readback_payload.get("result") != "pass":
         raise AssertionError(f"readback payload failed: {readback_payload.get('missing_inputs')}")
     governance_fields = readback_payload.get("governance_fields")
-    if not isinstance(governance_fields, dict) or governance_fields.get("head_sha") != head_sha:
+    if not isinstance(governance_fields, dict) or governance_fields.get("branch") != "work/1541-render" or "head_sha" in governance_fields:
         raise AssertionError("readback did not expose parsed governance fields")
     if (
         update_dry_run_payload.get("result") != "pass"
@@ -7959,7 +7954,6 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
             },
         },
         "branch-conflict.md": {"branch": "feature/not-a-work-branch"},
-        "head-conflict.md": {"head_sha": "2222222222222222222222222222222222222222"},
     }
     for body_name, overrides in negative_cases.items():
         (target / body_name).write_text(governance_metadata_body(fields_override=overrides), encoding="utf-8")
@@ -7985,22 +7979,6 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
         or "allowed values" not in str(first_unknown_diagnostic.get("next_action"))
     ):
         raise AssertionError("enum violations must expose legal values and a rewrite next_action")
-
-    head_conflict_payload = governance_metadata_preflight_payload(target, "head-conflict.md", expect=1)
-    head_conflict_diagnostic = next(
-        (
-            diagnostic
-            for diagnostic in head_conflict_payload.get("diagnostics", [])
-            if isinstance(diagnostic, dict) and "fields.head_sha" in diagnostic.get("missing_fields", [])
-        ),
-        None,
-    )
-    if (
-        not isinstance(head_conflict_diagnostic, dict)
-        or head_conflict_diagnostic.get("classifier") != "head_sha_drift"
-        or "--head-sha" not in str(head_conflict_diagnostic.get("next_action"))
-    ):
-        raise AssertionError("head_sha drift diagnostics must expose a targeted next_action")
 
     branch_conflict_payload = governance_metadata_preflight_payload(target, "branch-conflict.md", expect=1)
     branch_conflict_diagnostic = next(
@@ -8256,7 +8234,10 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
     if stale_body is None or docs_body_path is None:
         raise AssertionError("runtime PR body locators did not resolve to global cache paths")
     stale_body.parent.mkdir(parents=True, exist_ok=True)
-    stale_body.write_text(docs_body_path.read_text(encoding="utf-8").replace(head_sha, "0" * 40), encoding="utf-8")
+    stale_body.write_text(
+        docs_body_path.read_text(encoding="utf-8").replace("work/1806-pr-intent", "work/1806-stale-branch"),
+        encoding="utf-8",
+    )
     _, stale_check = run_json(
         [
             "docs-pr",
@@ -8280,8 +8261,8 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
         expect=1,
     )
     stale_missing = "\n".join(str(entry) for entry in stale_check.get("missing_inputs", []))
-    if stale_check.get("result") != "block" or "head_sha" not in stale_missing:
-        raise AssertionError("docs-pr check did not fail closed on stale head binding")
+    if stale_check.get("result") != "block" or "branch" not in stale_missing.lower():
+        raise AssertionError("docs-pr check did not fail closed on stale branch binding")
 
     (target / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
     (target / ".github" / "workflows" / "loom-check.yml").write_text("env:\n  LOOM_VERSION: 0.23.0\n", encoding="utf-8")
@@ -8527,11 +8508,9 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
 def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
     pr_path = target / fixture["pr_file"]
     payload = json.loads(pr_path.read_text(encoding="utf-8"))
-    head_sha = payload["headRefOid"]
     payload["body"] = (
         f"Loom Work Item: {fixture['item']}\n"
-        f"Branch: {fixture['branch']}\n"
-        f"Head SHA: {head_sha}\n\n"
+        f"Branch: {fixture['branch']}\n\n"
         "<!-- loom:repo-pr-metadata\n"
         "{\n"
         '  "schema_version": "loom-repo-pr-metadata/v1",\n'
@@ -8539,8 +8518,7 @@ def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface
         f'  "surface": "{surface}",\n'
         '  "fields": {\n'
         f'    "loom_work_item": "{fixture["item"]}",\n'
-        f'    "branch": "{fixture["branch"]}",\n'
-        f'    "head_sha": "{head_sha}"\n'
+        f'    "branch": "{fixture["branch"]}"\n'
         "  },\n"
         '  "source": {"rendered_hash": "sha256:fixture"},\n'
         '  "parser_version": "repo-parser/v1"\n'
@@ -8988,30 +8966,6 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             label,
             expected_missing="PR metadata machine block invalid: loom-governance-intensity",
         )
-
-    append_governance_intensity_metadata_body(
-        target,
-        fixture,
-        fields_override={
-            "governance_intensity": "light",
-            "change_class": "docs_governance",
-            "suite_path": "not_applicable",
-            "head_sha": "0" * 40,
-            "suite_not_applicable": {
-                "rationale": "docs-governance lite fixture does not need formal suite artifacts",
-                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
-                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
-                "scope_proof": "diff is limited to governance docs and current Loom carriers",
-                "review_requirement": "current_head_review_required",
-            },
-        },
-    )
-    assert_pr_gate_blocks(
-        target,
-        fixture,
-        "governance metadata carrier/head mismatch",
-        expected_missing="PR metadata machine block invalid: loom-governance-intensity",
-    )
 
     update_fixture_pr_head(target, fixture, extra={"headRefName": "work/1323-mismatched-pr-branch"})
     append_governance_intensity_metadata_body(
@@ -9713,7 +9667,6 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     aggregate_pr_payload["body"] = (
         f"Loom Work Item: {aggregate_item}\n"
         f"Branch: {fixture['branch']}\n"
-        f"Head SHA: {original_pr_payload['headRefOid']}\n"
     )
     pr_path.write_text(json.dumps(aggregate_pr_payload, indent=2) + "\n", encoding="utf-8")
     aggregate_payload = semantic_pr_gate_fixture_payload(target, {**fixture, "item": aggregate_item})
@@ -9771,13 +9724,13 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
     pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\n"
     pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
-    missing_body_head = semantic_pr_gate_fixture_payload(target, fixture)
-    if missing_body_head.get("result") != "block" or "head_binding_drift" not in missing_body_head.get("failure_taxonomy", []):
-        raise AssertionError("missing PR body Head SHA machine carrier did not fail closed")
+    no_body_head = semantic_pr_gate_fixture_payload(target, fixture)
+    if no_body_head.get("result") == "block" and "head_binding_drift" in no_body_head.get("failure_taxonomy", []):
+        raise AssertionError("missing PR body Head SHA must not fail closed after host-readback head binding")
 
     update_fixture_pr_head(target, fixture)
     pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
-    pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: wrong-branch\nHead SHA: {pr_payload['headRefOid']}\n"
+    pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: wrong-branch\n"
     pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
     wrong_body_branch = semantic_pr_gate_fixture_payload(target, fixture)
     if wrong_body_branch.get("result") != "block" or "head_binding_drift" not in wrong_body_branch.get("failure_taxonomy", []):
@@ -9895,7 +9848,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     carrier_pr = {
         **implementation_pr,
         "number": 1200,
-        "body": f"Loom Work Item: {fixture['item']}\nIssue: #{fixture['issue']}\nBranch: {carrier_branch}\nHead SHA: {carrier_head}\n",
+        "body": f"Loom Work Item: {fixture['item']}\nIssue: #{fixture['issue']}\nBranch: {carrier_branch}\n",
         "headRefName": carrier_branch,
         "headRefOid": carrier_head,
         "mergeCommit": {"oid": carrier_merge},
@@ -12803,7 +12756,6 @@ def run_aggregate_cli_contract() -> None:
                 continue
             expected_bindings = {
                 "loom_work_item": subject.get("item_id"),
-                "head_sha": subject.get("head_sha"),
                 "branch": subject.get("branch"),
             }
             for field_name, expected_value in expected_bindings.items():
@@ -12904,7 +12856,7 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("gate freeze PR body hash drift must expose the classifier-specific next_action")
 
         carrier_drift_body.write_text(
-            governance_metadata_body(item=freeze_item, branch=branch, head_sha="2" * 40),
+            governance_metadata_body(item=freeze_item, branch="work/cli-contract-fixture-drift", head_sha=head_sha),
             encoding="utf-8",
         )
         _, carrier_drift_payload = run_json(
