@@ -113,6 +113,7 @@ REQUIRED_COMMANDS = {
     "release resume",
     "release closeout-sync",
     "closeout run",
+    "closeout batch",
     "host list",
     "host doctor",
     "host install",
@@ -6268,6 +6269,45 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
         "- Evidence Freshness: current\n",
         encoding="utf-8",
     )
+    historical_item = "WI-historical-active"
+    historical_work_item = target / ".loom" / "work-items" / f"{historical_item}.md"
+    historical_work_item.write_text(
+        f"# {historical_item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {historical_item}\n"
+        "- Goal: Historical active carrier fixture.\n"
+        "- Scope: retained carrier only.\n"
+        "- Execution Path: historical issue -> same workspace\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{historical_item}.md\n"
+        f"- Review Entry: .loom/reviews/{historical_item}.json\n"
+        "- Validation Entry: not_applicable\n"
+        "- Closing Condition: not_applicable\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{historical_item}.md`\n",
+        encoding="utf-8",
+    )
+    historical_progress = target / ".loom" / "progress" / f"{historical_item}.md"
+    historical_progress.write_text(
+        f"# {historical_item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {historical_item}\n"
+        "- Current Checkpoint: pre_review\n"
+        "- Current Stop: Historical active carrier should not block the current item once fact-chain selects another item.\n"
+        "- Next Step: not_applicable\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: not_applicable\n"
+        "- Recovery Boundary: historical fixture only.\n"
+        "- Current Lane: historical-active-carrier\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n",
+        encoding="utf-8",
+    )
     status = target / ".loom" / "status" / "current.md"
     status.parent.mkdir(parents=True, exist_ok=True)
     status.write_text(
@@ -7516,6 +7556,52 @@ def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
             f"pr-gate did not consume machine-carrier-only PR binding: {machine_only_pr_gate_payload.get('missing_inputs')}"
         )
 
+    work_item_path = target / ".loom" / "work-items" / f"{fixture['item']}.md"
+    work_item_path.write_text(
+        work_item_path.read_text(encoding="utf-8").rstrip()
+        + "\n"
+        + f"- `.loom/bootstrap/init-result.json` refreshed for {fixture['item']} final carrier binding.\n",
+        encoding="utf-8",
+    )
+    init_result_path = target / ".loom" / "bootstrap" / "init-result.json"
+    init_result_payload = json.loads(init_result_path.read_text(encoding="utf-8"))
+    init_result_payload["final_carrier_binding_fixture"] = fixture["item"]
+    init_result_path.write_text(json.dumps(init_result_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", f".loom/work-items/{fixture['item']}.md", ".loom/bootstrap/init-result.json"],
+        cwd=target,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture final batch carrier binding"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    batch_carrier_payload = gate_freeze_fixture_payload(target, fixture)
+    batch_carrier_binding = batch_carrier_payload.get("input_bindings", {}).get("review_binding")
+    batch_carrier_head = batch_carrier_binding.get("head_binding", {}) if isinstance(batch_carrier_binding, dict) else {}
+    if (
+        not isinstance(batch_carrier_binding, dict)
+        or batch_carrier_binding.get("result") != "pass"
+        or batch_carrier_binding.get("binding_status") != "carrier-and-generated-only"
+        or f".loom/work-items/{fixture['item']}.md" not in batch_carrier_head.get("carrier_only_paths", [])
+        or ".loom/bootstrap/init-result.json" not in batch_carrier_head.get("generated_only_paths", [])
+        or batch_carrier_head.get("disallowed_paths") != []
+    ):
+        raise AssertionError(f"gate freeze did not accept final batch carrier binding drift: {batch_carrier_binding}")
+    batch_carrier_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        batch_carrier_pr_gate_payload.get("result") != "pass"
+        or batch_carrier_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status")
+        != "carrier-and-generated-only"
+    ):
+        raise AssertionError(
+            f"pr-gate did not consume final batch carrier binding drift: {batch_carrier_pr_gate_payload.get('missing_inputs')}"
+        )
+
     generated_path = "skills/README.md"
     (target / "skills").mkdir(parents=True, exist_ok=True)
     (target / generated_path).write_text("# Generated fixture drift\n", encoding="utf-8")
@@ -8112,6 +8198,12 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
                 "no_release",
                 "--upgrade-trigger",
                 "fixture",
+                "--covered-issue",
+                "1541",
+                "--covered-issue",
+                "1542",
+                "--excluded-scope",
+                "release publication",
             ]
         )
         if status != 0:
@@ -8135,12 +8227,20 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
             "--review-requirement": "current_head_review_required",
             "--release-judgment": "no_release",
             "--upgrade-trigger": "fixture",
+            "--excluded-scope": "release publication",
         }
         for flag, expected in expected_pairs.items():
             if flag not in flow_args:
                 raise AssertionError(f"pr metadata-update wrapper did not pass {flag}")
             if flow_args[flow_args.index(flag) + 1] != expected:
                 raise AssertionError(f"pr metadata-update wrapper changed {flag} value")
+        covered_issues = [
+            flow_args[index + 1]
+            for index, value in enumerate(flow_args)
+            if value == "--covered-issue" and index + 1 < len(flow_args)
+        ]
+        if covered_issues != ["1541", "1542"]:
+            raise AssertionError(f"pr metadata-update wrapper did not preserve repeatable --covered-issue values: {covered_issues}")
         if "--dry-run" not in flow_args or "--apply" in flow_args:
             raise AssertionError("pr metadata-update wrapper must default to dry-run delegation")
 
@@ -8178,6 +8278,7 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
 
+    rendered: Path | None = None
     with isolated_loom_workstation(tmp / "workstation"):
         _, render_payload = run_flow_json(
             [
@@ -8261,6 +8362,282 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
         or update_dry_run_payload.get("readback") is not None
     ):
         raise AssertionError("pr metadata-update must default to dry-run local render/preflight without host mutation")
+
+
+def assert_batch_pr_metadata_fixture(tmp: Path) -> None:
+    target = tmp / "batch-pr-metadata"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+
+    with isolated_loom_workstation(tmp / "workstation"):
+        _, render_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "render",
+                "--target",
+                str(target),
+                "--surface",
+                "merge_ready",
+                "--item",
+                "WI-1962",
+                "--issue",
+                "1962",
+                "--head-sha",
+                "2222222222222222222222222222222222222222",
+                "--branch",
+                "work/1962-batch-implementation-closeout",
+                "--covered-issue",
+                "1965",
+                "--excluded-scope",
+                "release publication",
+                "--output-file",
+                ".loom/runtime/pr/batch-rendered.md",
+            ]
+        )
+        rendered = runtime_locator_path(target, ".loom/runtime/pr/batch-rendered.md")
+
+    if render_payload.get("result") != "pass":
+        raise AssertionError(f"batch metadata render failed: {render_payload.get('missing_inputs')}")
+    fields = render_payload.get("envelope", {}).get("fields")
+    if not isinstance(fields, dict):
+        raise AssertionError("batch metadata render did not expose governance fields")
+    if fields.get("anchor_issue") != 1962:
+        raise AssertionError("batch metadata render did not expose the anchor issue")
+    if fields.get("covered_issues") != [1962, 1965]:
+        raise AssertionError(f"batch metadata render did not normalize covered issues: {fields.get('covered_issues')}")
+    if fields.get("excluded_scope") != ["release publication"]:
+        raise AssertionError("batch metadata render did not preserve excluded scope")
+
+    if rendered is None or not rendered.exists():
+        raise AssertionError("batch metadata render did not write the global runtime PR body artifact")
+    body = rendered.read_text(encoding="utf-8")
+    if "- Covered Issues: #1962, #1965" not in body:
+        raise AssertionError("batch metadata render did not write human covered issue bindings")
+    if "- Excluded Scope: release publication" not in body:
+        raise AssertionError("batch metadata render did not write human excluded scope bindings")
+
+
+def assert_active_workspace_carrier_boundary_fixture(tmp: Path) -> None:
+    target = tmp / "active-workspace-carrier-boundary"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-2003")
+    loom_flow = load_loom_flow_module()
+
+    context = loom_flow.extract_github_host_context(
+        target,
+        ["- Execution Path: issue #2002 -> branch work/2003-boundary -> PR #2003."],
+        default_owner="owner",
+        default_repo="repo",
+    )
+    if not isinstance(context, dict) or context.get("issue_number") != 2002 or context.get("pr_number") != 2003:
+        raise AssertionError(f"bare issue/PR host references were not parsed: {context}")
+
+    live_item = "STALE-0002"
+    (target / ".loom" / "work-items" / f"{live_item}.md").write_text(
+        f"# {live_item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {live_item}\n"
+        "- Goal: Fixture proves live same-workspace carriers still block.\n"
+        "- Scope: retained carrier only.\n"
+        "- Execution Path: live same workspace fixture\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{live_item}.md\n"
+        f"- Review Entry: .loom/reviews/{live_item}.json\n"
+        "- Validation Entry: not_applicable\n"
+        "- Closing Condition: not_applicable\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{live_item}.md`\n"
+        f"- `.loom/progress/{live_item}.md`\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "progress" / f"{live_item}.md").write_text(
+        f"# {live_item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {live_item}\n"
+        "- Current Checkpoint: pre_review\n"
+        "- Current Stop: Live same-workspace carrier should block.\n"
+        "- Next Step: not_applicable\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: not_applicable\n"
+        "- Recovery Boundary: fixture only.\n"
+        "- Current Lane: live-conflict\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = loom_flow.active_workspace_diagnostics(target, fixture["item"], ".")
+    by_item = {entry.get("item_id"): entry for entry in diagnostics if isinstance(entry, dict)}
+    historical = by_item.get("WI-historical-active")
+    if not isinstance(historical, dict) or historical.get("blocking") is not False or historical.get("classification") != "stale_carrier":
+        raise AssertionError(f"tracked historical active carrier should be nonblocking: {historical}")
+    live = by_item.get(live_item)
+    if not isinstance(live, dict) or live.get("blocking") is not True or live.get("classification") != "shared_workspace_conflict":
+        raise AssertionError(f"untracked live same-workspace carrier should block: {live}")
+
+
+def assert_post_review_carrier_paths_partial_context_fixture(tmp: Path) -> None:
+    target = tmp / "post-review-carrier-partial-context"
+    target.mkdir()
+    loom_flow = load_loom_flow_module()
+    review_path = ".loom/reviews/WI-2003.json"
+    (target / review_path).parent.mkdir(parents=True, exist_ok=True)
+    (target / review_path).write_text('{"decision":"allow"}\n', encoding="utf-8")
+
+    allowed = loom_flow.allowed_post_review_carrier_paths(
+        {
+            "target_root": target,
+            "item_id": "WI-2003",
+            "report": {
+                "fact_chain": {
+                    "entry_points": {
+                        "recovery_entry": ".loom/progress/WI-2003.md",
+                        "status_surface": ".loom/status/current.md",
+                    }
+                }
+            },
+        },
+        review_path,
+    )
+    if review_path not in allowed or ".loom/progress/WI-2003.md" not in allowed or ".loom/status/current.md" not in allowed:
+        raise AssertionError(f"partial post-review carrier context did not preserve known locators: {allowed}")
+    if ".loom/reviews/WI-2003.spec.json" not in allowed:
+        raise AssertionError("partial post-review carrier context did not include the expected spec review locator")
+
+
+def assert_batch_host_only_closeout_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for batch closeout regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    emitted_payloads: list[dict[str, Any]] = []
+    gh_calls: list[list[str]] = []
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted_payloads.append(payload)
+        return 0 if payload.get("result") in {"pass", "not_applicable"} else 1
+
+    def fake_run_capture(command: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        gh_calls.append(list(command))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    original_emit = module.emit
+    original_run_capture = module.run_capture
+    module.emit = fake_emit
+    module.run_capture = fake_run_capture
+    try:
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--pr",
+                "1999",
+                "--merge-commit",
+                "3333333333333333333333333333333333333333",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout batch dry-run regression did not complete")
+        dry_run = emitted_payloads[-1]
+        if (
+            dry_run.get("schema_version") != "loom-batch-closeout/v1"
+            or dry_run.get("result") != "pass"
+            or dry_run.get("dry_run") is not True
+            or dry_run.get("host_mutations") is not False
+            or dry_run.get("carrier_mutations") is not False
+            or dry_run.get("creates_closeout_pr") is not False
+            or dry_run.get("covered_issues") != [1962, 1965]
+        ):
+            raise AssertionError("closeout batch dry-run payload drifted")
+        if gh_calls:
+            raise AssertionError("closeout batch dry-run must not call gh")
+
+        emitted_payloads.clear()
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--pr",
+                "1999",
+                "--merge-commit",
+                "3333333333333333333333333333333333333333",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout batch apply regression did not complete")
+        apply_payload = emitted_payloads[-1]
+        if (
+            apply_payload.get("result") != "pass"
+            or apply_payload.get("apply") is not True
+            or apply_payload.get("host_mutations") is not True
+            or apply_payload.get("carrier_mutations") is not False
+            or apply_payload.get("creates_closeout_pr") is not False
+        ):
+            raise AssertionError("closeout batch apply payload drifted")
+        command_heads = [call[:3] for call in gh_calls]
+        expected_heads = [
+            ["gh", "issue", "comment"],
+            ["gh", "issue", "close"],
+            ["gh", "issue", "comment"],
+            ["gh", "issue", "close"],
+        ]
+        if command_heads != expected_heads:
+            raise AssertionError(f"closeout batch apply delegated unexpected commands: {command_heads}")
+
+        emitted_payloads.clear()
+        gh_calls.clear()
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted_payloads[-1].get("result") != "block":
+            raise AssertionError("closeout batch must block when the anchor issue is outside the covered issue set")
+        if gh_calls:
+            raise AssertionError("closeout batch anchor blocker must not mutate host state")
+    finally:
+        module.emit = original_emit
+        module.run_capture = original_run_capture
 
 
 def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
@@ -12699,6 +13076,17 @@ def run_pr_metadata_suite_not_applicable_surface() -> None:
     print("pr metadata suite_not_applicable surface checks passed")
 
 
+def run_batch_implementation_closeout_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-batch-implementation-closeout-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_batch_pr_metadata_fixture(tmp)
+        assert_active_workspace_carrier_boundary_fixture(tmp)
+        assert_post_review_carrier_paths_partial_context_fixture(tmp)
+        assert_batch_host_only_closeout_contract()
+
+    print("batch implementation closeout surface checks passed")
+
+
 def run_pr_gate_target_readback_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-pr-gate-target-readback-") as raw_tmp:
         assert_pr_gate_target_readback_contract(Path(raw_tmp))
@@ -15261,6 +15649,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="pr-metadata-suite-not-applicable",
             fixture_group="pr-metadata-suite-not-applicable",
             run=run_pr_metadata_suite_not_applicable_surface,
+        ),
+        SurfaceCheck(
+            name="batch-implementation-closeout",
+            fixture_group="batch-implementation-closeout",
+            run=run_batch_implementation_closeout_surface,
         ),
         SurfaceCheck(
             name="pr-gate-target-readback",

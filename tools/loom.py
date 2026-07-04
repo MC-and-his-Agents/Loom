@@ -336,6 +336,13 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Plan or apply a single post-merge closeout run across host reconciliation, terminal carrier metadata, recovery status, shadow refresh, and final closeout check.",
     },
     {
+        "command": "closeout batch",
+        "domain": "host-control",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan or apply host-only batch issue closeout comments for a merged implementation PR without writing repo carrier state or creating a closeout PR.",
+    },
+    {
         "command": "closeout queue status",
         "domain": "scenario",
         "status": "implemented",
@@ -6099,6 +6106,8 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("--review-requirement")
     parser.add_argument("--release-judgment")
     parser.add_argument("--upgrade-trigger", action="append")
+    parser.add_argument("--covered-issue", action="append", default=[])
+    parser.add_argument("--excluded-scope", action="append", default=[])
     parser.add_argument("--suite-na-rationale")
     parser.add_argument("--suite-na-consumer-boundary")
     parser.add_argument("--suite-na-recheck-condition")
@@ -6148,6 +6157,10 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--release-judgment", args.release_judgment])
         for trigger in args.upgrade_trigger or []:
             flow_args.extend(["--upgrade-trigger", trigger])
+        for issue in args.covered_issue or []:
+            flow_args.extend(["--covered-issue", issue])
+        for scope in args.excluded_scope or []:
+            flow_args.extend(["--excluded-scope", scope])
         if args.suite_na_rationale:
             flow_args.extend(["--suite-na-rationale", args.suite_na_rationale])
         if args.suite_na_consumer_boundary:
@@ -6212,6 +6225,10 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--release-judgment", args.release_judgment])
         for trigger in args.upgrade_trigger or []:
             flow_args.extend(["--upgrade-trigger", trigger])
+        for issue in args.covered_issue or []:
+            flow_args.extend(["--covered-issue", issue])
+        for scope in args.excluded_scope or []:
+            flow_args.extend(["--excluded-scope", scope])
         if args.suite_na_rationale:
             flow_args.extend(["--suite-na-rationale", args.suite_na_rationale])
         if args.suite_na_consumer_boundary:
@@ -9499,6 +9516,192 @@ def run_closeout_payload(args: argparse.Namespace, target: Path) -> dict[str, An
         apply=args.apply,
         dry_run_blocking_step=first_blocking_step(steps),
     )
+
+
+def batch_closeout_comment_body(args: argparse.Namespace, issue: int, *, repo_slug: str | None) -> str:
+    if args.comment_file:
+        comment_path = Path(args.comment_file).expanduser()
+        if not comment_path.is_absolute():
+            comment_path = resolve_target(args.target) / comment_path
+        return comment_path.read_text(encoding="utf-8")
+    if args.comment:
+        return args.comment
+
+    evidence_lines = []
+    if args.pr is not None:
+        pr_reference = f"https://github.com/{repo_slug}/pull/{args.pr}" if repo_slug else f"#{args.pr}"
+        evidence_lines.append(f"- PR: {pr_reference}")
+    if args.merge_commit:
+        evidence_lines.append(f"- Merge commit: {args.merge_commit}")
+    if args.target_branch:
+        evidence_lines.append(f"- Target branch: {args.target_branch}")
+    if args.evidence_locator:
+        evidence_lines.append(f"- Evidence: {args.evidence_locator}")
+    evidence = "\n".join(evidence_lines) if evidence_lines else "- Evidence: host readback"
+    return (
+        f"Batch closeout: issue #{issue} is covered by the merged implementation batch.\n\n"
+        f"{evidence}\n\n"
+        "Closeout mode: host-only batch closeout; no repository closeout PR or Loom carrier mutation was created."
+    )
+
+
+def batch_closeout_issue_step(
+    *,
+    issue: int,
+    comment_body: str,
+    repo_slug: str | None,
+    target: Path,
+    apply: bool,
+) -> dict[str, Any]:
+    step: dict[str, Any] = {
+        "issue": issue,
+        "mode": "host_only",
+        "planned_actions": ["comment", "close"],
+        "result": "pass",
+        "mutates": apply,
+        "commands": [],
+        "errors": [],
+    }
+    if not apply:
+        step["status"] = "planned"
+        return step
+    if not repo_slug:
+        step["result"] = "block"
+        step["status"] = "blocked"
+        step["errors"].append("unable to infer GitHub repository; pass --owner and --repo")
+        return step
+
+    comment_command = ["gh", "issue", "comment", str(issue), "--repo", repo_slug, "--body", comment_body]
+    close_command = ["gh", "issue", "close", str(issue), "--repo", repo_slug, "--reason", "completed"]
+    for action, command in (("comment", comment_command), ("close", close_command)):
+        completed = run_capture(command, cwd=target)
+        step["commands"].append({"action": action, "command": shlex.join(command), "returncode": completed.returncode})
+        if completed.returncode != 0:
+            step["result"] = "block"
+            step["status"] = "blocked"
+            step["errors"].append(completed.stderr.strip() or completed.stdout.strip() or f"gh issue {action} failed")
+            break
+    if step["result"] == "pass":
+        step["status"] = "applied"
+    return step
+
+
+def handle_closeout_batch(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom closeout batch")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--issue", type=int, action="append", required=True, help="Repeatable covered issue number to comment and close")
+    parser.add_argument("--anchor-issue", type=int)
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--merge-commit")
+    parser.add_argument("--target-branch", default="main")
+    parser.add_argument("--evidence-locator")
+    parser.add_argument("--owner")
+    parser.add_argument("--repo", dest="repo_name")
+    body_group = parser.add_mutually_exclusive_group()
+    body_group.add_argument("--comment")
+    body_group.add_argument("--comment-file")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--dry-run", dest="apply", action="store_false")
+    parser.set_defaults(apply=False)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    args = parser.parse_args(argv)
+
+    target = resolve_target(args.target)
+    covered_issues = list(dict.fromkeys(args.issue or []))
+    anchor_issue = args.anchor_issue if args.anchor_issue is not None else covered_issues[0]
+    missing_inputs: list[str] = []
+    if anchor_issue not in covered_issues:
+        missing_inputs.append("--anchor-issue must be included in at least one --issue")
+    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else infer_github_repo(target)
+    if args.apply and not repo_slug:
+        missing_inputs.append("owner/repo")
+
+    try:
+        comment_bodies = {
+            issue: batch_closeout_comment_body(args, issue, repo_slug=repo_slug)
+            for issue in covered_issues
+        }
+    except OSError as exc:
+        missing_inputs.append(f"comment-file unreadable: {exc}")
+        comment_bodies = {}
+
+    if missing_inputs:
+        return emit(
+            output(
+                "closeout batch",
+                "block",
+                schema_version="loom-batch-closeout/v1",
+                summary="batch closeout is missing required host inputs.",
+                dry_run=not args.apply,
+                apply=args.apply,
+                mutates=False,
+                host_mutations=False,
+                carrier_mutations=False,
+                creates_closeout_pr=False,
+                target=str(target),
+                anchor_issue=anchor_issue,
+                covered_issues=covered_issues,
+                pr=args.pr,
+                repo=repo_slug,
+                missing_inputs=missing_inputs,
+                fallback_to=["loom closeout batch --issue <n> --pr <merged-pr> --json"],
+            )
+        )
+
+    steps = [
+        batch_closeout_issue_step(
+            issue=issue,
+            comment_body=comment_bodies[issue],
+            repo_slug=repo_slug,
+            target=target,
+            apply=args.apply,
+        )
+        for issue in covered_issues
+    ]
+    blocking_steps = [step for step in steps if step.get("result") == "block"]
+    result = "block" if blocking_steps else "pass"
+    payload = output(
+        "closeout batch",
+        result,
+        schema_version="loom-batch-closeout/v1",
+        summary=(
+            "batch closeout applied host-only comments and issue closes."
+            if args.apply and result == "pass"
+            else "batch closeout dry-run produced a host-only issue closeout plan."
+            if result == "pass"
+            else "batch closeout stopped because one or more host mutations failed."
+        ),
+        dry_run=not args.apply,
+        apply=args.apply,
+        mutates=args.apply,
+        host_mutations=args.apply,
+        carrier_mutations=False,
+        creates_closeout_pr=False,
+        target=str(target),
+        repo=repo_slug,
+        anchor_issue=anchor_issue,
+        covered_issues=covered_issues,
+        pr=args.pr,
+        merge_commit=args.merge_commit,
+        target_branch=args.target_branch,
+        evidence_locator=args.evidence_locator,
+        closeout_mode="host_only_batch",
+        steps=steps if args.full_output or not args.apply else [
+            {
+                "issue": step.get("issue"),
+                "mode": step.get("mode"),
+                "result": step.get("result"),
+                "status": step.get("status"),
+                "planned_actions": step.get("planned_actions"),
+                "errors": step.get("errors"),
+            }
+            for step in steps
+        ],
+        missing_inputs=[error for step in blocking_steps for error in step.get("errors", [])],
+        fallback_to=["inspect failed host mutations and rerun `loom closeout batch --apply --json`"] if blocking_steps else None,
+    )
+    return emit(payload)
 
 
 def handle_closeout_run(argv: list[str]) -> int:
@@ -14641,6 +14844,8 @@ def main(argv: list[str]) -> int:
         return handle_closeout_sync(command.split()[1], forwarded)
     if command == "closeout run":
         return handle_closeout_run(forwarded)
+    if command == "closeout batch":
+        return handle_closeout_batch(forwarded)
     if command == "closeout queue status":
         return handle_closeout_queue_status(forwarded)
     if command in {"story", "spec", "plan", "build", "pre-review", "closeout", "handoff", "retire"}:

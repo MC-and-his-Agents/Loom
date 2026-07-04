@@ -128,8 +128,8 @@ TERMINAL_CLOSEOUT_STATES = {
 
 GITHUB_ISSUE_URL_RE = re.compile(r"github\.com/(?P<owner>[^/\s`]+)/(?P<repo>[^/\s`]+)/issues/(?P<number>\d+)")
 GITHUB_PR_URL_RE = re.compile(r"github\.com/(?P<owner>[^/\s`]+)/(?P<repo>[^/\s`]+)/pull/(?P<number>\d+)")
-GITHUB_ISSUE_REF_RE = re.compile(r"(?i)\bgithub\s+issue\s+#?(?P<number>\d+)\b")
-GITHUB_PR_REF_RE = re.compile(r"(?i)\b(?:github\s+pr|github\s+pull\s+request|pull\s+request)\s+#?(?P<number>\d+)\b")
+GITHUB_ISSUE_REF_RE = re.compile(r"(?i)\b(?:github\s+issue|issue)\s+#?(?P<number>\d+)\b")
+GITHUB_PR_REF_RE = re.compile(r"(?i)\b(?:github\s+pr|github\s+pull\s+request|pull\s+request|pr)\s+#?(?P<number>\d+)\b")
 
 RUNTIME_EVIDENCE_FIELDS = (
     "run_entry",
@@ -880,6 +880,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--review-requirement", choices=tuple(sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES)), default="current_head_review_required")
     pr_metadata.add_argument("--release-judgment", choices=tuple(sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES)), default="no_release")
     pr_metadata.add_argument("--upgrade-trigger", action="append", default=[], help="Repeatable governance upgrade trigger string")
+    pr_metadata.add_argument("--covered-issue", type=int, action="append", default=[], help="Repeatable GitHub issue number covered by this PR batch")
+    pr_metadata.add_argument("--excluded-scope", action="append", default=[], help="Repeatable excluded scope note for this PR batch")
     pr_metadata.add_argument("--suite-na-rationale")
     pr_metadata.add_argument("--suite-na-consumer-boundary")
     pr_metadata.add_argument("--suite-na-recheck-condition")
@@ -7324,11 +7326,15 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
     item_id = context.get("item_id")
     spec_review_path = f".loom/reviews/{item_id}.spec.json" if isinstance(item_id, str) and item_id.strip() else None
-    source_paths = {
-        *review_paths,
-        str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
-        str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
-    }
+    report = context.get("report")
+    fact_chain = report.get("fact_chain") if isinstance(report, dict) else None
+    fact_chain_entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+    source_paths = {str(path) for path in review_paths if isinstance(path, str) and path.strip()}
+    if isinstance(fact_chain_entry_points, dict):
+        for key in ("work_item", "recovery_entry", "status_surface"):
+            locator = fact_chain_entry_points.get(key)
+            if isinstance(locator, str) and locator.strip():
+                source_paths.add(locator)
     if spec_review_path:
         source_paths.add(spec_review_path)
     allowed = {
@@ -8074,6 +8080,11 @@ def review_head_binding_for_head(
 
 
 def review_generated_only_path_metadata(path: str) -> dict[str, str] | None:
+    if path == ".loom/bootstrap/init-result.json":
+        return {
+            "kind": "bootstrap-init-result-pointer",
+            "validation_action": "python3 .loom/bin/loom_init.py verify --target .",
+        }
     if path.startswith(".loom/bin/") and path.endswith(".py"):
         return {
             "kind": "repo-local-runtime-copy",
@@ -9672,7 +9683,7 @@ def render_recovery_entry(item_id: str, values: dict[str, str]) -> str:
         f"- Current Lane: {values['current_lane']}\n\n"
         "## Execution Ledger\n\n"
         "- Ledger Binding: recovery_entry\n"
-        "- Plan Locator: not_applicable\n"
+        "- Plan Locator: not_applicable (suite path: not_applicable)\n"
         "- Acceptance Locator: not_applicable\n"
         "- Validation Evidence Locator: not_applicable\n"
         "- Handoff Notes Locator: not_applicable\n"
@@ -10165,6 +10176,7 @@ def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entr
     diagnostics: list[dict[str, Any]] = []
     default_owner, default_repo = detect_github_repo(target_root)
     host_truth_cache: dict[tuple[str, str, int | None, int | None], dict[str, Any]] = {}
+    dirty_paths = {entry["path"] for entry in git_dirty_entries(target_root)}
     for candidate in sorted(work_items_dir.glob("*.md")):
         work_item_locator = relative_to_root(candidate, target_root)
         diagnostic: dict[str, Any] = {
@@ -10262,12 +10274,24 @@ def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entr
                     "run carrier closeout sync for this Work Item so versioned recovery/status truth consumes the completed host issue or merged PR before treating the same workspace binding as a live conflict."
                 )
                 diagnostic["next_command"] = carrier_closeout_sync_command(target_root, other_item_id, host_truth)
+            elif (
+                git_tracked_files(target_root, work_item_locator)
+                and git_tracked_files(target_root, recovery_rel)
+                and work_item_locator not in dirty_paths
+                and recovery_rel not in dirty_paths
+            ):
+                diagnostic["freshness"] = "historical_active"
+                diagnostic["classification"] = "stale_carrier"
+                diagnostic["blocking"] = False
+                diagnostic["recommended_remediation"] = (
+                    "leave this unrelated historical active carrier out of the current Work Item; reconcile it through its own issue flow if it still matters."
+                )
             else:
                 diagnostic["freshness"] = "active"
                 diagnostic["classification"] = "shared_workspace_conflict"
                 diagnostic["blocking"] = True
                 diagnostic["recommended_remediation"] = (
-                    "move one active item to its own branch/worktree or close its own recovery path before continuing."
+                    "finish, retire, or move this same-workspace active carrier before continuing the current workspace gate."
                 )
         diagnostics.append(diagnostic)
     return diagnostics
@@ -17129,6 +17153,22 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     upgrade_triggers = fields.get("upgrade_triggers")
     if not isinstance(upgrade_triggers, list) or any(not isinstance(entry, str) or not entry.strip() for entry in upgrade_triggers):
         missing_fields.append("fields.upgrade_triggers")
+    anchor_issue = fields.get("anchor_issue")
+    if anchor_issue is not None and (not isinstance(anchor_issue, int) or anchor_issue <= 0):
+        missing_fields.append("fields.anchor_issue")
+    covered_issues = fields.get("covered_issues")
+    if covered_issues is not None:
+        if (
+            not isinstance(covered_issues, list)
+            or any(not isinstance(entry, int) or entry <= 0 for entry in covered_issues)
+            or len(set(covered_issues)) != len(covered_issues)
+        ):
+            missing_fields.append("fields.covered_issues")
+        elif isinstance(anchor_issue, int) and anchor_issue not in covered_issues:
+            missing_fields.append("fields.covered_issues")
+    excluded_scope = fields.get("excluded_scope")
+    if excluded_scope is not None and (not isinstance(excluded_scope, list) or any(not isinstance(entry, str) or not entry.strip() for entry in excluded_scope)):
+        missing_fields.append("fields.excluded_scope")
 
     suite_not_applicable = fields.get("suite_not_applicable")
     if suite_path == "not_applicable":
@@ -17665,6 +17705,8 @@ def render_governance_intensity_metadata_body(
     upgrade_triggers: list[str],
     suite_not_applicable: dict[str, str] | None,
     issue_number: int | None,
+    covered_issues: list[int],
+    excluded_scope: list[str],
 ) -> tuple[str, dict[str, Any], list[str]]:
     contract_id = str(field.get("id") or GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID)
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
@@ -17687,6 +17729,9 @@ def render_governance_intensity_metadata_body(
         "release_judgment": release_judgment,
         "closeout_required": True,
         "upgrade_triggers": upgrade_triggers,
+        "anchor_issue": issue_number,
+        "covered_issues": covered_issues or None,
+        "excluded_scope": excluded_scope or None,
     }
     missing_inputs = validate_governance_intensity_metadata_fields(fields)
     if missing_inputs:
@@ -17704,6 +17749,12 @@ def render_governance_intensity_metadata_body(
     issue_reference = pr_metadata_issue_reference(issue_number)
     if issue_reference:
         updated = pr_metadata_replace_or_insert_binding_line(updated, label="Issue", value=issue_reference, insert_after="Loom Work Item")
+    if covered_issues:
+        covered_text = ", ".join(f"#{number}" for number in covered_issues)
+        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Covered Issues", value=covered_text, insert_after="Issue")
+    if excluded_scope:
+        excluded_text = "; ".join(excluded_scope)
+        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Excluded Scope", value=excluded_text, insert_after="Covered Issues")
     updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
     updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
     return updated, envelope, []
@@ -17725,6 +17776,8 @@ def pr_metadata_render_payload(
     review_requirement: str,
     release_judgment: str,
     upgrade_triggers: list[str],
+    covered_issues: list[int],
+    excluded_scope: list[str],
     suite_na_rationale: str | None,
     suite_na_consumer_boundary: str | None,
     suite_na_recheck_condition: str | None,
@@ -17764,6 +17817,8 @@ def pr_metadata_render_payload(
             "scope_proof": suite_na_scope_proof or "",
             "review_requirement": suite_na_review_requirement or review_requirement,
         }
+    normalized_covered_issues = sorted({*(covered_issues or []), *([issue_number] if isinstance(issue_number, int) else [])})
+    normalized_excluded_scope = dedupe_strings([entry.strip() for entry in excluded_scope if isinstance(entry, str) and entry.strip()])
 
     governance_surface = build_governance_surface(target_root)
     fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
@@ -17802,6 +17857,8 @@ def pr_metadata_render_payload(
         upgrade_triggers=[entry for entry in upgrade_triggers if isinstance(entry, str) and entry.strip()],
         suite_not_applicable=suite_not_applicable,
         issue_number=issue_number,
+        covered_issues=normalized_covered_issues,
+        excluded_scope=normalized_excluded_scope,
     )
     if render_errors:
         return {
@@ -18018,6 +18075,8 @@ def pr_metadata_update_payload(
     review_requirement: str,
     release_judgment: str,
     upgrade_triggers: list[str],
+    covered_issues: list[int],
+    excluded_scope: list[str],
     suite_na_rationale: str | None,
     suite_na_consumer_boundary: str | None,
     suite_na_recheck_condition: str | None,
@@ -18040,6 +18099,8 @@ def pr_metadata_update_payload(
         review_requirement=review_requirement,
         release_judgment=release_judgment,
         upgrade_triggers=upgrade_triggers,
+        covered_issues=covered_issues,
+        excluded_scope=excluded_scope,
         suite_na_rationale=suite_na_rationale,
         suite_na_consumer_boundary=suite_na_consumer_boundary,
         suite_na_recheck_condition=suite_na_recheck_condition,
@@ -21399,6 +21460,8 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 review_requirement=args.review_requirement,
                 release_judgment=args.release_judgment,
                 upgrade_triggers=args.upgrade_trigger,
+                covered_issues=args.covered_issue,
+                excluded_scope=args.excluded_scope,
                 suite_na_rationale=args.suite_na_rationale,
                 suite_na_consumer_boundary=args.suite_na_consumer_boundary,
                 suite_na_recheck_condition=args.suite_na_recheck_condition,
@@ -21428,6 +21491,8 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 review_requirement=args.review_requirement,
                 release_judgment=args.release_judgment,
                 upgrade_triggers=args.upgrade_trigger,
+                covered_issues=args.covered_issue,
+                excluded_scope=args.excluded_scope,
                 suite_na_rationale=args.suite_na_rationale,
                 suite_na_consumer_boundary=args.suite_na_consumer_boundary,
                 suite_na_recheck_condition=args.suite_na_recheck_condition,
