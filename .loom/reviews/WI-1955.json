@@ -3,11 +3,11 @@
   "item_id": "WI-1955",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1955 v0.27.1 release candidate is approved at head 4365d1d3. The change bumps VERSION and root package.json to v0.27.1, stamps plugin payload metadata with pending release commit and hash bf0a4d1dbcae49131a04a1860735517817f4a25b208eb6eceb6ca5ba56207f16, adds WI-1955 release carriers and readiness evidence, consumes the WI-1954 handoff carrier sync after implementation PR #1967 merged, and keeps publication deferred to the main-push release workflow. No runtime behavior beyond merged PR #1967 is included.",
+  "summary": "WI-1955 terminal release closeout carrier sync is approved for closeout PR gate consumption. Release v0.27.1 is published and read back at merge commit c38b1f04aedba0d4c8c9d84a2cc062ead1d41299; release closeout-sync wrote terminal closed_out metadata, and suite evidence/carrier validation, shadow parity, release readback, and diff hygiene pass. This review covers carrier-only closeout sync and does not approve new runtime behavior or republish.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-04T05:13:00Z",
-  "reviewed_head": "4365d1d3c4ad36d09f5460c601f4810f29418ac1",
-  "reviewed_validation_summary": "2026-07-04T04:43Z on branch `work/1955-v0.27.1-release`: passed `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/check_release_surface.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `git diff --check`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`, `npm pack --dry-run --json --ignore-scripts`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`; pre-release readback for v0.27.1 returned missing/unpublished with no tag, GitHub Release, or npm version occupying the release path.",
+  "authored_at": "2026-07-04T05:23:17Z",
+  "reviewed_head": "c38b1f04aedba0d4c8c9d84a2cc062ead1d41299",
+  "reviewed_validation_summary": "2026-07-04T05:21Z closeout validation on branch `work/1955-v0.27.1-closeout`: `git diff --check` passed; `python3 tools/loom.py release readback --target . --version v0.27.1 --commit c38b1f04aedba0d4c8c9d84a2cc062ead1d41299 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` returned published; `python3 tools/loom.py suite evidence validate --target . --item WI-1955 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1955 --json` passed; release workflow `loom-cli-release` run 28695863790 succeeded; tag v0.27.1 resolves to c38b1f04aedba0d4c8c9d84a2cc062ead1d41299; GitHub Release https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.27.1 is published; npm @mc-and-his-agents/loom@0.27.1 exists with latest=0.27.1.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1955.md",
     "recovery_entry": ".loom/progress/WI-1955.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "not_applicable_release_candidate",
+    "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -30,16 +30,28 @@
         "source": "github_host"
       }
     },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "release_readiness": "docs/evidence/v0.27.1-release-readiness.md",
-    "implementation_pr": "https://github.com/MC-and-his-Agents/Loom/pull/1967",
-    "implementation_merge_commit": "323e2300cc1a1e9b023b59a5588c4bab65adc51e",
-    "implementation_handoff_progress": ".loom/progress/WI-1954.md"
-  },
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored release review approved the current head for merge checkpoint consumption."
-  }
-}
+        "engine_adapter": null,
+        "engine_evidence": null,
+        "normalized_findings": null,
+        "release_readback": "v0.27.1 published at merge commit c38b1f04aedba0d4c8c9d84a2cc062ead1d41299",
+        "release_url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.27.1",
+        "release_workflow_run": "https://github.com/MC-and-his-Agents/Loom/actions/runs/28695863790",
+        "npm_package": "@mc-and-his-agents/loom@0.27.1",
+        "suite_evidence_validation": "pass",
+        "suite_carrier_validation": "pass",
+        "shadow_parity": "pass"
+      },
+      "carrier_only_closeout_review": {
+        "status": "passed",
+        "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+      },
+      "semantic_review_disposition": {
+        "status": "passed",
+        "reason": "Authored closeout carrier review approved the current terminal closeout carrier head for closeout PR gate consumption.",
+        "change_class": "docs_governance",
+        "substitute_validation": "release readback, suite evidence validation, suite carrier validation, shadow parity, and git diff check",
+        "authority": "codex-main-thread",
+        "risk_acceptance": "Bounded to carrier-only terminal closeout sync after release publication; no runtime behavior, packaging, or publication side effect is introduced.",
+        "one_shot": true
+      }
+    }
