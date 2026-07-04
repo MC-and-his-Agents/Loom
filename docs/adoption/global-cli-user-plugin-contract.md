@@ -132,6 +132,17 @@ Running this migration is not an upgrade prerequisite: ordinary `doctor`,
 `status`, `resume`, and per-repo adoption validation must keep working before a
 repository migrates its local cache.
 
+The migration plan also emits `repo_slimdown_entries` for existing host
+repositories. This is a read-only classification of `.loom/installed-state.json`,
+`.loom/companion`, `.loom/runtime`, `.loom/tmp`, `.loom/bin`, `.loom/bootstrap`,
+`.loom/status`, `.loom/work-items`, `.loom/progress`, `.loom/specs`,
+`.loom/reviews`, `.loom/shadow`, `plugins/loom`, `.agents/skills`, and
+`.agents/plugins/marketplace.json`. Only ignored or untracked runtime/tmp cache
+is eligible for `apply`; tracked governance, runtime, plugin, skill, shadow, or
+bootstrap residue is reported as `pr_required` so the host repository can decide
+whether to archive it, move it to host comments, move it to workstation cache, or
+retain it with a repo-owned reason.
+
 The current active item pointer is workstation state for light-governance and
 attach-only repositories:
 
