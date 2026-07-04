@@ -12765,6 +12765,10 @@ def assert_legacy_migration_surface(tmp: Path) -> None:
     _, no_op_plan = run_json(["migrate-global-cache", "plan", "--target", str(no_op), "--json"], expect=0)
     if no_op_plan.get("strategy") != "no_op" or no_op_plan.get("mutates") is not False:
         raise AssertionError(f"legacy migration no-op plan drifted: {no_op_plan}")
+    no_op_slimdown = no_op_plan.get("repo_slimdown", {})
+    retained = {entry.get("locator") for entry in no_op_slimdown.get("retained_repo_truth", []) if isinstance(entry, dict)}
+    if ".loom/installed-state.json" not in retained or no_op_slimdown.get("pr_required_locators"):
+        raise AssertionError(f"metadata-only migration plan did not retain only minimal repo truth: {no_op_slimdown}")
 
     apply_target = tmp / "legacy-apply"
     prepare_legacy_migration_target(apply_target)
@@ -12781,6 +12785,14 @@ def assert_legacy_migration_surface(tmp: Path) -> None:
         _, apply_plan = run_json(["migrate-global-cache", "plan", "--target", str(apply_target), "--json"], expect=0)
         if apply_plan.get("strategy") != "auto_commit_candidate":
             raise AssertionError(f"legacy migration apply fixture did not classify cache as auto_commit_candidate: {apply_plan}")
+        slim_entries = {
+            entry.get("locator"): entry
+            for entry in apply_plan.get("repo_slimdown_entries", [])
+            if isinstance(entry, dict)
+        }
+        for locator in (".loom/runtime", ".loom/tmp"):
+            if slim_entries.get(locator, {}).get("classification") != "global_cache_candidate":
+                raise AssertionError(f"{locator} was not classified as a global cache candidate: {slim_entries.get(locator)}")
         _, applied = run_json(["migrate-global-cache", "apply", "--target", str(apply_target), "--json"], expect=0)
         if applied.get("result") != "pass" or applied.get("strategy") != "auto_commit_candidate":
             raise AssertionError(f"legacy migration apply did not pass: {applied}")
@@ -12805,14 +12817,20 @@ def assert_legacy_migration_surface(tmp: Path) -> None:
     residue = tracked_target / "plugins" / "loom" / "payload.txt"
     residue.parent.mkdir(parents=True)
     residue.write_text("legacy\n", encoding="utf-8")
+    progress = tracked_target / ".loom" / "progress" / "WI-legacy.md"
+    progress.parent.mkdir(parents=True)
+    progress.write_text("legacy progress\n", encoding="utf-8")
     commit_all(tracked_target, "fixture tracked legacy residue")
     _, tracked_plan = run_json(["migrate-global-cache", "plan", "--target", str(tracked_target), "--json"], expect=0)
     if tracked_plan.get("strategy") != "pr_required":
         raise AssertionError(f"tracked legacy residue must require PR: {tracked_plan}")
+    pr_required = set(tracked_plan.get("repo_slimdown", {}).get("pr_required_locators", []))
+    if not {"plugins/loom", ".loom/progress"}.issubset(pr_required):
+        raise AssertionError(f"tracked slimdown residue did not require PR: {tracked_plan.get('repo_slimdown')}")
     status, tracked_apply = run_json(["migrate-global-cache", "apply", "--target", str(tracked_target), "--json"])
     if status == 0 or tracked_apply.get("result") != "block" or tracked_apply.get("failed_layer") != "legacy-residue":
         raise AssertionError("tracked legacy residue apply did not fail closed")
-    if not residue.exists():
+    if not residue.exists() or not progress.exists():
         raise AssertionError("tracked legacy residue was deleted by apply")
 
     missing_state = tmp / "legacy-missing-state"

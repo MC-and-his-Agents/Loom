@@ -17,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10516,6 +10517,32 @@ LEGACY_RESIDUE_LOCATORS = (
     ".agents/plugins/marketplace.json",
 )
 REPO_LOCAL_CACHE_LOCATORS = (".loom/runtime", ".loom/tmp")
+REPO_SLIMDOWN_LOCATOR_RULES = (
+    (".loom/installed-state.json", "installed-state", "retain_repo_truth", "retain the minimal repository adoption truth"),
+    (".loom/companion", "repo-companion", "retain_repo_truth", "retain repo-owned host adapter and interop locators"),
+    (".loom/runtime", "runtime-cache", "move_to_global_cache", "move ignored or untracked runtime cache to the workstation global cache"),
+    (".loom/tmp", "runtime-cache", "move_to_global_cache", "move ignored or untracked temporary output to the workstation global cache"),
+    (".loom/bin", "runtime-payload", "repo_pr_required", "remove repo-local runtime payload only through a repository-scoped migration PR"),
+    (".loom/bootstrap", "legacy-bootstrap-carrier", "repo_pr_required", "archive or replace legacy bootstrap carriers after installed-state is authoritative"),
+    (".loom/status", "current-pointer", "repo_pr_required", "move active current pointer state to workstation current.json"),
+    (".loom/work-items", "execution-carrier", "repo_pr_required", "move ordinary Work Item history to host issues or an archive"),
+    (".loom/progress", "execution-carrier", "repo_pr_required", "move ordinary progress history to host comments or an archive"),
+    (".loom/specs", "execution-carrier", "repo_pr_required", "move ordinary specs to host-linked archive when no longer repo truth"),
+    (".loom/reviews", "execution-carrier", "repo_pr_required", "move ordinary review records to host comments or an audit archive"),
+    (".loom/shadow", "shadow-evidence", "repo_pr_required", "move shadow/runtime evidence to global cache or an audit archive"),
+    ("plugins/loom", "plugin-payload", "repo_pr_required", "remove repo-local Loom plugin payload after user-level plugin provider is verified"),
+    (".agents/skills", "skills-payload", "repo_pr_required", "remove repo-local generated skills after user-level plugin provider is verified"),
+    (".agents/plugins/marketplace.json", "plugin-marketplace-state", "repo_pr_required", "remove repo-local installed marketplace state after workstation provider is verified"),
+)
+INSTALLED_STATE_WORKSTATION_FIELDS = (
+    "target",
+    "installed_at",
+    "upgraded_at",
+    "cli_freshness",
+    "plugin_freshness",
+    "plugin_cache_path",
+    "host_machine_path",
+)
 
 
 def git_list_files(target: Path, locator: str, *, others: bool = False, ignored: bool = False) -> list[str]:
@@ -10573,6 +10600,7 @@ def installed_state_readback(target: Path) -> dict[str, Any]:
             "reason": f"expected {INSTALLED_STATE_SCHEMA}",
         }
     repo_payload = payload.get("repo_payload") if isinstance(payload.get("repo_payload"), dict) else {}
+    slimdown = installed_state_slimdown_analysis(payload)
     return {
         "status": "present",
         "locator": ".loom/installed-state.json",
@@ -10581,6 +10609,51 @@ def installed_state_readback(target: Path) -> dict[str, Any]:
         "schema_version": payload.get("schema_version"),
         "repo_payload_mode": repo_payload.get("mode"),
         "version_context": payload.get("version_context") if isinstance(payload.get("version_context"), dict) else {},
+        "slimdown": slimdown,
+    }
+
+
+def installed_state_slimdown_analysis(payload: dict[str, Any]) -> dict[str, Any]:
+    repo_payload = payload.get("repo_payload") if isinstance(payload.get("repo_payload"), dict) else {}
+    contract = payload.get("contract") if isinstance(payload.get("contract"), dict) else {}
+    companion = payload.get("repo_companion") if isinstance(payload.get("repo_companion"), dict) else {}
+    workstation_fields = [field for field in INSTALLED_STATE_WORKSTATION_FIELDS if field in payload]
+    missing_repo_truth: list[str] = []
+    if repo_payload.get("mode") != "metadata-only":
+        missing_repo_truth.append("repo_payload.mode=metadata-only")
+    if not isinstance(repo_payload.get("adoption_mode"), str) or not repo_payload.get("adoption_mode"):
+        missing_repo_truth.append("repo_payload.adoption_mode")
+    if not isinstance(contract.get("minimum_loom_version"), str) or not contract.get("minimum_loom_version"):
+        missing_repo_truth.append("contract.minimum_loom_version")
+    locator_keys = ("repo_interface_locator", "repo_interop_locator", "companion_locator", "interop_locator")
+    declared_locators = {
+        key: value
+        for key, value in companion.items()
+        if key in locator_keys and isinstance(value, str) and value
+    }
+    update_required = bool(workstation_fields or missing_repo_truth)
+    return {
+        "schema_version": "loom-installed-state-slimdown/v1",
+        "classification": "pr_required" if update_required else "current",
+        "summary": (
+            "installed-state contains workstation-local or missing minimal repo truth fields"
+            if update_required
+            else "installed-state already carries only repository adoption truth required by this migration check"
+        ),
+        "retain_fields": [
+            "schema_version",
+            "repo_payload.mode",
+            "repo_payload.adoption_mode",
+            "contract.minimum_loom_version",
+            "skills_provider",
+            "provider_requirements",
+            "repo companion/interop locators when declared",
+        ],
+        "remove_workstation_fields": workstation_fields,
+        "missing_repo_truth": missing_repo_truth,
+        "declared_repo_locators": declared_locators,
+        "mutates": False,
+        "apply_action": "repo_pr_required" if update_required else "none",
     }
 
 
@@ -10613,6 +10686,50 @@ def migration_cache_entry(target: Path, locator: str) -> dict[str, Any]:
     }
 
 
+def repo_slimdown_entry(target: Path, locator: str, kind: str, disposition: str, reason: str) -> dict[str, Any]:
+    path = target / locator
+    tracked = git_list_files(target, locator)
+    ignored_entries = git_list_files(target, locator, ignored=True)
+    untracked_entries = git_list_files(target, locator, others=True)
+    exists = path.exists()
+    if path.is_file() or path.is_symlink():
+        file_count = 1
+    elif path.is_dir():
+        file_count = sum(1 for child in path.rglob("*") if child.is_file() or child.is_symlink())
+    else:
+        file_count = 0
+    if not exists:
+        strategy = "no_op"
+        classification = "absent"
+    elif disposition == "retain_repo_truth":
+        strategy = "no_op"
+        classification = "retained_repo_truth"
+    elif disposition == "move_to_global_cache" and not tracked:
+        strategy = "auto_commit_candidate"
+        classification = "global_cache_candidate"
+    elif tracked:
+        strategy = "pr_required"
+        classification = "tracked_repo_residue"
+    else:
+        strategy = "auto_commit_candidate"
+        classification = "untracked_repo_residue"
+    return {
+        "locator": locator,
+        "kind": kind,
+        "exists": exists,
+        "file_count": file_count,
+        "tracked_entries": path_sample(tracked),
+        "untracked_entries": path_sample(untracked_entries),
+        "ignored_entries": path_sample(ignored_entries),
+        "classification": classification,
+        "recommended_disposition": disposition,
+        "strategy": strategy,
+        "reason": reason,
+        "global_locator": f"~/.loom/repos/<repo-id>/{locator.removeprefix('.loom/')}" if exists and disposition == "move_to_global_cache" else None,
+        "mutated_by_apply": disposition == "move_to_global_cache" and strategy == "auto_commit_candidate",
+    }
+
+
 def legacy_residue_entry(target: Path, locator: str) -> dict[str, Any]:
     path = target / locator
     tracked = git_list_files(target, locator)
@@ -10642,7 +10759,34 @@ def legacy_residue_entry(target: Path, locator: str) -> dict[str, Any]:
     }
 
 
-def migration_strategy(installed_state: dict[str, Any], cache_entries: list[dict[str, Any]], residue_entries: list[dict[str, Any]]) -> dict[str, Any]:
+def repo_slimdown_summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    counts = Counter(str(entry.get("strategy")) for entry in entries)
+    retained = [
+        {"locator": entry.get("locator"), "reason": entry.get("reason")}
+        for entry in entries
+        if entry.get("classification") == "retained_repo_truth" and entry.get("exists")
+    ]
+    pr_required = [
+        entry.get("locator")
+        for entry in entries
+        if entry.get("strategy") == "pr_required"
+    ]
+    return {
+        "schema_version": "loom-repo-slimdown-summary/v1",
+        "strategy_counts": dict(sorted(counts.items())),
+        "retained_repo_truth": retained,
+        "pr_required_locators": pr_required,
+        "target_default_loom_file_goal": "<10",
+        "mutates": False,
+    }
+
+
+def migration_strategy(
+    installed_state: dict[str, Any],
+    cache_entries: list[dict[str, Any]],
+    residue_entries: list[dict[str, Any]],
+    slimdown_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
     blocking_reasons: list[str] = []
     if installed_state.get("blocking"):
         blocking_reasons.append(str(installed_state.get("reason") or "installed-state is not valid"))
@@ -10657,15 +10801,21 @@ def migration_strategy(installed_state: dict[str, Any], cache_entries: list[dict
             "requires_pr": False,
             "apply_allowed": False,
         }
-    if any((entry.get("tracked_entries") or {}).get("count") for entry in residue_entries):
+    slimdown_pr_required = [entry for entry in slimdown_entries if entry.get("strategy") == "pr_required"]
+    installed_state_slimdown = installed_state.get("slimdown") if isinstance(installed_state.get("slimdown"), dict) else {}
+    if any((entry.get("tracked_entries") or {}).get("count") for entry in residue_entries) or slimdown_pr_required or installed_state_slimdown.get("classification") == "pr_required":
         return {
             "classification": "pr_required",
             "display": "PR required",
-            "reason": "tracked legacy residue requires repository-scoped review before deletion or rewrite",
+            "reason": "tracked legacy residue or installed-state slimdown requires repository-scoped review before deletion or rewrite",
             "requires_pr": True,
             "apply_allowed": False,
         }
-    if any(entry.get("movable") for entry in cache_entries) or any(entry.get("exists") for entry in residue_entries):
+    if (
+        any(entry.get("movable") for entry in cache_entries)
+        or any(entry.get("exists") for entry in residue_entries)
+        or any(entry.get("strategy") == "auto_commit_candidate" for entry in slimdown_entries)
+    ):
         return {
             "classification": "auto_commit_candidate",
             "display": "auto-commit candidate",
@@ -10699,7 +10849,12 @@ def migration_plan_payload(command: str, target: Path) -> dict[str, Any]:
     installed_state = installed_state_readback(target)
     cache_entries = [migration_cache_entry(target, locator) for locator in REPO_LOCAL_CACHE_LOCATORS]
     residue_entries = [legacy_residue_entry(target, locator) for locator in LEGACY_RESIDUE_LOCATORS]
-    strategy = migration_strategy(installed_state, cache_entries, residue_entries)
+    slimdown_entries = [
+        repo_slimdown_entry(target, locator, kind, disposition, reason)
+        for locator, kind, disposition, reason in REPO_SLIMDOWN_LOCATOR_RULES
+    ]
+    slimdown = repo_slimdown_summary(slimdown_entries)
+    strategy = migration_strategy(installed_state, cache_entries, residue_entries, slimdown_entries)
     return output(
         command,
         "block" if strategy["classification"] == "blocked" else "pass",
@@ -10715,6 +10870,8 @@ def migration_plan_payload(command: str, target: Path) -> dict[str, Any]:
         installed_state=installed_state,
         cache_entries=cache_entries,
         legacy_residue=residue_entries,
+        repo_slimdown=slimdown,
+        repo_slimdown_entries=slimdown_entries,
         repo_change_strategy=strategy,
         strategy=strategy["classification"],
         strategy_display=strategy["display"],
@@ -10924,6 +11081,8 @@ def migration_apply_payload(command: str, target: Path) -> dict[str, Any]:
             installed_state=plan.get("installed_state"),
             cache_entries=plan.get("cache_entries"),
             legacy_residue=plan.get("legacy_residue"),
+            repo_slimdown=plan.get("repo_slimdown"),
+            repo_slimdown_entries=plan.get("repo_slimdown_entries"),
             repo_change_strategy=strategy,
             strategy=strategy.get("classification"),
             strategy_display=strategy.get("display"),
@@ -10959,6 +11118,8 @@ def migration_apply_payload(command: str, target: Path) -> dict[str, Any]:
         installed_state=plan.get("installed_state"),
         cache_entries=cache_entries,
         legacy_residue=plan.get("legacy_residue"),
+        repo_slimdown=plan.get("repo_slimdown"),
+        repo_slimdown_entries=plan.get("repo_slimdown_entries"),
         repo_change_strategy=strategy,
         strategy=strategy.get("classification"),
         strategy_display=strategy.get("display"),
