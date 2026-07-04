@@ -3335,6 +3335,104 @@ def load_governance_surface_module() -> Any:
     return module
 
 
+def write_host_planning_taxonomy_companion(
+    target: Path,
+    *,
+    object_type_mapping: list[dict[str, Any]],
+    missing_type_policy: str = "advisory_unknown",
+) -> None:
+    companion = target / ".loom" / "companion"
+    companion.mkdir(parents=True, exist_ok=True)
+    (companion / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+    (companion / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (companion / "repo-interface.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+                "specialized_gates": [],
+                "host_planning_taxonomy": {
+                    "object_type_mapping": object_type_mapping,
+                    "missing_type_policy": missing_type_policy,
+                },
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+@contextmanager
+def patched_github_intake_readbacks(module: Any, issue_payload: dict[str, Any]):
+    original_issue_payload = module.github_issue_payload
+    original_dependencies = module.github_issue_dependencies_payload
+    original_binding = module.host_binding_inspection_payload
+    original_project_drift = module.project_drift_payload
+    module.github_issue_payload = lambda *args, **kwargs: (issue_payload, [])
+    module.github_issue_dependencies_payload = lambda *args, **kwargs: {
+        "availability": "present",
+        "capability": {"status": "supported"},
+        "native_edges": [],
+        "checks": [],
+    }
+    module.host_binding_inspection_payload = lambda *args, **kwargs: {
+        "schema_version": "loom-host-binding-inspection/v1",
+        "result": "pass",
+        "missing_inputs": [],
+        "findings": [],
+    }
+    module.project_drift_payload = lambda *args, **kwargs: {
+        "schema_version": "loom-project-drift/v1",
+        "result": "pass",
+        "missing_inputs": [],
+        "findings": [],
+    }
+    try:
+        yield
+    finally:
+        module.github_issue_payload = original_issue_payload
+        module.github_issue_dependencies_payload = original_dependencies
+        module.host_binding_inspection_payload = original_binding
+        module.project_drift_payload = original_project_drift
+
+
+def run_github_intake_taxonomy_payload(
+    module: Any,
+    target: Path,
+    issue_payload: dict[str, Any],
+    *,
+    phase: int | None = None,
+    fr: int | None = None,
+) -> dict[str, Any]:
+    with patched_github_intake_readbacks(module, issue_payload):
+        return module.github_intake_payload(
+            target_root=target,
+            owner="owner",
+            repo_name="repo",
+            issue_number=int(issue_payload.get("number", 1)),
+            project_number=None,
+            phase_number=phase,
+            fr_number=fr,
+            pr_number=None,
+            branch_name=None,
+            head_sha=None,
+        )
+
+
 def assert_gate_freeze_carrier_shadow_bindings_contract() -> None:
     loom_flow = load_loom_flow_module()
     with tempfile.TemporaryDirectory(prefix="loom-freeze-shadow-") as raw_tmp:
@@ -13459,6 +13557,131 @@ def run_runtime_upgrade_surface() -> None:
     print("runtime-upgrade surface checks passed")
 
 
+def run_host_planning_taxonomy_surface() -> None:
+    module = load_loom_flow_module()
+    with tempfile.TemporaryDirectory(prefix="loom-taxonomy-") as raw_tmp:
+        tmp = Path(raw_tmp)
+
+        webenvoy_target = tmp / "webenvoy-labels"
+        webenvoy_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            webenvoy_target,
+            object_type_mapping=[
+                {"loom_type": "phase", "labels": ["类型：Phase"], "title_prefixes": ["Phase:"]},
+                {"loom_type": "fr", "labels": ["类型：FR"], "title_prefixes": ["FR:"]},
+                {"loom_type": "work_item", "labels": ["类型：Work Item"], "title_prefixes": ["WI:"]},
+            ],
+            missing_type_policy="infer_from_context",
+        )
+        webenvoy_payload = run_github_intake_taxonomy_payload(
+            module,
+            webenvoy_target,
+            {
+                "id": "ISSUE_fixture_1933",
+                "number": 1933,
+                "state": "OPEN",
+                "title": "修复宿主标签映射",
+                "body": "",
+                "url": "https://github.com/WebEnvoy/App/issues/1933",
+                "labels": ["类型：Work Item"],
+            },
+        )
+        if webenvoy_payload.get("result") != "pass" or webenvoy_payload.get("object_type") != "work_item":
+            raise AssertionError(f"repo companion Chinese label mapping did not classify work_item: {webenvoy_payload}")
+        if webenvoy_payload.get("route") != "loom-resume":
+            raise AssertionError(f"companion-mapped work_item did not route to loom-resume: {webenvoy_payload}")
+        if webenvoy_payload.get("type_inference", {}).get("source") != "repo_companion":
+            raise AssertionError("Chinese Work Item label must be consumed from repo companion, not Loom core")
+
+        no_mapping_target = tmp / "no-hardcoded-host-labels"
+        no_mapping_target.mkdir()
+        no_mapping_payload = run_github_intake_taxonomy_payload(
+            module,
+            no_mapping_target,
+            {
+                "id": "ISSUE_fixture_1933_unknown",
+                "number": 1933,
+                "state": "OPEN",
+                "title": "修复宿主标签映射",
+                "body": "",
+                "url": "https://github.com/WebEnvoy/App/issues/1933",
+                "labels": ["类型：Work Item"],
+            },
+        )
+        if no_mapping_payload.get("result") != "pass" or no_mapping_payload.get("object_type") != "unknown":
+            raise AssertionError("WebEnvoy Chinese labels must not be hardcoded into Loom core")
+        if "object_type" in no_mapping_payload.get("missing_inputs", []):
+            raise AssertionError("unknown issue type must be advisory unless a command requires a known type")
+        if not any(finding.get("kind") == "unrecognized_type_label" for finding in no_mapping_payload.get("findings", [])):
+            raise AssertionError("unknown issue type must emit an advisory unrecognized_type_label finding")
+
+        epic_story_target = tmp / "epic-story-task"
+        epic_story_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            epic_story_target,
+            object_type_mapping=[
+                {"loom_type": "phase", "labels": ["epic"], "title_prefixes": ["Epic:"]},
+                {"loom_type": "work_item", "labels": ["story", "task"], "title_prefixes": ["Story:", "Task:"]},
+            ],
+        )
+        epic_payload = run_github_intake_taxonomy_payload(
+            module,
+            epic_story_target,
+            {
+                "id": "ISSUE_fixture_epic",
+                "number": 3001,
+                "state": "OPEN",
+                "title": "Epic: Host adoption cleanup",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3001",
+                "labels": ["epic"],
+            },
+        )
+        if epic_payload.get("object_type") != "phase" or epic_payload.get("route") != "loom-story":
+            raise AssertionError(f"epic label/title mapping did not classify as phase story route: {epic_payload}")
+        story_payload = run_github_intake_taxonomy_payload(
+            module,
+            epic_story_target,
+            {
+                "id": "ISSUE_fixture_story",
+                "number": 3002,
+                "state": "OPEN",
+                "title": "Story: Slim down host closeout",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3002",
+                "labels": ["story"],
+            },
+        )
+        if story_payload.get("object_type") != "work_item" or story_payload.get("route") != "loom-resume":
+            raise AssertionError(f"story mapping did not classify as work_item: {story_payload}")
+
+        infer_target = tmp / "infer-from-context"
+        infer_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            infer_target,
+            object_type_mapping=[],
+            missing_type_policy="infer_from_context",
+        )
+        inferred_payload = run_github_intake_taxonomy_payload(
+            module,
+            infer_target,
+            {
+                "id": "ISSUE_fixture_inferred",
+                "number": 3003,
+                "state": "OPEN",
+                "title": "Unlabeled host task",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3003",
+                "labels": [],
+            },
+            fr=3000,
+        )
+        if inferred_payload.get("object_type") != "work_item" or inferred_payload.get("type_inference", {}).get("source") != "context":
+            raise AssertionError(f"infer_from_context did not infer work_item from FR context: {inferred_payload}")
+
+    print("host-planning-taxonomy surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
@@ -15674,6 +15897,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="runtime-upgrade",
             fixture_group="runtime-upgrade",
             run=run_runtime_upgrade_surface,
+        ),
+        SurfaceCheck(
+            name="host-planning-taxonomy",
+            fixture_group="host-planning-taxonomy",
+            run=run_host_planning_taxonomy_surface,
         ),
         SurfaceCheck(
             name="aggregate",

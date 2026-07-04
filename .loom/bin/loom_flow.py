@@ -25246,18 +25246,107 @@ def project_drift_payload(
     }
 
 
-def github_intake_object_type(issue_payload: dict[str, Any] | None) -> str:
+DEFAULT_GITHUB_INTAKE_OBJECT_TYPE_MAPPINGS = (
+    {"loom_type": "phase", "labels": ("phase",), "title_prefixes": ("phase:",)},
+    {"loom_type": "fr", "labels": ("fr",), "title_prefixes": ("fr:",)},
+    {"loom_type": "work_item", "labels": ("work-item",), "title_prefixes": ("work-item:", "bug:")},
+)
+HOST_PLANNING_MISSING_TYPE_POLICIES = {"advisory_unknown", "infer_from_context", "block_unknown"}
+
+
+def normalize_taxonomy_match_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def normalized_issue_labels(issue_payload: dict[str, Any] | None) -> set[str]:
     if not isinstance(issue_payload, dict):
-        return "unknown"
-    labels = set(issue_payload.get("labels", [])) if isinstance(issue_payload.get("labels"), list) else set()
-    title = str(issue_payload.get("title") or "").lower()
-    if "phase" in labels or title.startswith("phase:"):
-        return "phase"
-    if "fr" in labels or title.startswith("fr:"):
-        return "fr"
-    if "work-item" in labels or title.startswith("work-item:") or title.startswith("bug:"):
+        return set()
+    raw_labels = issue_payload.get("labels")
+    if not isinstance(raw_labels, list):
+        return set()
+    labels: set[str] = set()
+    for label in raw_labels:
+        if isinstance(label, dict):
+            label = label.get("name")
+        normalized = normalize_taxonomy_match_text(label)
+        if normalized:
+            labels.add(normalized)
+    return labels
+
+
+def github_intake_taxonomy_mapping(repo_interface: dict[str, Any] | None) -> tuple[list[dict[str, Any]], str, str]:
+    if not isinstance(repo_interface, dict):
+        return [], "advisory_unknown", "absent"
+    taxonomy = repo_interface.get("host_planning_taxonomy")
+    if not isinstance(taxonomy, dict) or taxonomy.get("availability") != "present":
+        return [], "advisory_unknown", str(taxonomy.get("availability") if isinstance(taxonomy, dict) else "absent")
+    raw_policy = taxonomy.get("missing_type_policy")
+    policy = raw_policy if isinstance(raw_policy, str) and raw_policy in HOST_PLANNING_MISSING_TYPE_POLICIES else "advisory_unknown"
+    mappings = [
+        mapping
+        for mapping in taxonomy.get("object_type_mapping", [])
+        if isinstance(mapping, dict) and mapping.get("loom_type") in {"phase", "fr", "work_item"}
+    ]
+    return mappings, policy, "present"
+
+
+def github_intake_object_type_match(
+    issue_payload: dict[str, Any] | None,
+    mappings: list[dict[str, Any]],
+) -> tuple[str, str]:
+    if not isinstance(issue_payload, dict):
+        return "unknown", "unreadable_issue"
+    labels = normalized_issue_labels(issue_payload)
+    title = normalize_taxonomy_match_text(issue_payload.get("title"))
+    for source, mapping_group in (("repo_companion", mappings), ("loom_default", list(DEFAULT_GITHUB_INTAKE_OBJECT_TYPE_MAPPINGS))):
+        for mapping in mapping_group:
+            loom_type = mapping.get("loom_type")
+            mapping_labels = {
+                normalize_taxonomy_match_text(label)
+                for label in mapping.get("labels", [])
+                if normalize_taxonomy_match_text(label)
+            }
+            if labels and mapping_labels and labels.intersection(mapping_labels):
+                return str(loom_type), source
+            for prefix in mapping.get("title_prefixes", []):
+                normalized_prefix = normalize_taxonomy_match_text(prefix)
+                if normalized_prefix and title.startswith(normalized_prefix):
+                    return str(loom_type), source
+    return "unknown", "unknown"
+
+
+def github_intake_context_inferred_object_type(
+    *,
+    phase_number: int | None,
+    fr_number: int | None,
+) -> str | None:
+    if fr_number is not None:
         return "work_item"
-    return "unknown"
+    if phase_number is not None:
+        return "fr"
+    return None
+
+
+def github_intake_object_type(
+    issue_payload: dict[str, Any] | None,
+    *,
+    repo_interface: dict[str, Any] | None = None,
+    phase_number: int | None = None,
+    fr_number: int | None = None,
+) -> tuple[str, dict[str, Any]]:
+    mappings, missing_type_policy, taxonomy_availability = github_intake_taxonomy_mapping(repo_interface)
+    object_type, source = github_intake_object_type_match(issue_payload, mappings)
+    if object_type == "unknown" and missing_type_policy == "infer_from_context":
+        inferred = github_intake_context_inferred_object_type(phase_number=phase_number, fr_number=fr_number)
+        if inferred:
+            object_type = inferred
+            source = "context"
+    return object_type, {
+        "source": source,
+        "taxonomy_availability": taxonomy_availability,
+        "missing_type_policy": missing_type_policy,
+        "repo_mapping_count": len(mappings),
+    }
 
 
 def github_intake_route(object_type: str, issue_payload: dict[str, Any] | None, dependency_graph: dict[str, Any]) -> str:
@@ -25319,8 +25408,16 @@ def github_intake_payload(
         issue_payload=issue_payload,
         native_dependency_payload=native_dependencies,
     )
-    object_type = github_intake_object_type(issue_payload)
+    governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
+    object_type, type_inference = github_intake_object_type(
+        issue_payload,
+        repo_interface=repo_interface if isinstance(repo_interface, dict) else None,
+        phase_number=phase_number,
+        fr_number=fr_number,
+    )
     route = github_intake_route(object_type, issue_payload, dependency_graph)
+    findings: list[dict[str, Any]] = []
 
     binding = host_binding_inspection_payload(
         target_root=target_root,
@@ -25348,7 +25445,16 @@ def github_intake_payload(
         if message not in missing_inputs:
             missing_inputs.append(f"binding: {message}")
     if object_type == "unknown":
-        missing_inputs.append("object_type")
+        finding = {
+            "kind": "unrecognized_type_label",
+            "severity": "warn",
+            "subject": f"issue #{issue_number}",
+            "summary": "GitHub issue type is not mapped by Loom defaults or repo companion host_planning_taxonomy.",
+            "fallback_to": "manual-reconciliation",
+        }
+        findings.append(finding)
+        if type_inference.get("missing_type_policy") == "block_unknown":
+            missing_inputs.append("object_type")
     for finding in dependency_graph.get("findings", []):
         if not isinstance(finding, dict):
             continue
@@ -25378,11 +25484,13 @@ def github_intake_payload(
         "missing_inputs": dedupe_strings(missing_inputs),
         "fallback_to": None if result == "pass" else route,
         "object_type": object_type,
+        "type_inference": type_inference,
         "route": route,
         "issue": issue_payload,
         "bindings": binding,
         "dependency_graph": dependency_graph,
         "project_drift": project_drift,
+        "findings": findings,
         "provenance": provenance,
     }
 

@@ -433,13 +433,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "94ab3d78ee16451ee1b0aa6c6956ce6be5bba726a931a052caea0a5aa4afc44d"
+      "sha256": "af21c0ed9c0a5906c9e8791f3a8390dd08207ea494f125dc15b58936979f1340"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "97f623281b31257b68225dd5225cf333c6e76209f2b07133311a7a863b26d7f8"
+      "sha256": "2c02961909b9256bece7977a8b0ecdda59b1b7ac8767e788951bbc9e13f67db6"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -861,6 +861,13 @@
         "status": "missing",
         "locator": "unknown",
         "source": "repo companion interface"
+      },
+      "host_planning_taxonomy": {
+        "availability": "absent",
+        "object_type_mapping": [],
+        "missing_type_policy": "advisory_unknown",
+        "summary": "no host planning taxonomy mapping is declared.",
+        "missing_inputs": []
       },
       "release_targets": {
         "availability": "absent",
