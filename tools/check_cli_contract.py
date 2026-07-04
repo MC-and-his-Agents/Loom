@@ -113,6 +113,7 @@ REQUIRED_COMMANDS = {
     "release resume",
     "release closeout-sync",
     "closeout run",
+    "closeout batch",
     "host list",
     "host doctor",
     "host install",
@@ -8112,6 +8113,12 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
                 "no_release",
                 "--upgrade-trigger",
                 "fixture",
+                "--covered-issue",
+                "1541",
+                "--covered-issue",
+                "1542",
+                "--excluded-scope",
+                "release publication",
             ]
         )
         if status != 0:
@@ -8135,12 +8142,20 @@ def assert_pr_metadata_wrapper_argument_contract() -> None:
             "--review-requirement": "current_head_review_required",
             "--release-judgment": "no_release",
             "--upgrade-trigger": "fixture",
+            "--excluded-scope": "release publication",
         }
         for flag, expected in expected_pairs.items():
             if flag not in flow_args:
                 raise AssertionError(f"pr metadata-update wrapper did not pass {flag}")
             if flow_args[flow_args.index(flag) + 1] != expected:
                 raise AssertionError(f"pr metadata-update wrapper changed {flag} value")
+        covered_issues = [
+            flow_args[index + 1]
+            for index, value in enumerate(flow_args)
+            if value == "--covered-issue" and index + 1 < len(flow_args)
+        ]
+        if covered_issues != ["1541", "1542"]:
+            raise AssertionError(f"pr metadata-update wrapper did not preserve repeatable --covered-issue values: {covered_issues}")
         if "--dry-run" not in flow_args or "--apply" in flow_args:
             raise AssertionError("pr metadata-update wrapper must default to dry-run delegation")
 
@@ -8178,6 +8193,7 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
 
+    rendered: Path | None = None
     with isolated_loom_workstation(tmp / "workstation"):
         _, render_payload = run_flow_json(
             [
@@ -8261,6 +8277,189 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
         or update_dry_run_payload.get("readback") is not None
     ):
         raise AssertionError("pr metadata-update must default to dry-run local render/preflight without host mutation")
+
+
+def assert_batch_pr_metadata_fixture(tmp: Path) -> None:
+    target = tmp / "batch-pr-metadata"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+
+    with isolated_loom_workstation(tmp / "workstation"):
+        _, render_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "render",
+                "--target",
+                str(target),
+                "--surface",
+                "merge_ready",
+                "--item",
+                "WI-1962",
+                "--issue",
+                "1962",
+                "--head-sha",
+                "2222222222222222222222222222222222222222",
+                "--branch",
+                "work/1962-batch-implementation-closeout",
+                "--covered-issue",
+                "1965",
+                "--excluded-scope",
+                "release publication",
+                "--output-file",
+                ".loom/runtime/pr/batch-rendered.md",
+            ]
+        )
+        rendered = runtime_locator_path(target, ".loom/runtime/pr/batch-rendered.md")
+
+    if render_payload.get("result") != "pass":
+        raise AssertionError(f"batch metadata render failed: {render_payload.get('missing_inputs')}")
+    fields = render_payload.get("envelope", {}).get("fields")
+    if not isinstance(fields, dict):
+        raise AssertionError("batch metadata render did not expose governance fields")
+    if fields.get("anchor_issue") != 1962:
+        raise AssertionError("batch metadata render did not expose the anchor issue")
+    if fields.get("covered_issues") != [1962, 1965]:
+        raise AssertionError(f"batch metadata render did not normalize covered issues: {fields.get('covered_issues')}")
+    if fields.get("excluded_scope") != ["release publication"]:
+        raise AssertionError("batch metadata render did not preserve excluded scope")
+
+    if rendered is None or not rendered.exists():
+        raise AssertionError("batch metadata render did not write the global runtime PR body artifact")
+    body = rendered.read_text(encoding="utf-8")
+    if "- Covered Issues: #1962, #1965" not in body:
+        raise AssertionError("batch metadata render did not write human covered issue bindings")
+    if "- Excluded Scope: release publication" not in body:
+        raise AssertionError("batch metadata render did not write human excluded scope bindings")
+
+
+def assert_batch_host_only_closeout_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for batch closeout regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    emitted_payloads: list[dict[str, Any]] = []
+    gh_calls: list[list[str]] = []
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted_payloads.append(payload)
+        return 0 if payload.get("result") in {"pass", "not_applicable"} else 1
+
+    def fake_run_capture(command: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        gh_calls.append(list(command))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    original_emit = module.emit
+    original_run_capture = module.run_capture
+    module.emit = fake_emit
+    module.run_capture = fake_run_capture
+    try:
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--pr",
+                "1999",
+                "--merge-commit",
+                "3333333333333333333333333333333333333333",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout batch dry-run regression did not complete")
+        dry_run = emitted_payloads[-1]
+        if (
+            dry_run.get("schema_version") != "loom-batch-closeout/v1"
+            or dry_run.get("result") != "pass"
+            or dry_run.get("dry_run") is not True
+            or dry_run.get("host_mutations") is not False
+            or dry_run.get("carrier_mutations") is not False
+            or dry_run.get("creates_closeout_pr") is not False
+            or dry_run.get("covered_issues") != [1962, 1965]
+        ):
+            raise AssertionError("closeout batch dry-run payload drifted")
+        if gh_calls:
+            raise AssertionError("closeout batch dry-run must not call gh")
+
+        emitted_payloads.clear()
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--pr",
+                "1999",
+                "--merge-commit",
+                "3333333333333333333333333333333333333333",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout batch apply regression did not complete")
+        apply_payload = emitted_payloads[-1]
+        if (
+            apply_payload.get("result") != "pass"
+            or apply_payload.get("apply") is not True
+            or apply_payload.get("host_mutations") is not True
+            or apply_payload.get("carrier_mutations") is not False
+            or apply_payload.get("creates_closeout_pr") is not False
+        ):
+            raise AssertionError("closeout batch apply payload drifted")
+        command_heads = [call[:3] for call in gh_calls]
+        expected_heads = [
+            ["gh", "issue", "comment"],
+            ["gh", "issue", "close"],
+            ["gh", "issue", "comment"],
+            ["gh", "issue", "close"],
+        ]
+        if command_heads != expected_heads:
+            raise AssertionError(f"closeout batch apply delegated unexpected commands: {command_heads}")
+
+        emitted_payloads.clear()
+        gh_calls.clear()
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted_payloads[-1].get("result") != "block":
+            raise AssertionError("closeout batch must block when the anchor issue is outside the covered issue set")
+        if gh_calls:
+            raise AssertionError("closeout batch anchor blocker must not mutate host state")
+    finally:
+        module.emit = original_emit
+        module.run_capture = original_run_capture
 
 
 def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
@@ -12699,6 +12898,15 @@ def run_pr_metadata_suite_not_applicable_surface() -> None:
     print("pr metadata suite_not_applicable surface checks passed")
 
 
+def run_batch_implementation_closeout_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-batch-implementation-closeout-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_batch_pr_metadata_fixture(tmp)
+        assert_batch_host_only_closeout_contract()
+
+    print("batch implementation closeout surface checks passed")
+
+
 def run_pr_gate_target_readback_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-pr-gate-target-readback-") as raw_tmp:
         assert_pr_gate_target_readback_contract(Path(raw_tmp))
@@ -15261,6 +15469,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="pr-metadata-suite-not-applicable",
             fixture_group="pr-metadata-suite-not-applicable",
             run=run_pr_metadata_suite_not_applicable_surface,
+        ),
+        SurfaceCheck(
+            name="batch-implementation-closeout",
+            fixture_group="batch-implementation-closeout",
+            run=run_batch_implementation_closeout_surface,
         ),
         SurfaceCheck(
             name="pr-gate-target-readback",

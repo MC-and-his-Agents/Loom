@@ -880,6 +880,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--review-requirement", choices=tuple(sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES)), default="current_head_review_required")
     pr_metadata.add_argument("--release-judgment", choices=tuple(sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES)), default="no_release")
     pr_metadata.add_argument("--upgrade-trigger", action="append", default=[], help="Repeatable governance upgrade trigger string")
+    pr_metadata.add_argument("--covered-issue", type=int, action="append", default=[], help="Repeatable GitHub issue number covered by this PR batch")
+    pr_metadata.add_argument("--excluded-scope", action="append", default=[], help="Repeatable excluded scope note for this PR batch")
     pr_metadata.add_argument("--suite-na-rationale")
     pr_metadata.add_argument("--suite-na-consumer-boundary")
     pr_metadata.add_argument("--suite-na-recheck-condition")
@@ -17129,6 +17131,22 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     upgrade_triggers = fields.get("upgrade_triggers")
     if not isinstance(upgrade_triggers, list) or any(not isinstance(entry, str) or not entry.strip() for entry in upgrade_triggers):
         missing_fields.append("fields.upgrade_triggers")
+    anchor_issue = fields.get("anchor_issue")
+    if anchor_issue is not None and (not isinstance(anchor_issue, int) or anchor_issue <= 0):
+        missing_fields.append("fields.anchor_issue")
+    covered_issues = fields.get("covered_issues")
+    if covered_issues is not None:
+        if (
+            not isinstance(covered_issues, list)
+            or any(not isinstance(entry, int) or entry <= 0 for entry in covered_issues)
+            or len(set(covered_issues)) != len(covered_issues)
+        ):
+            missing_fields.append("fields.covered_issues")
+        elif isinstance(anchor_issue, int) and anchor_issue not in covered_issues:
+            missing_fields.append("fields.covered_issues")
+    excluded_scope = fields.get("excluded_scope")
+    if excluded_scope is not None and (not isinstance(excluded_scope, list) or any(not isinstance(entry, str) or not entry.strip() for entry in excluded_scope)):
+        missing_fields.append("fields.excluded_scope")
 
     suite_not_applicable = fields.get("suite_not_applicable")
     if suite_path == "not_applicable":
@@ -17665,6 +17683,8 @@ def render_governance_intensity_metadata_body(
     upgrade_triggers: list[str],
     suite_not_applicable: dict[str, str] | None,
     issue_number: int | None,
+    covered_issues: list[int],
+    excluded_scope: list[str],
 ) -> tuple[str, dict[str, Any], list[str]]:
     contract_id = str(field.get("id") or GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID)
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
@@ -17687,6 +17707,9 @@ def render_governance_intensity_metadata_body(
         "release_judgment": release_judgment,
         "closeout_required": True,
         "upgrade_triggers": upgrade_triggers,
+        "anchor_issue": issue_number,
+        "covered_issues": covered_issues or None,
+        "excluded_scope": excluded_scope or None,
     }
     missing_inputs = validate_governance_intensity_metadata_fields(fields)
     if missing_inputs:
@@ -17704,6 +17727,12 @@ def render_governance_intensity_metadata_body(
     issue_reference = pr_metadata_issue_reference(issue_number)
     if issue_reference:
         updated = pr_metadata_replace_or_insert_binding_line(updated, label="Issue", value=issue_reference, insert_after="Loom Work Item")
+    if covered_issues:
+        covered_text = ", ".join(f"#{number}" for number in covered_issues)
+        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Covered Issues", value=covered_text, insert_after="Issue")
+    if excluded_scope:
+        excluded_text = "; ".join(excluded_scope)
+        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Excluded Scope", value=excluded_text, insert_after="Covered Issues")
     updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
     updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
     return updated, envelope, []
@@ -17725,6 +17754,8 @@ def pr_metadata_render_payload(
     review_requirement: str,
     release_judgment: str,
     upgrade_triggers: list[str],
+    covered_issues: list[int],
+    excluded_scope: list[str],
     suite_na_rationale: str | None,
     suite_na_consumer_boundary: str | None,
     suite_na_recheck_condition: str | None,
@@ -17764,6 +17795,8 @@ def pr_metadata_render_payload(
             "scope_proof": suite_na_scope_proof or "",
             "review_requirement": suite_na_review_requirement or review_requirement,
         }
+    normalized_covered_issues = sorted({*(covered_issues or []), *([issue_number] if isinstance(issue_number, int) else [])})
+    normalized_excluded_scope = dedupe_strings([entry.strip() for entry in excluded_scope if isinstance(entry, str) and entry.strip()])
 
     governance_surface = build_governance_surface(target_root)
     fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
@@ -17802,6 +17835,8 @@ def pr_metadata_render_payload(
         upgrade_triggers=[entry for entry in upgrade_triggers if isinstance(entry, str) and entry.strip()],
         suite_not_applicable=suite_not_applicable,
         issue_number=issue_number,
+        covered_issues=normalized_covered_issues,
+        excluded_scope=normalized_excluded_scope,
     )
     if render_errors:
         return {
@@ -18018,6 +18053,8 @@ def pr_metadata_update_payload(
     review_requirement: str,
     release_judgment: str,
     upgrade_triggers: list[str],
+    covered_issues: list[int],
+    excluded_scope: list[str],
     suite_na_rationale: str | None,
     suite_na_consumer_boundary: str | None,
     suite_na_recheck_condition: str | None,
@@ -18040,6 +18077,8 @@ def pr_metadata_update_payload(
         review_requirement=review_requirement,
         release_judgment=release_judgment,
         upgrade_triggers=upgrade_triggers,
+        covered_issues=covered_issues,
+        excluded_scope=excluded_scope,
         suite_na_rationale=suite_na_rationale,
         suite_na_consumer_boundary=suite_na_consumer_boundary,
         suite_na_recheck_condition=suite_na_recheck_condition,
@@ -21399,6 +21438,8 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 review_requirement=args.review_requirement,
                 release_judgment=args.release_judgment,
                 upgrade_triggers=args.upgrade_trigger,
+                covered_issues=args.covered_issue,
+                excluded_scope=args.excluded_scope,
                 suite_na_rationale=args.suite_na_rationale,
                 suite_na_consumer_boundary=args.suite_na_consumer_boundary,
                 suite_na_recheck_condition=args.suite_na_recheck_condition,
@@ -21428,6 +21469,8 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 review_requirement=args.review_requirement,
                 release_judgment=args.release_judgment,
                 upgrade_triggers=args.upgrade_trigger,
+                covered_issues=args.covered_issue,
+                excluded_scope=args.excluded_scope,
                 suite_na_rationale=args.suite_na_rationale,
                 suite_na_consumer_boundary=args.suite_na_consumer_boundary,
                 suite_na_recheck_condition=args.suite_na_recheck_condition,
