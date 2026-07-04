@@ -6711,16 +6711,12 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         compare_body_file=readback_drift_file,
     )
     body_drift_admission = body_drift_payload.get("hosted_freeze_admission")
-    if body_drift_payload.get("result") != "block" or body_drift_admission.get("result") != "block":
-        raise AssertionError("hosted freeze admission must block PR body readback drift")
-    if body_drift_admission.get("readback", {}).get("result") != "block":
-        raise AssertionError("hosted freeze admission did not classify PR body readback drift")
-    if not any(
-        finding.get("classifier") == "pr_metadata_drift"
-        for finding in body_drift_admission.get("failure_classifier", {}).get("findings", [])
-        if isinstance(finding, dict)
-    ):
-        raise AssertionError("hosted freeze admission PR body drift must carry classifier next action")
+    if body_drift_payload.get("result") != "pass" or body_drift_admission.get("result") != "pass":
+        raise AssertionError("hosted freeze admission must allow readback body drift when metadata machine blocks match")
+    if body_drift_admission.get("readback", {}).get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+        raise AssertionError("hosted freeze admission did not report benign PR body readback drift")
+    if body_drift_admission.get("failure_classifier", {}).get("findings"):
+        raise AssertionError("benign hosted freeze PR body drift must not carry failure classifier findings")
 
     snapshot = dict(admission.get("recomputed_freeze") or {})
     snapshot["snapshot_id"] = "0" * 64
@@ -7298,16 +7294,16 @@ def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
             "--compare-body-file",
             readback_drift_file,
         ],
-        expect=1,
+        expect=0,
     )
-    if readback_drift.get("readiness", {}).get("closeout_pr_allowed") is not False:
-        raise AssertionError("closeout freeze must fail closed when PR body readback drifts")
-    if not any(
+    if readback_drift.get("result") != "pass" or readback_drift.get("readiness", {}).get("closeout_pr_allowed") is not True:
+        raise AssertionError("closeout freeze must allow PR body readback drift when metadata machine blocks match")
+    if any(
         blocking.get("input") == "readback"
         for blocking in readback_drift.get("readiness", {}).get("blocking_inputs", [])
         if isinstance(blocking, dict)
     ):
-        raise AssertionError("closeout freeze readback drift must be a blocking input")
+        raise AssertionError("benign closeout freeze readback drift must not be a blocking input")
 
     unrelated_issue_file = fixture_dir / "issue-unrelated.json"
     unrelated_issue_file.write_text(
@@ -13986,54 +13982,21 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("gate freeze PR body pin did not retain metadata block fingerprints")
 
         readback_pr_body_drift.write_text(body + "\nOperator note added after edit.\n", encoding="utf-8")
-        _, body_hash_drift_payload = run_json(
-            [
-                "gate",
-                "freeze",
-                "check",
-                "--target",
-                str(REPO_ROOT),
-                "--item",
-                freeze_item,
-                "--head-sha",
-                head_sha,
-                "--branch",
-                branch,
-                "--body-file",
-                ".loom/runtime/pr/cli-contract-rendered.md",
-                "--compare-body-file",
-                ".loom/runtime/pr/cli-contract-readback-drift.md",
-                "--json",
-            ],
-            expect=1,
+        body_hash_drift_preflight = loom_flow.pr_metadata_preflight_payload(
+            target_root=REPO_ROOT,
+            surface="merge_ready",
+            body_file=".loom/runtime/pr/cli-contract-rendered.md",
+            compare_body_file=".loom/runtime/pr/cli-contract-readback-drift.md",
         )
-        body_hash_drift_payload = runtime_payload_from_agent_safe_output(body_hash_drift_payload)
-        body_hash_drift = body_hash_drift_payload.get("input_bindings", {}).get("pr_body_pin")
-        if not isinstance(body_hash_drift, dict) or body_hash_drift.get("result") != "block":
-            raise AssertionError("gate freeze PR body pin must block rendered/readback body hash drift")
-        if "rendered PR body hash does not match GitHub readback PR body hash" not in body_hash_drift.get("missing_inputs", []):
-            raise AssertionError("gate freeze PR body pin did not report rendered/readback body hash drift")
-        if not any(
-            blocking.get("input") == "pr_body_pin"
-            and "gh pr edit --body-file" in str(blocking.get("next_action"))
-            for blocking in body_hash_drift_payload.get("readiness", {}).get("blocking_inputs", [])
-            if isinstance(blocking, dict)
-        ):
-            raise AssertionError("gate freeze PR body pin block must include the gh pr edit/readback next action")
-        body_hash_drift_classifiers = {
-            finding.get("classifier")
-            for finding in body_hash_drift_payload.get("failure_classifier", {}).get("findings", [])
-            if isinstance(finding, dict)
-        }
-        if "pr_metadata_drift" not in body_hash_drift_classifiers:
-            raise AssertionError("gate freeze PR body hash drift must classify as pr_metadata_drift")
-        if not any(
-            finding.get("classifier") == "pr_metadata_drift"
-            and "regenerate or update the PR body machine carrier" in str(finding.get("next_action"))
-            for finding in body_hash_drift_payload.get("failure_classifier", {}).get("findings", [])
-            if isinstance(finding, dict)
-        ):
-            raise AssertionError("gate freeze PR body hash drift must expose the classifier-specific next_action")
+        if body_hash_drift_preflight.get("result") != "pass":
+            raise AssertionError(f"benign full-body drift should keep PR metadata preflight passing: {body_hash_drift_preflight.get('missing_inputs')}")
+        body_hash_drift = loom_flow.gate_freeze_pr_body_pin_binding(body_hash_drift_preflight)
+        if not isinstance(body_hash_drift, dict) or body_hash_drift.get("result") != "pass":
+            raise AssertionError("gate freeze PR body pin must allow full-body drift when machine blocks still match")
+        if body_hash_drift.get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+            raise AssertionError("gate freeze PR body pin must report benign full-body hash drift")
+        if body_hash_drift.get("missing_inputs"):
+            raise AssertionError("benign full-body PR body drift must not create blocking readiness inputs")
 
         carrier_drift_body.write_text(
             governance_metadata_body(item=freeze_item, branch="work/cli-contract-fixture-drift", head_sha=head_sha),
