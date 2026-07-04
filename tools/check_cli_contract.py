@@ -6790,12 +6790,14 @@ def assert_host_readback_only_pr_gate_fixture(tmp: Path) -> None:
 
     pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
     body_file = f".loom/fixtures/{fixture['item']}/host-readback-only-body.md"
+    readback_body_file = f".loom/fixtures/{fixture['item']}/host-readback-only-readback-body.md"
     (target / body_file).write_text(pr_payload["body"], encoding="utf-8")
+    (target / readback_body_file).write_text(pr_payload["body"] + "\n", encoding="utf-8")
     payload = semantic_pr_gate_fixture_payload(
         target,
         fixture,
         body_file=body_file,
-        compare_body_file=body_file,
+        compare_body_file=readback_body_file,
     )
     if payload.get("result") != "pass":
         raise AssertionError(f"host-readback-only PR gate blocked: {payload.get('missing_inputs')}")
@@ -6809,6 +6811,9 @@ def assert_host_readback_only_pr_gate_fixture(tmp: Path) -> None:
     admission = payload.get("hosted_freeze_admission", {})
     if admission.get("result") != "pass" or admission.get("profile") != "host_readback_only":
         raise AssertionError(f"host-readback-only hosted admission did not pass: {admission}")
+    body_pin = admission.get("input_bindings", {}).get("pr_body_pin", {})
+    if body_pin.get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+        raise AssertionError("host-readback-only body pin must tolerate full-body newline drift when machine blocks match")
     fact_chain = admission.get("input_bindings", {}).get("fact_chain", {})
     if fact_chain.get("result") != "not_applicable":
         raise AssertionError("host-readback-only hosted admission must mark fact-chain not_applicable")

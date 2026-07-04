@@ -18773,13 +18773,33 @@ def gate_freeze_pr_body_pin_binding(pr_metadata_preflight: dict[str, Any] | None
     )
     comparisons = body_artifact.get("machine_block_comparisons")
     metadata_block_fingerprints = comparisons if isinstance(comparisons, list) else []
+    machine_block_statuses = [
+        str(entry.get("status"))
+        for entry in metadata_block_fingerprints
+        if isinstance(entry, dict) and entry.get("status") is not None
+    ]
+    machine_blocks_match = bool(machine_block_statuses) and all(status == "match" for status in machine_block_statuses)
+    full_body_hash_match = (
+        bool(rendered_body_sha256)
+        and bool(readback_body_sha256)
+        and rendered_body_sha256 == readback_body_sha256
+    )
+    full_body_hash_status = (
+        "match"
+        if full_body_hash_match
+        else "metadata_blocks_match_full_body_diff"
+        if rendered_body_sha256 and readback_body_sha256 and machine_blocks_match
+        else "mismatch"
+        if rendered_body_sha256 and readback_body_sha256
+        else "not_compared"
+    )
     missing_inputs: list[str] = []
 
     if body_artifact.get("result") == "block":
         missing_inputs.extend(str(message) for message in body_artifact.get("missing_inputs", []))
     if body_file and not compare_body_file:
         missing_inputs.append("post-edit PR body readback file is required for gate freeze PR body pinning")
-    if rendered_body_sha256 and readback_body_sha256 and rendered_body_sha256 != readback_body_sha256:
+    if rendered_body_sha256 and readback_body_sha256 and rendered_body_sha256 != readback_body_sha256 and not machine_blocks_match:
         missing_inputs.append("rendered PR body hash does not match GitHub readback PR body hash")
     if pr_metadata_preflight.get("result") == "block":
         for message in pr_metadata_preflight.get("missing_inputs", []):
@@ -18792,7 +18812,7 @@ def gate_freeze_pr_body_pin_binding(pr_metadata_preflight: dict[str, Any] | None
         "schema_version": "loom-gate-freeze-pr-body-pin/v1",
         "result": result,
         "summary": (
-            "PR body rendered/readback hashes and metadata machine block fingerprints are pinned."
+            "PR body rendered/readback metadata machine block fingerprints are pinned."
             if result == "pass"
             else "PR body rendered/readback hash or metadata carrier pinning is stale."
         ),
@@ -18800,6 +18820,7 @@ def gate_freeze_pr_body_pin_binding(pr_metadata_preflight: dict[str, Any] | None
         "readback_locator": compare_body_file,
         "rendered_body_sha256": rendered_body_sha256,
         "readback_body_sha256": readback_body_sha256,
+        "full_body_hash_status": full_body_hash_status,
         "metadata_block_fingerprints": metadata_block_fingerprints,
         "preflight_body_source": body_artifact.get("preflight_body_source"),
         "pr_metadata_result": pr_metadata_preflight.get("result"),
