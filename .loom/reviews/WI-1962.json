@@ -3,18 +3,14 @@
   "item_id": "WI-1962",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head implementation review approves WI-1962 at c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382. Scope covers batch PR metadata, host-only closeout batch, and the minimal gate classifier fixes for final batch carrier binding and historical active carrier purity while preserving implementation drift blocking.",
+  "summary": "Current-head implementation review approves WI-1962 at f6ba96b1522684deb02f90aa2e817a38dab5abbe. Scope covers batch PR metadata, host-only batch closeout, and the minimal shared gate fixes for suite_not_applicable consumption, final batch carrier binding, historical active carrier purity, partial carrier context, and flow/runtime timeout budgets while preserving implementation drift blocking.",
   "reviewer": "codex",
-  "authored_at": "2026-07-04T13:42:00Z",
-  "reviewed_head": "c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382",
-  "reviewed_validation_summary": "2026-07-04T13:42Z at c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382: python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py passed; git diff --check passed; direct assert_gate_freeze_review_binding_fixture passed and covers final batch carrier binding drift plus historical active carrier purity; python3 tools/check_cli_contract.py --surface batch-implementation-closeout passed; python3 tools/check_npm_package.py --surface runtime-copy-parity passed; python3 tools/check_npm_package.py --surface plugin-payload-hash passed with hash 44a7139e105f33a8cc965598862bf3d46f6f5cf043790277a9f061bb07f1ff21; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed.",
-  "reviewed_validation_summary_hash": "ac17c87bb50ea2267a4dbe7f2c90ffbd9e69d6507c15232fc9ba3c60accfe0e3",
+  "authored_at": "2026-07-04T16:33:54Z",
+  "reviewed_head": "f6ba96b1522684deb02f90aa2e817a38dab5abbe",
+  "reviewed_validation_summary": "2026-07-04T16:32Z at f6ba96b1522684deb02f90aa2e817a38dab5abbe: python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py tools/check_cli_contract.py passed; git diff --check passed; python3 tools/check_cli_contract.py --surface batch-implementation-closeout passed; python3 tools/check_npm_package.py --surface runtime-copy-parity passed; python3 tools/check_npm_package.py --surface plugin-payload-hash passed with hash 8125bba23e3ae11fc48fbb528c07abba68cd81f4ec51918d08b5c9aa788904b7; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed; python3 tools/loom_check.py --source-surface merge-gate passed failures=0 elapsed=219.26s; python3 tools/loom_check.py --source-surface installed-runtime passed failures=0 elapsed=86.89s; python3 tools/loom_check.py --source-surface bootstrap-regression passed failures=0; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run passed refresh_needed=[].",
+  "reviewed_validation_summary_hash": "4641230fd07fab3525676937ecd84859a88f4d04da32990bb78b7ad822381509",
   "validation_summary_source": "recovery.latest_validation_summary",
   "validation_summary_locator": ".loom/progress/WI-1962.md",
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption after the batch carrier binding and historical active carrier purity classifier fixes."
-  },
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -23,17 +19,33 @@
     "work_item": ".loom/work-items/WI-1962.md",
     "recovery_entry": ".loom/progress/WI-1962.md",
     "status_surface": ".loom/status/current.md",
-    "implementation_head": "c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382",
-    "targeted_contract_surface": "python3 tools/check_cli_contract.py --surface batch-implementation-closeout",
-    "gate_classifier_fixture": "direct assert_gate_freeze_review_binding_fixture",
-    "adjacent_contract_surfaces": [
-      "python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py",
-      "git diff --check"
-    ],
-    "runtime_package_checks": [
-      "python3 tools/check_npm_package.py --surface runtime-copy-parity",
-      "python3 tools/check_npm_package.py --surface plugin-payload-hash",
-      "python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift"
-    ]
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
