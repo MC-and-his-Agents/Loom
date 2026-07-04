@@ -6458,8 +6458,8 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             if runtime_refresh_needed:
                 failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
             if isinstance(review, dict):
-                if review_is_stale and review.get("status") not in {"block", "refresh-needed"}:
-                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as refresh-needed review metadata"))
+                if review_is_stale and review.get("status") not in {"advisory", "block", "refresh-needed"}:
+                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as review metadata"))
         if kind == "shadow-parity":
             reports = payload.get("reports")
             report_surfaces = {

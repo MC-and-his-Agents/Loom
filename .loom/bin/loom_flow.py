@@ -283,7 +283,12 @@ GOVERNANCE_CHANGE_CLASS_VALUES = {
     "mixed",
 }
 GOVERNANCE_SUITE_PATH_VALUES = {"full", "minimal", "not_applicable"}
-GOVERNANCE_REVIEW_REQUIREMENT_VALUES = {"current_head_review_required", "specialized_review_required"}
+GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT = "host_readback_only"
+GOVERNANCE_REVIEW_REQUIREMENT_VALUES = {
+    "current_head_review_required",
+    "specialized_review_required",
+    GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT,
+}
 GOVERNANCE_RELEASE_JUDGMENT_VALUES = {"release_required", "no_release", "deferred_release_judgment_blocking"}
 GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS = (
     "rationale",
@@ -879,6 +884,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--suite-path", choices=tuple(sorted(GOVERNANCE_SUITE_PATH_VALUES)), default="minimal")
     pr_metadata.add_argument("--review-requirement", choices=tuple(sorted(GOVERNANCE_REVIEW_REQUIREMENT_VALUES)), default="current_head_review_required")
     pr_metadata.add_argument("--release-judgment", choices=tuple(sorted(GOVERNANCE_RELEASE_JUDGMENT_VALUES)), default="no_release")
+    pr_metadata.add_argument("--fact-chain-required", dest="fact_chain_required", action="store_true", default=True, help="Require repo-local Work Item fact-chain carriers; this is the default")
+    pr_metadata.add_argument("--no-fact-chain-required", dest="fact_chain_required", action="store_false", help="Declare a host-readback-only PR metadata profile without repo-local fact-chain carriers")
     pr_metadata.add_argument("--upgrade-trigger", action="append", default=[], help="Repeatable governance upgrade trigger string")
     pr_metadata.add_argument("--covered-issue", type=int, action="append", default=[], help="Repeatable GitHub issue number covered by this PR batch")
     pr_metadata.add_argument("--excluded-scope", action="append", default=[], help="Repeatable excluded scope note for this PR batch")
@@ -7646,6 +7653,17 @@ def governance_metadata_fields_from_preflight(pr_metadata_preflight: dict[str, A
     return fields if isinstance(fields, dict) else {}
 
 
+def governance_metadata_declares_host_readback_only(pr_metadata_preflight: dict[str, Any] | None) -> bool:
+    if not isinstance(pr_metadata_preflight, dict) or pr_metadata_preflight.get("result") != "pass":
+        return False
+    fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+    return (
+        fields.get("fact_chain_required") is False
+        and fields.get("review_requirement") == GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT
+        and fields.get("pr_gate_required") is True
+    )
+
+
 def governance_metadata_declares_suite_not_applicable(pr_metadata_preflight: dict[str, Any] | None) -> bool:
     fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
     if fields.get("suite_path") != "not_applicable":
@@ -7689,7 +7707,10 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
     fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
     missing_inputs: list[str] = []
     upgrade_reasons: list[str] = []
-    marker_present, suite_values = suite_path_decision_presence(context)
+    if context and isinstance(context.get("target_root"), Path):
+        marker_present, suite_values = suite_path_decision_presence(context)
+    else:
+        marker_present, suite_values = False, set()
     metadata_suite_not_applicable = governance_metadata_declares_suite_not_applicable(pr_metadata_preflight)
     authority_boundary = governance_intensity_authority_boundary()
 
@@ -7720,6 +7741,19 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
     declared_intensity = fields.get("governance_intensity")
     change_class = fields.get("change_class")
     suite_path = fields.get("suite_path")
+    host_readback_only = governance_metadata_declares_host_readback_only(pr_metadata_preflight)
+    non_skippable_gates = list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES)
+    if host_readback_only:
+        non_skippable_gates = [
+            gate
+            for gate in non_skippable_gates
+            if gate not in {"fact_chain", "current_head_review"}
+        ]
+        authority_boundary = {
+            **authority_boundary,
+            "does_not_replace": non_skippable_gates,
+            "repo_local_inputs_removed_by_profile": ["fact_chain", "current_head_review"],
+        }
 
     if fields.get("governance_intensity") == "light":
         if change_class in GOVERNANCE_HIGH_RISK_CHANGE_CLASSES:
@@ -7755,7 +7789,9 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
     elif declared_intensity in GOVERNANCE_INTENSITY_VALUES:
         result = "pass"
         summary = (
-            "governance intensity metadata and suite decision are aligned; non-skippable gates remain required."
+            "governance intensity metadata declares host-readback-only review; repo fact-chain and current-head review carriers are outside this gate boundary."
+            if host_readback_only
+            else "governance intensity metadata and suite decision are aligned; non-skippable gates remain required."
         )
     else:
         result = "not_applicable"
@@ -7776,7 +7812,7 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
         "effective_governance_intensity": effective_intensity,
         "effective_suite_path": suite_path if suite_path in GOVERNANCE_SUITE_PATH_VALUES else None,
         "upgrade_reasons": dedupe_strings(upgrade_reasons),
-        "non_skippable_gates": list(GOVERNANCE_INTENSITY_NON_SKIPPABLE_GATES),
+        "non_skippable_gates": non_skippable_gates,
         "consumed_locators": {
             "metadata_carrier": True,
             "suite_path_decision": marker_present,
@@ -7793,7 +7829,10 @@ def governance_intensity_gate_payload(context: dict[str, Any], pr_metadata_prefl
 
 def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
     fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
-    marker_present, suite_values = suite_path_decision_presence(context)
+    if context and isinstance(context.get("target_root"), Path):
+        marker_present, suite_values = suite_path_decision_presence(context)
+    else:
+        marker_present, suite_values = False, set()
     if not fields or fields.get("governance_intensity") != "light" or fields.get("change_class") != GOVERNANCE_DOCS_LITE_CHANGE_CLASS:
         return {
             "schema_version": "loom-docs-governance-lite-gate/v1",
@@ -15102,8 +15141,11 @@ def carrier_refresh_payload(
                 ),
             }
             if binding.get("status") in {"implementation-drift-only", "stale"}:
-                review_status["status"] = "block"
-                missing_inputs.append("review artifact is stale because non-carrier drift is present")
+                review_status["status"] = "advisory"
+                review_status["reason"] = (
+                    "carrier refresh reports stale review metadata but does not use it as merge approval; "
+                    "PR gate/review surfaces enforce semantic approval separately."
+                )
             elif binding.get("status") == "carrier-only":
                 review_status["status"] = "refresh-needed"
             else:
@@ -17118,6 +17160,14 @@ def governance_metadata_bool_field(fields: dict[str, Any], name: str, missing_fi
     return True
 
 
+def governance_metadata_optional_bool_field(fields: dict[str, Any], name: str, missing_fields: list[str]) -> bool | None:
+    value = fields.get(name)
+    if not isinstance(value, bool):
+        missing_fields.append(f"fields.{name}")
+        return None
+    return value
+
+
 def path_safe_work_item_id(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value))
 
@@ -17131,7 +17181,7 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     suite_path = governance_metadata_string_field(fields, "suite_path", missing_fields)
     review_requirement = governance_metadata_string_field(fields, "review_requirement", missing_fields)
     release_judgment = governance_metadata_string_field(fields, "release_judgment", missing_fields)
-    governance_metadata_bool_field(fields, "fact_chain_required", missing_fields)
+    fact_chain_required = governance_metadata_optional_bool_field(fields, "fact_chain_required", missing_fields)
     governance_metadata_bool_field(fields, "pr_gate_required", missing_fields)
     governance_metadata_bool_field(fields, "closeout_required", missing_fields)
 
@@ -17149,6 +17199,10 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
         missing_fields.append("fields.review_requirement")
     if release_judgment and release_judgment not in GOVERNANCE_RELEASE_JUDGMENT_VALUES:
         missing_fields.append("fields.release_judgment")
+    if review_requirement == GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT and fact_chain_required is not False:
+        missing_fields.append("fields.fact_chain_required")
+    if fact_chain_required is False and review_requirement != GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT:
+        missing_fields.append("fields.review_requirement")
 
     upgrade_triggers = fields.get("upgrade_triggers")
     if not isinstance(upgrade_triggers, list) or any(not isinstance(entry, str) or not entry.strip() for entry in upgrade_triggers):
@@ -17200,6 +17254,8 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
             missing_fields.append("fields.suite_path")
         if review_requirement != "current_head_review_required":
             missing_fields.append("fields.review_requirement")
+        if fact_chain_required is not True:
+            missing_fields.append("fields.fact_chain_required")
         if release_judgment != GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT:
             missing_fields.append("fields.release_judgment")
     if release_judgment == "deferred_release_judgment_blocking":
@@ -17702,6 +17758,7 @@ def render_governance_intensity_metadata_body(
     suite_path: str,
     review_requirement: str,
     release_judgment: str,
+    fact_chain_required: bool,
     upgrade_triggers: list[str],
     suite_not_applicable: dict[str, str] | None,
     issue_number: int | None,
@@ -17724,7 +17781,7 @@ def render_governance_intensity_metadata_body(
         "suite_path": suite_path,
         "suite_not_applicable": suite_not_applicable if suite_path == "not_applicable" else None,
         "review_requirement": review_requirement,
-        "fact_chain_required": True,
+        "fact_chain_required": fact_chain_required,
         "pr_gate_required": True,
         "release_judgment": release_judgment,
         "closeout_required": True,
@@ -17775,6 +17832,7 @@ def pr_metadata_render_payload(
     suite_path: str,
     review_requirement: str,
     release_judgment: str,
+    fact_chain_required: bool,
     upgrade_triggers: list[str],
     covered_issues: list[int],
     excluded_scope: list[str],
@@ -17854,6 +17912,7 @@ def pr_metadata_render_payload(
         suite_path=suite_path,
         review_requirement=review_requirement,
         release_judgment=release_judgment,
+        fact_chain_required=fact_chain_required,
         upgrade_triggers=[entry for entry in upgrade_triggers if isinstance(entry, str) and entry.strip()],
         suite_not_applicable=suite_not_applicable,
         issue_number=issue_number,
@@ -18074,6 +18133,7 @@ def pr_metadata_update_payload(
     suite_path: str,
     review_requirement: str,
     release_judgment: str,
+    fact_chain_required: bool,
     upgrade_triggers: list[str],
     covered_issues: list[int],
     excluded_scope: list[str],
@@ -18098,6 +18158,7 @@ def pr_metadata_update_payload(
         suite_path=suite_path,
         review_requirement=review_requirement,
         release_judgment=release_judgment,
+        fact_chain_required=fact_chain_required,
         upgrade_triggers=upgrade_triggers,
         covered_issues=covered_issues,
         excluded_scope=excluded_scope,
@@ -19868,6 +19929,7 @@ def hosted_freeze_admission_payload(
     compare_body_file: str | None,
     snapshot_file: str | None,
     surface: str | None,
+    pr_metadata_preflight: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     hosted_inputs_present = any([body_file, compare_body_file, snapshot_file])
     if not hosted_inputs_present:
@@ -19889,6 +19951,122 @@ def hosted_freeze_admission_payload(
                 "fallback_to": None,
             },
             "failure_classifier": failure_classifier_payload([]),
+        }
+
+    if governance_metadata_declares_host_readback_only(pr_metadata_preflight):
+        pr_body_pin = gate_freeze_pr_body_pin_binding(pr_metadata_preflight or {})
+        input_bindings = {
+            "pr_metadata": pr_metadata_preflight,
+            "pr_body_pin": pr_body_pin,
+            "fact_chain": {
+                "result": "not_applicable",
+                "source_locator": "pr_metadata.governance_intensity_carrier.fields.fact_chain_required",
+                "missing_inputs": [],
+                "summary": "PR metadata declares host_readback_only review and fact_chain_required false for this gate.",
+            },
+        }
+        blocking_inputs = gate_freeze_blocking_inputs(input_bindings)
+        recomputed = {
+            "command": "gate-freeze",
+            "operation": "check",
+            "schema_version": GATE_FREEZE_SCHEMA,
+            "result": "pass" if not blocking_inputs else "block",
+            "summary": (
+                "Hosted freeze admission consumed PR metadata/readback without repo fact-chain inputs."
+                if not blocking_inputs
+                else "Hosted freeze admission found blocking PR metadata/readback inputs."
+            ),
+            "missing_inputs": [
+                message
+                for blocking in blocking_inputs
+                if isinstance(blocking, dict)
+                for message in blocking.get("messages", [])
+                if str(message).strip()
+            ],
+            "fallback_to": None if not blocking_inputs else "update_pr_body",
+            "target": str(target_root),
+            "snapshot_subject": {
+                "item_id": expected_item,
+                "branch": branch_name,
+                "head_sha": head_sha,
+                "pr": pr_number,
+                "surface": surface,
+                "generated_at": current_iso_timestamp(),
+                "source_commands": {
+                    "check": "loom pr-gate check --target <repo> --json",
+                },
+            },
+            "input_bindings": input_bindings,
+            "readiness": {
+                "result": "pass" if not blocking_inputs else "block",
+                "blocking_inputs": blocking_inputs,
+                "refresh_suggestions": ["loom pr metadata-update --apply --json"] if blocking_inputs else [],
+                "next_action": "hosted_admission_allowed" if not blocking_inputs else "update_pr_body",
+            },
+        }
+        artifact_comparison = hosted_freeze_snapshot_comparison(target_root, snapshot_file, recomputed)
+        comparison_missing = [
+            str(message)
+            for message in artifact_comparison.get("missing_inputs", [])
+            if str(message).strip()
+        ]
+        if artifact_comparison.get("result") == "block":
+            blocking_inputs.append(
+                {
+                    "id": "hosted-freeze-snapshot-mismatch",
+                    "input": "hosted_admission",
+                    "failure_kind": artifact_comparison.get("failure_kind") or "hosted_snapshot_mismatch",
+                    "category": "gate_failure",
+                    "kind": artifact_comparison.get("failure_kind") or "hosted_snapshot_mismatch",
+                    "severity": "block",
+                    "subject": "hosted_freeze_snapshot",
+                    "result": "block",
+                    "source_locator": snapshot_file,
+                    "messages": comparison_missing,
+                    "next_action": "regenerate the freeze snapshot from the current PR/head/body/carriers, then rerun hosted admission.",
+                    "fallback_to": artifact_comparison.get("fallback_to"),
+                }
+            )
+        missing_inputs = dedupe_strings(
+            [
+                str(message)
+                for blocking in blocking_inputs
+                if isinstance(blocking, dict)
+                for message in blocking.get("messages", [])
+                if str(message).strip()
+            ]
+        )
+        result = "pass" if recomputed.get("result") == "pass" and artifact_comparison.get("result") in {"pass", "not_applicable"} else "block"
+        return {
+            "schema_version": HOSTED_FREEZE_ADMISSION_SCHEMA,
+            "result": result,
+            "summary": (
+                "Hosted freeze admission consumed host-readback-only metadata without repo fact-chain inputs."
+                if result == "pass"
+                else "Hosted freeze admission found blocking host-readback-only metadata drift."
+            ),
+            "missing_inputs": missing_inputs,
+            "fallback_to": None if result == "pass" else "update_pr_body",
+            "recomputed_freeze": recomputed,
+            "input_bindings": input_bindings,
+            "carrier_refresh": None,
+            "shadow_freshness": None,
+            "readback": pr_body_pin,
+            "readback_classification": failure_classifier_payload(
+                [
+                    {
+                        "input": "pr_body_pin",
+                        "failure_kind": "head_or_pr_drift",
+                        "messages": pr_body_pin.get("missing_inputs", []),
+                    }
+                ]
+                if isinstance(pr_body_pin, dict) and pr_body_pin.get("result") == "block"
+                else []
+            ),
+            "artifact_comparison": artifact_comparison,
+            "blocking_inputs": blocking_inputs,
+            "failure_classifier": failure_classifier_payload(blocking_inputs),
+            "profile": "host_readback_only",
         }
 
     freeze_surface = surface if surface in {"pre_review", "review", "merge_ready", "closeout"} else "merge_ready"
@@ -20899,15 +21077,6 @@ def pr_gate_payload(
     if effective_item is None:
         missing_inputs.append("PR body is missing `Loom Work Item: <item>`")
 
-    context: dict[str, Any] = {}
-    context_errors: list[str] = []
-    if effective_item is not None:
-        context, context_errors = load_context_with_retained_idle_fallback(target_root, output_relative, effective_item)
-    else:
-        context, context_errors = load_context(target_root, output_relative, expected_item)
-    if context_errors:
-        missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
-
     pr_head = head_sha
     if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str):
         if pr_head and pr_payload["headRefOid"] != pr_head:
@@ -20915,6 +21084,43 @@ def pr_gate_payload(
         pr_head = pr_payload["headRefOid"]
     if not pr_head:
         missing_inputs.append("PR head SHA is unavailable")
+
+    effective_branch_name = branch_name
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefName"), str) and pr_payload.get("headRefName"):
+        effective_branch_name = pr_payload["headRefName"]
+    metadata_surface = surface or body_surface or "merge_ready"
+    governance_surface = build_governance_surface(target_root)
+    pr_metadata_preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface=metadata_surface,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=pr_head,
+        branch_name=effective_branch_name,
+        pr_payload_file=pr_payload_file,
+        body_file=body_file,
+        compare_body_file=compare_body_file,
+        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
+        effective_pr=effective_pr,
+        governance_surface=governance_surface,
+        expected_item=effective_item,
+        expected_head_sha=pr_head,
+        expected_branch=effective_branch_name,
+    )
+    host_readback_only_gate = governance_metadata_declares_host_readback_only(pr_metadata_preflight)
+
+    context: dict[str, Any] = {}
+    context_errors: list[str] = []
+    if host_readback_only_gate:
+        context = {}
+        context_errors = []
+    elif effective_item is not None:
+        context, context_errors = load_context_with_retained_idle_fallback(target_root, output_relative, effective_item)
+    else:
+        context, context_errors = load_context(target_root, output_relative, expected_item)
+    if context_errors:
+        missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
 
     pr_state = pr_payload.get("state") if isinstance(pr_payload, dict) else None
     if pr_payload is not None:
@@ -20937,30 +21143,6 @@ def pr_gate_payload(
     current_head = git_head_sha(target_root)
     if pr_head and current_head and pr_head != current_head:
         missing_inputs.append("checkout head does not match PR head")
-    effective_branch_name = branch_name
-    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefName"), str) and pr_payload.get("headRefName"):
-        effective_branch_name = pr_payload["headRefName"]
-
-    metadata_surface = surface or body_surface or "merge_ready"
-    governance_surface = build_governance_surface(target_root)
-    pr_metadata_preflight = pr_metadata_preflight_payload(
-        target_root=target_root,
-        surface=metadata_surface,
-        owner=owner,
-        repo_name=repo_name,
-        pr_number=effective_pr,
-        head_sha=pr_head,
-        branch_name=effective_branch_name,
-        pr_payload_file=pr_payload_file,
-        body_file=body_file,
-        compare_body_file=compare_body_file,
-        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
-        effective_pr=effective_pr,
-        governance_surface=governance_surface,
-        expected_item=effective_item,
-        expected_head_sha=pr_head,
-        expected_branch=effective_branch_name,
-    )
     suite_validation_override = (
         metadata_suite_not_applicable_payload(
             context,
@@ -20984,6 +21166,7 @@ def pr_gate_payload(
         compare_body_file=compare_body_file,
         snapshot_file=gate_freeze_snapshot_file,
         surface=metadata_surface,
+        pr_metadata_preflight=pr_metadata_preflight,
     )
     if hosted_admission.get("result") == "block":
         missing_inputs.extend(
@@ -21021,6 +21204,32 @@ def pr_gate_payload(
         "missing_inputs": [],
         "fallback_to": None,
     }
+    if host_readback_only_gate:
+        merge_checkpoint = {
+            "result": "not_applicable",
+            "summary": "PR metadata declares fact_chain_required false; repo merge checkpoint carriers are outside this gate boundary.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+        review_approval = {
+            "status": GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT,
+            "path": None,
+            "decision": None,
+            "kind": GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT,
+            "reviewed_head": pr_head,
+            "head_binding": {
+                "status": "host-readback",
+                "stale": False,
+                "target_head": pr_head,
+                "missing_inputs": [],
+            },
+            "semantic_review_disposition": {
+                "status": GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT,
+                "consumable": True,
+                "source": "pr_metadata.governance_intensity_carrier.fields.review_requirement",
+            },
+            "missing_inputs": [],
+        }
     timing_review_record: dict[str, Any] | None = None
     timing_review_path: str | None = None
     if context:
@@ -21181,7 +21390,7 @@ def pr_gate_payload(
             "pr_metadata_preflight": pr_metadata_preflight,
         }
     )
-    governance_intensity_gate = governance_intensity_gate_payload(context, pr_metadata_preflight) if context else None
+    governance_intensity_gate = governance_intensity_gate_payload(context, pr_metadata_preflight)
     if isinstance(governance_intensity_gate, dict):
         if governance_intensity_gate.get("result") == "block":
             missing_inputs.extend(
@@ -21198,7 +21407,7 @@ def pr_gate_payload(
                 "governance_intensity_gate": governance_intensity_gate,
             }
         )
-    docs_governance_lite_gate = docs_governance_lite_gate_payload(context, pr_metadata_preflight) if context else None
+    docs_governance_lite_gate = docs_governance_lite_gate_payload(context, pr_metadata_preflight)
     if isinstance(docs_governance_lite_gate, dict):
         if docs_governance_lite_gate.get("result") == "block":
             missing_inputs.extend(
@@ -21250,7 +21459,7 @@ def pr_gate_payload(
             for key in ("statusCheckRollup", "checks", "latestReviews", "reviewDecision", "mergeStateStatus")
         )
     if ci_or_host_review_signal_present and review_approval.get("status") != "approved":
-        if review_approval.get("status") == "terminal_closeout_retained":
+        if review_approval.get("status") in {"terminal_closeout_retained", GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT}:
             pass
         else:
             missing_inputs.append("ci-only or host-review signal cannot satisfy semantic_review_disposition")
@@ -21273,12 +21482,42 @@ def pr_gate_payload(
         else {
             "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
             "surface": "merge_ready",
-            "result": "block",
-            "result_summary": "approval bypass lint cannot run until the Work Item fact chain is readable.",
+            "result": "pass" if host_readback_only_gate else "block",
+            "result_summary": (
+                "approval bypass lint consumed host-readback-only metadata without requiring repo fact-chain carriers."
+                if host_readback_only_gate
+                else "approval bypass lint cannot run until the Work Item fact chain is readable."
+            ),
             "blocking_results": [],
             "advisory_results": [],
             "repo_specific_results": [],
-            "not_applicable_results": [],
+            "not_applicable_results": [
+                {
+                    "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+                    "id": "host_readback_only_review",
+                    "kind": "host_readback_only",
+                    "surface": "merge_ready",
+                    "subject": "pr_metadata.review_requirement",
+                    "strength": "not_applicable",
+                    "summary": "Repo-local review artifact and active fact-chain are not gate inputs for this PR metadata profile.",
+                    "mapped_failure": {
+                        "category": "not_applicable",
+                        "kind": "host_readback_only",
+                    },
+                    "provenance": {
+                        "source_layer": "pr_metadata",
+                        "source_owner": "host",
+                        "source_locator": "pr_metadata.governance_intensity_carrier.fields.review_requirement",
+                        "source_binding": "host_readback_only",
+                        "freshness": "current",
+                    },
+                    "bindings": {
+                        "work_item": effective_item,
+                        "head_sha": pr_head,
+                    },
+                    "fallback_to": None,
+                }
+            ] if host_readback_only_gate else [],
             "mapped_failures": [],
             "provenance": [],
         }
@@ -21364,6 +21603,9 @@ def pr_gate_payload(
         else
         "PR merge gate consumed terminal closeout carrier drift with retained implementation review evidence."
         if result == "pass" and terminal_closeout_consumption.get("result") == "pass"
+        else
+        "PR merge gate consumed host-readback-only metadata without repo-local review or fact-chain carriers."
+        if result == "pass" and review_approval.get("status") == GOVERNANCE_HOST_READBACK_REVIEW_REQUIREMENT
         else
         "PR merge gate found fresh authored semantic review approval for the current PR head."
         if result == "pass"
@@ -21459,6 +21701,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 suite_path=args.suite_path,
                 review_requirement=args.review_requirement,
                 release_judgment=args.release_judgment,
+                fact_chain_required=args.fact_chain_required,
                 upgrade_triggers=args.upgrade_trigger,
                 covered_issues=args.covered_issue,
                 excluded_scope=args.excluded_scope,
@@ -21490,6 +21733,7 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
                 suite_path=args.suite_path,
                 review_requirement=args.review_requirement,
                 release_judgment=args.release_judgment,
+                fact_chain_required=args.fact_chain_required,
                 upgrade_triggers=args.upgrade_trigger,
                 covered_issues=args.covered_issue,
                 excluded_scope=args.excluded_scope,

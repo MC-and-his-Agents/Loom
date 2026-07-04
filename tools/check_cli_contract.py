@@ -6746,6 +6746,92 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("hosted snapshot mismatch must carry classifier next action")
 
 
+def assert_host_readback_only_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "host-readback-only-pr-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1965")
+    write_hosted_freeze_admission_inputs(target)
+
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    init_payload = json.loads(init_result.read_text(encoding="utf-8"))
+    init_payload["fact_chain"]["entry_points"]["current_item_id"] = "WI-stale-current"
+    init_payload["fact_chain"]["entry_points"]["work_item"] = ".loom/work-items/WI-stale-current.md"
+    init_payload["fact_chain"]["entry_points"]["recovery_entry"] = ".loom/progress/WI-stale-current.md"
+    init_result.write_text(json.dumps(init_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture stale current pointer"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(
+        target,
+        fixture,
+        extra={
+            "statusCheckRollup": [
+                {"name": "py-compile", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "loom-check", "conclusion": "SUCCESS", "status": "COMPLETED"},
+            ],
+        },
+    )
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "standard",
+            "change_class": "contract",
+            "suite_path": "minimal",
+            "review_requirement": "host_readback_only",
+            "fact_chain_required": False,
+        },
+    )
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    body_file = f".loom/fixtures/{fixture['item']}/host-readback-only-body.md"
+    (target / body_file).write_text(pr_payload["body"], encoding="utf-8")
+    payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+    )
+    if payload.get("result") != "pass":
+        raise AssertionError(f"host-readback-only PR gate blocked: {payload.get('missing_inputs')}")
+    serialized = json.dumps(payload, ensure_ascii=False)
+    if "current item mismatch" in serialized or "WI-stale-current" in serialized:
+        raise AssertionError("host-readback-only PR gate leaked stale current pointer into gate result")
+    if payload.get("review_approval", {}).get("status") != "host_readback_only":
+        raise AssertionError("host-readback-only PR gate did not expose the review approval boundary")
+    if payload.get("merge_checkpoint", {}).get("result") != "not_applicable":
+        raise AssertionError("host-readback-only PR gate must not evaluate repo merge checkpoint carriers")
+    admission = payload.get("hosted_freeze_admission", {})
+    if admission.get("result") != "pass" or admission.get("profile") != "host_readback_only":
+        raise AssertionError(f"host-readback-only hosted admission did not pass: {admission}")
+    fact_chain = admission.get("input_bindings", {}).get("fact_chain", {})
+    if fact_chain.get("result") != "not_applicable":
+        raise AssertionError("host-readback-only hosted admission must mark fact-chain not_applicable")
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "standard",
+            "change_class": "contract",
+            "suite_path": "minimal",
+            "review_requirement": "current_head_review_required",
+            "fact_chain_required": False,
+        },
+    )
+    invalid_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        invalid_payload.get("result") != "block"
+        or "PR metadata machine block invalid: loom-governance-intensity" not in invalid_payload.get("missing_inputs", [])
+    ):
+        raise AssertionError("fact_chain_required false without host_readback_only must fail metadata preflight")
+
+
 def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
     target = tmp / "pr-metadata-suite-not-applicable"
     target.mkdir()
@@ -8848,9 +8934,28 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     if light_fixture_payload.get("result") != "pass":
         raise AssertionError(f"light fixture metadata fixture did not pass: {light_fixture_payload.get('missing_inputs')}")
 
+    host_readback_only = target / "host-readback-only.md"
+    host_readback_only.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "standard",
+                "change_class": "contract",
+                "suite_path": "minimal",
+                "review_requirement": "host_readback_only",
+                "fact_chain_required": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    host_readback_payload = governance_metadata_preflight_payload(target, "host-readback-only.md")
+    if host_readback_payload.get("result") != "pass":
+        raise AssertionError(f"host-readback-only metadata fixture did not pass: {host_readback_payload.get('missing_inputs')}")
+
     negative_cases: dict[str, dict[str, Any]] = {
         "missing-intensity.md": {"governance_intensity": "__DELETE__"},
         "unknown-intensity.md": {"governance_intensity": "casual"},
+        "host-readback-requires-false-fact-chain.md": {"review_requirement": "host_readback_only"},
+        "false-fact-chain-requires-host-readback.md": {"fact_chain_required": False},
         "light-runtime.md": {"governance_intensity": "light", "change_class": "runtime"},
         "light-release-impacting-docs.md": {"governance_intensity": "light", "change_class": "release"},
         "light-workflow.md": {"governance_intensity": "light", "change_class": "workflow"},
@@ -13160,6 +13265,7 @@ def run_pr_metadata_surface() -> None:
         with isolated_loom_workstation(tmp / "workstation"):
             assert_governance_metadata_render_readback_fixture(tmp)
             assert_governance_intensity_metadata_preflight_fixture(tmp)
+            assert_host_readback_only_pr_gate_fixture(tmp)
             assert_pr_intent_profile_fixture(tmp)
 
     print("pr metadata surface checks passed")
