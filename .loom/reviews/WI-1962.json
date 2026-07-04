@@ -3,17 +3,17 @@
   "item_id": "WI-1962",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head implementation review approves WI-1962 at 72099f374a9f595258e928d5a6c12e0093197446. Scope covers batch PR metadata, host-only closeout batch, and the minimal gate classifier fix that treats active Work Item carriers and init-result pointer updates as safe final batch binding drift while preserving implementation drift blocking.",
+  "summary": "Current-head implementation review approves WI-1962 at c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382. Scope covers batch PR metadata, host-only closeout batch, and the minimal gate classifier fixes for final batch carrier binding and historical active carrier purity while preserving implementation drift blocking.",
   "reviewer": "codex",
-  "authored_at": "2026-07-04T13:20:00Z",
-  "reviewed_head": "72099f374a9f595258e928d5a6c12e0093197446",
-  "reviewed_validation_summary": "2026-07-04T13:20Z at 72099f374a9f595258e928d5a6c12e0093197446: python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py passed; git diff --check passed; direct assert_gate_freeze_review_binding_fixture passed and covers final batch carrier binding drift; python3 tools/check_cli_contract.py --surface batch-implementation-closeout passed; python3 tools/check_npm_package.py --surface runtime-copy-parity passed; python3 tools/check_npm_package.py --surface plugin-payload-hash passed with hash e23a9a47c1f77257bfabe76fbc1d7c21587e8f05ff389a36bdb99da2be84861b; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed.",
-  "reviewed_validation_summary_hash": "d33ba04b1e52aa32b1c343b25f057fe6a359c137fc4556ad716247c1e672fc53",
+  "authored_at": "2026-07-04T13:42:00Z",
+  "reviewed_head": "c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382",
+  "reviewed_validation_summary": "2026-07-04T13:42Z at c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382: python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py passed; git diff --check passed; direct assert_gate_freeze_review_binding_fixture passed and covers final batch carrier binding drift plus historical active carrier purity; python3 tools/check_cli_contract.py --surface batch-implementation-closeout passed; python3 tools/check_npm_package.py --surface runtime-copy-parity passed; python3 tools/check_npm_package.py --surface plugin-payload-hash passed with hash 44a7139e105f33a8cc965598862bf3d46f6f5cf043790277a9f061bb07f1ff21; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed.",
+  "reviewed_validation_summary_hash": "ac17c87bb50ea2267a4dbe7f2c90ffbd9e69d6507c15232fc9ba3c60accfe0e3",
   "validation_summary_source": "recovery.latest_validation_summary",
   "validation_summary_locator": ".loom/progress/WI-1962.md",
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption after the batch carrier binding classifier fix."
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption after the batch carrier binding and historical active carrier purity classifier fixes."
   },
   "fallback_to": null,
   "findings": [],
@@ -23,7 +23,7 @@
     "work_item": ".loom/work-items/WI-1962.md",
     "recovery_entry": ".loom/progress/WI-1962.md",
     "status_surface": ".loom/status/current.md",
-    "implementation_head": "72099f374a9f595258e928d5a6c12e0093197446",
+    "implementation_head": "c71a9eae2d614f07ab9c59bf99e0e8dbe56ae382",
     "targeted_contract_surface": "python3 tools/check_cli_contract.py --surface batch-implementation-closeout",
     "gate_classifier_fixture": "direct assert_gate_freeze_review_binding_fixture",
     "adjacent_contract_surfaces": [
