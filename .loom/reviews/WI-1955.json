@@ -1,0 +1,45 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1955",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1955 v0.27.1 release candidate is approved at head 4365d1d3. The change bumps VERSION and root package.json to v0.27.1, stamps plugin payload metadata with pending release commit and hash bf0a4d1dbcae49131a04a1860735517817f4a25b208eb6eceb6ca5ba56207f16, adds WI-1955 release carriers and readiness evidence, consumes the WI-1954 handoff carrier sync after implementation PR #1967 merged, and keeps publication deferred to the main-push release workflow. No runtime behavior beyond merged PR #1967 is included.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-04T05:13:00Z",
+  "reviewed_head": "4365d1d3c4ad36d09f5460c601f4810f29418ac1",
+  "reviewed_validation_summary": "2026-07-04T04:43Z on branch `work/1955-v0.27.1-release`: passed `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/check_release_surface.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `git diff --check`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`, `npm pack --dry-run --json --ignore-scripts`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`; pre-release readback for v0.27.1 returned missing/unpublished with no tag, GitHub Release, or npm version occupying the release path.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1955.md",
+    "recovery_entry": ".loom/progress/WI-1955.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "not_applicable_release_candidate",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "release_readiness": "docs/evidence/v0.27.1-release-readiness.md",
+    "implementation_pr": "https://github.com/MC-and-his-Agents/Loom/pull/1967",
+    "implementation_merge_commit": "323e2300cc1a1e9b023b59a5588c4bab65adc51e",
+    "implementation_handoff_progress": ".loom/progress/WI-1954.md"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored release review approved the current head for merge checkpoint consumption."
+  }
+}
