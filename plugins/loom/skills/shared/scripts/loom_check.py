@@ -64,6 +64,7 @@ SOURCE_SURFACE_CLOSEOUT_RECONCILIATION = "closeout-reconciliation"
 SOURCE_SURFACE_RETIRE_WORKSPACE = "retire-workspace"
 SOURCE_SURFACE_INSTALLED_RUNTIME = "installed-runtime"
 SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
+SOURCE_SURFACE_ROOT_SELF_ADOPTION = "root-self-adoption"
 SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
 SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_FULL,
@@ -77,10 +78,15 @@ SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_RETIRE_WORKSPACE,
     SOURCE_SURFACE_INSTALLED_RUNTIME,
     SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
+    SOURCE_SURFACE_ROOT_SELF_ADOPTION,
     SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
 )
 SOURCE_SURFACE_COUNT = 45
 SOURCE_SURFACE_GROUPS = {
+    SOURCE_SURFACE_BOOTSTRAP_REGRESSION: {
+        SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
+        SOURCE_SURFACE_ROOT_SELF_ADOPTION,
+    },
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {
         SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
         SOURCE_SURFACE_REVIEW_RUN,
@@ -6458,8 +6464,8 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             if runtime_refresh_needed:
                 failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
             if isinstance(review, dict):
-                if review_is_stale and review.get("status") not in {"block", "refresh-needed"}:
-                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as refresh-needed review metadata"))
+                if review_is_stale and review.get("status") not in {"advisory", "block", "refresh-needed"}:
+                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as review metadata"))
         if kind == "shadow-parity":
             reports = payload.get("reports")
             report_surfaces = {
@@ -23013,7 +23019,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-assets", lambda: check_demo_assets(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-fact-chain", lambda: check_demo_fact_chain(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-repo-local-cli", lambda: check_demo_repo_local_cli(root)),
-        (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
+        (SOURCE_SURFACE_ROOT_SELF_ADOPTION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_REVIEW_RUN, "review-run", lambda: check_review_run_fixture(root)),

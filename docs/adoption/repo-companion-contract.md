@@ -142,6 +142,10 @@
   "context_schema": {
     "fields": []
   },
+  "host_planning_taxonomy": {
+    "object_type_mapping": [],
+    "missing_type_policy": "advisory_unknown"
+  },
   "guardian_adapters": [],
   "dynamic_tool_locators": [],
   "policy_locators": [],
@@ -155,6 +159,7 @@
 - `review_instruction_locators`
 - `metadata_contract`
 - `context_schema`
+- `host_planning_taxonomy`
 - `guardian_adapters`
 - `dynamic_tool_locators`
 - `policy_locators`
@@ -167,6 +172,7 @@
 
 - `metadata_contract` 与 `context_schema` 只在 `v2` 合法
 - `review_instruction_locators` 只在 `v2` 合法
+- `host_planning_taxonomy` 只在 `v2` 合法
 - `guardian_adapters` 只在 `v2` 合法
 - `dynamic_tool_locators` 只在 `v2` 合法
 - `policy_locators` 只在 `v2` 合法
@@ -242,7 +248,53 @@
   `passed`、`not_applicable` 或 `waived`
 - missing、unreadable 或 unsafe locator 在 mature / deep-existing 仓库中必须 fail closed；轻量仓库必须显式声明 `loom_default` 才能走默认 instruction
 
-### 4.5 `dynamic_tool_locators`
+### 4.5 `host_planning_taxonomy`
+
+`host_planning_taxonomy` 用于声明宿主仓库自己的规划对象命名如何映射到 Loom 消费语义。它解决的是 issue intake 的入口分类问题，不要求宿主采用固定的 Phase / FR / Work Item 标签体系。
+
+最小合同：
+
+```json
+{
+  "host_planning_taxonomy": {
+    "object_type_mapping": [
+      {
+        "loom_type": "phase",
+        "labels": ["phase", "epic"],
+        "title_prefixes": ["Phase:", "Epic:"]
+      },
+      {
+        "loom_type": "fr",
+        "labels": ["fr", "feature"],
+        "title_prefixes": ["FR:", "Feature:"]
+      },
+      {
+        "loom_type": "work_item",
+        "labels": ["work-item", "story", "task"],
+        "title_prefixes": ["WI:", "Work Item:", "Story:", "Task:"]
+      }
+    ],
+    "missing_type_policy": "advisory_unknown"
+  }
+}
+```
+
+字段约束：
+
+- `object_type_mapping` 必须是数组，可为空
+- `object_type_mapping[*].loom_type` 只允许 `phase | fr | work_item`
+- `labels` 与 `title_prefixes` 均为可选字符串数组，但每条 mapping 至少声明其中一种
+- `missing_type_policy` 只允许 `advisory_unknown | infer_from_context | block_unknown`
+
+稳定约束：
+
+- Loom core 只保留最小默认识别；中文标签、Epic / Story / Task、repo-specific issue type 或无分级模式必须通过 repo companion 声明或保持 advisory unknown
+- `unknown` 默认是 advisory，不得让普通 issue intake 因宿主没有 Loom 固定标签体系直接 block
+- 只有当前命令确实需要已知类型，或宿主显式选择 `block_unknown` 时，unknown 才能进入 blocking missing input
+- `infer_from_context` 只允许从显式父级输入推断最小 Loom 消费类型，不得自动创建层级、改写标签或把推断结果写回宿主
+- `host_planning_taxonomy` 不承载 issue 状态、Project 状态、closeout 结果、review 结论或运行态进度
+
+### 4.6 `dynamic_tool_locators`
 
 `dynamic_tool_locators` 用于声明 repo-specific 或 host-provided dynamic tool 的 declaration-time locator。它回答的是：
 

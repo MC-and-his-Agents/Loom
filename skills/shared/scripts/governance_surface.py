@@ -361,6 +361,7 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "review_instruction_locators",
     "metadata_contract",
     "context_schema",
+    "host_planning_taxonomy",
     "dynamic_tool_locators",
     "policy_locators",
     "hook_locators",
@@ -368,6 +369,8 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "host_truth_locators",
     "advanced_lint_locators",
 }
+HOST_PLANNING_LOOM_TYPES = {"phase", "fr", "work_item"}
+HOST_PLANNING_MISSING_TYPE_POLICIES = {"advisory_unknown", "infer_from_context", "block_unknown"}
 ADVANCED_LINT_TYPES = {"architecture_boundary", "bounded_context", "legacy_access", "host_state_access", "companion_boundary"}
 ADVANCED_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
 FORBIDDEN_COMPANION_TRUTH_FIELDS = {
@@ -1649,6 +1652,85 @@ def validate_context_schema(
     return missing_inputs
 
 
+def empty_host_planning_taxonomy() -> dict[str, Any]:
+    return {
+        "availability": "absent",
+        "object_type_mapping": [],
+        "missing_type_policy": "advisory_unknown",
+        "summary": "no host planning taxonomy mapping is declared.",
+        "missing_inputs": [],
+    }
+
+
+def validate_host_planning_taxonomy(entry: object) -> tuple[dict[str, Any], list[str]]:
+    base = empty_host_planning_taxonomy()
+    if entry is None:
+        return base, []
+    if not isinstance(entry, dict):
+        base.update(
+            {
+                "availability": "incomplete",
+                "summary": "host planning taxonomy mapping must be an object.",
+                "missing_inputs": ["host_planning_taxonomy must be an object"],
+            }
+        )
+        return base, list(base["missing_inputs"])
+
+    missing_inputs: list[str] = []
+    policy = entry.get("missing_type_policy", "advisory_unknown")
+    if policy not in HOST_PLANNING_MISSING_TYPE_POLICIES:
+        missing_inputs.append(
+            "host_planning_taxonomy.missing_type_policy must be `advisory_unknown`, `infer_from_context`, or `block_unknown`"
+        )
+        policy = "advisory_unknown"
+
+    mappings = entry.get("object_type_mapping", [])
+    normalized_mappings: list[dict[str, Any]] = []
+    if not isinstance(mappings, list):
+        missing_inputs.append("host_planning_taxonomy.object_type_mapping must be a list")
+    else:
+        for index, mapping in enumerate(mappings):
+            prefix = f"host_planning_taxonomy.object_type_mapping[{index}]"
+            if not isinstance(mapping, dict):
+                missing_inputs.append(f"{prefix} must be an object")
+                continue
+            loom_type = mapping.get("loom_type")
+            if loom_type not in HOST_PLANNING_LOOM_TYPES:
+                missing_inputs.append(f"{prefix}.loom_type must be `phase`, `fr`, or `work_item`")
+                continue
+            normalized: dict[str, Any] = {"loom_type": loom_type, "labels": [], "title_prefixes": []}
+            for field in ("labels", "title_prefixes"):
+                raw_values = mapping.get(field, [])
+                if raw_values is None:
+                    raw_values = []
+                if not isinstance(raw_values, list):
+                    missing_inputs.append(f"{prefix}.{field} must be a list")
+                    continue
+                values = []
+                for value_index, value in enumerate(raw_values):
+                    if not isinstance(value, str) or not value.strip():
+                        missing_inputs.append(f"{prefix}.{field}[{value_index}] must be a non-empty string")
+                        continue
+                    values.append(value.strip())
+                normalized[field] = values
+            if not normalized["labels"] and not normalized["title_prefixes"]:
+                missing_inputs.append(f"{prefix} must declare at least one label or title_prefix")
+            normalized_mappings.append(normalized)
+
+    result = {
+        "availability": "incomplete" if missing_inputs else "present",
+        "object_type_mapping": normalized_mappings,
+        "missing_type_policy": policy,
+        "summary": (
+            "host planning taxonomy mapping is readable."
+            if not missing_inputs
+            else "host planning taxonomy mapping is incomplete."
+        ),
+        "missing_inputs": missing_inputs,
+    }
+    return result, missing_inputs
+
+
 def locator_field_missing(value: object) -> bool:
     return not isinstance(value, str) or not value.strip()
 
@@ -2731,6 +2813,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "hook_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "advanced_lint_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "host_planning_taxonomy": empty_host_planning_taxonomy(),
         "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
@@ -2887,6 +2970,11 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             entry=context_schema,
                         )
                     )
+                host_planning_taxonomy, taxonomy_errors = validate_host_planning_taxonomy(
+                    interface_payload.get("host_planning_taxonomy")
+                )
+                repo_interface_surface["host_planning_taxonomy"] = host_planning_taxonomy
+                missing_inputs.extend(taxonomy_errors)
                 dynamic_tool_locators = interface_payload.get("dynamic_tool_locators")
                 if dynamic_tool_locators is not None:
                     repo_interface_surface["tool_availability"] = dynamic_tool_availability_payload(

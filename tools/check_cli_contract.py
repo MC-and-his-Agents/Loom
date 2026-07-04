@@ -3335,6 +3335,104 @@ def load_governance_surface_module() -> Any:
     return module
 
 
+def write_host_planning_taxonomy_companion(
+    target: Path,
+    *,
+    object_type_mapping: list[dict[str, Any]],
+    missing_type_policy: str = "advisory_unknown",
+) -> None:
+    companion = target / ".loom" / "companion"
+    companion.mkdir(parents=True, exist_ok=True)
+    (companion / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+    (companion / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (companion / "repo-interface.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+                "specialized_gates": [],
+                "host_planning_taxonomy": {
+                    "object_type_mapping": object_type_mapping,
+                    "missing_type_policy": missing_type_policy,
+                },
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+@contextmanager
+def patched_github_intake_readbacks(module: Any, issue_payload: dict[str, Any]):
+    original_issue_payload = module.github_issue_payload
+    original_dependencies = module.github_issue_dependencies_payload
+    original_binding = module.host_binding_inspection_payload
+    original_project_drift = module.project_drift_payload
+    module.github_issue_payload = lambda *args, **kwargs: (issue_payload, [])
+    module.github_issue_dependencies_payload = lambda *args, **kwargs: {
+        "availability": "present",
+        "capability": {"status": "supported"},
+        "native_edges": [],
+        "checks": [],
+    }
+    module.host_binding_inspection_payload = lambda *args, **kwargs: {
+        "schema_version": "loom-host-binding-inspection/v1",
+        "result": "pass",
+        "missing_inputs": [],
+        "findings": [],
+    }
+    module.project_drift_payload = lambda *args, **kwargs: {
+        "schema_version": "loom-project-drift/v1",
+        "result": "pass",
+        "missing_inputs": [],
+        "findings": [],
+    }
+    try:
+        yield
+    finally:
+        module.github_issue_payload = original_issue_payload
+        module.github_issue_dependencies_payload = original_dependencies
+        module.host_binding_inspection_payload = original_binding
+        module.project_drift_payload = original_project_drift
+
+
+def run_github_intake_taxonomy_payload(
+    module: Any,
+    target: Path,
+    issue_payload: dict[str, Any],
+    *,
+    phase: int | None = None,
+    fr: int | None = None,
+) -> dict[str, Any]:
+    with patched_github_intake_readbacks(module, issue_payload):
+        return module.github_intake_payload(
+            target_root=target,
+            owner="owner",
+            repo_name="repo",
+            issue_number=int(issue_payload.get("number", 1)),
+            project_number=None,
+            phase_number=phase,
+            fr_number=fr,
+            pr_number=None,
+            branch_name=None,
+            head_sha=None,
+        )
+
+
 def assert_gate_freeze_carrier_shadow_bindings_contract() -> None:
     loom_flow = load_loom_flow_module()
     with tempfile.TemporaryDirectory(prefix="loom-freeze-shadow-") as raw_tmp:
@@ -6613,16 +6711,12 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         compare_body_file=readback_drift_file,
     )
     body_drift_admission = body_drift_payload.get("hosted_freeze_admission")
-    if body_drift_payload.get("result") != "block" or body_drift_admission.get("result") != "block":
-        raise AssertionError("hosted freeze admission must block PR body readback drift")
-    if body_drift_admission.get("readback", {}).get("result") != "block":
-        raise AssertionError("hosted freeze admission did not classify PR body readback drift")
-    if not any(
-        finding.get("classifier") == "pr_metadata_drift"
-        for finding in body_drift_admission.get("failure_classifier", {}).get("findings", [])
-        if isinstance(finding, dict)
-    ):
-        raise AssertionError("hosted freeze admission PR body drift must carry classifier next action")
+    if body_drift_payload.get("result") != "pass" or body_drift_admission.get("result") != "pass":
+        raise AssertionError("hosted freeze admission must allow readback body drift when metadata machine blocks match")
+    if body_drift_admission.get("readback", {}).get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+        raise AssertionError("hosted freeze admission did not report benign PR body readback drift")
+    if body_drift_admission.get("failure_classifier", {}).get("findings"):
+        raise AssertionError("benign hosted freeze PR body drift must not carry failure classifier findings")
 
     snapshot = dict(admission.get("recomputed_freeze") or {})
     snapshot["snapshot_id"] = "0" * 64
@@ -6646,6 +6740,97 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         if isinstance(finding, dict)
     ):
         raise AssertionError("hosted snapshot mismatch must carry classifier next action")
+
+
+def assert_host_readback_only_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "host-readback-only-pr-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1965")
+    write_hosted_freeze_admission_inputs(target)
+
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    init_payload = json.loads(init_result.read_text(encoding="utf-8"))
+    init_payload["fact_chain"]["entry_points"]["current_item_id"] = "WI-stale-current"
+    init_payload["fact_chain"]["entry_points"]["work_item"] = ".loom/work-items/WI-stale-current.md"
+    init_payload["fact_chain"]["entry_points"]["recovery_entry"] = ".loom/progress/WI-stale-current.md"
+    init_result.write_text(json.dumps(init_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture stale current pointer"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(
+        target,
+        fixture,
+        extra={
+            "statusCheckRollup": [
+                {"name": "py-compile", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "loom-check", "conclusion": "SUCCESS", "status": "COMPLETED"},
+            ],
+        },
+    )
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "standard",
+            "change_class": "contract",
+            "suite_path": "minimal",
+            "review_requirement": "host_readback_only",
+            "fact_chain_required": False,
+        },
+    )
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    body_file = f".loom/fixtures/{fixture['item']}/host-readback-only-body.md"
+    readback_body_file = f".loom/fixtures/{fixture['item']}/host-readback-only-readback-body.md"
+    (target / body_file).write_text(pr_payload["body"], encoding="utf-8")
+    (target / readback_body_file).write_text(pr_payload["body"] + "\n", encoding="utf-8")
+    payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=readback_body_file,
+    )
+    if payload.get("result") != "pass":
+        raise AssertionError(f"host-readback-only PR gate blocked: {payload.get('missing_inputs')}")
+    serialized = json.dumps(payload, ensure_ascii=False)
+    if "current item mismatch" in serialized or "WI-stale-current" in serialized:
+        raise AssertionError("host-readback-only PR gate leaked stale current pointer into gate result")
+    if payload.get("review_approval", {}).get("status") != "host_readback_only":
+        raise AssertionError("host-readback-only PR gate did not expose the review approval boundary")
+    if payload.get("merge_checkpoint", {}).get("result") != "not_applicable":
+        raise AssertionError("host-readback-only PR gate must not evaluate repo merge checkpoint carriers")
+    admission = payload.get("hosted_freeze_admission", {})
+    if admission.get("result") != "pass" or admission.get("profile") != "host_readback_only":
+        raise AssertionError(f"host-readback-only hosted admission did not pass: {admission}")
+    body_pin = admission.get("input_bindings", {}).get("pr_body_pin", {})
+    if body_pin.get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+        raise AssertionError("host-readback-only body pin must tolerate full-body newline drift when machine blocks match")
+    fact_chain = admission.get("input_bindings", {}).get("fact_chain", {})
+    if fact_chain.get("result") != "not_applicable":
+        raise AssertionError("host-readback-only hosted admission must mark fact-chain not_applicable")
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "standard",
+            "change_class": "contract",
+            "suite_path": "minimal",
+            "review_requirement": "current_head_review_required",
+            "fact_chain_required": False,
+        },
+    )
+    invalid_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        invalid_payload.get("result") != "block"
+        or "PR metadata machine block invalid: loom-governance-intensity" not in invalid_payload.get("missing_inputs", [])
+    ):
+        raise AssertionError("fact_chain_required false without host_readback_only must fail metadata preflight")
 
 
 def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
@@ -7109,16 +7294,16 @@ def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
             "--compare-body-file",
             readback_drift_file,
         ],
-        expect=1,
+        expect=0,
     )
-    if readback_drift.get("readiness", {}).get("closeout_pr_allowed") is not False:
-        raise AssertionError("closeout freeze must fail closed when PR body readback drifts")
-    if not any(
+    if readback_drift.get("result") != "pass" or readback_drift.get("readiness", {}).get("closeout_pr_allowed") is not True:
+        raise AssertionError("closeout freeze must allow PR body readback drift when metadata machine blocks match")
+    if any(
         blocking.get("input") == "readback"
         for blocking in readback_drift.get("readiness", {}).get("blocking_inputs", [])
         if isinstance(blocking, dict)
     ):
-        raise AssertionError("closeout freeze readback drift must be a blocking input")
+        raise AssertionError("benign closeout freeze readback drift must not be a blocking input")
 
     unrelated_issue_file = fixture_dir / "issue-unrelated.json"
     unrelated_issue_file.write_text(
@@ -8750,9 +8935,28 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     if light_fixture_payload.get("result") != "pass":
         raise AssertionError(f"light fixture metadata fixture did not pass: {light_fixture_payload.get('missing_inputs')}")
 
+    host_readback_only = target / "host-readback-only.md"
+    host_readback_only.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "standard",
+                "change_class": "contract",
+                "suite_path": "minimal",
+                "review_requirement": "host_readback_only",
+                "fact_chain_required": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    host_readback_payload = governance_metadata_preflight_payload(target, "host-readback-only.md")
+    if host_readback_payload.get("result") != "pass":
+        raise AssertionError(f"host-readback-only metadata fixture did not pass: {host_readback_payload.get('missing_inputs')}")
+
     negative_cases: dict[str, dict[str, Any]] = {
         "missing-intensity.md": {"governance_intensity": "__DELETE__"},
         "unknown-intensity.md": {"governance_intensity": "casual"},
+        "host-readback-requires-false-fact-chain.md": {"review_requirement": "host_readback_only"},
+        "false-fact-chain-requires-host-readback.md": {"fact_chain_required": False},
         "light-runtime.md": {"governance_intensity": "light", "change_class": "runtime"},
         "light-release-impacting-docs.md": {"governance_intensity": "light", "change_class": "release"},
         "light-workflow.md": {"governance_intensity": "light", "change_class": "workflow"},
@@ -13062,6 +13266,7 @@ def run_pr_metadata_surface() -> None:
         with isolated_loom_workstation(tmp / "workstation"):
             assert_governance_metadata_render_readback_fixture(tmp)
             assert_governance_intensity_metadata_preflight_fixture(tmp)
+            assert_host_readback_only_pr_gate_fixture(tmp)
             assert_pr_intent_profile_fixture(tmp)
 
     print("pr metadata surface checks passed")
@@ -13459,6 +13664,131 @@ def run_runtime_upgrade_surface() -> None:
     print("runtime-upgrade surface checks passed")
 
 
+def run_host_planning_taxonomy_surface() -> None:
+    module = load_loom_flow_module()
+    with tempfile.TemporaryDirectory(prefix="loom-taxonomy-") as raw_tmp:
+        tmp = Path(raw_tmp)
+
+        webenvoy_target = tmp / "webenvoy-labels"
+        webenvoy_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            webenvoy_target,
+            object_type_mapping=[
+                {"loom_type": "phase", "labels": ["类型：Phase"], "title_prefixes": ["Phase:"]},
+                {"loom_type": "fr", "labels": ["类型：FR"], "title_prefixes": ["FR:"]},
+                {"loom_type": "work_item", "labels": ["类型：Work Item"], "title_prefixes": ["WI:"]},
+            ],
+            missing_type_policy="infer_from_context",
+        )
+        webenvoy_payload = run_github_intake_taxonomy_payload(
+            module,
+            webenvoy_target,
+            {
+                "id": "ISSUE_fixture_1933",
+                "number": 1933,
+                "state": "OPEN",
+                "title": "修复宿主标签映射",
+                "body": "",
+                "url": "https://github.com/WebEnvoy/App/issues/1933",
+                "labels": ["类型：Work Item"],
+            },
+        )
+        if webenvoy_payload.get("result") != "pass" or webenvoy_payload.get("object_type") != "work_item":
+            raise AssertionError(f"repo companion Chinese label mapping did not classify work_item: {webenvoy_payload}")
+        if webenvoy_payload.get("route") != "loom-resume":
+            raise AssertionError(f"companion-mapped work_item did not route to loom-resume: {webenvoy_payload}")
+        if webenvoy_payload.get("type_inference", {}).get("source") != "repo_companion":
+            raise AssertionError("Chinese Work Item label must be consumed from repo companion, not Loom core")
+
+        no_mapping_target = tmp / "no-hardcoded-host-labels"
+        no_mapping_target.mkdir()
+        no_mapping_payload = run_github_intake_taxonomy_payload(
+            module,
+            no_mapping_target,
+            {
+                "id": "ISSUE_fixture_1933_unknown",
+                "number": 1933,
+                "state": "OPEN",
+                "title": "修复宿主标签映射",
+                "body": "",
+                "url": "https://github.com/WebEnvoy/App/issues/1933",
+                "labels": ["类型：Work Item"],
+            },
+        )
+        if no_mapping_payload.get("result") != "pass" or no_mapping_payload.get("object_type") != "unknown":
+            raise AssertionError("WebEnvoy Chinese labels must not be hardcoded into Loom core")
+        if "object_type" in no_mapping_payload.get("missing_inputs", []):
+            raise AssertionError("unknown issue type must be advisory unless a command requires a known type")
+        if not any(finding.get("kind") == "unrecognized_type_label" for finding in no_mapping_payload.get("findings", [])):
+            raise AssertionError("unknown issue type must emit an advisory unrecognized_type_label finding")
+
+        epic_story_target = tmp / "epic-story-task"
+        epic_story_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            epic_story_target,
+            object_type_mapping=[
+                {"loom_type": "phase", "labels": ["epic"], "title_prefixes": ["Epic:"]},
+                {"loom_type": "work_item", "labels": ["story", "task"], "title_prefixes": ["Story:", "Task:"]},
+            ],
+        )
+        epic_payload = run_github_intake_taxonomy_payload(
+            module,
+            epic_story_target,
+            {
+                "id": "ISSUE_fixture_epic",
+                "number": 3001,
+                "state": "OPEN",
+                "title": "Epic: Host adoption cleanup",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3001",
+                "labels": ["epic"],
+            },
+        )
+        if epic_payload.get("object_type") != "phase" or epic_payload.get("route") != "loom-story":
+            raise AssertionError(f"epic label/title mapping did not classify as phase story route: {epic_payload}")
+        story_payload = run_github_intake_taxonomy_payload(
+            module,
+            epic_story_target,
+            {
+                "id": "ISSUE_fixture_story",
+                "number": 3002,
+                "state": "OPEN",
+                "title": "Story: Slim down host closeout",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3002",
+                "labels": ["story"],
+            },
+        )
+        if story_payload.get("object_type") != "work_item" or story_payload.get("route") != "loom-resume":
+            raise AssertionError(f"story mapping did not classify as work_item: {story_payload}")
+
+        infer_target = tmp / "infer-from-context"
+        infer_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            infer_target,
+            object_type_mapping=[],
+            missing_type_policy="infer_from_context",
+        )
+        inferred_payload = run_github_intake_taxonomy_payload(
+            module,
+            infer_target,
+            {
+                "id": "ISSUE_fixture_inferred",
+                "number": 3003,
+                "state": "OPEN",
+                "title": "Unlabeled host task",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3003",
+                "labels": [],
+            },
+            fr=3000,
+        )
+        if inferred_payload.get("object_type") != "work_item" or inferred_payload.get("type_inference", {}).get("source") != "context":
+            raise AssertionError(f"infer_from_context did not infer work_item from FR context: {inferred_payload}")
+
+    print("host-planning-taxonomy surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
@@ -13652,54 +13982,21 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("gate freeze PR body pin did not retain metadata block fingerprints")
 
         readback_pr_body_drift.write_text(body + "\nOperator note added after edit.\n", encoding="utf-8")
-        _, body_hash_drift_payload = run_json(
-            [
-                "gate",
-                "freeze",
-                "check",
-                "--target",
-                str(REPO_ROOT),
-                "--item",
-                freeze_item,
-                "--head-sha",
-                head_sha,
-                "--branch",
-                branch,
-                "--body-file",
-                ".loom/runtime/pr/cli-contract-rendered.md",
-                "--compare-body-file",
-                ".loom/runtime/pr/cli-contract-readback-drift.md",
-                "--json",
-            ],
-            expect=1,
+        body_hash_drift_preflight = loom_flow.pr_metadata_preflight_payload(
+            target_root=REPO_ROOT,
+            surface="merge_ready",
+            body_file=".loom/runtime/pr/cli-contract-rendered.md",
+            compare_body_file=".loom/runtime/pr/cli-contract-readback-drift.md",
         )
-        body_hash_drift_payload = runtime_payload_from_agent_safe_output(body_hash_drift_payload)
-        body_hash_drift = body_hash_drift_payload.get("input_bindings", {}).get("pr_body_pin")
-        if not isinstance(body_hash_drift, dict) or body_hash_drift.get("result") != "block":
-            raise AssertionError("gate freeze PR body pin must block rendered/readback body hash drift")
-        if "rendered PR body hash does not match GitHub readback PR body hash" not in body_hash_drift.get("missing_inputs", []):
-            raise AssertionError("gate freeze PR body pin did not report rendered/readback body hash drift")
-        if not any(
-            blocking.get("input") == "pr_body_pin"
-            and "gh pr edit --body-file" in str(blocking.get("next_action"))
-            for blocking in body_hash_drift_payload.get("readiness", {}).get("blocking_inputs", [])
-            if isinstance(blocking, dict)
-        ):
-            raise AssertionError("gate freeze PR body pin block must include the gh pr edit/readback next action")
-        body_hash_drift_classifiers = {
-            finding.get("classifier")
-            for finding in body_hash_drift_payload.get("failure_classifier", {}).get("findings", [])
-            if isinstance(finding, dict)
-        }
-        if "pr_metadata_drift" not in body_hash_drift_classifiers:
-            raise AssertionError("gate freeze PR body hash drift must classify as pr_metadata_drift")
-        if not any(
-            finding.get("classifier") == "pr_metadata_drift"
-            and "regenerate or update the PR body machine carrier" in str(finding.get("next_action"))
-            for finding in body_hash_drift_payload.get("failure_classifier", {}).get("findings", [])
-            if isinstance(finding, dict)
-        ):
-            raise AssertionError("gate freeze PR body hash drift must expose the classifier-specific next_action")
+        if body_hash_drift_preflight.get("result") != "pass":
+            raise AssertionError(f"benign full-body drift should keep PR metadata preflight passing: {body_hash_drift_preflight.get('missing_inputs')}")
+        body_hash_drift = loom_flow.gate_freeze_pr_body_pin_binding(body_hash_drift_preflight)
+        if not isinstance(body_hash_drift, dict) or body_hash_drift.get("result") != "pass":
+            raise AssertionError("gate freeze PR body pin must allow full-body drift when machine blocks still match")
+        if body_hash_drift.get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+            raise AssertionError("gate freeze PR body pin must report benign full-body hash drift")
+        if body_hash_drift.get("missing_inputs"):
+            raise AssertionError("benign full-body PR body drift must not create blocking readiness inputs")
 
         carrier_drift_body.write_text(
             governance_metadata_body(item=freeze_item, branch="work/cli-contract-fixture-drift", head_sha=head_sha),
@@ -15674,6 +15971,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="runtime-upgrade",
             fixture_group="runtime-upgrade",
             run=run_runtime_upgrade_surface,
+        ),
+        SurfaceCheck(
+            name="host-planning-taxonomy",
+            fixture_group="host-planning-taxonomy",
+            run=run_host_planning_taxonomy_surface,
         ),
         SurfaceCheck(
             name="aggregate",
