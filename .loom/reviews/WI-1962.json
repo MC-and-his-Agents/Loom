@@ -1,0 +1,39 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1962",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head implementation review approves WI-1962 batch implementation and host-only closeout support at implementation head 8514d44946ef2c7e3eccf1114bdfca8e8511b59f. Scope is limited to PR metadata covered/excluded batch fields, `loom closeout batch`, focused contract tests, and runtime/plugin/demo hash synchronization.",
+  "reviewer": "codex",
+  "authored_at": "2026-07-04T12:43:00Z",
+  "reviewed_head": "8514d44946ef2c7e3eccf1114bdfca8e8511b59f",
+  "reviewed_validation_summary": "2026-07-04T12:43Z at 8514d44946ef2c7e3eccf1114bdfca8e8511b59f: python3 -m py_compile skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/loom.py tools/check_cli_contract.py passed; git diff --check passed; python3 tools/check_cli_contract.py --surface batch-implementation-closeout passed; python3 tools/check_cli_contract.py --surface pr-metadata passed; python3 tools/check_cli_contract.py --surface closeout-wrapper passed; python3 tools/check_npm_package.py --surface runtime-copy-parity passed; python3 tools/check_npm_package.py --surface plugin-payload-hash passed with hash f34d470c22f7b6b95352f0c6c045da54c407833f3a6823c9f0fd23a95f024fc4; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed; hosted freeze admission smoke passed after root runtime hash sync; python3 tools/check_cli_contract.py --surface aggregate passed in 558.94s.",
+  "reviewed_validation_summary_hash": "cefc492b8c001fc31ad3369e8dd46b665ca41732f62539bb009d8a22cbe1849a",
+  "validation_summary_source": "recovery.latest_validation_summary",
+  "validation_summary_locator": ".loom/progress/WI-1962.md",
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  },
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1962.md",
+    "recovery_entry": ".loom/progress/WI-1962.md",
+    "status_surface": ".loom/status/current.md",
+    "implementation_head": "8514d44946ef2c7e3eccf1114bdfca8e8511b59f",
+    "targeted_contract_surface": "python3 tools/check_cli_contract.py --surface batch-implementation-closeout",
+    "adjacent_contract_surfaces": [
+      "python3 tools/check_cli_contract.py --surface pr-metadata",
+      "python3 tools/check_cli_contract.py --surface closeout-wrapper",
+      "python3 tools/check_cli_contract.py --surface aggregate"
+    ],
+    "runtime_package_checks": [
+      "python3 tools/check_npm_package.py --surface runtime-copy-parity",
+      "python3 tools/check_npm_package.py --surface plugin-payload-hash",
+      "python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift"
+    ]
+  }
+}
