@@ -5,9 +5,9 @@
   "kind": "code_review",
   "summary": "WI-1955 v0.27.1 release candidate is approved at head 0606fd86. The change bumps VERSION and root package.json to v0.27.1, stamps plugin payload metadata with pending release commit and hash bf0a4d1dbcae49131a04a1860735517817f4a25b208eb6eceb6ca5ba56207f16, adds WI-1955 release carriers and readiness evidence, and keeps publication deferred to the main-push release workflow. No runtime behavior beyond merged PR #1967 is included.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-04T04:45:59Z",
-  "reviewed_head": "0606fd86ccccc3a877015d4d9684708e07a1d8aa",
-  "reviewed_validation_summary": "2026-07-04T04:43Z release validation passed py_compile_clean for release tools, git diff --check, version surface, release surface, npm package check, npm pack dry-run for @mc-and-his-agents/loom@0.27.1, and skills release-check; pre-release readback returned missing/unpublished for v0.27.1. 2026-07-04T04:46Z fact-chain, suite validate, suite evidence validate, and suite carrier validate passed for WI-1955 at head 0606fd86ccccc3a877015d4d9684708e07a1d8aa.",
+  "authored_at": "2026-07-04T04:50:10Z",
+  "reviewed_head": "188b13e3a072420a9abea982bf96a752284d6e0e",
+  "reviewed_validation_summary": "2026-07-04T04:43Z on branch `work/1955-v0.27.1-release`: passed `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/check_npm_package.py tools/check_release_surface.py tools/stamp_plugin_payload_metadata.py tools/version_surface_check.py`, `git diff --check`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`, `npm pack --dry-run --json --ignore-scripts`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --target . --json`; pre-release readback for v0.27.1 returned missing/unpublished with no tag, GitHub Release, or npm version occupying the release path.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -36,5 +36,9 @@
     "release_readiness": "docs/evidence/v0.27.1-release-readiness.md",
     "implementation_pr": "https://github.com/MC-and-his-Agents/Loom/pull/1967",
     "implementation_merge_commit": "323e2300cc1a1e9b023b59a5588c4bab65adc51e"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored release review approved the current head for merge checkpoint consumption."
   }
 }
