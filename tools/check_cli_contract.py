@@ -1188,6 +1188,20 @@ def assert_ship_status_preflight_contract(tmp: Path) -> None:
         )
         if clean_result != "pass" or clean_blockers or clean_fixed or not clean_next:
             raise AssertionError("ship status clean readback must pass without blockers")
+        light_result, light_blockers, light_fixed, light_next = module.ship_status_diagnostic(
+            host={"issue": {"state": "closed"}, "errors": []},
+            release={"tag": {"exists": False}, "github_release": {"exists": False}, "npm": {"exists": False}, "errors": []},
+            checkout={"stale_against_origin_main": False, "dirty": False, "errors": []},
+            carrier={"state": "active"},
+            adoption_mode="light-governance",
+        )
+        if (
+            light_result != "pass"
+            or light_blockers
+            or "repair_global_current_pointer" not in light_fixed
+            or "loom workstation current --target <repo> --clear --apply --json" not in light_next
+        ):
+            raise AssertionError("light-governance ship status must repair global current instead of blocking on stale repo carrier")
         if not module.ship_missing_readback("npm ERR! 404 No match found"):
             raise AssertionError("ship status must treat missing release/package readback as absent, not as an error")
         readback_errors: list[str] = []
@@ -1374,6 +1388,7 @@ def assert_ship_apply_wrapper_contract() -> None:
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
+    original_write_workstation_current = module.write_workstation_current
     module.flow_payload = passing_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
@@ -1384,6 +1399,8 @@ def assert_ship_apply_wrapper_contract() -> None:
         "changed_paths": ["README.md"],
         "missing_inputs": [],
     }
+    current_writes: list[dict[str, Any]] = []
+    module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
     try:
         status = module.handle_ship(
             [
@@ -1409,6 +1426,9 @@ def assert_ship_apply_wrapper_contract() -> None:
             raise AssertionError("ship --apply must emit mutating loom-ship/v1 apply payload")
         if emitted.get("creates_closeout_pr") is not False or emitted.get("closeout_mode") != "host_only":
             raise AssertionError("ship --apply must default to host-only closeout without creating a closeout PR")
+        step_names = [step.get("name") for step in emitted.get("steps", []) if isinstance(step, dict)]
+        if "global-current-closeout" not in step_names or not current_writes or current_writes[-1].get("state") != "no_active_item":
+            raise AssertionError("ship --apply host-only closeout must clear the workstation current pointer")
         expected_prefixes = [
             ["pr-metadata", "update"],
             ["carrier", "refresh"],
@@ -1534,6 +1554,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
+        module.write_workstation_current = original_write_workstation_current
 
 
 def assert_ship_closeout_policy_admission_contract() -> None:
@@ -1641,6 +1662,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
     calls: list[list[str]] = []
     emitted: dict[str, Any] = {}
+    current_writes: list[dict[str, Any]] = []
 
     def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
         emitted.clear()
@@ -1650,6 +1672,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
     def run_host_only_case(name: str, fields: dict[str, Any], expected_policy: str) -> None:
         calls.clear()
         emitted.clear()
+        write_count_before = len(current_writes)
         merge_sha = f"fixture-{name}-merge-sha"
 
         def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
@@ -1754,6 +1777,12 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         step_names = [step.get("name") for step in emitted.get("steps", []) if isinstance(step, dict)]
         if "host-reconciliation-sync" not in step_names or "host-closeout-check" not in step_names:
             raise AssertionError(f"{name} ship --apply must consume host reconciliation and closeout check")
+        if (
+            "global-current-closeout" not in step_names
+            or len(current_writes) != write_count_before + 1
+            or current_writes[-1].get("state") != "no_active_item"
+        ):
+            raise AssertionError(f"{name} ship --apply must clear the workstation current pointer after host-only closeout")
         closeout_steps = [step for step in emitted.get("steps", []) if isinstance(step, dict) and step.get("name") == "host-closeout-check"]
         closeout_payload = closeout_steps[-1].get("payload", {}) if closeout_steps else {}
         if closeout_payload.get("issue", {}).get("state") != "CLOSED":
@@ -1897,6 +1926,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
+    original_write_workstation_current = module.write_workstation_current
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
     module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
@@ -1906,6 +1936,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         "changed_paths": ["tools/check_cli_contract.py"],
         "missing_inputs": [],
     }
+    module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
     try:
         run_host_only_case(
             "light",
@@ -1925,7 +1956,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
                 "release_judgment": "no_release",
                 "upgrade_triggers": [],
             },
-            "inline",
+            "host_only",
         )
         run_versioned_terminal_blocker()
         run_release_closeout_blocker()
@@ -1934,6 +1965,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
+        module.write_workstation_current = original_write_workstation_current
 
 
 def assert_ship_docs_entry_contract() -> None:
@@ -4480,6 +4512,21 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     state = json.loads((target / ".loom" / "installed-state.json").read_text(encoding="utf-8"))
     if state.get("repo_payload", {}).get("mode") != "metadata-only":
         raise AssertionError("metadata-only installed-state did not declare repo_payload.mode")
+    if state.get("repo_payload", {}).get("adoption_mode") != "light-governance":
+        raise AssertionError("metadata-only installed-state did not declare the default light-governance adoption mode")
+    if state.get("contract", {}).get("minimum_loom_version") is None:
+        raise AssertionError("metadata-only installed-state did not declare a minimum Loom contract")
+    for local_field in (
+        "target",
+        "installed_at",
+        "upgraded_at",
+        "cli_freshness",
+        "plugin_freshness",
+        "plugin_cache_path",
+        "host_machine_path",
+    ):
+        if local_field in state:
+            raise AssertionError(f"metadata-only installed-state leaked workstation-local field: {local_field}")
     if state.get("skills_provider", {}).get("scope") != "user":
         raise AssertionError("metadata-only installed-state did not declare user skills provider")
     layer_paths = {layer.get("installed_path") for layer in state.get("layers", []) if isinstance(layer, dict)}
@@ -4505,6 +4552,7 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
         if headless_verify.get("result") != "pass" or headless_verify.get("doctor", {}).get("result") != "pass":
             raise AssertionError("metadata-only verify required Codex Desktop runtime/cache state")
     assert_global_cli_metadata_only_bootstrap_contract(tmp)
+    assert_light_governance_slim_bootstrap_contract(tmp)
 
     _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0)
     refresh_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "host-plugin-refresh-boundary"), None)
@@ -4744,7 +4792,16 @@ def assert_workstation_registry_entry_shape(entry: dict[str, Any], *, fixture_id
     adoption = entry.get("adoption")
     if not isinstance(adoption, dict):
         raise AssertionError(f"{fixture_id} registry entry adoption must be an object")
-    if adoption.get("mode") not in {"metadata-only", "repo-local-wrapper", "legacy-embedded", "unknown"}:
+    if adoption.get("mode") not in {
+        "light-governance",
+        "execution-control",
+        "strong-governance",
+        "attach-only",
+        "metadata-only",
+        "repo-local-wrapper",
+        "legacy-embedded",
+        "unknown",
+    }:
         raise AssertionError(f"{fixture_id} registry entry adoption mode drifted")
     opt_in = entry.get("opt_in")
     if not isinstance(opt_in, dict) or not isinstance(opt_in.get("enabled"), bool) or not opt_in.get("source"):
@@ -4767,6 +4824,7 @@ def assert_workstation_registry_fixture_contract() -> None:
         "loom workstation unregister --json",
         "loom workstation upgrade --plan --json",
         "loom workstation upgrade --apply --json",
+        "loom workstation current --json",
     } - command_surface:
         raise AssertionError("workstation registry fixtures must name the future workstation command surface")
     forbidden_truth_fields = set(fixture_data.get("forbidden_repository_truth_fields", []))
@@ -5059,6 +5117,83 @@ def assert_workstation_registry_cli_contract(tmp: Path) -> None:
             os.environ["LOOM_TEST_NPM_LATEST_VERSION"] = old_latest
 
 
+def assert_workstation_current_cli_contract(tmp: Path) -> None:
+    home = tmp / "current-home"
+    target = tmp / "current-target"
+    home.mkdir()
+    write_workstation_registry_target(target, version="v0.28.0")
+    with isolated_codex_workstation(home):
+        _, initial = run_json(["workstation", "current", "--target", str(target), "--json"], expect=0)
+        current = initial.get("current") if isinstance(initial.get("current"), dict) else {}
+        if initial.get("mutates") is not False or current.get("state") != "no_active_item":
+            raise AssertionError(f"workstation current read must be non-mutating and empty by default: {initial}")
+        if (home / ".loom" / "repos").exists():
+            raise AssertionError("workstation current read must not create workstation state")
+
+        _, planned = run_json(
+            [
+                "workstation",
+                "current",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1957",
+                "--issue",
+                "1957",
+                "--pr",
+                "1971",
+                "--branch",
+                "work/1957-1960-host-tax-core",
+                "--json",
+            ],
+            expect=0,
+        )
+        if planned.get("mutates") is not False or planned.get("apply_required") is not True:
+            raise AssertionError(f"workstation current plan must not mutate without --apply: {planned}")
+        if (home / ".loom" / "repos").exists():
+            raise AssertionError("workstation current plan must not create workstation state")
+
+        _, active = run_json(
+            [
+                "workstation",
+                "current",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1957",
+                "--issue",
+                "1957",
+                "--pr",
+                "1971",
+                "--branch",
+                "work/1957-1960-host-tax-core",
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        writes = active.get("writes")
+        active_current = active.get("current") if isinstance(active.get("current"), dict) else {}
+        if active.get("mutates") is not True or not isinstance(writes, list) or len(writes) != 1:
+            raise AssertionError(f"workstation current apply must write exactly one workstation file: {active}")
+        current_path = Path(writes[0])
+        if home.resolve() not in current_path.resolve().parents or not current_path.exists():
+            raise AssertionError(f"workstation current wrote outside isolated HOME: {writes}")
+        if active_current.get("state") != "active" or active_current.get("current_item_id") != "WI-1957":
+            raise AssertionError(f"workstation current apply did not persist the active item: {active_current}")
+        persisted = json.loads(current_path.read_text(encoding="utf-8"))
+        if persisted.get("state") != "active" or persisted.get("target") != str(target.resolve()):
+            raise AssertionError(f"workstation current persisted invalid payload: {persisted}")
+
+        _, cleared = run_json(["workstation", "current", "--target", str(target), "--clear", "--apply", "--json"], expect=0)
+        cleared_current = cleared.get("current") if isinstance(cleared.get("current"), dict) else {}
+        if cleared_current.get("state") != "no_active_item" or cleared_current.get("current_item_id") is not None:
+            raise AssertionError(f"workstation current clear did not remove active item: {cleared_current}")
+        cleared_persisted = json.loads(current_path.read_text(encoding="utf-8"))
+        if cleared_persisted.get("state") != "no_active_item" or cleared_persisted.get("issue") is not None:
+            raise AssertionError(f"workstation current clear persisted invalid payload: {cleared_persisted}")
+
+
 def assert_workstation_registry_cli_blocks(payload: dict[str, Any], classification: str, entry_id: Any) -> None:
     if payload.get("result") != "block" or payload.get("failed_layer") != "workstation-registry":
         raise AssertionError(f"workstation registry {classification} did not fail closed: {payload}")
@@ -5190,6 +5325,7 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "status",
     "shadow-parity",
     "story",
+    "workstation current",
 ]
 
 
@@ -5197,9 +5333,12 @@ def global_cli_state(target: Path) -> dict[str, Any]:
     return {
         "schema_version": "loom-installed-state/v2",
         "installation_id": "fixture-global-cli",
-        "target": str(target),
         "upgrade_eligibility": "current",
         "runtime_provider": "global-cli",
+        "contract": {
+            "minimum_loom_version": "v0.13.0",
+            "installed_state_schema": "loom-installed-state/v2",
+        },
         "provider_requirements": {
             "global_cli": {
                 "required": True,
@@ -5214,8 +5353,17 @@ def global_cli_state(target: Path) -> dict[str, Any]:
         },
         "repo_payload": {
             "mode": "metadata-only",
+            "adoption_mode": "light-governance",
             "intentional_absent_paths": [
                 ".loom/bin",
+                ".loom/runtime",
+                ".loom/tmp",
+                ".loom/shadow",
+                ".loom/status/current.md",
+                ".loom/work-items",
+                ".loom/progress",
+                ".loom/specs",
+                ".loom/reviews",
                 "plugins/loom/.codex-plugin/plugin.json",
                 "plugins/loom/skills",
                 ".agents/skills",
@@ -5228,7 +5376,7 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "layer_type": "repository-adoption-metadata",
                 "installed_path": ".loom/installed-state.json",
                 "version_context": {
-                    "repo_version": "v0.13.0",
+                    "minimum_loom_contract": "v0.13.0",
                     "installed_state_schema": "loom-installed-state/v2",
                 },
                 "runtime_state": "ready",
@@ -5241,8 +5389,8 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "layer_type": "user-level-skills-provider",
                 "installed_path": "workstation:codex-loom-plugin",
                 "version_context": {
-                    "plugin_surface_version": "v0.13.0",
-                    "host_adapter_version": "v0.13.0",
+                    "minimum_plugin_contract": "v0.13.0",
+                    "minimum_host_adapter_contract": "v0.13.0",
                 },
                 "runtime_state": "ready",
                 "upgrade_eligibility": "current",
@@ -5340,6 +5488,60 @@ def assert_global_cli_metadata_only_bootstrap_contract(tmp: Path) -> None:
     if payload.get("verification", {}).get("ok") is not True:
         raise AssertionError(f"metadata-only global-cli bootstrap did not verify: {payload.get('verification')}")
     assert_no_repo_local_runtime_bootstrap(target, payload)
+
+
+def assert_light_governance_slim_bootstrap_contract(tmp: Path) -> None:
+    target = tmp / "bootstrap-light-governance-slim"
+    target.mkdir()
+    _, payload = run_json(
+        [
+            "init",
+            "bootstrap",
+            "--target",
+            str(target),
+            "--intent",
+            "light-governance",
+            "--write",
+            "--verify",
+            "--json",
+        ],
+        expect=0,
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if payload.get("verification", {}).get("ok") is not True:
+        raise AssertionError(f"light-governance slim bootstrap did not verify: {payload.get('verification')}")
+    if payload.get("runtime_provider", {}).get("runtime_provider") != "global-cli":
+        raise AssertionError("light-governance bootstrap must default to the global CLI runtime provider")
+    declared_paths = {
+        item.get("path")
+        for collection_name in ("initial_artifacts", "planned_writes")
+        for item in payload.get(collection_name, [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    forbidden = {
+        ".loom/work-items",
+        ".loom/progress",
+        ".loom/specs",
+        ".loom/reviews",
+        ".loom/status/current.md",
+        ".loom/shadow",
+        ".loom/bin",
+        ".loom/runtime",
+        ".loom/tmp",
+    }
+    declared_forbidden = sorted(
+        path
+        for path in declared_paths
+        if any(path == blocked or path.startswith(blocked + "/") for blocked in forbidden)
+    )
+    if declared_forbidden:
+        raise AssertionError(f"light-governance bootstrap declared execution carriers: {declared_forbidden}")
+    for unexpected in forbidden:
+        if (target / unexpected).exists():
+            raise AssertionError(f"light-governance bootstrap created forbidden repo carrier: {unexpected}")
+    loom_files = [path for path in (target / ".loom").rglob("*") if path.is_file()]
+    if len(loom_files) >= 10:
+        raise AssertionError(f"light-governance bootstrap left too many .loom files: {len(loom_files)}")
 
 
 def write_global_cli_fact_chain_fixture(target: Path) -> None:
@@ -11701,7 +11903,9 @@ def run_adoption_host_metadata_surface() -> None:
 def run_workstation_registry_surface() -> None:
     assert_workstation_registry_fixture_contract()
     with tempfile.TemporaryDirectory(prefix="loom-workstation-registry-") as raw_tmp:
-        assert_workstation_registry_cli_contract(Path(raw_tmp))
+        tmp = Path(raw_tmp)
+        assert_workstation_registry_cli_contract(tmp)
+        assert_workstation_current_cli_contract(tmp)
     print("workstation registry surface checks passed")
 
 

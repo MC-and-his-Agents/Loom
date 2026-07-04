@@ -23,7 +23,10 @@ The CLI also reads `.loom/installed-state.v2.json` and `.loom/installed-state/in
 {
   "schema_version": "loom-installed-state/v2",
   "installation_id": "repo-specific-stable-id",
-  "target": "/absolute/or/repo-relative/target",
+  "contract": {
+    "minimum_loom_version": "v0.28.0",
+    "installed_state_schema": "loom-installed-state/v2"
+  },
   "upgrade_eligibility": "current",
   "layers": [
     {
@@ -31,8 +34,8 @@ The CLI also reads `.loom/installed-state.v2.json` and `.loom/installed-state/in
       "layer_type": "repository-adoption-metadata",
       "installed_path": ".loom/installed-state.json",
       "version_context": {
-        "repo_version": "v0.13.0",
-        "runtime_core_version": "1.0.0"
+        "minimum_loom_contract": "v0.28.0",
+        "installed_state_schema": "loom-installed-state/v2"
       },
       "runtime_state": "ready",
       "upgrade_eligibility": "current",
@@ -171,11 +174,24 @@ from repository truth:
 
 ```json
 {
+  "contract": {
+    "minimum_loom_version": "v0.28.0",
+    "installed_state_schema": "loom-installed-state/v2"
+  },
   "runtime_provider": "global-cli",
   "repo_payload": {
     "mode": "metadata-only",
+    "adoption_mode": "light-governance",
     "intentional_absent_paths": [
       ".loom/bin",
+      ".loom/runtime",
+      ".loom/tmp",
+      ".loom/shadow",
+      ".loom/status/current.md",
+      ".loom/work-items",
+      ".loom/progress",
+      ".loom/specs",
+      ".loom/reviews",
       "plugins/loom/.codex-plugin/plugin.json",
       "plugins/loom/skills",
       ".agents/skills",
@@ -222,6 +238,12 @@ must not fail metadata-only repositories merely because `plugins/loom/skills/`
 is absent. `doctor`, `host verify`, and `skills check` report missing
 workstation registration as a provider/workstation gap, not as missing
 repository payload.
+
+Installed-state is repository truth, not workstation state. New metadata-only
+records must not write top-level `target`, `installed_at`, `upgraded_at`,
+`cli_freshness`, `plugin_freshness`, `plugin_cache_path`, or
+`host_machine_path`. Upgrades should remove those fields when refreshing the
+repo contract.
 
 When metadata-only repositories also depend on the global CLI runtime provider,
 installed-state must keep the two dependencies separate:

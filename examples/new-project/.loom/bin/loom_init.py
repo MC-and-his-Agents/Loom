@@ -1615,6 +1615,16 @@ def profile_common_artifacts(global_cli_metadata_only: bool = False) -> list[dic
     return artifacts
 
 
+def profile_light_governance_artifacts() -> list[dict[str, str]]:
+    return [
+        {"path": ".loom/README.md", "kind": "rule-entry", "source": "generated"},
+        {"path": ".loom/bootstrap/init-result.json", "kind": "init-result", "source": "generated"},
+        {"path": ".loom/companion/README.md", "kind": "repo-companion-entry", "source": "generated"},
+        {"path": ".loom/companion/repo-interface.json", "kind": "repo-companion-interface", "source": "generated"},
+        {"path": ".loom/companion/interop.json", "kind": "repo-interop-contract", "source": "generated"},
+    ]
+
+
 def profile_light_artifacts(target_root: Path) -> list[dict[str, str]]:
     artifacts: list[dict[str, str]] = []
     if not (target_root / "AGENTS.md").exists():
@@ -1720,11 +1730,11 @@ def initial_work_items(
                 "scope": "Create companion, review guidance, and PR template surfaces without Loom-owned execution carriers",
                 "execution_path": "adoption/light-governance",
                 "workspace_entry": ".",
-                "recovery_entry": "checkpoint-lite issue or PR notes",
-                "review_entry": ".loom/reviews/INIT-0001.json",
+                "recovery_entry": "host issue or PR notes",
+                "review_entry": ".loom/companion/README.md",
                 "validation_entry": validation_entry,
                 "artifacts": artifacts,
-                "closing_condition": "The companion entry, review guidance, PR template, and bootstrap metadata are readable without generated work/progress/status/spec carriers",
+                "closing_condition": "The companion locator, PR template, and bootstrap metadata are readable without generated work/progress/status/spec/review carriers",
                 "post_build_continuation": "Upgrade to execution-control only when the repo needs Loom-owned work item, recovery, status, or spec carriers",
                 "owner_for_checkpoint_lite": "repository owner or current lightweight adoption operator",
             }
@@ -1757,10 +1767,20 @@ def initial_artifacts(
     if not profile_writes_artifacts(profile):
         return []
 
-    artifacts = profile_common_artifacts(global_cli_metadata_only)
     if profile == "light-governance":
-        artifacts.extend(profile_light_artifacts(target_root))
-    elif profile in {"execution-control", "strong-governance"}:
+        artifacts = profile_light_governance_artifacts()
+        if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
+            artifacts.append(
+                {
+                    "path": ".github/PULL_REQUEST_TEMPLATE.md",
+                    "kind": "pr-template",
+                    "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md",
+                }
+            )
+        return artifacts
+
+    artifacts = profile_common_artifacts(global_cli_metadata_only)
+    if profile in {"execution-control", "strong-governance"}:
         artifacts.extend(profile_execution_artifacts(target_root))
     if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
         artifacts.append(
@@ -1832,6 +1852,8 @@ def planned_write_targets(result: dict[str, object], adoption_path: str) -> list
             kind=str(artifact.get("kind", "artifact")),
             adoption_path=adoption_path,
         )
+    if adoption_path in {"minimal-bootstrap", "lightweight-retrofit"}:
+        return planned
     for path, kind in (
         (".loom/companion/README.md", "repo-companion-entry"),
         (".loom/companion/manifest.json", "repo-companion-manifest"),
@@ -1886,7 +1908,12 @@ def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[
             {"path": ".loom/progress/**", "reason": "light-governance does not author Loom recovery truth"},
             {"path": ".loom/status/current.md", "reason": "light-governance does not author Loom status truth"},
             {"path": ".loom/specs/**", "reason": "light-governance keeps formal Loom specs deferred until execution-control"},
+            {"path": ".loom/reviews/**", "reason": "light-governance keeps semantic review evidence in host comments until execution-control"},
             {"path": ".loom/stories/**", "reason": "light-governance keeps story carriers deferred until execution-control"},
+            {"path": ".loom/shadow/**", "reason": "light-governance does not author repo-local shadow parity carriers by default"},
+            {"path": ".loom/bin/**", "reason": "light-governance uses the global CLI runtime provider"},
+            {"path": ".loom/runtime/**", "reason": "light-governance keeps runtime cache in workstation state"},
+            {"path": ".loom/tmp/**", "reason": "light-governance keeps temporary output in workstation state"},
             release_target_absent,
         ]
     return [release_target_absent]
@@ -1969,13 +1996,13 @@ def candidate_intent_options(
     signal_default: str,
 ) -> list[dict[str, object]]:
     options: list[dict[str, object]] = []
-    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root)
     for intent in reasonable_candidate_intents(scenario, intake):
         option_intake = dict(intake)
         option_intake["adoption_intent"] = intent
         option_intake["adoption_intent_source"] = "decision_prompt"
         path = recommended_adoption_path(scenario, option_intake)
         profile = scaffold_profile_key(path, option_intake)
+        global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root) or profile in {"light-governance", "attach-only"}
         artifacts = initial_artifacts(target_root, install_pr_template, path, profile, global_cli_metadata_only)
         planned = planned_write_targets({"initial_artifacts": artifacts}, path)
         heavy = any(isinstance(item.get("requires_intent"), str) for item in planned)
@@ -2019,7 +2046,9 @@ def decision_prompt_payload(
         return None
 
     validation_entry = intake.get("repository_level_validation_entry")
-    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root)
+    profile_payload = result.get("scaffold_profile") if isinstance(result.get("scaffold_profile"), dict) else {}
+    prompt_profile = profile_payload.get("name") if isinstance(profile_payload.get("name"), str) else ""
+    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root) or prompt_profile in {"light-governance", "attach-only"}
     verification_commands = (
         ["loom verify --target . --json", "loom adopt verify --target . --json"]
         if global_cli_metadata_only
@@ -2141,7 +2170,7 @@ def build_result(
     attach_only = uses_attach_only_path(adoption_path)
     read_only_adoption = adoption_path in NON_WRITABLE_ADOPTION_PATHS
     has_work_item_carriers = profile_has_work_item_carriers(profile)
-    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root)
+    global_cli_metadata_only = target_uses_global_cli_metadata_only(target_root) or profile in {"light-governance", "attach-only"}
     main_problem = {
         "new": "the repository has no controlled Loom entry yet",
         "pre-execution-existing": "the repo has established document truth but no formed execution surface yet",
@@ -2208,7 +2237,7 @@ def build_result(
                 "observe-only": "read-only repository observation; no Loom adoption carriers are written",
                 "skill-install-only": "skill/runtime installation intent without repository governance adoption carriers",
                 "attach-only": "companion/read-surface attachment that preserves repo-owned execution truth",
-                "light-governance": "companion, review guidance, and PR-template loop without Loom-owned work item/progress/status/spec carriers",
+                "light-governance": "minimal companion locator and PR-template loop without Loom-owned work item/progress/status/spec/review carriers",
                 "execution-control": "Loom-owned work item, progress, review, status, and spec carriers",
                 "strong-governance": "execution-control surface prepared for host gates, required checks, merge, and closeout consumption",
             }[profile],
@@ -2286,7 +2315,7 @@ def build_result(
                 if attach_only
                 else [
                     "admission checkpoint confirms the companion entry, review guidance, bootstrap metadata, and PR template are readable",
-                    "build checkpoint confirms generated light-governance surfaces are internally consistent",
+                    "build checkpoint confirms generated light-governance metadata and companion locator surfaces are internally consistent",
                     "merge checkpoint remains repo-owned until the intent upgrades to execution-control or strong-governance",
                 ]
                 if profile == "light-governance"
@@ -2299,7 +2328,7 @@ def build_result(
             "clean_state": (
                 "all generated attach-only Loom artifacts are readable, verified, and do not introduce Loom-authored work/progress/status/review/spec truth carriers"
                 if attach_only
-                else "all generated light-governance artifacts are readable, verified, and do not introduce Loom-owned work/progress/status/spec carriers"
+                else "all generated light-governance artifacts are readable, verified, and do not introduce Loom-owned work/progress/status/spec/review/shadow carriers"
                 if profile == "light-governance"
                 else "all generated Loom artifacts are readable, verified, and free of conflicting duplicates"
             ),
@@ -2312,7 +2341,7 @@ def build_result(
                 if attach_only
                 else [
                     "the target repo has a readable Loom companion entry",
-                    "the companion review guidance, lightweight review placeholders, and PR template exist",
+                    "the companion locator, bootstrap metadata, and PR template exist",
                     "the bootstrap manifest and init-result are verifiable",
                 ]
                 if profile == "light-governance"
@@ -2518,8 +2547,8 @@ def render_loom_readme(result: dict[str, object]) -> str:
     elif profile_name == "light-governance":
         path_lines = (
             "- Repo companion entry: `.loom/companion/README.md`\n"
-            "- Review record: `.loom/reviews/INIT-0001.json`\n"
-            "- Spec-review guidance: `.loom/reviews/INIT-0001.spec.json`\n"
+            "- Repo interface locator: `.loom/companion/repo-interface.json`\n"
+            "- Repo interop locator: `.loom/companion/interop.json`\n"
         )
     else:
         path_lines = (
@@ -2963,14 +2992,19 @@ def scaffold_target(
     profile = result.get("scaffold_profile")
     profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
     global_cli_metadata_only = bootstrap_uses_global_cli_runtime(result)
-    writes_light_loop = profile_name in {"light-governance", "execution-control", "strong-governance"}
+    declared_write_paths = {
+        str(artifact.get("path"))
+        for artifact in result.get("initial_artifacts", [])
+        if isinstance(artifact, dict) and isinstance(artifact.get("path"), str)
+    }
+    writes_light_loop = profile_name in {"execution-control", "strong-governance"}
     writes_work_item_carriers = profile_has_work_item_carriers(profile_name)
     writes_formal_spec_suite = writes_work_item_carriers
     if profile_name == "attach-only":
         forbidden_errors = attach_only_forbidden_carrier_errors(target_root, result)
         if forbidden_errors:
             raise RuntimeError("; ".join(forbidden_errors))
-    if ensure_gitignore_has_runtime_ignores(target_root, repair_gitignore=repair_gitignore):
+    if ".gitignore" in declared_write_paths and ensure_gitignore_has_runtime_ignores(target_root, repair_gitignore=repair_gitignore):
         written += 1
         touched.append(".gitignore")
     result["gitignore_policy"] = gitignore_policy_payload(target_root)
@@ -2991,7 +3025,7 @@ def scaffold_target(
         (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
         (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
     ]
-    if not global_cli_metadata_only:
+    if ".loom/bootstrap/manifest.json" in declared_write_paths:
         writes.insert(3, (target_root / ".loom/bootstrap/manifest.json", manifest_payload(result), "json"))
     if writes_light_loop:
         writes.extend(
@@ -3010,13 +3044,16 @@ def scaffold_target(
         )
 
     for path, payload, kind in writes:
+        relative = str(path.relative_to(target_root))
+        if relative not in declared_write_paths and path != output_path:
+            continue
         changed = write_json(path, payload, force=force) if kind == "json" else write_text(path, payload, force=force)
         if changed:
             written += 1
-            touched.append(str(path.relative_to(target_root)))
+            touched.append(relative)
 
     makefile_target = target_root / "Makefile"
-    if not global_cli_metadata_only and not makefile_target.exists():
+    if "Makefile" in declared_write_paths and not makefile_target.exists():
         if write_text(makefile_target, render_makefile(), force=force):
             written += 1
             touched.append("Makefile")
@@ -3028,13 +3065,15 @@ def scaffold_target(
             if evidence_source is None:
                 continue
             relative = f".loom/shadow/{surface.replace('_', '-')}-{side}.json"
+            if relative not in declared_write_paths:
+                continue
             path = target_root / relative
             payload = shadow_evidence_payload(target_root, source=evidence_source, value=value)
             if write_json(path, payload, force=force):
                 written += 1
                 touched.append(relative)
 
-    if not global_cli_metadata_only:
+    if any(path.startswith(".loom/bin/") for path in declared_write_paths):
         for source, destination in (
             (Path(__file__), target_root / ".loom/bin/loom_init.py"),
             (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),
@@ -3046,9 +3085,12 @@ def scaffold_target(
             (Path(__file__).with_name("loom_check.py"), target_root / ".loom/bin/loom_check.py"),
             (Path(__file__).with_name("loom_story_carriers.py"), target_root / ".loom/bin/loom_story_carriers.py"),
         ):
+            relative = str(destination.relative_to(target_root))
+            if relative not in declared_write_paths:
+                continue
             if copy_file(source, destination, force=force):
                 written += 1
-                touched.append(str(destination.relative_to(target_root)))
+                touched.append(relative)
     if writes_formal_spec_suite:
         for source, destination in (
             (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
@@ -3059,18 +3101,21 @@ def scaffold_target(
             ),
             (shared_asset(__file__, "templates/scaffold/user-story.md"), target_root / ".loom/stories/_template.md"),
         ):
+            relative = str(destination.relative_to(target_root))
+            if relative not in declared_write_paths:
+                continue
             if copy_file(source, destination, force=force):
                 written += 1
-                touched.append(str(destination.relative_to(target_root)))
+                touched.append(relative)
 
     pr_template_target = target_root / ".github/PULL_REQUEST_TEMPLATE.md"
-    if install_pr_template or not pr_template_target.exists():
+    if ".github/PULL_REQUEST_TEMPLATE.md" in declared_write_paths:
         if copy_file(shared_asset(__file__, "github/PULL_REQUEST_TEMPLATE.md"), pr_template_target, force=force):
             written += 1
             touched.append(str(pr_template_target.relative_to(target_root)))
 
     root_agents = target_root / "AGENTS.md"
-    if writes_light_loop and not root_agents.exists():
+    if "AGENTS.md" in declared_write_paths and not root_agents.exists():
         if write_text(root_agents, render_root_agents(), force=force):
             written += 1
             touched.append(str(root_agents.relative_to(target_root)))
@@ -3229,6 +3274,11 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                 ".loom/progress/**",
                 ".loom/status/current.md",
                 ".loom/specs/**",
+                ".loom/reviews/**",
+                ".loom/shadow/**",
+                ".loom/bin/**",
+                ".loom/runtime/**",
+                ".loom/tmp/**",
             )
             for collection_name, paths in (("initial_artifacts", declared_generated), ("planned_writes", planned_generated)):
                 for path in paths:
@@ -3243,9 +3293,22 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                 ".loom/specs/INIT-0001/spec.md",
                 ".loom/specs/INIT-0001/plan.md",
                 ".loom/specs/INIT-0001/implementation-contract.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/reviews/INIT-0001.spec.json",
+                ".loom/shadow",
+                ".loom/bin",
+                ".loom/runtime",
+                ".loom/tmp",
             ):
                 if (target_root / path).exists():
                     errors.append(f"light-governance bootstrap must not leave execution-control carrier on disk: {path}")
+            loom_files = [
+                path
+                for path in (target_root / ".loom").rglob("*")
+                if path.is_file()
+            ] if (target_root / ".loom").exists() else []
+            if len(loom_files) >= 10:
+                errors.append(f"light-governance bootstrap must keep `.loom/` below 10 files by default; found {len(loom_files)}")
         if global_cli_metadata_only:
             declared_paths = {
                 item.get("path")

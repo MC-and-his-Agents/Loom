@@ -421,7 +421,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "9290ddb419c5145a2e044d41914329337f937bc1ee7d5270bfe18c4b0e17ff3c"
+      "sha256": "c89103ad663833e5ca5299996bbfec73e6009e2c8afd4d2a3c634ed0ca3c89ca"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -463,7 +463,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "c1b04d03ebea88996a6d89ee75ed26ebdd7602d2c42710e9e75b339e4d93d556"
+      "sha256": "e59a889bccff2a92d2ecb3797f253ba361946f85b4046ee5ec77a78e43c1a83c"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -730,12 +730,10 @@
       ],
       "pr_reviews": "not_required",
       "rulesets": {
-        "status": "verified",
-        "enforced": false,
-        "count": 0,
-        "active_count": 0,
-        "required_checks": [],
-        "details_read": false
+        "status": "unverified",
+        "enforced": "unknown",
+        "count": "unknown",
+        "required_checks": "unknown"
       },
       "ci_check_presence": {
         "schema_version": "loom-ci-check-presence/v1",
@@ -749,7 +747,7 @@
         ],
         "check_ran": true,
         "required_checks_configured": true,
-        "host_enforcement_status": "verified",
+        "host_enforcement_status": "unverified",
         "recommended_action": "install the workflow and configure its stable check names as host-required checks"
       },
       "host_enforcement": {
@@ -757,13 +755,13 @@
         "required_checks": true,
         "workflow_exists": true,
         "check_ran": true,
-        "verification_status": "verified"
+        "verification_status": "unverified"
       },
       "api_snapshot": {
         "schema_version": "loom-host-api-snapshot/v1",
         "read_mode": "cached_non_merge",
-        "verification_status": "verified",
-        "fallback_status": null,
+        "verification_status": "unverified",
+        "fallback_status": "host_unavailable",
         "cache_scope": "process",
         "requests": [
           {
@@ -792,29 +790,32 @@
             "purpose": "branch ruleset enforcement"
           }
         ],
-        "errors": [],
+        "errors": [
+          "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": net/http: TLS handshake timeout"
+        ],
         "budget": {
           "schema_version": "loom-execution-budget/v1",
-          "status": "not_applicable",
+          "status": "unavailable",
           "enforcement": "advisory",
-          "summary": "execution budget is not collected for this invocation.",
+          "summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": net/http: TLS handshake timeout",
           "dimensions": [],
           "provenance": {
-            "source": "github_host"
+            "source": "github_control_plane",
+            "error_count": 1
           },
           "adapter_evidence_locator": ""
         }
       },
       "host_governance_capability": {
         "schema_version": "loom-host-governance-capability-diagnosis/v1",
-        "status": "host_enforced",
-        "reason": "host_enforced",
-        "setup_guidance": "keep branch protection or rulesets requiring Loom stable checks enabled",
+        "status": "unavailable",
+        "reason": "host_api_unavailable",
+        "setup_guidance": "install and authenticate gh, then retry the GitHub governance readback",
         "signals": {
           "repository": "MC-and-his-Agents/Loom",
           "default_branch": "main",
           "branch_protection": "enabled",
-          "rulesets_enforced": false,
+          "rulesets_enforced": "unknown",
           "required_checks": true,
           "pr_reviews": "not_required"
         }
@@ -1379,10 +1380,17 @@
         "current": "light",
         "judgment": {
           "schema_version": "loom-github-profile-maturity-judgment/v1",
-          "judgment": "light",
+          "judgment": "blocked",
           "current": "light",
-          "blocked": false,
-          "blockers": [],
+          "blocked": true,
+          "blockers": [
+            {
+              "id": "github_host_signals_unreadable",
+              "reason": "GitHub host signals could not be read reliably",
+              "source_locator": "github_control_plane.api_snapshot.errors",
+              "fallback_to": "github-profile-binding"
+            }
+          ],
           "evidence": [
             {
               "id": "work_item",
@@ -1422,13 +1430,13 @@
             },
             {
               "id": "github_api_snapshot",
-              "status": "verified",
+              "status": "unverified",
               "locator": "github_control_plane.api_snapshot",
               "authority": "github"
             },
             {
               "id": "host_enforcement",
-              "status": "verified",
+              "status": "unverified",
               "locator": "github_control_plane.host_enforcement",
               "authority": "github"
             },
@@ -1463,7 +1471,7 @@
               "authority": "loom + host"
             }
           ],
-          "summary": "GitHub profile maturity judgment is `light`."
+          "summary": "GitHub profile maturity is blocked by unreadable or conflicting required signals."
         },
         "achieved": [
           "light"
@@ -2510,42 +2518,14 @@
           },
           "write_targets": [
             ".loom/README.md",
-            ".loom/bootstrap/intake.snapshot.json",
             ".loom/bootstrap/init-result.json",
-            ".loom/bootstrap/capability-map.md",
             ".loom/companion/README.md",
-            ".loom/companion/manifest.json",
             ".loom/companion/repo-interface.json",
             ".loom/companion/interop.json",
-            ".loom/companion/checkpoints.md",
-            ".loom/companion/review.md",
-            ".loom/companion/merge-ready.md",
-            ".loom/companion/closeout.md",
-            ".loom/shadow/admission-loom.json",
-            ".loom/shadow/admission-repo.json",
-            ".loom/shadow/review-loom.json",
-            ".loom/shadow/review-repo.json",
-            ".loom/shadow/merge-ready-loom.json",
-            ".loom/shadow/merge-ready-repo.json",
-            ".loom/shadow/closeout-loom.json",
-            ".loom/shadow/closeout-repo.json",
-            ".gitignore",
-            ".loom/bootstrap/manifest.json",
-            ".loom/bin/loom_init.py",
-            ".loom/bin/fact_chain_support.py",
-            ".loom/bin/governance_surface.py",
-            ".loom/bin/loom_flow.py",
-            ".loom/bin/loom_status.py",
-            ".loom/bin/runtime_paths.py",
-            ".loom/bin/runtime_state.py",
-            ".loom/bin/loom_check.py",
-            ".loom/bin/loom_story_carriers.py",
-            ".loom/reviews/INIT-0001.json",
-            ".loom/reviews/INIT-0001.spec.json",
             ".github/PULL_REQUEST_TEMPLATE.md"
           ],
           "verification_commands": [
-            "python3 .loom/bin/loom_init.py verify --target ."
+            "loom verify --target . --json"
           ]
         },
         {

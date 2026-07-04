@@ -103,6 +103,7 @@ HOST_SCHEMA = "loom-host-orchestration/v1"
 WORKSTATION_SCHEMA = "loom-workstation-registration/v1"
 WORKSTATION_CONTROL_SCHEMA = "loom-workstation-control/v1"
 WORKSTATION_REPOSITORIES_SCHEMA = "loom-workstation-repositories/v1"
+WORKSTATION_CURRENT_SCHEMA = "loom-workstation-current/v1"
 WORKSTATION_UPGRADE_PLAN_SCHEMA = "loom-workstation-upgrade-plan/v1"
 GLOBAL_CACHE_MIGRATION_SCHEMA = "loom-global-cache-migration/v1"
 SKILLS_SCHEMA = "loom-skills-surface/v1"
@@ -131,6 +132,7 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "status",
     "shadow-parity",
     "story",
+    "workstation current",
 ]
 
 
@@ -556,6 +558,13 @@ COMMANDS: list[dict[str, Any]] = [
         "status": "implemented",
         "json": True,
         "summary": "Plan a machine-level Loom CLI/plugin refresh plus per-repository adoption classifications without mutating state.",
+    },
+    {
+        "command": "workstation current",
+        "domain": "workstation",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read or update ~/.loom/repos/<repo-id>/current.json without mutating the repository.",
     },
     {
         "command": "skills list",
@@ -3010,6 +3019,7 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
     if mode != "metadata-only":
         raise ValueError("loom install only supports metadata-only adoption")
     versions = version_context()
+    minimum_contract = versions["repo_version"]
     layers: list[dict[str, Any]] = []
     graph_layers: list[str] = []
     graph_edges: list[dict[str, str]] = []
@@ -3021,7 +3031,7 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                 "layer_type": "repository-adoption-metadata",
                 "installed_path": ".loom/installed-state.json",
                 "version_context": {
-                    "repo_version": versions["repo_version"],
+                    "minimum_loom_contract": minimum_contract,
                     "installed_state_schema": INSTALLED_STATE_SCHEMA,
                 },
                 "runtime_state": "ready",
@@ -3034,8 +3044,8 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                 "layer_type": "user-level-skills-provider",
                 "installed_path": "workstation:codex-loom-plugin",
                 "version_context": {
-                    "plugin_surface_version": versions["plugin_surface_version"],
-                    "host_adapter_version": versions["host_adapter_version"],
+                    "minimum_plugin_contract": versions["plugin_surface_version"],
+                    "minimum_host_adapter_contract": versions["host_adapter_version"],
                 },
                 "runtime_state": "ready",
                 "upgrade_eligibility": "current",
@@ -3048,7 +3058,7 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                 "installed_path": "workstation:loom-cli",
                 "version_context": {
                     "package": "@mc-and-his-agents/loom",
-                    "version_requirement": versions["repo_version"],
+                    "minimum_version": minimum_contract,
                 },
                 "runtime_state": "unknown",
                 "upgrade_eligibility": "unknown",
@@ -3064,11 +3074,13 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
     return {
         "schema_version": INSTALLED_STATE_SCHEMA,
         "installation_id": f"loom-{target.name or 'repo'}",
-        "target": str(target),
-        "installed_at": now_iso(),
         "installing_command": "loom install",
         "upgrade_eligibility": "current",
         "runtime_provider": runtime_provider,
+        "contract": {
+            "minimum_loom_version": minimum_contract,
+            "installed_state_schema": INSTALLED_STATE_SCHEMA,
+        },
         "provider_requirements": {
             "global_cli": {
                 "required": runtime_provider == RUNTIME_PROVIDER_GLOBAL_CLI,
@@ -3076,15 +3088,24 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                 "authority": "workstation",
                 "package": "@mc-and-his-agents/loom",
                 "executable": "loom",
-                "version_requirement": versions["repo_version"],
+                "version_requirement": minimum_contract,
                 "required_commands": list(GLOBAL_CLI_REQUIRED_COMMANDS),
                 "compatibility_mode_allowed": False,
             }
         },
         "repo_payload": {
             "mode": "metadata-only",
+            "adoption_mode": "light-governance",
             "intentional_absent_paths": [
                 ".loom/bin",
+                ".loom/runtime",
+                ".loom/tmp",
+                ".loom/shadow",
+                ".loom/status/current.md",
+                ".loom/work-items",
+                ".loom/progress",
+                ".loom/specs",
+                ".loom/reviews",
                 "plugins/loom/.codex-plugin/plugin.json",
                 "plugins/loom/skills",
                 ".agents/skills",
@@ -3148,6 +3169,29 @@ def target_runtime_provider(target: Path) -> str | None:
         return installed_state_runtime_provider(read_json(path))
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def target_adoption_mode(target: Path) -> str | None:
+    path = installed_state_path(target)
+    if path is None:
+        return None
+    try:
+        state = read_json(path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(state, dict):
+        return None
+    repo_payload = state.get("repo_payload") if isinstance(state.get("repo_payload"), dict) else {}
+    adoption_mode = repo_payload.get("adoption_mode")
+    if isinstance(adoption_mode, str) and adoption_mode.strip():
+        return adoption_mode.strip()
+    if repo_payload.get("mode") == "metadata-only":
+        return "light-governance"
+    return None
+
+
+def target_uses_light_governance(target: Path) -> bool:
+    return target_adoption_mode(target) in {"light-governance", "attach-only"}
 
 
 def global_cli_provider_requirement(state: Any) -> dict[str, Any] | None:
@@ -5634,20 +5678,32 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     fallback_to=["loom repair plan --target <repo> --json"],
                 )
             )
-        state["upgraded_at"] = now_iso()
-        state["upgrade_eligibility"] = "current"
-        write_json(path, state)
+        refreshed_state = dict(state)
+        removed_workstation_fields = [
+            field
+            for field in ("target", "installed_at", "upgraded_at", "cli_freshness", "plugin_freshness", "plugin_cache_path", "host_machine_path")
+            if refreshed_state.pop(field, None) is not None
+        ]
+        refreshed_state["upgrade_eligibility"] = "current"
+        changed = refreshed_state != state
+        if changed:
+            write_json(path, refreshed_state)
         return emit(
             output(
                 command,
                 "pass",
                 schema=DELIVERY_SCHEMA,
-                summary="Target repository installed-state metadata was refreshed for the current Loom version surface.",
+                summary=(
+                    "Target repository installed-state metadata was refreshed for repository contract drift."
+                    if changed
+                    else "Target repository installed-state metadata already matches repository truth; workstation freshness was not written."
+                ),
                 target=str(target),
                 host=args.host,
-                mutates=True,
+                mutates=changed,
                 installed_state_path=str(path),
-                installed_state=state,
+                installed_state=refreshed_state,
+                removed_workstation_fields=removed_workstation_fields,
                 host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                 fallback_to=None,
             )
@@ -5736,7 +5792,7 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
         return [{"path": "$", "reason": "installed-state must be a JSON object"}]
     if state.get("schema_version") != INSTALLED_STATE_SCHEMA:
         errors.append({"path": "schema_version", "reason": f"expected {INSTALLED_STATE_SCHEMA}"})
-    for key in ("installation_id", "target", "layers", "installation_graph"):
+    for key in ("installation_id", "layers", "installation_graph"):
         if key not in state:
             errors.append({"path": key, "reason": "required field is missing"})
     layers = state.get("layers")
@@ -5845,6 +5901,9 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
         mode = repo_payload.get("mode")
         if mode != "metadata-only":
             errors.append({"path": "repo_payload.mode", "reason": "repo payload mode must be metadata-only"})
+        adoption_mode = repo_payload.get("adoption_mode")
+        if adoption_mode is not None and adoption_mode not in {"light-governance", "execution-control", "strong-governance", "attach-only"}:
+            errors.append({"path": "repo_payload.adoption_mode", "reason": "unsupported repository adoption mode"})
         if mode == "metadata-only":
             if ".loom/bin" in layer_paths or "plugins/loom/skills" in layer_paths or "plugin-embedded-skills" in layer_types:
                 errors.append({"path": "repo_payload.mode", "reason": "metadata-only mode must not declare repo-local runtime or embedded plugin skills payload"})
@@ -6581,13 +6640,13 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
     elif intensity == "reinforced" or any(word in lowered for word in ("security", "permission", "conflict", "parent", "milestone", "multi")):
         policy = "full_closeout_pr"
         upgrade_reasons.append("reinforced_or_high_risk_closeout")
-    elif intensity == "light":
+    elif intensity in {"light", "standard", None}:
         policy = "host_only"
     elif any(word in lowered for word in ("carrier", "versioned")):
         policy = "batched_carrier_pr"
         upgrade_reasons.append("versioned_carrier_required")
     else:
-        policy = "inline"
+        policy = "host_only"
     return {
         "schema_version": "loom-closeout-policy-decision/v1",
         "result": "pass",
@@ -8192,7 +8251,14 @@ def ship_checkout_status(target: Path) -> dict[str, Any]:
     }
 
 
-def ship_status_diagnostic(*, host: dict[str, Any], release: dict[str, Any], checkout: dict[str, Any], carrier: dict[str, Any]) -> tuple[str, list[str], list[str], str]:
+def ship_status_diagnostic(
+    *,
+    host: dict[str, Any],
+    release: dict[str, Any],
+    checkout: dict[str, Any],
+    carrier: dict[str, Any],
+    adoption_mode: str | None = None,
+) -> tuple[str, list[str], list[str], str]:
     blockers: list[str] = []
     fixed: list[str] = []
     if checkout.get("stale_against_origin_main"):
@@ -8201,19 +8267,29 @@ def ship_status_diagnostic(*, host: dict[str, Any], release: dict[str, Any], che
         blockers.append("checkout_has_uncommitted_changes")
     issue = host.get("issue") if isinstance(host.get("issue"), dict) else None
     if issue and issue.get("state") == "closed" and carrier.get("state") == "active":
-        blockers.append("host_closed_but_carrier_active")
+        if adoption_mode in {"light-governance", "attach-only"}:
+            fixed.append("repair_global_current_pointer")
+        else:
+            blockers.append("host_closed_but_carrier_active")
     if release.get("tag", {}).get("exists") or release.get("github_release", {}).get("exists") or release.get("npm", {}).get("exists"):
         blockers.append("target_release_already_exists")
     if host.get("errors") or release.get("errors") or checkout.get("errors"):
         blockers.append("readback_errors")
     if not blockers:
-        return "pass", blockers, fixed, "run loom ship --dry-run or loom ship --apply after PR bindings are ready"
+        next_action = (
+            "run loom workstation current --target <repo> --clear --apply --json"
+            if "repair_global_current_pointer" in fixed
+            else "run loom ship --dry-run or loom ship --apply after PR bindings are ready"
+        )
+        return "pass", blockers, fixed, next_action
     if "checkout_stale_against_origin_main" in blockers:
         fixed.append("fast-forward or recreate the issue worktree from origin/main")
     if "checkout_has_uncommitted_changes" in blockers:
         fixed.append("commit, stash, or discard local changes before shipping")
     if "host_closed_but_carrier_active" in blockers:
         fixed.append("run loom closeout sync or carrier closeout-sync before continuing")
+    if "repair_global_current_pointer" in fixed:
+        fixed.append("run loom workstation current --target <repo> --clear --apply --json")
     if "target_release_already_exists" in blockers:
         fixed.append("read back the existing release/tag/npm package before publishing")
     return "block", blockers, fixed, fixed[0] if fixed else "resolve ship preflight blockers"
@@ -8238,7 +8314,15 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
     release = ship_release_presence(target, repo=repo_slug, version=args.version, package_name=args.package)
     checkout = ship_checkout_status(target)
     carrier = ship_status_surface(target)
-    result, blockers, fixed, next_action = ship_status_diagnostic(host=host, release=release, checkout=checkout, carrier=carrier)
+    adoption_mode = target_adoption_mode(target)
+    workstation_current = read_workstation_current(target)
+    result, blockers, fixed, next_action = ship_status_diagnostic(
+        host=host,
+        release=release,
+        checkout=checkout,
+        carrier=carrier,
+        adoption_mode=adoption_mode,
+    )
     payload = output(
         f"ship {mode}",
         result,
@@ -8249,6 +8333,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
         item={"id": args.item},
         issue={"number": args.issue},
         milestone={"number": args.milestone},
+        adoption_mode=adoption_mode,
         diagnostic={"blocked": result == "block", "blockers": blockers, "fixed": fixed, "next_action": next_action},
         missing_inputs=blockers,
         fallback_to=fixed or None,
@@ -8256,6 +8341,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
         release=release,
         checkout=checkout,
         carrier=carrier,
+        workstation_current=workstation_current,
         next_action=next_action,
     )
     return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
@@ -8602,6 +8688,33 @@ def handle_ship(argv: list[str]) -> int:
             add_closeout_check_args(final_closeout_args, closeout_args)
             final_closeout = flow_payload(command, final_closeout_args, fallback_to=["loom closeout --target <repo> --json", "manual-reconciliation"])
             steps.append(ship_step("host-closeout-check", final_closeout, mutates=False))
+            if final_closeout.get("result") == "pass":
+                current_payload = workstation_current_payload(
+                    target,
+                    item=args.item,
+                    issue=str(args.issue) if args.issue is not None else None,
+                    pr=str(args.pr),
+                    branch=closeout_branch,
+                    clear=True,
+                )
+                try:
+                    current_path = write_workstation_current(target, current_payload)
+                    global_current = {
+                        "command": "workstation current",
+                        "result": "pass",
+                        "summary": "host-only closeout cleared the workstation current pointer without mutating repository carriers.",
+                        "path": str(current_path),
+                        "current": current_payload,
+                    }
+                except OSError as exc:
+                    global_current = {
+                        "command": "workstation current",
+                        "result": "block",
+                        "summary": "host-only closeout could not update the workstation current pointer.",
+                        "missing_inputs": [str(exc)],
+                        "fallback_to": "loom workstation current --target <repo> --clear --apply --json",
+                    }
+                steps.append(ship_step("global-current-closeout", global_current, mutates=global_current.get("result") == "pass"))
 
         blocker = first_ship_blocker(steps)
         ship_result = "pass" if blocker is None else "block"
@@ -9533,6 +9646,88 @@ def workstation_repo_id(target: Path, remote_hash_value: str | None) -> str:
     return "repo_" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
 
 
+def workstation_repo_state_dir(target: Path) -> Path:
+    canonical_url = canonical_git_remote(target)
+    return Path.home().expanduser().resolve() / ".loom" / "repos" / workstation_repo_id(target, remote_hash(canonical_url))
+
+
+def workstation_current_path(target: Path) -> Path:
+    return workstation_repo_state_dir(target) / "current.json"
+
+
+def read_workstation_current(target: Path) -> dict[str, Any]:
+    path = workstation_current_path(target)
+    if not path.exists():
+        return {
+            "schema_version": WORKSTATION_CURRENT_SCHEMA,
+            "authority": "workstation",
+            "state": "no_active_item",
+            "current_item_id": None,
+            "path": "~/.loom/repos/<repo-id>/current.json",
+        }
+    try:
+        payload = read_json(path)
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "schema_version": WORKSTATION_CURRENT_SCHEMA,
+            "authority": "workstation",
+            "state": "unreadable",
+            "current_item_id": None,
+            "path": str(path),
+            "error": str(exc),
+        }
+    if not isinstance(payload, dict):
+        return {
+            "schema_version": WORKSTATION_CURRENT_SCHEMA,
+            "authority": "workstation",
+            "state": "invalid",
+            "current_item_id": None,
+            "path": str(path),
+        }
+    payload.setdefault("schema_version", WORKSTATION_CURRENT_SCHEMA)
+    payload.setdefault("authority", "workstation")
+    payload.setdefault("path", str(path))
+    return payload
+
+
+def workstation_current_payload(
+    target: Path,
+    *,
+    item: str | None,
+    issue: str | None,
+    pr: str | None,
+    branch: str | None,
+    clear: bool,
+) -> dict[str, Any]:
+    path = workstation_current_path(target)
+    now = now_iso()
+    canonical_url = canonical_git_remote(target)
+    hash_value = remote_hash(canonical_url)
+    repo_id = workstation_repo_id(target, hash_value)
+    state = "no_active_item" if clear else "active"
+    return {
+        "schema_version": WORKSTATION_CURRENT_SCHEMA,
+        "authority": "workstation",
+        "repo_id": repo_id,
+        "target": str(target.resolve()),
+        "remote_hash": hash_value,
+        "state": state,
+        "current_item_id": None if clear else item,
+        "issue": None if clear else issue,
+        "pr": None if clear else pr,
+        "branch": None if clear else branch,
+        "updated_at": now,
+        "updated_by": "loom workstation current",
+        "path": str(path),
+    }
+
+
+def write_workstation_current(target: Path, payload: dict[str, Any]) -> Path:
+    path = workstation_current_path(target)
+    write_json(path, payload)
+    return path
+
+
 def workstation_adoption_snapshot(target: Path) -> dict[str, Any]:
     path = installed_state_path(target)
     if path is None:
@@ -9556,12 +9751,16 @@ def workstation_adoption_snapshot(target: Path) -> dict[str, Any]:
             "last_seen_version": None,
         }
     repo_payload = state.get("repo_payload") if isinstance(state.get("repo_payload"), dict) else {}
-    mode = repo_payload.get("mode") if isinstance(repo_payload.get("mode"), str) else "unknown"
-    if mode not in {"metadata-only", "repo-local-wrapper", "legacy-embedded", "unknown"}:
+    mode = (repo_payload.get("adoption_mode") or repo_payload.get("mode")) if isinstance(repo_payload, dict) else "unknown"
+    if not isinstance(mode, str):
+        mode = "unknown"
+    if mode not in {"light-governance", "execution-control", "strong-governance", "attach-only", "metadata-only", "repo-local-wrapper", "legacy-embedded", "unknown"}:
         mode = "unknown"
     version_data = state.get("version_context") if isinstance(state.get("version_context"), dict) else {}
+    contract = state.get("contract") if isinstance(state.get("contract"), dict) else {}
     last_seen_version = (
-        version_data.get("repo_version")
+        contract.get("minimum_loom_version")
+        or version_data.get("repo_version")
         or version_data.get("loom_version")
         or version_data.get("source_package_version")
         or version_data.get("version")
@@ -10604,9 +10803,14 @@ def handle_migrate_global_cache(argv: list[str]) -> int:
 
 def handle_workstation(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom workstation")
-    parser.add_argument("action", choices=("register", "list", "unregister", "upgrade"))
+    parser.add_argument("action", choices=("register", "list", "unregister", "upgrade", "current"))
     parser.add_argument("--target")
     parser.add_argument("--id")
+    parser.add_argument("--item")
+    parser.add_argument("--issue")
+    parser.add_argument("--pr")
+    parser.add_argument("--branch")
+    parser.add_argument("--clear", action="store_true")
     parser.add_argument("--keep-entry", action="store_true")
     parser.add_argument("--plan", action="store_true")
     parser.add_argument("--apply", action="store_true")
@@ -10644,6 +10848,102 @@ def handle_workstation(argv: list[str]) -> int:
                 registry_path=registry_path,
                 registry=registry,
                 target_version=args.target_version,
+            )
+        )
+
+    if args.action == "current":
+        target = resolve_target(args.target or ".")
+        if not target.exists():
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=WORKSTATION_CONTROL_SCHEMA,
+                    summary="Target repository path does not exist.",
+                    target=str(target),
+                    mutates=False,
+                    failed_layer="target",
+                    fail_closed_reason="target path does not exist",
+                    fallback_to=["loom workstation current --target <repo> --json"],
+                )
+            )
+        current = read_workstation_current(target)
+        if not args.apply:
+            planned = (
+                workstation_current_payload(
+                    target,
+                    item=args.item,
+                    issue=args.issue,
+                    pr=args.pr,
+                    branch=args.branch,
+                    clear=args.clear,
+                )
+                if args.clear or args.item or args.issue or args.pr or args.branch
+                else None
+            )
+            return emit(
+                output(
+                    command,
+                    "pass",
+                    schema=WORKSTATION_CONTROL_SCHEMA,
+                    summary="Workstation current pointer read without mutating repository or workstation state.",
+                    target=str(target),
+                    mutates=False,
+                    current=current,
+                    planned_current=planned,
+                    apply_required=planned is not None,
+                    fallback_to="loom workstation current --target <repo> --apply --json" if planned is not None else None,
+                )
+            )
+        if not args.clear and not args.item:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=WORKSTATION_CONTROL_SCHEMA,
+                    summary="Workstation current pointer apply requires --item or --clear.",
+                    target=str(target),
+                    mutates=False,
+                    failed_layer="workstation-current",
+                    fail_closed_reason="missing current pointer item or clear intent",
+                    fallback_to=["loom workstation current --target <repo> --item <WI> --apply --json", "loom workstation current --target <repo> --clear --apply --json"],
+                )
+            )
+        payload = workstation_current_payload(
+            target,
+            item=args.item,
+            issue=args.issue,
+            pr=args.pr,
+            branch=args.branch,
+            clear=args.clear,
+        )
+        try:
+            current_path = write_workstation_current(target, payload)
+        except OSError as exc:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=WORKSTATION_CONTROL_SCHEMA,
+                    summary="Workstation current pointer could not be written.",
+                    target=str(target),
+                    mutates=True,
+                    failed_layer="workstation-current",
+                    fail_closed_reason=str(exc),
+                    fallback_to=["repair ~/.loom permissions", "loom workstation current --target <repo> --json"],
+                )
+            )
+        return emit(
+            output(
+                command,
+                "pass",
+                schema=WORKSTATION_CONTROL_SCHEMA,
+                summary="Workstation current pointer updated without mutating the target repository.",
+                target=str(target),
+                mutates=True,
+                writes=[str(current_path)],
+                current=payload,
+                fallback_to=None,
             )
         )
 
