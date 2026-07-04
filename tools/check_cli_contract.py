@@ -6269,6 +6269,45 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
         "- Evidence Freshness: current\n",
         encoding="utf-8",
     )
+    historical_item = "WI-historical-active"
+    historical_work_item = target / ".loom" / "work-items" / f"{historical_item}.md"
+    historical_work_item.write_text(
+        f"# {historical_item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {historical_item}\n"
+        "- Goal: Historical active carrier fixture.\n"
+        "- Scope: retained carrier only.\n"
+        "- Execution Path: historical issue -> same workspace\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{historical_item}.md\n"
+        f"- Review Entry: .loom/reviews/{historical_item}.json\n"
+        "- Validation Entry: not_applicable\n"
+        "- Closing Condition: not_applicable\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{historical_item}.md`\n",
+        encoding="utf-8",
+    )
+    historical_progress = target / ".loom" / "progress" / f"{historical_item}.md"
+    historical_progress.write_text(
+        f"# {historical_item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {historical_item}\n"
+        "- Current Checkpoint: pre_review\n"
+        "- Current Stop: Historical active carrier should not block the current item once fact-chain selects another item.\n"
+        "- Next Step: not_applicable\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: not_applicable\n"
+        "- Recovery Boundary: historical fixture only.\n"
+        "- Current Lane: historical-active-carrier\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n",
+        encoding="utf-8",
+    )
     status = target / ".loom" / "status" / "current.md"
     status.parent.mkdir(parents=True, exist_ok=True)
     status.write_text(

@@ -10272,11 +10272,11 @@ def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entr
                 )
                 diagnostic["next_command"] = carrier_closeout_sync_command(target_root, other_item_id, host_truth)
             else:
-                diagnostic["freshness"] = "active"
-                diagnostic["classification"] = "shared_workspace_conflict"
-                diagnostic["blocking"] = True
+                diagnostic["freshness"] = "historical_active"
+                diagnostic["classification"] = "stale_carrier"
+                diagnostic["blocking"] = False
                 diagnostic["recommended_remediation"] = (
-                    "move one active item to its own branch/worktree or close its own recovery path before continuing."
+                    "leave this unrelated historical active carrier out of the current Work Item; reconcile it through its own issue flow if it still matters."
                 )
         diagnostics.append(diagnostic)
     return diagnostics
