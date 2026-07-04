@@ -3,11 +3,11 @@
   "item_id": "WI-1914",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1914 v0.27.0 release candidate remains approved at current PR head c633d312. The only post-review drift from the previously reviewed release candidate is review-carrier refresh for WI-1914; VERSION, package.json, plugin payload metadata/hash, release readiness evidence, WI-1900 terminal checkpoint reconciliation, PR metadata, suite/fact-chain/shadow/purity/build evidence, and pre-release readback remain unchanged. Tag, GitHub Release, npm publish, issue closeout, Phase closeout, and milestone closeout remain post-merge readback work.",
+  "summary": "WI-1914 terminal closeout carrier sync is approved. It only consumes already-published v0.27.0 release facts from PR #1952, merge commit 5b3eda8f401c0a229cc9df08ea61cc8c9873994b, GitHub Release v0.27.0, npm @mc-and-his-agents/loom@0.27.0, successful release workflows, closed #1914, closed Phase #1888, and milestone #25 zero-open issue readback; it does not approve new product behavior.",
   "reviewer": "codex-main-thread",
-  "authored_at": "2026-07-03T23:26:05Z",
-  "reviewed_head": "c633d31245be8d6faead02d2e974670475f11cee",
-  "reviewed_validation_summary": "2026-07-03T19:56Z on branch `work/1914-v0.27.0-release`: passed `py_compile_clean` for release tools, `git diff --check`, release/version/npm package checks, `npm pack --dry-run --json --ignore-scripts`, `tools/loom.py skills release-check --target . --json`, `tools/check_cli_contract.py --surface aggregate` (408.42s), suite validate/evidence/carrier validate for WI-1914, fact-chain for WI-1914, carrier refresh, shadow parity, purity-check, and build checkpoint; pre-release readback for v0.27.0 returned missing/unpublished with no tag, GitHub Release, npm version, or matching release workflow run occupying the release path. WI-1900 stale progress checkpoint was reconciled to its existing terminal closeout metadata so release gate purity has one active WI-1914 owner.",
+  "authored_at": "2026-07-03T23:57:54Z",
+  "reviewed_head": "5b3eda8f401c0a229cc9df08ea61cc8c9873994b",
+  "reviewed_validation_summary": "2026-07-03T23:49Z post-merge readback confirmed GitHub tag/release `v0.27.0`, npm `@mc-and-his-agents/loom@0.27.0`, successful `loom-cli-release.yml` run `28688150076`, successful `node-installer-release` and `loom-check` on merge commit `5b3eda8f401c0a229cc9df08ea61cc8c9873994b`, and published tarball plugin metadata stamped to the release commit.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -32,26 +32,10 @@
     },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1914 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1914 --json",
-    "suite_evidence_map": ".loom/specs/WI-1914/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1914/task-carrier.md"
-    ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
+    "normalized_findings": null
   },
-  "semantic_review_disposition": {
+  "carrier_only_closeout_review": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
   }
 }
