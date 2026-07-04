@@ -6803,7 +6803,11 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             if not isinstance(signals, list) or not signals or not all(isinstance(item, dict) and item.get("summary") and item.get("locator") for item in signals):
                 failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include governance signal summaries and locators"))
             verification_commands = prompt.get("verification_commands")
-            if not isinstance(verification_commands, list) or "python3 .loom/bin/loom_init.py verify --target ." not in verification_commands:
+            accepted_verify_entries = {
+                "python3 .loom/bin/loom_init.py verify --target .",
+                "loom verify --target . --json",
+            }
+            if not isinstance(verification_commands, list) or not accepted_verify_entries.intersection(verification_commands):
                 failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include verify entry"))
             writeback = prompt.get("field_writeback_contract")
             if not isinstance(writeback, list) or not writeback:
@@ -7479,10 +7483,28 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 failures.append(Failure("deep-existing-bootstrap", "light-governance sample must defer Loom-owned spec carriers to execution-control"))
             planned = light_payload.get("planned_writes")
             planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
-            for required in (".loom/reviews/INIT-0001.json", ".loom/reviews/INIT-0001.spec.json", ".github/PULL_REQUEST_TEMPLATE.md"):
+            for required in (
+                ".loom/README.md",
+                ".loom/bootstrap/init-result.json",
+                ".loom/companion/README.md",
+                ".loom/companion/repo-interface.json",
+                ".loom/companion/interop.json",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+            ):
                 if required not in planned_paths or not (light_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must generate `{required}`"))
-            for absent in (".loom/work-items/**", ".loom/progress/**", ".loom/status/current.md", ".loom/specs/**", ".loom/stories/**"):
+            for absent in (
+                ".loom/work-items/**",
+                ".loom/progress/**",
+                ".loom/status/current.md",
+                ".loom/specs/**",
+                ".loom/reviews/**",
+                ".loom/stories/**",
+                ".loom/shadow/**",
+                ".loom/bin/**",
+                ".loom/runtime/**",
+                ".loom/tmp/**",
+            ):
                 if absent not in absent_paths:
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must mark `{absent}` intentionally absent"))
             for forbidden in (
@@ -7492,6 +7514,12 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/specs/INIT-0001/spec.md",
                 ".loom/specs/INIT-0001/plan.md",
                 ".loom/specs/INIT-0001/implementation-contract.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/reviews/INIT-0001.spec.json",
+                ".loom/shadow",
+                ".loom/bin",
+                ".loom/runtime",
+                ".loom/tmp",
                 ".loom/stories/_template.md",
             ):
                 if forbidden in planned_paths or (light_target / forbidden).exists():
@@ -7500,9 +7528,9 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             readme_text = (light_target / ".loom/README.md").read_text(encoding="utf-8") if (light_target / ".loom/README.md").exists() else ""
             if ".loom/specs" in readme_text or "Spec suite" in readme_text:
                 failures.append(Failure("deep-existing-bootstrap", "`light-governance bootstrap sample` must not declare a spec suite in `.loom/README.md`"))
-            spec_review_text = (light_target / ".loom/reviews/INIT-0001.spec.json").read_text(encoding="utf-8") if (light_target / ".loom/reviews/INIT-0001.spec.json").exists() else ""
-            if "formal spec path" in spec_review_text:
-                failures.append(Failure("deep-existing-bootstrap", "`light-governance spec review placeholder` must not tell operators to consume a formal spec path"))
+            loom_files = [path for path in (light_target / ".loom").rglob("*") if path.is_file()] if (light_target / ".loom").exists() else []
+            if len(loom_files) >= 10:
+                failures.append(Failure("deep-existing-bootstrap", "`light-governance bootstrap sample` must keep `.loom/` below 10 files by default"))
             if (light_target / ".loom/bin/loom_init.py").exists():
                 poisoned_light_target = tmp_root / "light-governance-poison-specs"
                 shutil.copytree(light_target, poisoned_light_target)

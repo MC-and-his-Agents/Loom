@@ -17,7 +17,7 @@ loom doctor --target . --json
 
 The global `loom` CLI owns runtime execution. The Codex user-level Loom plugin
 owns Loom skill discovery. The target repository owns only adoption metadata and
-repo governance carriers.
+repo governance carriers that its adoption mode explicitly enables.
 
 ## Repository Adoption Output
 
@@ -25,11 +25,15 @@ Metadata-only adoption writes repository truth only:
 
 - `.loom/installed-state.json`
 - root `AGENTS.md`, creating it first when it is missing
-- Loom governance carriers that are explicitly part of repository truth
+- for light-governance bootstrap: `.loom/README.md`,
+  `.loom/bootstrap/init-result.json`, and repo companion locators
 
 It must not write runtime, plugin, or skills payload into the target repository:
 
 - no `.loom/bin` runtime layer
+- no `.loom/runtime`, `.loom/tmp`, or `.loom/shadow` workstation/cache state
+- no default `.loom/work-items`, `.loom/progress`, `.loom/status/current.md`,
+  `.loom/specs`, or `.loom/reviews` execution-control carriers
 - no `plugins/loom/.codex-plugin/plugin.json`
 - no `plugins/loom/skills/`
 - no `.agents/skills`
@@ -42,11 +46,24 @@ An adopted repository declares:
 ```json
 {
   "schema_version": "loom-installed-state/v2",
+  "contract": {
+    "minimum_loom_version": "v0.28.0",
+    "installed_state_schema": "loom-installed-state/v2"
+  },
   "runtime_provider": "global-cli",
   "repo_payload": {
     "mode": "metadata-only",
+    "adoption_mode": "light-governance",
     "intentional_absent_paths": [
       ".loom/bin",
+      ".loom/runtime",
+      ".loom/tmp",
+      ".loom/shadow",
+      ".loom/status/current.md",
+      ".loom/work-items",
+      ".loom/progress",
+      ".loom/specs",
+      ".loom/reviews",
       "plugins/loom/.codex-plugin/plugin.json",
       "plugins/loom/skills",
       ".agents/skills",
@@ -73,6 +90,11 @@ An adopted repository declares:
 `installed-state validate` validates repository metadata. `doctor` may block on
 missing global CLI or missing Codex user plugin, but those are provider gaps, not
 repository payload drift.
+
+Repository installed-state must not store workstation-local freshness or paths:
+no top-level `target`, `installed_at`, `upgraded_at`, `cli_freshness`,
+`plugin_freshness`, `plugin_cache_path`, or `host_machine_path`. Those facts are
+diagnostic/workstation state.
 
 ## Workstation Repository Registry
 
@@ -109,6 +131,18 @@ legacy payloads such as `.loom/bin`, `plugins/loom`, `.agents/skills`, or
 Running this migration is not an upgrade prerequisite: ordinary `doctor`,
 `status`, `resume`, and per-repo adoption validation must keep working before a
 repository migrates its local cache.
+
+The current active item pointer is workstation state for light-governance and
+attach-only repositories:
+
+```bash
+loom workstation current --target <repo> --json
+loom workstation current --target <repo> --item <WI> --issue <issue> --pr <pr> --branch <branch> --apply --json
+loom workstation current --target <repo> --clear --apply --json
+```
+
+It writes `~/.loom/repos/<repo-id>/current.json` and must not mutate
+`.loom/status/current.md`.
 
 ## Codex User-Level Plugin Target
 

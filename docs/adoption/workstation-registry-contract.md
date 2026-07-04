@@ -148,6 +148,9 @@ loom workstation list --json
 loom workstation upgrade --plan --to <version> --json
 loom workstation upgrade --apply --to <version> --json
 loom workstation upgrade --apply --to <version> --target <repo> --json
+loom workstation current --target <repo> --json
+loom workstation current --target <repo> --item <WI> --issue <issue> --pr <pr> --branch <branch> --apply --json
+loom workstation current --target <repo> --clear --apply --json
 loom workstation unregister --target <repo> --json
 loom workstation unregister --id <repo-id> --json
 loom workstation unregister --target <repo> --keep-entry --json
@@ -180,6 +183,12 @@ single-invocation cache. It may be reused across repository classifications, but
 it must be invalidated when the target version, source package version, Codex
 plugin payload hash, Codex marketplace/runtime cache, or host doctor result
 changes.
+
+`current` reads or writes `~/.loom/repos/<repo-id>/current.json`. A read is
+non-mutating. Applying `--item ...` marks the local workstation's active item;
+applying `--clear` records `no_active_item`. This surface is only a local
+execution pointer and must not mutate `.loom/status/current.md` or any
+repository carrier.
 
 `unregister` removes the matching entry by target path or id. With
 `--keep-entry`, it leaves the entry visible for diagnostics and sets

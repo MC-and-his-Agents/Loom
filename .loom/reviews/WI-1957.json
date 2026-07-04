@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1957",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Reviewed host tax core through head 4bc40a933e60b5b80cb0ab6f346d8df0951e547c after fixing aggregate suite consumption: suite_not_applicable is consistently consumed by PR metadata, hosted freeze admission, checkpoint merge, active build readiness, and check_cli_contract aggregate. Local validation: py_compile tools/check_cli_contract.py, git diff --check, pr-metadata-suite-not-applicable, runtime carrier suite_not_applicable fixture, runtime-copy-parity, plugin-payload-hash, demo fixture drift, local pr-gate, and aggregate contract all passed.",
+  "reviewer": "Codex main thread with read-only review lane 019f2cb6-c449-7f73-bcc0-c2b1c68dfaa8",
+  "authored_at": "2026-07-04T11:40:06Z",
+  "reviewed_head": "4bc40a933e60b5b80cb0ab6f346d8df0951e547c",
+  "reviewed_validation_summary": "2026-07-04T11:39Z at 4bc40a933e60b5b80cb0ab6f346d8df0951e547c: python3 -m py_compile tools/check_cli_contract.py passed; git diff --check passed; python3 tools/check_cli_contract.py --surface aggregate passed in 540.20s after the suite_not_applicable build consumption contract fix. Earlier implementation validations at d07122cd5387ef46b5f6366fb2fb374ca887ad97 also passed: py_compile_clean for modified runtime/check files, git diff --check, pr-metadata-suite-not-applicable, runtime carrier suite_not_applicable adoption/spec-gate fixture, runtime-copy-parity, plugin-payload-hash with plugin_payload_hash 1a909ce725a9d41a75332af69296c4766634584295f944996c8a7d2cc308f763, and demo fixture drift.",
+  "reviewed_validation_summary_hash": "8d58815fddc581276cf3dce39b62b253695c1ce53f5815ee53529cffe69954e7",
+  "validation_summary_source": "recovery.latest_validation_summary",
+  "validation_summary_locator": ".loom/progress/WI-1957.md",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1957.md",
+    "recovery_entry": ".loom/progress/WI-1957.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/codex-app-review",
+    "engine_evidence": "subagent:019f2cb6-c449-7f73-bcc0-c2b1c68dfaa8",
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

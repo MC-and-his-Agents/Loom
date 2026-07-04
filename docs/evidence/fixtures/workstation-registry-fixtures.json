@@ -11,7 +11,8 @@
     "loom workstation list --json",
     "loom workstation unregister --json",
     "loom workstation upgrade --plan --json",
-    "loom workstation upgrade --apply --json"
+    "loom workstation upgrade --apply --json",
+    "loom workstation current --json"
   ],
   "fixtures": [
     {

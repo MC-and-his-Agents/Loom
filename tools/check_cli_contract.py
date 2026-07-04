@@ -1188,6 +1188,20 @@ def assert_ship_status_preflight_contract(tmp: Path) -> None:
         )
         if clean_result != "pass" or clean_blockers or clean_fixed or not clean_next:
             raise AssertionError("ship status clean readback must pass without blockers")
+        light_result, light_blockers, light_fixed, light_next = module.ship_status_diagnostic(
+            host={"issue": {"state": "closed"}, "errors": []},
+            release={"tag": {"exists": False}, "github_release": {"exists": False}, "npm": {"exists": False}, "errors": []},
+            checkout={"stale_against_origin_main": False, "dirty": False, "errors": []},
+            carrier={"state": "active"},
+            adoption_mode="light-governance",
+        )
+        if (
+            light_result != "pass"
+            or light_blockers
+            or "repair_global_current_pointer" not in light_fixed
+            or "loom workstation current --target <repo> --clear --apply --json" not in light_next
+        ):
+            raise AssertionError("light-governance ship status must repair global current instead of blocking on stale repo carrier")
         if not module.ship_missing_readback("npm ERR! 404 No match found"):
             raise AssertionError("ship status must treat missing release/package readback as absent, not as an error")
         readback_errors: list[str] = []
@@ -1374,6 +1388,7 @@ def assert_ship_apply_wrapper_contract() -> None:
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
+    original_write_workstation_current = module.write_workstation_current
     module.flow_payload = passing_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
@@ -1384,6 +1399,8 @@ def assert_ship_apply_wrapper_contract() -> None:
         "changed_paths": ["README.md"],
         "missing_inputs": [],
     }
+    current_writes: list[dict[str, Any]] = []
+    module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
     try:
         status = module.handle_ship(
             [
@@ -1409,6 +1426,9 @@ def assert_ship_apply_wrapper_contract() -> None:
             raise AssertionError("ship --apply must emit mutating loom-ship/v1 apply payload")
         if emitted.get("creates_closeout_pr") is not False or emitted.get("closeout_mode") != "host_only":
             raise AssertionError("ship --apply must default to host-only closeout without creating a closeout PR")
+        step_names = [step.get("name") for step in emitted.get("steps", []) if isinstance(step, dict)]
+        if "global-current-closeout" not in step_names or not current_writes or current_writes[-1].get("state") != "no_active_item":
+            raise AssertionError("ship --apply host-only closeout must clear the workstation current pointer")
         expected_prefixes = [
             ["pr-metadata", "update"],
             ["carrier", "refresh"],
@@ -1534,6 +1554,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
+        module.write_workstation_current = original_write_workstation_current
 
 
 def assert_ship_closeout_policy_admission_contract() -> None:
@@ -1641,6 +1662,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
     calls: list[list[str]] = []
     emitted: dict[str, Any] = {}
+    current_writes: list[dict[str, Any]] = []
 
     def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
         emitted.clear()
@@ -1650,6 +1672,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
     def run_host_only_case(name: str, fields: dict[str, Any], expected_policy: str) -> None:
         calls.clear()
         emitted.clear()
+        write_count_before = len(current_writes)
         merge_sha = f"fixture-{name}-merge-sha"
 
         def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
@@ -1754,6 +1777,12 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         step_names = [step.get("name") for step in emitted.get("steps", []) if isinstance(step, dict)]
         if "host-reconciliation-sync" not in step_names or "host-closeout-check" not in step_names:
             raise AssertionError(f"{name} ship --apply must consume host reconciliation and closeout check")
+        if (
+            "global-current-closeout" not in step_names
+            or len(current_writes) != write_count_before + 1
+            or current_writes[-1].get("state") != "no_active_item"
+        ):
+            raise AssertionError(f"{name} ship --apply must clear the workstation current pointer after host-only closeout")
         closeout_steps = [step for step in emitted.get("steps", []) if isinstance(step, dict) and step.get("name") == "host-closeout-check"]
         closeout_payload = closeout_steps[-1].get("payload", {}) if closeout_steps else {}
         if closeout_payload.get("issue", {}).get("state") != "CLOSED":
@@ -1897,6 +1926,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
+    original_write_workstation_current = module.write_workstation_current
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
     module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
@@ -1906,6 +1936,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         "changed_paths": ["tools/check_cli_contract.py"],
         "missing_inputs": [],
     }
+    module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
     try:
         run_host_only_case(
             "light",
@@ -1925,7 +1956,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
                 "release_judgment": "no_release",
                 "upgrade_triggers": [],
             },
-            "inline",
+            "host_only",
         )
         run_versioned_terminal_blocker()
         run_release_closeout_blocker()
@@ -1934,6 +1965,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
+        module.write_workstation_current = original_write_workstation_current
 
 
 def assert_ship_docs_entry_contract() -> None:
@@ -3032,12 +3064,21 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
     if not isinstance(suite_validation, dict):
         raise AssertionError("build did not expose suite validation")
     validator_mode = suite_validation.get("validator_mode")
-    if (
-        suite_validation.get("command") != "suite validate"
-        or validator_mode not in {"repo-local-cli", "global-cli"}
-        or suite_validation.get("mutates") is not False
-    ):
-        raise AssertionError("build suite validation did not consume Loom CLI JSON")
+    cli_json_consumed = (
+        suite_validation.get("command") == "suite validate"
+        and validator_mode in {"repo-local-cli", "global-cli"}
+        and suite_validation.get("mutates") is False
+    )
+    active_marker_consumed = (
+        suite_validation.get("command") == "suite validate"
+        and suite_validation.get("result") == "not_applicable"
+        and validator_mode == "active-fact-chain-marker"
+        and suite_validation.get("mutates") is False
+        and isinstance(suite_validation.get("payload"), dict)
+        and suite_validation["payload"].get("suite_path") == "not_applicable"
+    )
+    if not cli_json_consumed and not active_marker_consumed:
+        raise AssertionError("build suite validation did not consume CLI JSON or an active not_applicable fact-chain marker")
     carrier_validation = payload.get("suite_carrier_validation")
     if not isinstance(carrier_validation, dict):
         raise AssertionError("build did not expose suite carrier validation")
@@ -3280,6 +3321,16 @@ def load_loom_flow_module() -> Any:
     finally:
         if sys.path and sys.path[0] == scripts_root:
             sys.path.pop(0)
+    return module
+
+
+def load_governance_surface_module() -> Any:
+    module_path = REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "governance_surface.py"
+    spec = importlib.util.spec_from_file_location("governance_surface_contract", module_path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load governance_surface module for suite path decision checks")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
     return module
 
 
@@ -4480,6 +4531,21 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     state = json.loads((target / ".loom" / "installed-state.json").read_text(encoding="utf-8"))
     if state.get("repo_payload", {}).get("mode") != "metadata-only":
         raise AssertionError("metadata-only installed-state did not declare repo_payload.mode")
+    if state.get("repo_payload", {}).get("adoption_mode") != "light-governance":
+        raise AssertionError("metadata-only installed-state did not declare the default light-governance adoption mode")
+    if state.get("contract", {}).get("minimum_loom_version") is None:
+        raise AssertionError("metadata-only installed-state did not declare a minimum Loom contract")
+    for local_field in (
+        "target",
+        "installed_at",
+        "upgraded_at",
+        "cli_freshness",
+        "plugin_freshness",
+        "plugin_cache_path",
+        "host_machine_path",
+    ):
+        if local_field in state:
+            raise AssertionError(f"metadata-only installed-state leaked workstation-local field: {local_field}")
     if state.get("skills_provider", {}).get("scope") != "user":
         raise AssertionError("metadata-only installed-state did not declare user skills provider")
     layer_paths = {layer.get("installed_path") for layer in state.get("layers", []) if isinstance(layer, dict)}
@@ -4505,6 +4571,7 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
         if headless_verify.get("result") != "pass" or headless_verify.get("doctor", {}).get("result") != "pass":
             raise AssertionError("metadata-only verify required Codex Desktop runtime/cache state")
     assert_global_cli_metadata_only_bootstrap_contract(tmp)
+    assert_light_governance_slim_bootstrap_contract(tmp)
 
     _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0)
     refresh_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "host-plugin-refresh-boundary"), None)
@@ -4744,7 +4811,16 @@ def assert_workstation_registry_entry_shape(entry: dict[str, Any], *, fixture_id
     adoption = entry.get("adoption")
     if not isinstance(adoption, dict):
         raise AssertionError(f"{fixture_id} registry entry adoption must be an object")
-    if adoption.get("mode") not in {"metadata-only", "repo-local-wrapper", "legacy-embedded", "unknown"}:
+    if adoption.get("mode") not in {
+        "light-governance",
+        "execution-control",
+        "strong-governance",
+        "attach-only",
+        "metadata-only",
+        "repo-local-wrapper",
+        "legacy-embedded",
+        "unknown",
+    }:
         raise AssertionError(f"{fixture_id} registry entry adoption mode drifted")
     opt_in = entry.get("opt_in")
     if not isinstance(opt_in, dict) or not isinstance(opt_in.get("enabled"), bool) or not opt_in.get("source"):
@@ -4767,6 +4843,7 @@ def assert_workstation_registry_fixture_contract() -> None:
         "loom workstation unregister --json",
         "loom workstation upgrade --plan --json",
         "loom workstation upgrade --apply --json",
+        "loom workstation current --json",
     } - command_surface:
         raise AssertionError("workstation registry fixtures must name the future workstation command surface")
     forbidden_truth_fields = set(fixture_data.get("forbidden_repository_truth_fields", []))
@@ -5059,6 +5136,83 @@ def assert_workstation_registry_cli_contract(tmp: Path) -> None:
             os.environ["LOOM_TEST_NPM_LATEST_VERSION"] = old_latest
 
 
+def assert_workstation_current_cli_contract(tmp: Path) -> None:
+    home = tmp / "current-home"
+    target = tmp / "current-target"
+    home.mkdir()
+    write_workstation_registry_target(target, version="v0.28.0")
+    with isolated_codex_workstation(home):
+        _, initial = run_json(["workstation", "current", "--target", str(target), "--json"], expect=0)
+        current = initial.get("current") if isinstance(initial.get("current"), dict) else {}
+        if initial.get("mutates") is not False or current.get("state") != "no_active_item":
+            raise AssertionError(f"workstation current read must be non-mutating and empty by default: {initial}")
+        if (home / ".loom" / "repos").exists():
+            raise AssertionError("workstation current read must not create workstation state")
+
+        _, planned = run_json(
+            [
+                "workstation",
+                "current",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1957",
+                "--issue",
+                "1957",
+                "--pr",
+                "1971",
+                "--branch",
+                "work/1957-1960-host-tax-core",
+                "--json",
+            ],
+            expect=0,
+        )
+        if planned.get("mutates") is not False or planned.get("apply_required") is not True:
+            raise AssertionError(f"workstation current plan must not mutate without --apply: {planned}")
+        if (home / ".loom" / "repos").exists():
+            raise AssertionError("workstation current plan must not create workstation state")
+
+        _, active = run_json(
+            [
+                "workstation",
+                "current",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1957",
+                "--issue",
+                "1957",
+                "--pr",
+                "1971",
+                "--branch",
+                "work/1957-1960-host-tax-core",
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        writes = active.get("writes")
+        active_current = active.get("current") if isinstance(active.get("current"), dict) else {}
+        if active.get("mutates") is not True or not isinstance(writes, list) or len(writes) != 1:
+            raise AssertionError(f"workstation current apply must write exactly one workstation file: {active}")
+        current_path = Path(writes[0])
+        if home.resolve() not in current_path.resolve().parents or not current_path.exists():
+            raise AssertionError(f"workstation current wrote outside isolated HOME: {writes}")
+        if active_current.get("state") != "active" or active_current.get("current_item_id") != "WI-1957":
+            raise AssertionError(f"workstation current apply did not persist the active item: {active_current}")
+        persisted = json.loads(current_path.read_text(encoding="utf-8"))
+        if persisted.get("state") != "active" or persisted.get("target") != str(target.resolve()):
+            raise AssertionError(f"workstation current persisted invalid payload: {persisted}")
+
+        _, cleared = run_json(["workstation", "current", "--target", str(target), "--clear", "--apply", "--json"], expect=0)
+        cleared_current = cleared.get("current") if isinstance(cleared.get("current"), dict) else {}
+        if cleared_current.get("state") != "no_active_item" or cleared_current.get("current_item_id") is not None:
+            raise AssertionError(f"workstation current clear did not remove active item: {cleared_current}")
+        cleared_persisted = json.loads(current_path.read_text(encoding="utf-8"))
+        if cleared_persisted.get("state") != "no_active_item" or cleared_persisted.get("issue") is not None:
+            raise AssertionError(f"workstation current clear persisted invalid payload: {cleared_persisted}")
+
+
 def assert_workstation_registry_cli_blocks(payload: dict[str, Any], classification: str, entry_id: Any) -> None:
     if payload.get("result") != "block" or payload.get("failed_layer") != "workstation-registry":
         raise AssertionError(f"workstation registry {classification} did not fail closed: {payload}")
@@ -5190,6 +5344,7 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "status",
     "shadow-parity",
     "story",
+    "workstation current",
 ]
 
 
@@ -5197,9 +5352,12 @@ def global_cli_state(target: Path) -> dict[str, Any]:
     return {
         "schema_version": "loom-installed-state/v2",
         "installation_id": "fixture-global-cli",
-        "target": str(target),
         "upgrade_eligibility": "current",
         "runtime_provider": "global-cli",
+        "contract": {
+            "minimum_loom_version": "v0.13.0",
+            "installed_state_schema": "loom-installed-state/v2",
+        },
         "provider_requirements": {
             "global_cli": {
                 "required": True,
@@ -5214,8 +5372,17 @@ def global_cli_state(target: Path) -> dict[str, Any]:
         },
         "repo_payload": {
             "mode": "metadata-only",
+            "adoption_mode": "light-governance",
             "intentional_absent_paths": [
                 ".loom/bin",
+                ".loom/runtime",
+                ".loom/tmp",
+                ".loom/shadow",
+                ".loom/status/current.md",
+                ".loom/work-items",
+                ".loom/progress",
+                ".loom/specs",
+                ".loom/reviews",
                 "plugins/loom/.codex-plugin/plugin.json",
                 "plugins/loom/skills",
                 ".agents/skills",
@@ -5228,7 +5395,7 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "layer_type": "repository-adoption-metadata",
                 "installed_path": ".loom/installed-state.json",
                 "version_context": {
-                    "repo_version": "v0.13.0",
+                    "minimum_loom_contract": "v0.13.0",
                     "installed_state_schema": "loom-installed-state/v2",
                 },
                 "runtime_state": "ready",
@@ -5241,8 +5408,8 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "layer_type": "user-level-skills-provider",
                 "installed_path": "workstation:codex-loom-plugin",
                 "version_context": {
-                    "plugin_surface_version": "v0.13.0",
-                    "host_adapter_version": "v0.13.0",
+                    "minimum_plugin_contract": "v0.13.0",
+                    "minimum_host_adapter_contract": "v0.13.0",
                 },
                 "runtime_state": "ready",
                 "upgrade_eligibility": "current",
@@ -5340,6 +5507,60 @@ def assert_global_cli_metadata_only_bootstrap_contract(tmp: Path) -> None:
     if payload.get("verification", {}).get("ok") is not True:
         raise AssertionError(f"metadata-only global-cli bootstrap did not verify: {payload.get('verification')}")
     assert_no_repo_local_runtime_bootstrap(target, payload)
+
+
+def assert_light_governance_slim_bootstrap_contract(tmp: Path) -> None:
+    target = tmp / "bootstrap-light-governance-slim"
+    target.mkdir()
+    _, payload = run_json(
+        [
+            "init",
+            "bootstrap",
+            "--target",
+            str(target),
+            "--intent",
+            "light-governance",
+            "--write",
+            "--verify",
+            "--json",
+        ],
+        expect=0,
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if payload.get("verification", {}).get("ok") is not True:
+        raise AssertionError(f"light-governance slim bootstrap did not verify: {payload.get('verification')}")
+    if payload.get("runtime_provider", {}).get("runtime_provider") != "global-cli":
+        raise AssertionError("light-governance bootstrap must default to the global CLI runtime provider")
+    declared_paths = {
+        item.get("path")
+        for collection_name in ("initial_artifacts", "planned_writes")
+        for item in payload.get(collection_name, [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    forbidden = {
+        ".loom/work-items",
+        ".loom/progress",
+        ".loom/specs",
+        ".loom/reviews",
+        ".loom/status/current.md",
+        ".loom/shadow",
+        ".loom/bin",
+        ".loom/runtime",
+        ".loom/tmp",
+    }
+    declared_forbidden = sorted(
+        path
+        for path in declared_paths
+        if any(path == blocked or path.startswith(blocked + "/") for blocked in forbidden)
+    )
+    if declared_forbidden:
+        raise AssertionError(f"light-governance bootstrap declared execution carriers: {declared_forbidden}")
+    for unexpected in forbidden:
+        if (target / unexpected).exists():
+            raise AssertionError(f"light-governance bootstrap created forbidden repo carrier: {unexpected}")
+    loom_files = [path for path in (target / ".loom").rglob("*") if path.is_file()]
+    if len(loom_files) >= 10:
+        raise AssertionError(f"light-governance bootstrap left too many .loom files: {len(loom_files)}")
 
 
 def write_global_cli_fact_chain_fixture(target: Path) -> None:
@@ -6385,6 +6606,230 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         if isinstance(finding, dict)
     ):
         raise AssertionError("hosted snapshot mismatch must carry classifier next action")
+
+
+def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "pr-metadata-suite-not-applicable"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1957")
+    write_hosted_freeze_admission_inputs(target)
+    suite_dir = target / ".loom" / "specs" / fixture["item"]
+    shutil.rmtree(suite_dir)
+    subprocess.run(["git", "add", "-A", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture remove repo suite"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload.update(
+        {
+            "reviewed_head": reviewed_head,
+            "reviewed_validation_summary": fixture["validation_summary"],
+            "reviewed_validation_summary_hash": None,
+            "validation_summary_source": "recovery.latest_validation_summary",
+            "validation_summary_locator": f".loom/progress/{fixture['item']}.md",
+            "summary": "Fixture implementation review approves metadata-declared suite not_applicable without repo-local spec files.",
+            "semantic_review_disposition": {
+                "status": "passed",
+                "reason": "Authored implementation review approved the current head; PR metadata supplies the formal suite not_applicable decision.",
+            },
+            "consumed_inputs": {
+                "work_item": f".loom/work-items/{fixture['item']}.md",
+                "recovery_entry": f".loom/progress/{fixture['item']}.md",
+                "suite_evidence_validation": "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable",
+                "suite_carrier_validation": "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable",
+            },
+        }
+    )
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture metadata suite review"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "reinforced",
+            "change_class": "runtime",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "batch implementation is validated by targeted contract checks instead of repo-local formal suite files",
+                "consumer_boundary": "PR gate, review, merge-ready, and closeout consume this only as formal suite non-applicability",
+                "recheck_condition": "scope expands beyond the declared runtime batch or validation evidence changes",
+                "scope_proof": "fixture intentionally removes .loom/specs/<WI> and relies on PR metadata machine carrier",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    body_file = f".loom/fixtures/{fixture['item']}/body.md"
+    (target / body_file).write_text(str(pr_payload.get("body") or ""), encoding="utf-8")
+    payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+    )
+    if payload.get("result") != "pass":
+        raise AssertionError(f"PR metadata suite_not_applicable fixture blocked: {payload.get('missing_inputs')}")
+    serialized_missing = "\n".join(str(message) for message in payload.get("missing_inputs", []))
+    forbidden_fragments = ("missing formal spec suite file", "suite_path_decision", "missing_evidence_map", "missing_task_carrier_locator")
+    if any(fragment in serialized_missing for fragment in forbidden_fragments):
+        raise AssertionError(f"PR metadata suite_not_applicable leaked repo-local suite requirements: {serialized_missing}")
+    spec_review = payload.get("merge_checkpoint", {}).get("spec_review", {})
+    if spec_review.get("result") != "not_applicable":
+        raise AssertionError(f"merge checkpoint did not consume PR metadata suite not_applicable: {spec_review}")
+    governance_gate = next(
+        (
+            step.get("governance_intensity_gate")
+            for step in payload.get("steps", [])
+            if isinstance(step, dict) and step.get("name") == "governance-intensity-gate"
+        ),
+        {},
+    )
+    if governance_gate.get("suite_path_decision", {}).get("source") != "pr_metadata":
+        raise AssertionError(f"governance gate did not identify PR metadata as suite decision source: {governance_gate}")
+    freeze_suite = payload.get("hosted_freeze_admission", {}).get("input_bindings", {}).get("suite_validation", {})
+    if (
+        freeze_suite.get("result") != "not_applicable"
+        or freeze_suite.get("source_locator") != "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable"
+    ):
+        raise AssertionError(f"hosted freeze did not consume PR metadata suite not_applicable: {freeze_suite}")
+
+
+def assert_suite_not_applicable_marker_parser_contract(tmp: Path) -> None:
+    target = tmp / "suite-not-applicable-marker-parser"
+    target.mkdir()
+    accepted = target / "accepted.md"
+    accepted.write_text(
+        "- Suite path: not_applicable\n"
+        "- Plan Locator: not_applicable (suite path: not_applicable)\n",
+        encoding="utf-8",
+    )
+    rejected = target / "rejected.md"
+    rejected.write_text(
+        "- Note: no suite path: not_applicable evidence yet\n"
+        "- Latest Validation Summary: previous fixture mentioned suite path: not_applicable while debugging.\n"
+        "- Plan Locator: .loom/specs/WI-1957/plan.md (suite path: not_applicable)\n",
+        encoding="utf-8",
+    )
+
+    loom_flow = load_loom_flow_module()
+    context = {"target_root": target}
+    accepted_present, accepted_values = loom_flow.suite_path_decision_presence_from_paths(context, ["accepted.md"])
+    if not accepted_present or accepted_values != {"not_applicable"}:
+        raise AssertionError(f"structured suite_not_applicable marker was not consumed: {accepted_values}")
+    rejected_present, rejected_values = loom_flow.suite_path_decision_presence_from_paths(context, ["rejected.md"])
+    if rejected_present or rejected_values:
+        raise AssertionError(f"unstructured suite_not_applicable prose was consumed: {rejected_values}")
+
+    governance_surface = load_governance_surface_module()
+    if governance_surface.suite_path_decision(accepted) != "not_applicable":
+        raise AssertionError("governance surface did not consume structured suite_not_applicable marker")
+    if governance_surface.suite_path_decision(rejected):
+        raise AssertionError("governance surface consumed unstructured suite_not_applicable prose")
+
+
+def assert_runtime_carrier_suite_not_applicable_adoption_fixture(tmp: Path) -> None:
+    target = tmp / "runtime-carrier-suite-not-applicable"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1957")
+    item = fixture["item"]
+    shutil.rmtree(target / ".loom" / "specs" / item)
+    (target / ".loom" / "reviews" / f"{item}.spec.json").unlink()
+    progress_path = target / ".loom" / "progress" / f"{item}.md"
+    progress_text = progress_path.read_text(encoding="utf-8")
+    if "suite path: not_applicable" not in progress_text:
+        progress_text = progress_text.replace(
+            f"- Plan Locator: .loom/specs/{item}/plan.md\n",
+            f"- Plan Locator: not_applicable (suite path: not_applicable)\n",
+            1,
+        )
+    progress_path.write_text(progress_text, encoding="utf-8")
+    subprocess.run(["git", "add", "-A", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture runtime suite not applicable"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload.update(
+        {
+            "reviewed_head": reviewed_head,
+            "reviewed_validation_summary": fixture["validation_summary"],
+            "summary": "Fixture implementation review approves runtime-carrier suite not_applicable without repo-local spec files.",
+            "semantic_review_disposition": {
+                "status": "passed",
+                "reason": "Authored implementation review approved the current head; progress/status declare the formal suite not_applicable decision.",
+            },
+            "consumed_inputs": {
+                "work_item": f".loom/work-items/{item}.md",
+                "recovery_entry": f".loom/progress/{item}.md",
+                "suite_path_decision": f".loom/progress/{item}.md",
+            },
+        }
+    )
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture runtime suite review"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+
+    loom_flow = load_loom_flow_module()
+    context, context_errors = loom_flow.load_retained_item_context(
+        target,
+        ".loom/bootstrap/init-result.json",
+        item,
+        f".loom/work-items/{item}.md",
+    )
+    if context_errors:
+        raise AssertionError(f"runtime carrier suite_not_applicable context failed: {context_errors}")
+    spec_gate = loom_flow.spec_review_gate_payload(context)
+    if spec_gate.get("result") != "not_applicable":
+        raise AssertionError(f"runtime carrier suite_not_applicable did not reach spec gate: {spec_gate}")
+    suite_validation = spec_gate.get("suite_validation", {})
+    if suite_validation.get("validator_mode") != "active-fact-chain-marker":
+        raise AssertionError(f"runtime carrier suite_not_applicable did not use the active fact-chain marker: {suite_validation}")
+
+    status_code, adoption = run_flow_json(["adopt", "verify", "--target", str(target), "--item", item])
+    missing = "\n".join(str(entry) for entry in adoption.get("missing_inputs", []))
+    if "Spec Review Record" in missing or "missing spec review artifact" in missing:
+        raise AssertionError(f"runtime carrier suite_not_applicable still required a spec review artifact: {missing}")
+    if adoption.get("reviews", {}).get("spec", {}).get("status") != "not_applicable":
+        raise AssertionError(f"adoption verify did not classify spec review as not_applicable: {adoption.get('reviews')}")
+    consumer = adoption.get("producer_consumer_roundtrip", {}).get("consumer", {})
+    if consumer.get("review_artifacts", {}).get("Spec Review Record", {}).get("status") != "not_applicable":
+        raise AssertionError(f"adoption PR body did not render Spec Review Record as not_applicable: {consumer}")
+    if status_code not in {0, 1}:
+        raise AssertionError(f"adoption verify returned unexpected status {status_code}: {adoption}")
+
+    _, profile = run_flow_json(["governance-profile", "status", "--target", str(target)], expect=0)
+    missing_by_level = profile.get("maturity", {}).get("missing_by_level", {})
+    standard_missing = set(missing_by_level.get("standard", [])) if isinstance(missing_by_level, dict) else set()
+    forbidden = {"spec_path", "plan_path", "spec_gate"} & standard_missing
+    if forbidden:
+        raise AssertionError(f"runtime carrier suite_not_applicable did not satisfy maturity spec facts: {sorted(forbidden)}")
 
 
 def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
@@ -9430,6 +9875,8 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     with isolated_loom_workstation(tmp / "workstation"):
         assert_gate_freeze_review_binding_fixture(tmp)
         assert_hosted_freeze_admission_pr_gate_fixture(tmp)
+        assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp)
+        assert_runtime_carrier_suite_not_applicable_adoption_fixture(tmp)
         assert_closeout_freeze_profile_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
     assert_governance_intensity_pr_gate_positive_variants(tmp)
@@ -11701,7 +12148,9 @@ def run_adoption_host_metadata_surface() -> None:
 def run_workstation_registry_surface() -> None:
     assert_workstation_registry_fixture_contract()
     with tempfile.TemporaryDirectory(prefix="loom-workstation-registry-") as raw_tmp:
-        assert_workstation_registry_cli_contract(Path(raw_tmp))
+        tmp = Path(raw_tmp)
+        assert_workstation_registry_cli_contract(tmp)
+        assert_workstation_current_cli_contract(tmp)
     print("workstation registry surface checks passed")
 
 
@@ -12239,6 +12688,15 @@ def run_pr_metadata_surface() -> None:
             assert_pr_intent_profile_fixture(tmp)
 
     print("pr metadata surface checks passed")
+
+
+def run_pr_metadata_suite_not_applicable_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-suite-not-applicable-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_suite_not_applicable_marker_parser_contract(tmp)
+        assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp)
+
+    print("pr metadata suite_not_applicable surface checks passed")
 
 
 def run_pr_gate_target_readback_surface() -> None:
@@ -14798,6 +15256,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="pr-metadata",
             fixture_group="pr-metadata",
             run=run_pr_metadata_surface,
+        ),
+        SurfaceCheck(
+            name="pr-metadata-suite-not-applicable",
+            fixture_group="pr-metadata-suite-not-applicable",
+            run=run_pr_metadata_suite_not_applicable_surface,
         ),
         SurfaceCheck(
             name="pr-gate-target-readback",

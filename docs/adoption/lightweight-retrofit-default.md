@@ -35,9 +35,9 @@
 - `spec_review`
 - 最小 PR 模板
 - repo companion 与 bootstrap metadata
-- review guidance / spec-review guidance
+- repo-owned review instruction locators
 
-本策略对应 `light-governance` scaffold profile。该 profile 可以暴露 review/spec-review 指引和轻量 review placeholder，但不生成 Loom-owned formal spec suite。
+本策略对应 `light-governance` scaffold profile。该 profile 暴露 companion locator、repo interface 与 PR template；默认不生成 Loom-owned review placeholder、formal spec suite、status/current、work item 或 progress carrier。
 
 ## 4. 默认接入方式
 
@@ -48,7 +48,7 @@
 - 在 `repo-interface.json` 中显式声明 `review_instruction_locators`；已有规则用 repo-owned locator，确无规则时才声明 `loom_default`
 - 不在第一轮重写整个根级规则体系
 - 不把轻量 retrofit 升级成 unattended strong adoption
-- 不在默认 `light-governance` 中生成 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md` 或 `.loom/specs/**`
+- 不在默认 `light-governance` 中生成 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/specs/**`、`.loom/reviews/**`、`.loom/shadow/**`、`.loom/bin/**`、`.loom/runtime/**` 或 `.loom/tmp/**`
 
 轻量仓库可以从 Loom default review instruction 起步，但这个选择必须是显式 locator 合同，而不是自动猜测 `spec_review.md`、`code_review.md` 或任何单仓历史路径。
 
@@ -59,11 +59,12 @@
 - 完整 recovery 模型
 - work item 合同
 - 状态面
+- repo-local review carrier
 - profile 分层
 - 重 harness
 - formal spec suite
 
-如果目标仓库需要 Loom-owned `work item`、`progress`、`status` 或 `spec` carriers，必须把接入意图显式升级到 `execution-control`；此时才允许脚手架生成 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md` 和 `.loom/specs/**`。
+如果目标仓库需要 Loom-owned `work item`、`progress`、`status`、`review`、`runtime cache` 或 `spec` carriers，必须把接入意图显式升级到 `execution-control`；此时才允许脚手架生成对应 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**` 和 `.loom/specs/**`。
 
 ## 6. checkpoint-lite
 
