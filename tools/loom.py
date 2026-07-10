@@ -65,6 +65,7 @@ for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
     if shared_scripts_root.is_dir() and str(shared_scripts_root) not in sys.path:
         sys.path.insert(0, str(shared_scripts_root))
 from runtime_paths import global_runtime_path, is_global_runtime_locator
+from product_acceptance import main as product_acceptance_main
 
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
 LOOM_BOOTSTRAP_END = "<!-- LOOM_BOOTSTRAP_END -->"
@@ -776,6 +777,7 @@ SUITE_SUPPORT_MARKERS = {
 }
 
 COMMAND_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "acceptance": ("product_acceptance.py", ()),
     "init": ("loom_init.py", ()),
     "adopt": ("loom_flow.py", ("adopt",)),
     "route": ("loom_init.py", ("route",)),
@@ -15129,6 +15131,9 @@ def main(argv: list[str]) -> int:
     if command == "suite" or command.startswith("suite "):
         suite_args = command.split()[1:] + forwarded if command.startswith("suite ") else forwarded
         return handle_suite(suite_args)
+    if command == "acceptance" or command.startswith("acceptance "):
+        acceptance_args = command.split()[1:] + forwarded if command.startswith("acceptance ") else forwarded
+        return product_acceptance_main(acceptance_args)
     if command == "init":
         return handle_init(forwarded)
     if command == "adopt" or command.startswith("adopt "):

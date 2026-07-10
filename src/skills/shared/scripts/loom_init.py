@@ -37,6 +37,7 @@ CHECK_RUNTIME_SOURCE = "skills/shared/scripts/loom_check.py"
 STORY_CARRIERS_RUNTIME_SOURCE = "skills/shared/scripts/loom_story_carriers.py"
 AUTHORITY_CONTRACT_RUNTIME_SOURCE = "skills/shared/scripts/authority_contract.py"
 FAILURE_ENVELOPE_RUNTIME_SOURCE = "skills/shared/scripts/failure_envelope.py"
+PRODUCT_ACCEPTANCE_RUNTIME_SOURCE = "skills/shared/scripts/product_acceptance.py"
 EXECUTION_ATTEMPTS_RUNTIME_SOURCE = "skills/shared/scripts/execution_attempts.py"
 FACT_CHAIN_RUNTIME_SOURCE = "skills/shared/scripts/fact_chain_support.py"
 GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
@@ -147,6 +148,7 @@ ATTACH_ONLY_HOST_TRUTH_LOCATORS = {
 RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/authority_contract.py": AUTHORITY_CONTRACT_RUNTIME_SOURCE,
     ".loom/bin/failure_envelope.py": FAILURE_ENVELOPE_RUNTIME_SOURCE,
+    ".loom/bin/product_acceptance.py": PRODUCT_ACCEPTANCE_RUNTIME_SOURCE,
     ".loom/bin/execution_attempts.py": EXECUTION_ATTEMPTS_RUNTIME_SOURCE,
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
     ".loom/bin/fact_chain_support.py": FACT_CHAIN_RUNTIME_SOURCE,
@@ -1613,6 +1615,7 @@ def profile_common_artifacts(global_cli_metadata_only: bool = False) -> list[dic
             {"path": ".loom/bootstrap/manifest.json", "kind": "manifest", "source": "generated"},
             runtime_artifact(".loom/bin/authority_contract.py", "loom-tool-support", AUTHORITY_CONTRACT_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/failure_envelope.py", "loom-tool-support", FAILURE_ENVELOPE_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/product_acceptance.py", "loom-tool-support", PRODUCT_ACCEPTANCE_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/execution_attempts.py", "loom-tool-support", EXECUTION_ATTEMPTS_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
@@ -1695,6 +1698,7 @@ def attach_only_artifact_paths(target_root: Path, install_pr_template: bool, glo
                 ".loom/bootstrap/manifest.json",
                 ".loom/bin/authority_contract.py",
                 ".loom/bin/failure_envelope.py",
+                ".loom/bin/product_acceptance.py",
                 ".loom/bin/execution_attempts.py",
                 ".loom/bin/loom_init.py",
                 ".loom/bin/fact_chain_support.py",
@@ -2974,6 +2978,7 @@ def runtime_artifact(path: str, kind: str, source: str) -> dict[str, str]:
     runtime_sources = {
         ".loom/bin/authority_contract.py": Path(__file__).with_name("authority_contract.py"),
         ".loom/bin/failure_envelope.py": Path(__file__).with_name("failure_envelope.py"),
+        ".loom/bin/product_acceptance.py": Path(__file__).with_name("product_acceptance.py"),
         ".loom/bin/execution_attempts.py": Path(__file__).with_name("execution_attempts.py"),
         ".loom/bin/loom_init.py": Path(__file__),
         ".loom/bin/fact_chain_support.py": Path(__file__).with_name("fact_chain_support.py"),
@@ -3106,6 +3111,7 @@ def scaffold_target(
         for source, destination in (
             (Path(__file__).with_name("authority_contract.py"), target_root / ".loom/bin/authority_contract.py"),
             (Path(__file__).with_name("failure_envelope.py"), target_root / ".loom/bin/failure_envelope.py"),
+            (Path(__file__).with_name("product_acceptance.py"), target_root / ".loom/bin/product_acceptance.py"),
             (Path(__file__).with_name("execution_attempts.py"), target_root / ".loom/bin/execution_attempts.py"),
             (Path(__file__), target_root / ".loom/bin/loom_init.py"),
             (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),

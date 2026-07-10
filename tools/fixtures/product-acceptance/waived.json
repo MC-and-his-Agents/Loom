@@ -1,0 +1,9 @@
+{
+  "schema_version": "loom-product-acceptance/v1",
+  "story_locator": "issue:225",
+  "scenario_id": "READ-001",
+  "verdict": "waived",
+  "minimum_evidence_class": "live_readonly",
+  "rationale": "人工认证尚未授权，不能以合成证据替代真实运行时。",
+  "evidence": []
+}

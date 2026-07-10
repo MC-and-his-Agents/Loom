@@ -71,6 +71,7 @@ SCAFFOLD_FORBIDDEN_ACTION_KEYS = {
 REQUIRED_COMMANDS = {
     "version",
     "help",
+    "acceptance validate",
     "installed-state show",
     "installed-state validate",
     "installed-state export",

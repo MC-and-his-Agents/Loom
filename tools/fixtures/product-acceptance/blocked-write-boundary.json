@@ -1,0 +1,8 @@
+{
+  "schema_version": "loom-product-acceptance/v1",
+  "story_locator": "issue:225",
+  "scenario_id": "READ-001",
+  "verdict": "passed",
+  "minimum_evidence_class": "live_readonly",
+  "evidence": [{"evidence_class": "live_readonly", "observed_at": "2026-07-11T00:00:00Z", "freshness_window_seconds": 3600, "run_id": "unsafe-run", "artifact_refs": ["artifact:unsafe"], "provider_profile": {"provider": "provider-x", "profile": "redacted-profile", "redacted": true}, "component_versions": {"WebEnvoy/Core": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "operation_boundary": {"allowed_actions": ["read"], "prohibited_actions": ["login", "captcha_or_risk_bypass", "submit", "publish", "send", "external_visible_write"], "observed_actions": ["external_visible_write"]}}]
+}
