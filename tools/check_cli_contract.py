@@ -11259,7 +11259,7 @@ raise SystemExit(1)
 def install_bootstrapped_runtime(target: Path) -> None:
     runtime_target = target / ".loom" / "bin"
     manifest_target = target / ".loom" / "bootstrap" / "manifest.json"
-    source_manifest = REPO_ROOT / "examples" / "new-project" / ".loom" / "bootstrap" / "manifest.json"
+    source_manifest = REPO_ROOT / ".loom" / "bootstrap" / "manifest.json"
     if runtime_target.exists():
         shutil.rmtree(runtime_target)
     shutil.copytree(REPO_ROOT / ".loom" / "bin", runtime_target)
