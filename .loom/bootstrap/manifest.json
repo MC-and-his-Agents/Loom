@@ -123,10 +123,16 @@
       "sha256": "4cc504db34b896bb6d3dc223c0be13337e17618df966a2a5ac50c0416544bab4"
     },
     {
+      "path": ".loom/bin/failure_envelope.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/failure_envelope.py",
+      "sha256": "0838f25a3973c0c7378c9346fb85f2009f4774299b224ff532a6e2441c420003"
+    },
+    {
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "ebfd11847dd4c39cdf0f7f2499eec41175a0e82a260f50ab396ec7625ee5ae85"
+      "sha256": "393abba4c9b6b07fb5f8557826df2dfdb1a7325c79deb39adc2c0b4bbbd7da47"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -156,7 +162,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "5ba8bb9b8e466ec490beac0643b5d35fdf43668e34970f12345e70a0e014619e"
+      "sha256": "ededad131f3d7a4b4a0fcbb5e3f1316c2cb82bf08def9a3304af81056023d7f3"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -174,7 +180,7 @@
       "path": ".loom/bin/runtime_state.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/runtime_state.py",
-      "sha256": "03ea3ed268b5305a93e04529c17a9681323a04e53609309a22e85d32e09532d9"
+      "sha256": "4952cc62ecedd8d78b319fa34ae820ef50585ce91e0fbfb8fc98c0d62bdb800d"
     },
     {
       "path": ".loom/bin/loom_check.py",
