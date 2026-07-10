@@ -4,7 +4,7 @@
 
 - Item ID: WI-2012
 - Goal: 修复 global-CLI metadata-only carrier refresh 对不存在 bootstrap manifest 的错误依赖。
-- Scope: Issue #2012；主控线程 ownership 仅覆盖 carrier refresh 共享实现、对应 source check、生成副本和 WI-2012 carriers。保留 repo-local runtime manifest fail-closed，不修改 WebEnvoy 产品仓。
+- Scope: Issue #2012；主控线程 ownership 仅覆盖 carrier refresh 共享实现、对应 source/check_cli_contract 回归、生成副本和 WI-2012 carriers。保留 repo-local runtime manifest fail-closed，不修改 WebEnvoy 产品仓。
 - Execution Path: issue #2012 -> branch work/2012-metadata-only-carrier-refresh -> targeted regression -> source validation -> PR gate -> merge
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-2012.md
@@ -12,10 +12,10 @@
 - Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture; git diff --check
 - Closing Condition: PR for #2012 merges with current-head review and hosted gates; Harbor #244 no longer fails carrier refresh because bootstrap manifest is intentionally absent.
 - Current Checkpoint: build
-- Current Stop: PR #2015 created from the validated implementation; PR metadata preflight and GitHub body readback passed.
-- Next Step: Push the PR carrier sync, bind PR metadata to the final head, then run current-head review and hosted gates.
+- Current Stop: Deterministic pre-review validation passed after making the closeout fixture respect a baseline not_applicable suite gate.
+- Next Step: Commit and push the CLI contract correction, update PR #2015 metadata to the final head, then rerun pre-review and current-head review.
 - Blockers: None
-- Latest Validation Summary: 2026-07-10 current worktree: py_compile passed; generated-tree-drift passed; suite evidence validate passed; suite carrier validate passed; fact-chain passed; git diff --check passed; source-self-fixture passed with failures=0 including malformed installed-state coverage; Harbor HARBOR-241 reproduction no longer reports invalid bootstrap manifest and leaves current-head review as the genuine blocker.
+- Latest Validation Summary: 2026-07-10 current worktree: git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py --profile source --source-surface contract-only passed; python3 tools/check_cli_contract.py passed all 6 surfaces in 211.59s; governance-closeout focused surface passed in 40.41s; make loom-demo-new-project-check passed; source-self-fixture passed with failures=0; suite evidence/carrier validation and fact-chain passed; Harbor HARBOR-241 reproduction no longer reports invalid bootstrap manifest.
 - Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-2012.md`.
 - Current Lane: WI-2012 metadata-only carrier refresh correction
 

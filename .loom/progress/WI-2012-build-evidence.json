@@ -5,12 +5,13 @@
     {
       "id": "WI-2012-metadata-only-carrier-refresh",
       "status": "integrated",
-      "summary": "The main controller integrated the metadata-only installed-state guard, malformed-input protection, source regression assertions, generated runtime copies, and WI-2012 carriers without changing repo-local manifest validation.",
+      "summary": "The main controller integrated the metadata-only installed-state guard, malformed-input protection, source and CLI contract regression assertions, generated runtime copies, and WI-2012 carriers without changing repo-local manifest validation.",
       "locators": [
         "src/skills/shared/scripts/loom_flow.py",
         "src/skills/shared/scripts/loom_check.py",
         "skills/shared/scripts/loom_flow.py",
         "skills/shared/scripts/loom_check.py",
+        "tools/check_cli_contract.py",
         ".loom/work-items/WI-2012.md",
         ".loom/progress/WI-2012.md",
         ".loom/specs/WI-2012/evidence-map.md",

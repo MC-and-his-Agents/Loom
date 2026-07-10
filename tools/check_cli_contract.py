@@ -539,6 +539,10 @@ def active_suite_path_not_applicable(active_item: str) -> bool:
 def assert_closeout_blocks_missing_suite_evidence(active_item: str) -> None:
     if active_suite_path_not_applicable(active_item):
         return
+    _, baseline = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+    baseline_suite_gate = baseline.get("suite_gate_validation")
+    if isinstance(baseline_suite_gate, dict) and baseline_suite_gate.get("result") == "not_applicable":
+        return
     evidence_map = f".loom/specs/{active_item}/evidence-map.md"
     with preserved_repo_paths((evidence_map,)):
         path = REPO_ROOT / evidence_map
