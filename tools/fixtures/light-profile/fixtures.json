@@ -1,0 +1,154 @@
+{
+  "schema_version": "loom-light-profile-fixtures/v1",
+  "cases": [
+    {
+      "id": "heavy-tree",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/bootstrap/init-result.json": "{\"initial_artifacts\":[{\"path\":\".loom/status/current.md\"}]}\n",
+        ".loom/status/current.md": "# Current Status\n",
+        ".loom/work-items/WI-1.md": "- Workspace Entry: /Users/example/worktree\n",
+        ".loom/progress/WI-1.md": "checkpoint\n",
+        ".loom/specs/WI-1/spec.md": "spec\n",
+        ".loom/stories/WI-1.md": "story\n",
+        ".loom/reviews/WI-1.json": "{}\n",
+        ".loom/shadow/review-loom.json": "{}\n",
+        ".loom/bin/loom.py": "print('legacy')\n",
+        ".loom/runtime/session.json": "{}\n",
+        ".loom/tmp/run.log": "temporary\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 11
+      }
+    },
+    {
+      "id": "absolute-workspace-entry",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/bootstrap/init-result.json": "{\"workspace_entry\":\"/Users/example/worktree\"}\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 1
+      }
+    },
+    {
+      "id": "absolute-private-workspace-entry",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/bootstrap/init-result.json": "{\"workspace_entry\":\"/private/var/folders/example/worktree\"}\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 1
+      }
+    },
+    {
+      "id": "absolute-windows-workspace-entry",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/bootstrap/init-result.json": "{\"workspace_entry\":\"C:\\\\Users\\\\example\\\\worktree\"}\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 1
+      }
+    },
+    {
+      "id": "clean-light",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/bootstrap/init-result.json": "{\"schema_version\":\"loom-init-output/v1\"}\n",
+        ".loom/companion/repo-interface.json": "{}\n",
+        ".github/workflows/loom-delivery-gate.yml": "name: Loom\n"
+      },
+      "expected": {
+        "result": "pass",
+        "primary_cause": "passed",
+        "legacy_gate_blocker": false,
+        "violation_count": 0
+      }
+    },
+    {
+      "id": "attach-only-forbidden-carrier",
+      "adoption_mode": "attach-only",
+      "tracked_files": {
+        ".loom/status/current.md": "stale\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 1
+      }
+    },
+    {
+      "id": "untracked-and-ignored",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/bootstrap/init-result.json": "{}\n"
+      },
+      "untracked_files": {
+        ".loom/status/current.md": "stale\n"
+      },
+      "ignored_files": {
+        ".loom/tmp/run.log": "stale\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 2
+      }
+    },
+    {
+      "id": "legacy-missing-state",
+      "without_installed_state": true,
+      "tracked_files": {
+        ".loom/bootstrap/manifest.json": "not json\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 2
+      }
+    },
+    {
+      "id": "light-nonmetadata-state",
+      "adoption_mode": "light-governance",
+      "repo_payload_extra": {
+        "mode": "repo-local-runtime"
+      },
+      "tracked_files": {},
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_state_unreadable",
+        "legacy_gate_blocker": true,
+        "violation_count": 0
+      }
+    },
+    {
+      "id": "non-light",
+      "adoption_mode": "execution-control",
+      "tracked_files": {
+        ".loom/status/current.md": "allowed outside light\n"
+      },
+      "expected": {
+        "result": "pass",
+        "primary_cause": "not_applicable",
+        "legacy_gate_blocker": false,
+        "violation_count": 0
+      }
+    }
+  ]
+}

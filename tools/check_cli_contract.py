@@ -97,6 +97,7 @@ REQUIRED_COMMANDS = {
     "profile status",
     "profile upgrade-plan",
     "profile upgrade",
+    "profile light-migration-plan",
     "checkpoint admission",
     "checkpoint build",
     "checkpoint merge",
