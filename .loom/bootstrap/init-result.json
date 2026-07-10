@@ -110,7 +110,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "393abba4c9b6b07fb5f8557826df2dfdb1a7325c79deb39adc2c0b4bbbd7da47"
+      "sha256": "1d08e31e21340a0d4b098034acd83188ac2acdea85c9abdd9af9f17a92a166e9"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -140,7 +140,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "4f0d77eadb8b7f55414e084a015dece1dc15932743ba10837ce02a1bf05d7440"
+      "sha256": "ea95e71aa410a2f103fcc14ecf86d97969d32904d34784acf1c0bfd4ce22e84a"
     },
     {
       "path": ".loom/bin/loom_status.py",
