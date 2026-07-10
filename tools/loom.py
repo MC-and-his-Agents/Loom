@@ -296,6 +296,13 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "profile status", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade", "domain": "profile", "status": "implemented", "json": True},
+    {
+        "command": "profile light-migration-plan",
+        "domain": "profile",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read the light-profile carrier invariant and emit a non-mutating profile-migration plan.",
+    },
     {"command": "governance-profile status", "domain": "profile", "status": "implemented", "json": True},
     {"command": "governance-profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
     {"command": "governance-profile upgrade", "domain": "profile", "status": "implemented", "json": True},
@@ -12004,8 +12011,16 @@ def handle_profile(argv: list[str]) -> int:
     if not argv:
         return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Profile requires an operation.", failed_layer="profile-input", fail_closed_reason="missing profile operation", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json"]))
     operation = argv[0]
+    if operation == "light-migration-plan":
+        return emit_delegated(
+            "profile light-migration-plan",
+            "light_profile.py",
+            ["plan", *strip_json_flag(argv[1:])],
+            failed_layer="light-profile",
+            fallback_to=["loom profile light-migration-plan --target <repo> --json"],
+        )
     if operation not in {"status", "upgrade-plan", "upgrade"}:
-        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported profile operation: {operation}", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json"]))
+        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported profile operation: {operation}", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json", "loom profile light-migration-plan --target <repo> --json"]))
     return emit_flow(f"profile {operation}", ["governance-profile", operation, *strip_json_flag(argv[1:])], fallback_to=["loom profile status --target <repo> --json", "docs/adoption/github-profile-upgrade.md"])
 
 
