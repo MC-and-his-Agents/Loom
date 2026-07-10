@@ -35,6 +35,7 @@ FLOW_RUNTIME_SOURCE = "skills/shared/scripts/loom_flow.py"
 STATUS_RUNTIME_SOURCE = "skills/shared/scripts/loom_status.py"
 CHECK_RUNTIME_SOURCE = "skills/shared/scripts/loom_check.py"
 STORY_CARRIERS_RUNTIME_SOURCE = "skills/shared/scripts/loom_story_carriers.py"
+AUTHORITY_CONTRACT_RUNTIME_SOURCE = "skills/shared/scripts/authority_contract.py"
 FACT_CHAIN_RUNTIME_SOURCE = "skills/shared/scripts/fact_chain_support.py"
 GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
 ADMISSION_RUNTIME_SOURCE = "skills/shared/scripts/github_admission.py"
@@ -142,6 +143,7 @@ ATTACH_ONLY_HOST_TRUTH_LOCATORS = {
 }
 
 RUNTIME_ARTIFACT_SOURCES = {
+    ".loom/bin/authority_contract.py": AUTHORITY_CONTRACT_RUNTIME_SOURCE,
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
     ".loom/bin/fact_chain_support.py": FACT_CHAIN_RUNTIME_SOURCE,
     ".loom/bin/governance_surface.py": GOVERNANCE_RUNTIME_SOURCE,
@@ -1605,6 +1607,7 @@ def profile_common_artifacts(global_cli_metadata_only: bool = False) -> list[dic
     artifacts.extend(
         [
             {"path": ".loom/bootstrap/manifest.json", "kind": "manifest", "source": "generated"},
+            runtime_artifact(".loom/bin/authority_contract.py", "loom-tool-support", AUTHORITY_CONTRACT_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
@@ -1684,6 +1687,7 @@ def attach_only_artifact_paths(target_root: Path, install_pr_template: bool, glo
         artifacts.extend(
             [
                 ".loom/bootstrap/manifest.json",
+                ".loom/bin/authority_contract.py",
                 ".loom/bin/loom_init.py",
                 ".loom/bin/fact_chain_support.py",
                 ".loom/bin/governance_surface.py",
@@ -1732,7 +1736,7 @@ def initial_work_items(
     artifacts = [
         path
         for path in artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile, global_cli_metadata_only))
-        if path not in {".loom/bin/github_admission.py", ".loom/bin/github_host.py"}
+        if path not in {".loom/bin/authority_contract.py", ".loom/bin/github_admission.py", ".loom/bin/github_host.py"}
     ]
     if profile == "light-governance":
         return [
@@ -2960,6 +2964,7 @@ def sha256_file(path: Path) -> str:
 
 def runtime_artifact(path: str, kind: str, source: str) -> dict[str, str]:
     runtime_sources = {
+        ".loom/bin/authority_contract.py": Path(__file__).with_name("authority_contract.py"),
         ".loom/bin/loom_init.py": Path(__file__),
         ".loom/bin/fact_chain_support.py": Path(__file__).with_name("fact_chain_support.py"),
         ".loom/bin/governance_surface.py": Path(__file__).with_name("governance_surface.py"),
@@ -3089,6 +3094,7 @@ def scaffold_target(
 
     if any(path.startswith(".loom/bin/") for path in declared_write_paths):
         for source, destination in (
+            (Path(__file__).with_name("authority_contract.py"), target_root / ".loom/bin/authority_contract.py"),
             (Path(__file__), target_root / ".loom/bin/loom_init.py"),
             (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),
             (Path(__file__).with_name("governance_surface.py"), target_root / ".loom/bin/governance_surface.py"),
