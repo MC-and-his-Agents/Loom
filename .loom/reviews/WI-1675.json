@@ -1,0 +1,58 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1675",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1675 closeout carrier sync is approved for PR #1677. The diff only appends Terminal Closeout Metadata to .loom/progress/WI-1675.md after PR #1676 was merged and issue #1675 was closed; it does not change README content, runtime behavior, installer behavior, package release surfaces, permissions, or user-visible product behavior.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T09:58:57Z",
+  "reviewed_head": "be2e6b82276e47fd2ce4580c6f3dafb2a11aabc2",
+  "reviewed_validation_summary": "2026-06-21T09:34Z local validation passed for WI-1675: git diff --check; doc-sync check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; skills surface check; `loom skills check`; py_compile for loom_check mirrors; loom_check contract-only; installer regression including npm test and npm pack dry-run; demo bootstrap fixture sync followed by `make loom-demo-new-project-check`; root bootstrap hash sync followed by `.loom/bin/loom_init.py verify`, runtime parity, and adopt verify; suite evidence validate; suite carrier validate; suite validate; fact-chain; shadow parity; local PR gate passed for head d3d833067f929431ef247dfce9f362ca7258517a before fixture sync. Full local `python3 tools/loom_check.py` was run after the demo fixture sync and failed only on root-self-adoption because root bootstrap hash carriers were stale; targeted root self-governance checks now pass after hash sync. PR metadata, PR gate, hosted checks, and merge check will be rerun after the fixture implementation commit and review refresh.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1675.md",
+    "recovery_entry": ".loom/progress/WI-1675.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": EOF; github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 2
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1675 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1675 --json",
+    "suite_evidence_map": ".loom/specs/WI-1675/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1675/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

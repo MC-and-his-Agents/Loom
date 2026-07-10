@@ -1,0 +1,30 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1658",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1658 minimal release suite is approved: spec, plan, implementation contract, evidence map, and task carrier consistently scope the work to v0.17.1 release preparation and post-merge release evidence consumption. The suite keeps runtime implementation, repo-local install revival, downstream migration, and final #1489 closeout out of scope.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T03:14:29Z",
+  "reviewed_head": "93b417d076c0ba0e19382c53c8c06dba536ecc80",
+  "reviewed_validation_summary": "2026-06-21T03:20Z release-prep validation passed on branch work/1658-release / PR #1671: `python3 tools/loom.py release readback --target . --version v0.17.1 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` passed and classified `v0.17.1` as unpublished with missing tag, GitHub Release, npm version, and target workflow run; `git diff --check`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm pack --dry-run --json --ignore-scripts`; `python3 test/output_envelope_test.py`; `python3 tools/loom.py help --json`; `python3 tools/loom.py suite validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1658 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1658 --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; PR metadata update/readback for #1671.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1658.md",
+    "recovery_entry": ".loom/progress/WI-1658.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1658 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1658 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1658 --json",
+    "suite_spec": ".loom/specs/WI-1658/spec.md",
+    "suite_plan": ".loom/specs/WI-1658/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1658/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1658/task-carrier.md"
+    ],
+    "single_person_review_boundary": "No non-author GitHub reviewer approval is required; this authored Loom spec review complements the implementation review for PR gate consumption."
+  }
+}

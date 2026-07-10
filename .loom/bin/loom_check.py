@@ -38,13 +38,15 @@ from loom_flow import (
     review_head_binding,
     review_head_binding_for_head,
 )
-from runtime_paths import repo_local_root
+from runtime_paths import global_runtime_path, is_global_runtime_locator, repo_local_root
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
 BOOTSTRAP_TIMEOUT_SECONDS = 120.0
 REVIEW_RUN_TIMEOUT_SECONDS = 120.0
 SHADOW_PARITY_TIMEOUT_SECONDS = 120.0
+RUNTIME_PARITY_TIMEOUT_SECONDS = 120.0
+FLOW_COMMAND_TIMEOUT_SECONDS = 120.0
 LOOM_CHECK_RUN_ID_ENV = "LOOM_CHECK_RUN_ID"
 
 SOURCE_PROFILE = "source"
@@ -62,6 +64,7 @@ SOURCE_SURFACE_CLOSEOUT_RECONCILIATION = "closeout-reconciliation"
 SOURCE_SURFACE_RETIRE_WORKSPACE = "retire-workspace"
 SOURCE_SURFACE_INSTALLED_RUNTIME = "installed-runtime"
 SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
+SOURCE_SURFACE_ROOT_SELF_ADOPTION = "root-self-adoption"
 SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
 SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_FULL,
@@ -75,10 +78,15 @@ SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_RETIRE_WORKSPACE,
     SOURCE_SURFACE_INSTALLED_RUNTIME,
     SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
+    SOURCE_SURFACE_ROOT_SELF_ADOPTION,
     SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
 )
 SOURCE_SURFACE_COUNT = 45
 SOURCE_SURFACE_GROUPS = {
+    SOURCE_SURFACE_BOOTSTRAP_REGRESSION: {
+        SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
+        SOURCE_SURFACE_ROOT_SELF_ADOPTION,
+    },
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {
         SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
         SOURCE_SURFACE_REVIEW_RUN,
@@ -162,6 +170,8 @@ CONSUMER_REQUIRED_PATHS = (
     ".loom/bin/runtime_state.py",
     ".loom/bin/fact_chain_support.py",
     ".loom/bin/governance_surface.py",
+    ".loom/bin/github_admission.py",
+    ".loom/bin/github_host.py",
     ".loom/bin/loom_check.py",
     ".loom/companion/manifest.json",
     ".loom/companion/repo-interface.json",
@@ -373,7 +383,6 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
 )
 
 GENERATED_TRACKED_PATHS = (
-    "plugins/loom/skills",
     "packages/skills",
     "packages/loom-installer/payload",
 )
@@ -391,6 +400,8 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/status/current.md",
     "examples/new-project/.loom/bin/loom_init.py",
     "examples/new-project/.loom/bin/fact_chain_support.py",
+    "examples/new-project/.loom/bin/github_admission.py",
+    "examples/new-project/.loom/bin/github_host.py",
     "examples/new-project/.loom/bin/runtime_paths.py",
     "examples/new-project/.loom/bin/runtime_state.py",
     "examples/new-project/.loom/bin/loom_flow.py",
@@ -1115,6 +1126,24 @@ def load_json_file(path: Path) -> object:
         return json.load(handle)
 
 
+def runtime_fixture_path(target_root: Path, locator: str | Path) -> Path:
+    if is_global_runtime_locator(locator):
+        return global_runtime_path(target_root, locator)
+    return target_root / locator
+
+
+def runtime_fixture_read_path(target_root: Path, locator: str | Path) -> Path:
+    if is_global_runtime_locator(locator):
+        global_path = global_runtime_path(target_root, locator)
+        if global_path.exists():
+            return global_path
+        legacy_path = target_root / locator
+        if legacy_path.exists():
+            return legacy_path
+        return global_path
+    return target_root / locator
+
+
 def load_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -1213,6 +1242,20 @@ def unique_missing_path(prefix: str) -> Path:
 
 
 @contextmanager
+def temporary_environment(values: Mapping[str, str]):
+    saved = {key: os.environ.get(key) for key in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+@contextmanager
 def loom_check_temporary_directory(prefix: str):
     path = Path(tempfile.mkdtemp(prefix=prefix))
     run_id = os.environ.setdefault(LOOM_CHECK_RUN_ID_ENV, uuid.uuid4().hex)
@@ -1266,6 +1309,10 @@ def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | 
         return ADOPT_VERIFY_TIMEOUT_SECONDS
     if "review" in normalized and "run" in normalized:
         return REVIEW_RUN_TIMEOUT_SECONDS
+    if "flow" in normalized:
+        return FLOW_COMMAND_TIMEOUT_SECONDS
+    if "runtime-parity" in normalized:
+        return RUNTIME_PARITY_TIMEOUT_SECONDS
     if "shadow-parity" in normalized:
         return SHADOW_PARITY_TIMEOUT_SECONDS
     return DEFAULT_COMMAND_TIMEOUT_SECONDS
@@ -1279,9 +1326,13 @@ def check_command_timeout_budget() -> list[Failure]:
         failures.append(Failure("command-timeout-budget", "adopt verify commands must keep the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "review", "run"], None) != REVIEW_RUN_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "review run commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "runtime-parity", "validate"], None) != RUNTIME_PARITY_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "runtime parity commands must keep the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "shadow-parity"], None) != SHADOW_PARITY_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "shadow-parity commands must keep the extended loom_check timeout budget"))
-    if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != FLOW_COMMAND_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "flow commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "workspace", "locate"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "ordinary commands must keep the default loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap"], 5.0) != 5.0:
         failures.append(Failure("command-timeout-budget", "explicit command timeout overrides must be honored"))
@@ -1842,7 +1893,11 @@ def host_read_unavailable(payload: dict[str, object]) -> bool:
             "http 403",
             "host_unavailable",
             "host unavailable",
+            "classifier=external_service_flake",
+            "classifier=host_api_unreadable",
+            "classifier=permission",
             "rate limit exceeded",
+            "resource not accessible",
         )
     )
 
@@ -4934,11 +4989,14 @@ def require_generated_skills_surface_parity_validation(
     for relative in stable_surface_files:
         source = root / "src/skills" / relative
         generated = root / "skills" / relative
-        if not source.is_file() or not generated.is_file():
+        plugin_generated = root / "plugins" / "loom" / "skills" / relative
+        if not source.is_file() or not generated.is_file() or not plugin_generated.is_file():
             failures.append(Failure(category, f"{context} generated skills parity missing `{relative}`"))
             continue
         if source.read_bytes() != generated.read_bytes():
             failures.append(Failure(category, f"{context} generated skills parity drifted for `{relative}`"))
+        if source.read_bytes() != plugin_generated.read_bytes():
+            failures.append(Failure(category, f"{context} plugin payload parity drifted for `{relative}`"))
 
     registry = load_json_file(root / "src/skills/registry.json")
     entries = registry.get("entries") if isinstance(registry, dict) else None
@@ -4950,15 +5008,19 @@ def require_generated_skills_surface_parity_validation(
         if not isinstance(skill_id, str) or not skill_id:
             failures.append(Failure(category, f"{context} source skills registry contains an invalid entry"))
             continue
-        runtime_root = root / "skills" / skill_id / ".loom-runtime"
-        for relative in ("registry.json", "install-layout.json", "route-matrix.md"):
-            source = root / "src/skills" / relative
-            runtime = runtime_root / relative
-            if not runtime.is_file():
-                failures.append(Failure(category, f"{context} `{skill_id}` runtime missing `{relative}`"))
+        generated_skill = root / "skills" / skill_id
+        plugin_skill = root / "plugins" / "loom" / "skills" / skill_id
+        for relative in ("SKILL.md", "contract.json"):
+            source = root / "src" / "skills" / skill_id / relative
+            generated = generated_skill / relative
+            plugin_generated = plugin_skill / relative
+            if not source.is_file() or not generated.is_file() or not plugin_generated.is_file():
+                failures.append(Failure(category, f"{context} `{skill_id}` generated/plugin payload missing `{relative}`"))
                 continue
-            if source.read_bytes() != runtime.read_bytes():
-                failures.append(Failure(category, f"{context} `{skill_id}` runtime drifted for `{relative}`"))
+            if source.read_bytes() != generated.read_bytes():
+                failures.append(Failure(category, f"{context} `{skill_id}` generated skills drifted for `{relative}`"))
+            if source.read_bytes() != plugin_generated.read_bytes():
+                failures.append(Failure(category, f"{context} `{skill_id}` plugin payload drifted for `{relative}`"))
 
 def author_suite_negative_fail_closed_fixtures(target: Path) -> tuple[str, str]:
     full_item = "WI-full-missing-negative"
@@ -5600,11 +5662,13 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
 
     if "agent-first project operating layer" not in readme:
         failures.append(Failure(category, "`README.md` must present Loom as an agent-first project operating layer"))
-    if "Advanced / Compatibility" not in readme:
-        failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
-    if "[中文版本](./README.zh-CN.md)" not in readme or "[English version](./README.md)" not in readme_zh:
+    if "global `loom` command" not in readme or "Codex user-level plugin" not in readme:
+        failures.append(Failure(category, "`README.md` must describe the global CLI plus Codex user-level plugin install model"))
+    if "global `loom` CLI" not in skills_readme or "Codex user plugin" not in skills_readme:
+        failures.append(Failure(category, "`skills/README.md` must describe the global CLI plus Codex user plugin install model"))
+    if "[中文版本](./README.zh-CN.md)" not in readme or "[英文版本](./README.md)" not in readme_zh:
         failures.append(Failure(category, "root README language switch links must stay in sync"))
-    if "agent-first project operating layer" not in readme_zh:
+    if "智能体优先的项目运营层" not in readme_zh:
         failures.append(Failure(category, "`README.zh-CN.md` must preserve the Chinese operating-layer positioning"))
     if "unique root entry" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must keep `loom-init` as the unique root entry"))
@@ -5616,7 +5680,7 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
         failures.append(Failure(category, "`skills/route-matrix.md` must keep explicit routing as the first priority"))
     if "若无法稳定判断，回退到 `loom-init`" not in route_matrix:
         failures.append(Failure(category, "`skills/route-matrix.md` must keep fallback-to-loom-init semantics"))
-    if "`plugin` 与 `single-skill` 两类安装结果边界" not in route_matrix and "fallback_to: \"loom-init\"" not in route_matrix:
+    if "fallback_to: \"loom-init\"" not in route_matrix:
         failures.append(Failure(category, "`skills/route-matrix.md` must keep the stable fallback payload contract"))
 
     if contract.get("id") != "loom-init":
@@ -5628,7 +5692,7 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(routing, dict):
         failures.append(Failure(category, "`skills/loom-init/contract.json` must declare `routing`"))
     else:
-        if routing.get("reference") not in {"../route-matrix.md", ".loom-runtime/route-matrix.md"}:
+        if routing.get("reference") != "../route-matrix.md":
             failures.append(Failure(category, "`skills/loom-init/contract.json` must reference the generated route matrix"))
         if routing.get("fallback_entry") != "loom-init":
             failures.append(Failure(category, "`skills/loom-init/contract.json` fallback entry must remain `loom-init`"))
@@ -5641,8 +5705,9 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
 
     installation_commands = (
         "npm install -g @mc-and-his-agents/loom",
-        "loom host install --host codex --mode plugin --target . --apply --json",
-        "loom host verify --host codex --mode plugin --target . --json",
+        "loom host register --host codex --source <global-loom-package>/plugins/loom --scope user --apply --json",
+        "loom install --target . --apply --json",
+        "loom skills check --target . --json",
     )
     for command in installation_commands:
         if command not in skills_readme:
@@ -5654,10 +5719,17 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
         failures.append(Failure(category, "`skills/README.md` must document downstream plugin embedded skills payload"))
     if plugin_embedded_payload not in skills_readme_zh:
         failures.append(Failure(category, "`skills/README.zh-CN.md` must document downstream plugin embedded skills payload"))
-    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme:
-        failures.append(Failure(category, "`README.md` must document native skills-library installation"))
-    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme_zh:
-        failures.append(Failure(category, "`README.zh-CN.md` must document native skills-library installation"))
+    root_install_commands = (
+        "npm install -g @mc-and-his-agents/loom",
+        "loom host install --host codex --scope user --apply --json",
+        "loom host register --host codex --scope user --apply --json",
+        "loom install --target . --apply --json",
+    )
+    for command in root_install_commands:
+        if command not in readme:
+            failures.append(Failure(category, f"`README.md` must document `{command}`"))
+        if command not in readme_zh:
+            failures.append(Failure(category, f"`README.zh-CN.md` must document `{command}`"))
 
     return failures
 
@@ -6086,7 +6158,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
     with loom_check_temporary_directory(prefix="loom-check-route-registry-") as tmp:
         broken_skills = Path(tmp) / "skills"
         shutil.copytree(root / "skills", broken_skills)
-        registry_path = broken_skills / "loom-init" / ".loom-runtime" / "registry.json"
+        registry_path = broken_skills / "registry.json"
         registry = load_json_file(registry_path)
         if isinstance(registry, dict):
             entries = registry.get("entries")
@@ -6268,6 +6340,7 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
         entry_points = init_result.get("fact_chain", {}).get("entry_points")
         if isinstance(entry_points, dict) and isinstance(entry_points.get("current_item_id"), str):
             active_item = entry_points["current_item_id"]
+    root_is_idle = active_item == "no_active_item"
 
     required_paths = (
         ".loom/bootstrap/manifest.json",
@@ -6355,6 +6428,11 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             maturity = payload.get("maturity")
             if isinstance(maturity, dict) and maturity.get("current") == "strong":
                 pass
+            elif root_is_idle and isinstance(maturity, dict):
+                missing_by_level = maturity.get("missing_by_level")
+                light_missing = missing_by_level.get("light") if isinstance(missing_by_level, dict) else []
+                if not isinstance(light_missing, list) or not {"work_item", "recovery", "review"}.issubset(set(light_missing)):
+                    failures.append(Failure("root-self-adoption", "`root governance status` idle closeout must be blocked only by absent active carriers"))
             elif host_verification_unconfirmed(payload):
                 missing_by_level = maturity.get("missing_by_level") if isinstance(maturity, dict) else {}
                 strong_missing = missing_by_level.get("strong") if isinstance(missing_by_level, dict) else []
@@ -6390,8 +6468,8 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             if runtime_refresh_needed:
                 failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
             if isinstance(review, dict):
-                if review_is_stale and review.get("status") not in {"block", "refresh-needed"}:
-                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as refresh-needed review metadata"))
+                if review_is_stale and review.get("status") not in {"advisory", "block", "refresh-needed"}:
+                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as review metadata"))
         if kind == "shadow-parity":
             reports = payload.get("reports")
             report_surfaces = {
@@ -6417,7 +6495,8 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     marketplace_path = root / ".agents/plugins/marketplace.json"
     if marketplace_path.exists():
-        failures.append(Failure("root-self-plugin", "root `.agents/plugins/marketplace.json` is repo-local installed state and must not be committed upstream"))
+        failures.extend(validate_published_marketplace_catalog(root, marketplace_path))
+    failures.extend(check_published_marketplace_catalog_contract(root))
 
     root_plugin_paths = (
         "plugins/loom/.codex-plugin/plugin.json",
@@ -6428,102 +6507,38 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
     )
     failures.extend(check_required_paths(root, "root-self-plugin", root_plugin_paths))
 
-    package_root = root / "packages/loom-installer"
-    cli_entry = package_root / "dist/src/cli.js"
-    package_json = package_root / "package.json"
-    if not package_json.exists():
-        failures.append(Failure("root-self-plugin", "installer package must exist for downstream plugin verification"))
+    source_plugin_root = root / "plugins/loom"
+    if not source_plugin_root.exists():
+        failures.append(Failure("root-self-plugin", "source plugin payload is missing: `plugins/loom`"))
         return failures
-    npm_bin = host_executable("npm")
-    node_bin = host_executable("node")
-    python_bin = (
-        os.environ.get("LOOM_INSTALLER_PYTHON_BIN")
-        or os.environ.get("LOOM_INSTALLER_TEST_PYTHON_BIN")
-        or host_executable("python3")
-    )
     with tempfile.TemporaryDirectory(prefix="loom-root-self-plugin-") as tmp:
         tmp_root = Path(tmp)
         target = tmp_root / "target"
-        home = tmp_root / "home"
-        npm_cache = tmp_root / "npm-cache"
         target.mkdir(parents=True, exist_ok=True)
-        home.mkdir(parents=True, exist_ok=True)
-        npm_cache.mkdir(parents=True, exist_ok=True)
-        env = {
-            "HOME": str(home),
-            "CODEX_HOME": str(home / ".codex"),
-            "LOOM_INSTALLER_BUILD_TIMESTAMP": "2026-01-01T00:00:00.000Z",
-            "LOOM_INSTALLER_PYTHON_BIN": python_bin,
-            "npm_config_cache": str(npm_cache),
-            "NPM_CONFIG_CACHE": str(npm_cache),
-        }
-        clean_path_entries = [
-            entry
-            for entry in os.environ.get("PATH", "").split(os.pathsep)
-            if entry and "/mise/shims" not in entry
-        ]
-        env["PATH"] = os.pathsep.join(
-            [str(Path(python_bin).parent), str(Path(node_bin).parent), str(Path(npm_bin).parent), *clean_path_entries]
-        )
-        commands: list[tuple[str, list[str], Path]] = []
-        if not (package_root / "node_modules/.bin/tsc").exists():
-            commands.append(
-                (
-                    "install self-plugin build dependencies",
-                    [npm_bin, "ci", "--prefix", str(package_root)],
-                    root,
-                )
-            )
-        commands.extend(
-            (
-                (
-                    "build downstream plugin installer",
-                    [npm_bin, "--prefix", str(package_root), "run", "build"],
-                    root,
-                ),
-                (
-                    "install downstream plugin payload",
-                    [
-                        node_bin,
-                        str(cli_entry),
-                        "add",
-                        "plugin",
-                        "--host",
-                        "codex",
-                        "--target",
-                        str(target),
-                        "--force",
-                        "--json",
-                    ],
-                    root,
-                ),
-            )
-        )
-        try:
-            lock = acquire_installer_regression_lock(
-                package_root,
-                command="loom_check root-self-plugin installer build/install",
-                cwd=root,
-            )
-        except RuntimeError as exc:
-            failures.append(Failure("root-self-plugin", str(exc)))
-            return failures
-        try:
-            for label, args, cwd in commands:
-                try:
-                    result = run_command(root, args, cwd=cwd, env=env, timeout_seconds=300)
-                except subprocess.TimeoutExpired:
-                    failures.append(Failure("root-self-plugin", f"`{label}` timed out"))
-                    return failures
-                if result.returncode != 0:
-                    detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
-                    failures.append(Failure("root-self-plugin", f"`{label}` failed: {detail}"))
-                    return failures
-        finally:
-            release_installer_regression_lock(lock)
-
         installed_marketplace = target / ".agents/plugins/marketplace.json"
         plugin_root = target / "plugins/loom"
+        shutil.copytree(source_plugin_root, plugin_root)
+        installed_marketplace.parent.mkdir(parents=True, exist_ok=True)
+        installed_marketplace.write_text(
+            json.dumps(
+                {
+                    "name": "loom-local",
+                    "interface": {"displayName": "Loom Local Plugins"},
+                    "plugins": [
+                        {
+                            "name": "loom",
+                            "source": {"source": "local", "path": "./plugins/loom"},
+                            "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                            "category": "Productivity",
+                        }
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         expected_paths = (
             plugin_root / ".codex-plugin/plugin.json",
             plugin_root / "skills/registry.json",
@@ -6562,6 +6577,78 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
             if generated_cache:
                 preview = ", ".join(generated_cache[:5])
                 failures.append(Failure("root-self-plugin", f"downstream plugin payload must exclude Python cache artifacts: {preview}"))
+    return failures
+
+
+def validate_published_marketplace_catalog(root: Path, marketplace_path: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    try:
+        payload = load_json_file(marketplace_path)
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        return [Failure("root-self-plugin", f"published marketplace catalog is unreadable: {exc}")]
+    if not isinstance(payload, dict):
+        return [Failure("root-self-plugin", "published marketplace catalog must be a JSON object")]
+    plugins = payload.get("plugins")
+    if not isinstance(plugins, list) or len(plugins) != 1:
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must expose exactly the `loom` plugin"))
+        return failures
+    entry = plugins[0]
+    if not isinstance(entry, dict) or entry.get("name") != "loom":
+        failures.append(Failure("root-self-plugin", "published marketplace catalog plugin entry must be named `loom`"))
+        return failures
+    source = entry.get("source")
+    if not isinstance(source, dict) or source.get("source") != "local" or source.get("path") != "./plugins/loom":
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must point `loom` to local `./plugins/loom`"))
+    policy = entry.get("policy")
+    if not isinstance(policy, dict) or policy.get("installation") != "AVAILABLE":
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must mark `loom` installation as AVAILABLE"))
+    forbidden_keys = {"enabled", "installed", "installed_at", "cache", "cache_path", "runtime_cache"}
+    for context, value in (("catalog", payload), ("plugin entry", entry), ("plugin source", source if isinstance(source, dict) else {})):
+        leaked = sorted(forbidden_keys & set(value))
+        if leaked:
+            failures.append(Failure("root-self-plugin", f"published marketplace catalog {context} must not contain workstation installed-state keys: {', '.join(leaked)}"))
+    if failures:
+        return failures
+    plugin_root = (marketplace_path.parent.parent.parent / "plugins/loom").resolve()
+    expected_root = (root / "plugins/loom").resolve()
+    if plugin_root != expected_root:
+        failures.append(Failure("root-self-plugin", "published marketplace catalog must resolve `./plugins/loom` inside the source repository"))
+    return failures
+
+
+def check_published_marketplace_catalog_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    with tempfile.TemporaryDirectory(prefix="loom-marketplace-catalog-contract-") as tmp:
+        fixture_root = Path(tmp)
+        catalog = fixture_root / ".agents/plugins/marketplace.json"
+        (fixture_root / "plugins/loom").mkdir(parents=True)
+        catalog.parent.mkdir(parents=True)
+        valid_payload = {
+            "name": "loom",
+            "interface": {"displayName": "Loom"},
+            "plugins": [
+                {
+                    "name": "loom",
+                    "source": {"source": "local", "path": "./plugins/loom"},
+                    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                    "category": "Productivity",
+                }
+            ],
+        }
+        catalog.write_text(json.dumps(valid_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if validate_published_marketplace_catalog(fixture_root, catalog):
+            failures.append(Failure("root-self-plugin", "published marketplace catalog fixture must be accepted"))
+        invalid_payload = dict(valid_payload)
+        invalid_payload["plugins"] = [
+            {
+                "name": "loom",
+                "source": {"source": "local", "path": "/tmp/plugins/loom"},
+                "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+            }
+        ]
+        catalog.write_text(json.dumps(invalid_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if not validate_published_marketplace_catalog(fixture_root, catalog):
+            failures.append(Failure("root-self-plugin", "repo-local installed marketplace fixture must stay blocked"))
     return failures
 
 
@@ -6736,7 +6823,11 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             if not isinstance(signals, list) or not signals or not all(isinstance(item, dict) and item.get("summary") and item.get("locator") for item in signals):
                 failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include governance signal summaries and locators"))
             verification_commands = prompt.get("verification_commands")
-            if not isinstance(verification_commands, list) or "python3 .loom/bin/loom_init.py verify --target ." not in verification_commands:
+            accepted_verify_entries = {
+                "python3 .loom/bin/loom_init.py verify --target .",
+                "loom verify --target . --json",
+            }
+            if not isinstance(verification_commands, list) or not accepted_verify_entries.intersection(verification_commands):
                 failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include verify entry"))
             writeback = prompt.get("field_writeback_contract")
             if not isinstance(writeback, list) or not writeback:
@@ -7412,10 +7503,28 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 failures.append(Failure("deep-existing-bootstrap", "light-governance sample must defer Loom-owned spec carriers to execution-control"))
             planned = light_payload.get("planned_writes")
             planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
-            for required in (".loom/reviews/INIT-0001.json", ".loom/reviews/INIT-0001.spec.json", ".github/PULL_REQUEST_TEMPLATE.md"):
+            for required in (
+                ".loom/README.md",
+                ".loom/bootstrap/init-result.json",
+                ".loom/companion/README.md",
+                ".loom/companion/repo-interface.json",
+                ".loom/companion/interop.json",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+            ):
                 if required not in planned_paths or not (light_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must generate `{required}`"))
-            for absent in (".loom/work-items/**", ".loom/progress/**", ".loom/status/current.md", ".loom/specs/**", ".loom/stories/**"):
+            for absent in (
+                ".loom/work-items/**",
+                ".loom/progress/**",
+                ".loom/status/current.md",
+                ".loom/specs/**",
+                ".loom/reviews/**",
+                ".loom/stories/**",
+                ".loom/shadow/**",
+                ".loom/bin/**",
+                ".loom/runtime/**",
+                ".loom/tmp/**",
+            ):
                 if absent not in absent_paths:
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must mark `{absent}` intentionally absent"))
             for forbidden in (
@@ -7425,6 +7534,12 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/specs/INIT-0001/spec.md",
                 ".loom/specs/INIT-0001/plan.md",
                 ".loom/specs/INIT-0001/implementation-contract.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/reviews/INIT-0001.spec.json",
+                ".loom/shadow",
+                ".loom/bin",
+                ".loom/runtime",
+                ".loom/tmp",
                 ".loom/stories/_template.md",
             ):
                 if forbidden in planned_paths or (light_target / forbidden).exists():
@@ -7433,9 +7548,9 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             readme_text = (light_target / ".loom/README.md").read_text(encoding="utf-8") if (light_target / ".loom/README.md").exists() else ""
             if ".loom/specs" in readme_text or "Spec suite" in readme_text:
                 failures.append(Failure("deep-existing-bootstrap", "`light-governance bootstrap sample` must not declare a spec suite in `.loom/README.md`"))
-            spec_review_text = (light_target / ".loom/reviews/INIT-0001.spec.json").read_text(encoding="utf-8") if (light_target / ".loom/reviews/INIT-0001.spec.json").exists() else ""
-            if "formal spec path" in spec_review_text:
-                failures.append(Failure("deep-existing-bootstrap", "`light-governance spec review placeholder` must not tell operators to consume a formal spec path"))
+            loom_files = [path for path in (light_target / ".loom").rglob("*") if path.is_file()] if (light_target / ".loom").exists() else []
+            if len(loom_files) >= 10:
+                failures.append(Failure("deep-existing-bootstrap", "`light-governance bootstrap sample` must keep `.loom/` below 10 files by default"))
             if (light_target / ".loom/bin/loom_init.py").exists():
                 poisoned_light_target = tmp_root / "light-governance-poison-specs"
                 shutil.copytree(light_target, poisoned_light_target)
@@ -7468,7 +7583,9 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         example_target = root / "examples/new-project"
     if not example_target.exists():
         return failures
-    with loom_check_temporary_directory(prefix="loom-check-review-run-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-review-run-") as tmp, temporary_environment(
+        {"LOOM_WORKSTATION_ROOT": str(Path(tmp) / "workstation")}
+    ):
         source_snapshot = Path(tmp) / "source-snapshot"
         review_target = Path(tmp) / "new-project"
         fake_bin = Path(tmp) / "bin"
@@ -7839,15 +7956,16 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 evidence = payload.get("engine", {}).get("evidence") if isinstance(payload.get("engine"), dict) else None
                 context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
                 prompt_path = evidence.get("prompt") if isinstance(evidence, dict) else None
-                if not isinstance(context_pack_path, str) or not (review_target / context_pack_path).exists():
+                context_pack_file = runtime_fixture_read_path(review_target, context_pack_path) if isinstance(context_pack_path, str) else None
+                if context_pack_file is None or not context_pack_file.exists():
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` positive chain must write context pack evidence"))
                 else:
-                    context_pack = json.loads((review_target / context_pack_path).read_text(encoding="utf-8"))
+                    context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
                     if context_pack.get("schema_version") != "loom-review-context-pack/v1":
                         failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` context pack must use the stable schema"))
                     if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
                         failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` context pack must include repeated blocker signal"))
-                prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
+                prompt_file = runtime_fixture_read_path(review_target, prompt_path) if isinstance(prompt_path, str) else None
                 prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file is not None and prompt_file.exists() else ""
                 if not prompt_text or "Recent Review Context Pack" not in prompt_text:
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` prompt must include recent review context pack guidance"))
@@ -7946,7 +8064,8 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
                 evidence = shadow_engine.get("evidence") if isinstance(shadow_engine.get("evidence"), dict) else {}
                 for key in ("raw_review", "normalized_findings", "metadata", "parity_diff"):
                     value = evidence.get(key)
-                    if not isinstance(value, str) or not (shadow_target / value).exists():
+                    evidence_file = runtime_fixture_read_path(shadow_target, value) if isinstance(value, str) else None
+                    if evidence_file is None or not evidence_file.exists():
                         failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` shadow adapter must write {key} evidence"))
                 if shadow_engine.get("authoritative") is not False or shadow_engine.get("blocking") is not False:
                     failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow adapter must stay non-authoritative and non-blocking"))
@@ -8529,7 +8648,7 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
         )
         repeated_target = Path(tmp) / "repeated-blocker-context"
         copy_review_target(repeated_target, "review run repeated blocker context")
-        history_root = repeated_target / ".loom/runtime/review/INIT-0001"
+        history_root = runtime_fixture_path(repeated_target, ".loom/runtime/review/INIT-0001")
         for attempt in ("attempt-a", "attempt-b"):
             attempt_root = history_root / attempt
             attempt_root.mkdir(parents=True, exist_ok=True)
@@ -8589,13 +8708,17 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
             if not isinstance(context_pack_path, str):
                 failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must expose context pack evidence"))
             else:
-                context_pack = json.loads((repeated_target / context_pack_path).read_text(encoding="utf-8"))
-                signal = context_pack.get("repeated_blocker_signal")
-                if not isinstance(signal, dict) or signal.get("result") != "present":
-                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must identify repeated blocker candidates"))
-                candidates = signal.get("candidates") if isinstance(signal, dict) else None
-                if not isinstance(candidates, list) or not candidates:
-                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must include candidate details"))
+                context_pack_file = runtime_fixture_read_path(repeated_target, context_pack_path)
+                if not context_pack_file.exists():
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must write context pack evidence"))
+                else:
+                    context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
+                    signal = context_pack.get("repeated_blocker_signal")
+                    if not isinstance(signal, dict) or signal.get("result") != "present":
+                        failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must identify repeated blocker candidates"))
+                    candidates = signal.get("candidates") if isinstance(signal, dict) else None
+                    if not isinstance(candidates, list) or not candidates:
+                        failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must include candidate details"))
 
         start_review_run_fixture_group(
             failures,
@@ -9568,7 +9691,7 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
             failures.append(Failure(category, "`workspace locate` must not treat local-only retire evidence as versioned checkpoint truth"))
         progress_after_retire = progress_path.read_text(encoding="utf-8")
         for stable_line in (
-            "- Current Checkpoint: admission checkpoint",
+            "- Current Checkpoint: admission",
             "- Current Stop:",
             "- Next Step:",
             "- Blockers:",
@@ -9620,7 +9743,7 @@ raise SystemExit(1)
         stale_recovery.write_text(
             source_recovery.read_text(encoding="utf-8")
             .replace("INIT-0001", "STALE-0002")
-            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
+            .replace("- Current Checkpoint: admission", "- Current Checkpoint: retired"),
             encoding="utf-8",
         )
         closeout_item.write_text(
@@ -9633,7 +9756,7 @@ raise SystemExit(1)
         closeout_recovery.write_text(
             source_recovery.read_text(encoding="utf-8")
             .replace("INIT-0001", "CLOSEOUT-0004")
-            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: build"),
+            .replace("- Current Checkpoint: admission", "- Current Checkpoint: build"),
             encoding="utf-8",
         )
         payload, error = load_command_json(
@@ -9842,7 +9965,7 @@ raise SystemExit(1)
         shutil.copytree(example_target, retire_target)
         for layout_path in (
             broken_install / "install-layout.json",
-            broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json",
+            broken_install / "install-layout.json",
         ):
             if layout_path.exists():
                 layout_path.unlink()
@@ -9933,7 +10056,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
         broken_install = tmp_root / "broken-install" / "skills"
         shutil.copytree(root / "skills", broken_install)
-        (broken_install / "loom-init" / ".loom-runtime" / "shared" / "scripts" / "loom_flow.py").unlink()
+        (broken_install / "shared" / "scripts" / "loom_flow.py").unlink()
         payload, error = load_command_json(
             root,
             ["python3", str(broken_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
@@ -9945,7 +10068,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
         drift_install = tmp_root / "drift-install" / "skills"
         shutil.copytree(root / "skills", drift_install)
-        (drift_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
+        (drift_install / "install-layout.json").unlink()
         payload, error = load_command_json(
             root,
             ["python3", str(drift_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
@@ -10917,7 +11040,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                     return result.stdout.strip()
 
                 def write_json_fixture(target: Path, relative: str, payload: object) -> str:
-                    path = target / relative
+                    path = runtime_fixture_path(target, relative)
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                     return relative
@@ -11373,10 +11496,16 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                 raw_review_path = raw_only_target / ".loom/reviews/INIT-0001.json"
                 if raw_review_path.exists():
                     raw_review_path.unlink()
-                write_json_fixture(
-                    raw_only_target,
-                    ".loom/runtime/review/INIT-0001/raw-only-head/engine-result.json",
-                    {"decision": "allow", "summary": "Raw evidence must not satisfy the PR gate.", "findings": []},
+                raw_engine_path = raw_only_target / ".loom/runtime/review/INIT-0001/raw-only-head/engine-result.json"
+                raw_engine_path.parent.mkdir(parents=True, exist_ok=True)
+                raw_engine_path.write_text(
+                    json.dumps(
+                        {"decision": "allow", "summary": "Raw evidence must not satisfy the PR gate.", "findings": []},
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
                 )
                 git_add = run_command(root, ["git", "add", "-f", "-A", ".loom/reviews/INIT-0001.json", ".loom/runtime/review"], cwd=raw_only_target)
                 git_commit = run_command(root, ["git", "commit", "-m", "leave only raw review evidence for pr gate fixture"], cwd=raw_only_target)
@@ -11752,8 +11881,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
                 broken_install = tmp_root / "broken-install" / "skills"
                 shutil.copytree(root / "skills", broken_install)
-                (broken_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
-                (broken_install / "loom-pre-review" / ".loom-runtime" / "install-layout.json").unlink()
+                (broken_install / "install-layout.json").unlink()
                 payload, error = load_command_json(
                     root,
                     [
@@ -12165,7 +12293,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
 
             shutil.copytree(root / "skills", broken_install)
             (broken_install / "install-layout.json").unlink()
-            (broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json").unlink()
+            (broken_install / "install-layout.json").unlink()
             for label, args in (
                 (
                     "installed closeout check missing install-layout",
@@ -16498,6 +16626,15 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
 
     def prepare_strong_target(target: Path) -> str | None:
         shutil.copytree(example_target, target)
+        init_result_path = target / ".loom" / "bootstrap" / "init-result.json"
+        init_result = load_json_file(init_result_path)
+        if isinstance(init_result, dict):
+            run = init_result.get("run")
+            if not isinstance(run, dict):
+                run = {}
+                init_result["run"] = run
+            run["scenario_key"] = "complex-existing"
+            write_json(init_result_path, init_result)
         install_strong_companion(target)
         install_interop(target)
         reviewed_head = git_init(target)
@@ -16583,10 +16720,26 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                             {"name": "loom-check"},
                         ]
                     }, []
+                if endpoint == "repos/owner/repo/rulesets/42":
+                    return {
+                        "rules": [
+                            {
+                                "type": "required_status_checks",
+                                "parameters": {
+                                    "required_status_checks": [
+                                        {"context": "py-compile"},
+                                        {"context": "demo-bootstrap"},
+                                        {"context": "repo-local-cli"},
+                                        {"context": "loom-check"},
+                                    ]
+                                },
+                            }
+                        ]
+                    }, []
                 return {}, []
 
             governance_surface_module.gh_json = fake_control_plane_json
-            governance_surface_module.gh_json_list = lambda _root, _args: ([{"target": "branch", "enforcement": "active"}], [])
+            governance_surface_module.gh_json_list = lambda _root, _args: ([{"id": 42, "target": "branch", "enforcement": "active"}], [])
             surface, errors = governance_surface_module.detect_github_control_plane(base)
             if errors:
                 failures.append(Failure("adversarial-adoption", f"host control-plane verified fixture failed: {'; '.join(errors)}"))
@@ -16596,6 +16749,108 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 failures.append(Failure("adversarial-adoption", "required checks fixture must be host-enforced only when stable check names are configured"))
             elif surface.get("rulesets", {}).get("enforced") is not True:
                 failures.append(Failure("adversarial-adoption", "ruleset fixture must report active branch ruleset enforcement"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_ruleset_only_json(_root: Path, args: list[str]) -> tuple[dict[str, object], list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {"protected": False}, []
+                if endpoint == "repos/owner/repo/actions/workflows":
+                    return {"workflows": [{"path": ".github/workflows/loom-check.yml"}]}, []
+                if endpoint == "repos/owner/repo/commits/main/check-runs":
+                    return {
+                        "check_runs": [
+                            {"name": "py-compile"},
+                            {"name": "demo-bootstrap"},
+                            {"name": "repo-local-cli"},
+                            {"name": "loom-check"},
+                        ]
+                    }, []
+                if endpoint == "repos/owner/repo/rulesets/77":
+                    return {
+                        "rules": [
+                            {
+                                "type": "required_status_checks",
+                                "parameters": {
+                                    "required_status_checks": [
+                                        {"context": "py-compile"},
+                                        {"context": "demo-bootstrap"},
+                                        {"context": "repo-local-cli"},
+                                        {"context": "loom-check"},
+                                    ]
+                                },
+                            }
+                        ]
+                    }, []
+                return {}, []
+
+            governance_surface_module.gh_json = fake_ruleset_only_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([{"id": 77, "target": "branch", "enforcement": "active"}], [])
+            surface, errors = governance_surface_module.detect_github_control_plane(base)
+            if errors:
+                failures.append(Failure("adversarial-adoption", f"ruleset-only required checks fixture failed: {'; '.join(errors)}"))
+            elif surface.get("branch_protection") != "disabled":
+                failures.append(Failure("adversarial-adoption", "ruleset-only fixture must not require branch protection"))
+            elif surface.get("host_enforcement", {}).get("verification_status") != "verified":
+                failures.append(Failure("adversarial-adoption", "ruleset-only required checks must verify host enforcement"))
+            elif surface.get("host_enforcement", {}).get("required_checks") is not True:
+                failures.append(Failure("adversarial-adoption", "ruleset-only stable checks must satisfy required check enforcement"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_ruleset_failure_json(_root: Path, args: list[str]) -> tuple[dict[str, object] | None, list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {"protected": False}, []
+                if endpoint == "repos/owner/repo/actions/workflows":
+                    return {"workflows": [{"path": ".github/workflows/loom-check.yml"}]}, []
+                if endpoint == "repos/owner/repo/commits/main/check-runs":
+                    return {
+                        "check_runs": [
+                            {"name": "py-compile"},
+                            {"name": "demo-bootstrap"},
+                            {"name": "repo-local-cli"},
+                            {"name": "loom-check"},
+                        ]
+                    }, []
+                if endpoint == "repos/owner/repo/rulesets/88":
+                    return None, ["ruleset detail unavailable"]
+                return {}, []
+
+            governance_surface_module.gh_json = fake_ruleset_failure_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([{"id": 88, "target": "branch", "enforcement": "active"}], [])
+            surface, errors = governance_surface_module.detect_github_control_plane(base)
+            if errors:
+                failures.append(Failure("adversarial-adoption", f"ruleset detail read failure must not become missing inputs: {'; '.join(errors)}"))
+            elif surface.get("api_snapshot", {}).get("verification_status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "ruleset detail read failure must keep the API snapshot unverified"))
+            elif surface.get("host_enforcement", {}).get("verification_status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "ruleset detail read failure must fail closed for host enforcement"))
+            elif surface.get("rulesets", {}).get("status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "ruleset detail read failure must leave rulesets unverified"))
         finally:
             governance_surface_module.detect_github_repo = original_detect_repo
             governance_surface_module.gh_rest_json = original_rest_json
@@ -16652,7 +16907,12 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             loom_flow_module.run_git = fake_run_git
             if not loom_flow_module.contains_merged_commit(base, "abc123", "release/main"):
                 failures.append(Failure("adversarial-adoption", "target-branch merge containment fixture unexpectedly failed"))
-            expected_fetch = ["fetch", "origin", "refs/heads/release/main:refs/remotes/origin/release/main"]
+            expected_fetch = [
+                "fetch",
+                "--no-write-fetch-head",
+                "origin",
+                "refs/heads/release/main:refs/remotes/origin/release/main",
+            ]
             if not merge_calls or merge_calls[0] != expected_fetch:
                 failures.append(Failure("adversarial-adoption", "merge commit containment must fetch the explicit target branch"))
         finally:
@@ -16838,6 +17098,127 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                     failures.append(Failure("adversarial-adoption", "hostless baseline must still prove repo companion and interop carriers are present"))
             else:
                 failures.append(Failure("adversarial-adoption", "baseline fixture must reach strong maturity when GitHub host signals are readable"))
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_profile_host_json(_root: Path, args: list[str]) -> tuple[dict[str, object], list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {
+                        "protected": True,
+                        "protection": {
+                            "required_status_checks": {
+                                "contexts": ["py-compile", "demo-bootstrap", "repo-local-cli", "loom-check"]
+                            },
+                            "required_pull_request_reviews": {},
+                        },
+                    }, []
+                if endpoint == "repos/owner/repo/actions/workflows":
+                    return {"workflows": [{"path": ".github/workflows/loom-check.yml"}]}, []
+                if endpoint == "repos/owner/repo/commits/main/check-runs":
+                    return {
+                        "check_runs": [
+                            {"name": "py-compile"},
+                            {"name": "demo-bootstrap"},
+                            {"name": "repo-local-cli"},
+                            {"name": "loom-check"},
+                        ]
+                    }, []
+                return {}, []
+
+            def adversarial_precondition(payload: dict[str, object]) -> dict[str, object]:
+                gate_rollout = payload.get("gate_rollout")
+                preconditions = gate_rollout.get("blocking_preconditions") if isinstance(gate_rollout, dict) else []
+                if isinstance(preconditions, list):
+                    for precondition in preconditions:
+                        if isinstance(precondition, dict) and precondition.get("id") == "adversarial_adoption_checks":
+                            return precondition
+                return {}
+
+            governance_surface_module.gh_json = fake_profile_host_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([], [])
+            record_target = base / "adversarial-record"
+            if not copy_baseline_fixture(record_target, "adversarial evidence record"):
+                return failures
+            evidence_path = record_target / ".loom" / "companion" / "adversarial-adoption.json"
+            if evidence_path.exists():
+                evidence_path.unlink()
+
+            missing_profile = loom_flow_module.governance_profile_payload(record_target, "status")
+            if adversarial_precondition(missing_profile).get("status") != "missing":
+                failures.append(Failure("adversarial-adoption", "governance profile must report missing adversarial adoption evidence"))
+
+            write_json(
+                evidence_path,
+                {
+                    "schema_version": governance_surface_module.ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA,
+                    "result": "pass",
+                    "head_sha": "0" * 40,
+                    "generated_at": "2026-01-01T00:00:00Z",
+                },
+            )
+            stale_profile = loom_flow_module.governance_profile_payload(record_target, "status")
+            if adversarial_precondition(stale_profile).get("status") != "stale":
+                failures.append(Failure("adversarial-adoption", "governance profile must report stale adversarial adoption evidence"))
+
+            evidence_payload = loom_flow_module.adversarial_adoption_evidence_payload(
+                record_target,
+                ".loom/bootstrap/init-result.json",
+                "INIT-0001",
+                record=True,
+            )
+            recorded = load_json_file(evidence_path)
+            current_record_head = loom_flow_module.git_head_sha(record_target)
+            if evidence_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "`adopt adversarial-test --record` fixture must pass for a strong baseline"))
+            elif not isinstance(recorded, dict) or recorded.get("schema_version") != governance_surface_module.ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA:
+                failures.append(Failure("adversarial-adoption", "recorded adversarial adoption evidence must use the v1 schema"))
+            elif recorded.get("head_sha") != current_record_head:
+                failures.append(Failure("adversarial-adoption", "recorded adversarial adoption evidence must bind to the current head"))
+            else:
+                dirty_profile = loom_flow_module.governance_profile_payload(record_target, "status")
+                dirty_precondition = adversarial_precondition(dirty_profile)
+                if dirty_precondition.get("status") == "pass":
+                    failures.append(Failure("adversarial-adoption", "uncommitted adversarial adoption evidence must not satisfy blocking rollout"))
+                result = run_command(root, ["git", "add", "-f", ".loom/companion/adversarial-adoption.json"], cwd=record_target, timeout_seconds=30)
+                if result.returncode == 0:
+                    result = run_command(root, ["git", "commit", "-m", "record adversarial adoption evidence"], cwd=record_target, timeout_seconds=30)
+                if result.returncode != 0:
+                    failures.append(Failure("adversarial-adoption", f"recorded adversarial adoption evidence commit failed: {result.stderr.strip() or result.stdout.strip()}"))
+
+            for operation in ("status", "upgrade-plan"):
+                profile = loom_flow_module.governance_profile_payload(record_target, operation)
+                precondition = adversarial_precondition(profile)
+                gate_rollout = profile.get("gate_rollout")
+                maturity = profile.get("maturity")
+                if precondition.get("status") != "pass":
+                    failures.append(Failure("adversarial-adoption", f"`governance-profile {operation}` must consume fresh adversarial adoption evidence"))
+                elif (
+                    isinstance(maturity, dict)
+                    and maturity.get("current") == "strong"
+                    and isinstance(gate_rollout, dict)
+                    and gate_rollout.get("blocking_allowed") is not True
+                ):
+                    failures.append(Failure("adversarial-adoption", f"`governance-profile {operation}` must allow blocking rollout after fresh pass evidence"))
+            resume_payload, resume_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(record_target), "--item", "INIT-0001"],
+            )
+            if resume_error:
+                failures.append(Failure("adversarial-adoption", f"`flow resume` recorded evidence fixture failed: {resume_error}"))
+            elif resume_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "`flow resume` must accept committed adversarial adoption evidence carrier-only drift"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
 
         baseline_checks = (
             ("runtime-parity", lambda target: ["python3", str(target / ".loom/bin/loom_flow.py"), "runtime-parity", "validate", "--target", str(target)], "pass"),
@@ -17175,6 +17556,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             loom_flow_module.run_process = lambda *_args, **_kwargs: FakeGateResult()
             payload, closeout_errors = loom_flow_module.closeout_payload(
                 target_root=repo_declared_gate_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=None,
@@ -17193,6 +17575,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 failures.append(Failure("adversarial-adoption", "default closeout payload must expose closeout-contract profile"))
             heavy_payload, heavy_errors = loom_flow_module.closeout_payload(
                 target_root=repo_declared_gate_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=None,
@@ -17316,6 +17699,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             )
             closeout_target_branch_payload, closeout_errors = loom_flow_module.closeout_payload(
                 target_root=closeout_target_branch_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=1,
@@ -17350,6 +17734,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 return failures
             closeout_missing_base_payload, closeout_errors = loom_flow_module.closeout_payload(
                 target_root=closeout_missing_base_target,
+                expected_item=None,
                 phase_number=None,
                 fr_number=None,
                 issue_number=1,
@@ -17471,6 +17856,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             def closeout_backlink_payload(target: Path, fixture_files: dict[str, str | None]) -> dict[str, object]:
                 payload, errors = loom_flow_module.closeout_payload(
                     target_root=target,
+                    expected_item=None,
                     phase_number=None,
                     fr_number=None,
                     issue_number=1,
@@ -18006,6 +18392,9 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 repo_name="",
                 pr_number=None,
                 pr_payload={"state": "MERGED", "headRefOid": target_head, "baseRefName": "main"},
+                merge_ready_pr_number=None,
+                merge_ready_pr_payload={"state": "MERGED", "headRefOid": target_head, "baseRefName": "main"},
+                merge_ready_pr_errors=[],
                 merge_commit_sha=target_head,
                 merge_commit_in_target=True,
                 pr_payload_file="fixture:pr",
@@ -18183,10 +18572,10 @@ def check_operating_layer_contract(root: Path) -> list[Failure]:
             "trunk truth",
         ],
         "README.zh-CN.md": [
-            "agent-first project operating layer",
+            "智能体优先的项目运营层",
             "行为证据",
             "测试证据",
-            "主干真相",
+            "主干事实",
         ],
         "VISION.md": [
             "agent-first project operating layer",
@@ -20777,8 +21166,11 @@ def check_execution_attempt_contract(root: Path) -> list[Failure]:
         if not any("authored progress field" in error for error in poison_errors):
             failures.append(Failure("execution-attempt", "attempt envelope must reject copied recovery progress fields"))
 
-        latest_path = target / ".loom/runtime/attempts/INIT-0001/latest.json"
-        latest_path.unlink()
+        latest_path = loom_flow_module.execution_attempt_directory(target, "INIT-0001") / "latest.json"
+        legacy_latest_path = target / ".loom/runtime/attempts/INIT-0001/latest.json"
+        for candidate in {latest_path, legacy_latest_path}:
+            if candidate.exists():
+                candidate.unlink()
         missing = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
         if missing.get("status") != "missing" or missing.get("freshness") != "missing":
             failures.append(Failure("execution-attempt", "missing latest attempt evidence must be marked missing"))
@@ -21795,6 +22187,14 @@ def evaluate_complex_existing_authority_migration_fixture(group: str, input_payl
             missing_inputs.append("fresh Loom merge-ready / PR merge gate allow result")
         if input_payload.get("required_checks") != "pass":
             missing_inputs.append("required checks readback")
+        triggered_check_rollup = input_payload.get("triggered_check_rollup")
+        if isinstance(triggered_check_rollup, dict):
+            if triggered_check_rollup.get("unreadable") is True:
+                missing_inputs.append("triggered check rollup readback")
+            if triggered_check_rollup.get("blocking"):
+                missing_inputs.append("triggered checks failed")
+            if triggered_check_rollup.get("pending"):
+                missing_inputs.append("triggered checks pending")
         if input_payload.get("observed_pr_head") and input_payload.get("observed_pr_head") != input_payload.get("head_sha"):
             missing_inputs.append("PR head drift after Loom merge-ready allow result")
         return {
@@ -22623,7 +23023,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-assets", lambda: check_demo_assets(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-fact-chain", lambda: check_demo_fact_chain(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-repo-local-cli", lambda: check_demo_repo_local_cli(root)),
-        (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
+        (SOURCE_SURFACE_ROOT_SELF_ADOPTION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_REVIEW_RUN, "review-run", lambda: check_review_run_fixture(root)),

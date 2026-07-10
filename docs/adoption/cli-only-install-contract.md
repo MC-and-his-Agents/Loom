@@ -11,9 +11,10 @@ The target install shape is:
 
 ```text
 npm install -g @mc-and-his-agents/loom
-loom install <host>
-loom skills sync
-loom doctor
+loom host install --host codex --scope user --apply
+loom host register --host codex --scope user --apply
+loom install --target . --apply
+loom doctor --target .
 loom upgrade
 ```
 
@@ -56,9 +57,9 @@ primary user install entries.
 - Host plugins are host adapter payloads managed by the `loom` CLI.
 - `SKILLS` are executable scenario payloads managed, synchronized, and verified
   by the `loom` CLI.
-- Plugin surface version, host adapter version, skill package version, skill
-  contract version, registry version, runtime core version, and schema version
-  remain independent authority lines.
+- Plugin surface version, host adapter version, plugin payload version, plugin
+  payload hash, skill contract version, registry version, runtime core version,
+  and schema version remain independent authority lines.
 - Those independent versions must not drive root CLI publish decisions unless
   the root CLI release judgment explicitly includes them as CLI-managed payload
   changes.

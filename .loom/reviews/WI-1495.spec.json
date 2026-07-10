@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1495",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1495 closeout sync at head f544528f: the minimal suite remains terminal for #1495/#1496, and PR #1664 records PR #1663 merge facts, issue closure facts, terminal closeout carriers, hosted host-read classifier hardening, and generated demo/plugin payload synchronization.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T16:54:32Z",
+  "reviewed_head": "f544528f96c23e293e8d8179a11e0892ee219cc7",
+  "reviewed_validation_summary": "2026-06-20 WI-1495 closeout readback remains current: PR #1663 MERGED at 2026-06-20T16:06:11Z with merge commit 042d6fd0f66466c3ff8b1b8f4fb628b8d9732565; #1495 CLOSED at 2026-06-20T16:08:42Z; #1496 CLOSED at 2026-06-20T16:09:01Z. Current PR #1664 head f544528f validation passed: make py-compile; make loom-demo-new-project-check; python3 tools/skills_surface.py check; npm --prefix packages/loom-installer run check:distribution; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1495 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1495 --json; git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1495.md",
+    "recovery_entry": ".loom/progress/WI-1495.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": net/http: TLS handshake timeout",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1495/spec.md",
+    "suite_plan": ".loom/specs/WI-1495/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1495/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1495/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

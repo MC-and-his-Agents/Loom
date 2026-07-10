@@ -1,0 +1,111 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1687-main-thread-pr-backlink-safe-repair",
+      "task_goal": "Implement safe PR body Issue backlink repair for pr-metadata flows when a trusted Work Item issue input and host readback establish the missing backlink.",
+      "context_locators": [
+        ".loom/work-items/WI-1687.md",
+        ".loom/progress/WI-1687.md",
+        ".loom/status/current.md",
+        ".loom/specs/WI-1687/spec.md",
+        ".loom/specs/WI-1687/plan.md",
+        ".loom/specs/WI-1687/evidence-map.md",
+        ".loom/specs/WI-1687/task-carrier.md",
+        "src/skills/shared/scripts/loom_flow.py",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        "issue #1687"
+      ],
+      "read_scope": [
+        "Existing pr-metadata render/update/readback/preflight flow, wrapper passthrough, generated skills/plugin mirrors, focused CLI contract fixtures, and WI-1687 Loom carriers"
+      ],
+      "write_ownership": [
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "plugins/loom/skills/shared/scripts/loom_flow.py",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        ".loom/bootstrap/init-result.json",
+        ".loom/status/current.md",
+        ".loom/work-items/WI-1687.md",
+        ".loom/progress/WI-1687.md",
+        ".loom/progress/WI-1687-build-evidence.json",
+        ".loom/specs/WI-1687/spec.md",
+        ".loom/specs/WI-1687/plan.md",
+        ".loom/specs/WI-1687/evidence-map.md",
+        ".loom/specs/WI-1687/task-carrier.md",
+        ".loom/specs/WI-1687/implementation-contract.md",
+        ".loom/progress/WI-1684.md"
+      ],
+      "non_goals": [
+        "No short human diagnostics implementation",
+        "No loom ship implementation",
+        "No controlled-merge closeout chaining implementation",
+        "No closeout policy implementation",
+        "No release packaging or version bump",
+        "No generic PR body rewriting beyond the Issue backlink line"
+      ],
+      "validation_expectation": "Focused validation must include py_compile_clean for touched Python surfaces, skills surface check, pr-metadata contract fixtures, governance-closeout contract fixtures, git diff --check, fact-chain, state-check, and build flow evidence consumption.",
+      "output_format": "Committed branch updates with source runtime, generated mirrors, wrapper passthrough, focused contract fixtures, WI-1687 carriers, PR metadata, and review artifact.",
+      "integration_target": [
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "plugins/loom/skills/shared/scripts/loom_flow.py",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        ".loom/progress/WI-1687.md",
+        ".loom/status/current.md"
+      ],
+      "status": "integrated",
+      "summary": "The pr-metadata runtime, generated mirrors, CLI wrapper passthrough, and focused contract fixture are integrated on branch work/1687-pr-backlink-safe-repair."
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1687-runtime-safe-repair",
+      "status": "integrated",
+      "summary": "pr-metadata now accepts an expected issue, renders the human Issue backlink, blocks missing backlink inputs, and emits a safe repair action only after metadata and host readback evidence are available.",
+      "locators": [
+        "src/skills/shared/scripts/loom_flow.py"
+      ]
+    },
+    {
+      "id": "WI-1687-generated-mirrors",
+      "status": "integrated",
+      "summary": "skills and plugin runtime mirrors were regenerated from the source skill surface and verified with the surface checker.",
+      "locators": [
+        "skills/shared/scripts/loom_flow.py",
+        "plugins/loom/skills/shared/scripts/loom_flow.py"
+      ]
+    },
+    {
+      "id": "WI-1687-wrapper-and-fixture",
+      "status": "integrated",
+      "summary": "tools/loom.py passes --issue through the PR metadata commands, and check_cli_contract.py covers the missing Issue backlink safe repair action.",
+      "locators": [
+        "tools/loom.py",
+        "tools/check_cli_contract.py"
+      ]
+    },
+    {
+      "id": "WI-1687-local-validation",
+      "status": "integrated",
+      "summary": "2026-06-22 local validation refreshed on branch work/1687-pr-backlink-safe-repair after PR #1703 metadata spacing fix: py_compile_clean for touched Python surfaces; tools/check_cli_contract.py --surface pr-metadata; tools/check_cli_contract.py --surface governance-closeout; git diff --check; tools/skills_surface.py check; fact-chain; state-check; suite validate; flow build; tools/loom_check.py --profile source --source-surface contract-only; tools/check_release_surface.py; tools/version_surface_check.py; tools/check_npm_package.py; tools/check_demo_bootstrap_fixture.py --surface fixture-drift; tools/check_demo_bootstrap_fixture.py --surface generation; tools/loom_flow.py shadow-parity --target . --surface all.",
+      "locators": [
+        ".loom/progress/WI-1687.md",
+        ".loom/specs/WI-1687/evidence-map.md",
+        "/tmp/wi1687-fact.json",
+        "/tmp/wi1687-state.json"
+      ]
+    },
+    {
+      "id": "WI-1687-predecessor-carrier-terminalized",
+      "status": "integrated",
+      "summary": "WI-1684 predecessor progress carrier was terminalized from PR #1702, issue #1684, and merge commit d00fdf2670739c88656a3948d923d2e53b762b88 readback so current workspace admission has no untriaged residue.",
+      "locators": [
+        ".loom/progress/WI-1684.md"
+      ]
+    }
+  ]
+}

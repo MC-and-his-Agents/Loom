@@ -12,17 +12,22 @@
 
 | 场景 | 任务信号 | 目标 skill | 依赖 CLI |
 | --- | --- | --- | --- |
-| 初始化 / retrofit | 初始化、新项目接入、既有仓库 retrofit、引入 Loom | `loom-adopt` | `loom-init/scripts/loom-init.py bootstrap\|verify\|fact-chain` |
-| 恢复执行 | 接手当前事项、恢复上下文、问下一步、继续推进 | `loom-resume` | `loom-resume/scripts/loom-resume.py flow resume` |
+| 初始化 / retrofit | 初始化、新项目接入、既有仓库 retrofit、引入 Loom | `loom-adopt` | `loom init bootstrap\|verify\|fact-chain --target <repo> --json` |
+| 恢复执行 | 接手当前事项、恢复上下文、问下一步、继续推进 | `loom-resume` | `loom resume --target <repo> [--item <id>] --json` |
 | delivery planning / issue-tree plan | 规划 issue tree、拆 Phase / FR / Work Item、PR 切分建议、依赖 / blocked-by 关系、把 story / roadmap / governance goal 转成执行树；用户明确要求“先规划不要创建” | `loom-init` 输出 planning 结果 | 无专用 CLI；消费 `docs/methodology/templates/delivery-planning.md`、`docs/methodology/templates/issue-tree-plan.md`、`docs/methodology/templates/pr-slicing.md` 与 GitHub profile mapping |
-| 执行 / build | 实现当前事项、执行 build、implementation round、集成 subagent 输出、检查 repeated blocker | `loom-build` | `loom-build/scripts/loom-build.py flow build` |
-| story intake | vision、roadmap、notes、host issue、产品讨论转 User Story；story readiness；story business confirmation；业务语义确认或修订；actor specificity；scenario coverage | `loom-story` | `loom-story/scripts/loom-story.py flow story` |
-| review 前统一检查 | review 前检查、进入 review、确认是否可 review、确认 gate chain 是否已到 review gate | `loom-pre-review` | `loom-pre-review/scripts/loom-pre-review.py flow pre-review` |
-| formal spec review | formal spec review、spec review、确认 spec 是否通过、审查 formal spec 路径、确认 spec gate | `loom-spec-review` | `loom-spec-review/scripts/loom-spec-review.py flow spec-review` + `shared/scripts/loom_flow.py review run --review-file .loom/reviews/<item>.spec.json` + `shared/scripts/loom_flow.py review record --review-file .loom/reviews/<item>.spec.json --kind spec_review` |
-| 正式 review | 正式 review、语义审查、输出 review 结论、code review、implementation review、确认 review gate | `loom-review` | `loom-review/scripts/loom-review.py flow review` + `shared/scripts/loom_flow.py review run` + `loom-review/scripts/loom-review.py review record` |
-| 交接 | 交接、回写停点、移交当前事项 | `loom-handoff` | `loom-handoff/scripts/loom-handoff.py flow handoff` |
-| 清理 / retire | 清理现场、退休现场、结束当前事项现场 | `loom-retire` | `loom-retire/scripts/loom-retire.py workspace cleanup\|retire` |
-| merge 前放行 | merge-ready、最终放行前预检、确认是否可合并、确认 GitHub controlled merge 前置是否齐全 | `loom-merge-ready` | `loom-merge-ready/scripts/loom-merge-ready.py flow merge-ready` |
+| 执行 / build | 实现当前事项、执行 build、implementation round、集成 subagent 输出、检查 repeated blocker | `loom-build` | `loom build --target <repo> [--item <id>] --json` |
+| story intake | vision、roadmap、notes、host issue、产品讨论转 User Story；story readiness；story business confirmation；业务语义确认或修订；actor specificity；scenario coverage | `loom-story` | `loom story --target <repo> [--item <id>] --json` |
+| review 前统一检查 | review 前检查、进入 review、确认是否可 review、确认 gate chain 是否已到 review gate | `loom-pre-review` | `loom pre-review --target <repo> [--item <id>] --json` |
+| formal spec review | formal spec review、spec review、确认 spec 是否通过、审查 formal spec 路径、确认 spec gate | `loom-spec-review` | `loom spec-review --target <repo> [--item <id>] --json` + `loom review run --target <repo> --item <id> --review-file .loom/reviews/<item>.spec.json` + `loom review record --target <repo> --item <id> --review-file .loom/reviews/<item>.spec.json --kind spec_review` |
+| 正式 review | 正式 review、语义审查、输出 review 结论、code review、implementation review、确认 review gate | `loom-review` | `loom review --target <repo> [--item <id>] --json` + `loom review run --target <repo> --item <id>` + `loom review record --target <repo> --item <id>` |
+| 交接 | 交接、回写停点、移交当前事项 | `loom-handoff` | `loom handoff --target <repo> [--item <id>] --json` |
+| 普通交付 / ship | 工作项已有拉取请求，用户要求合并并收尾，且不属于发布、父级 / 里程碑、多个工作项同批交付、宿主冲突或强化治理升级 | `loom-init` 输出 ship 路径；`loom-merge-ready` 仅作显式预检 | `loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json` |
+| release readback | 发布已经触发或声称完成，需要确认 tag、GitHub Release、npm、workflow、package surface、carrier 状态 | `loom-init` 输出 release readback 路径 | `loom release readback --target <repo> --version <version> --commit <sha> --json` |
+| release closeout | release 已发布并读回通过，只需要把 repo carrier / status / shadow / PR metadata 下一步收口 | `loom-init` 输出 release closeout-sync 路径 | `loom release closeout-sync --target <repo> --version <version> --item <WI> --pr <release-pr> --apply --json` |
+| runtime upgrade | 单仓 Loom workflow pin 升级维护，不做多仓批量，不刷新用户级 plugin/cache | `loom-init` 输出 runtime-upgrade 路径 | `loom runtime-upgrade status --target <repo> --json` -> `loom runtime-upgrade prepare|pr|check|closeout ... --json` |
+| host/plugin 诊断 | Codex plugin/cache 过期、不可读或用户要求诊断本机插件状态 | `loom-init` 输出 host doctor 路径 | `loom host doctor --host codex --scope user --json`；需要时显式 `loom host install|register --host codex --scope user --apply --json` |
+| 清理 / retire | 清理现场、退休现场、结束当前事项现场 | `loom-retire` | `loom retire --target <repo> --item <id> --json` |
+| merge 前放行 | merge-ready、最终放行前预检、确认是否可合并、确认 GitHub controlled merge 前置是否齐全 | `loom-merge-ready` | `loom merge-ready --target <repo> [--item <id>] --json` |
 
 ## 3. 强治理控制面
 
@@ -43,17 +48,25 @@
 - `maturity upgrade`
   - profile maturity 固定按 `light -> standard -> strong`，事项成熟度由 governance state machine 承接
 - `GitHub controlled merge`
-  - merge 由宿主控制面执行；Loom 只消费 required checks、review、head 绑定与 merge gate 结果
+  - merge 由宿主控制面执行；普通交付通过 `loom ship` 串联拉取请求元数据、拉取请求门控、受控合并与收尾策略
 
 ## 4. Formal Spec Suite Path 消费边界
+
+## 4.1 Agent-Safe Output Boundary
+
+Codex 用户级 plugin payload 只调用全局 `loom` CLI。默认使用 `--json` 的
+agent-safe summary / artifact locator 输出；只有明确调试完整诊断时才加
+`--full-output`。技能、handoff 和跨线程消息只能传递摘要、事实载体 locator 与
+artifact locator；不得内联完整报告、完整状态表、完整命令 JSON、长 stdout 或旧线程完整
+turns。artifact locator 只是诊断入口，不是 authored truth carrier。
 
 `loom-story`、`loom-spec-review`、`loom-build`、`loom-pre-review` 与 `loom-merge-ready`
 必须消费 `docs/methodology/templates/spec-suite.md` 已定义的
 `full suite` / `minimal suite` path decision，不得在 skill 中重新定义 suite
 工件、evidence-map、consistency-analysis 或 gate-chain 语义。
 
-Scenario skills 消费 suite readiness 时必须读取 `loom suite ... --json`
-输出；缺少 repo-local CLI JSON 时 fail closed，不在 skill runtime 中重新实现
+Scenario skills 消费 suite readiness 时必须读取全局 `loom suite ... --json`
+输出；缺少全局 CLI agent-safe JSON 时 fail closed，不在 skill runtime 中重新实现
 suite path、evidence-map 或 task-carrier 判定。
 
 固定消费规则：
@@ -137,6 +150,8 @@ suite path、evidence-map 或 task-carrier 判定。
 - 用户要求 formal spec review，进入 `loom-spec-review`
 - 用户要求 implementation/code review，进入 `loom-review`
 - 用户要求 merge-ready 或合并前检查，进入 `loom-merge-ready`
+- 用户要求普通拉取请求合并并收尾，且工作项、拉取请求、分支和代码头已明确，优先输出
+  `loom ship` 路径
 - 用户只是在整理 actor、capability、outcome、business value 或 acceptance scenarios，进入 `loom-story`
 
 planning 输出只能包含：

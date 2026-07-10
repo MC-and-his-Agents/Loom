@@ -102,6 +102,8 @@ go.work.sum
 plugins/loom/*
 !plugins/loom/.codex-plugin/
 !plugins/loom/.codex-plugin/plugin.json
+!plugins/loom/skills/
+!plugins/loom/skills/**
 packages/skills/
 packages/loom-installer/payload/
 .worktrees/

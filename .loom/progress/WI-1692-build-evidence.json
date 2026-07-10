@@ -1,0 +1,74 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "aquinas-1692-implementation-plan",
+      "task_goal": "Analyze the controlled-merge wrapper surface for issue #1692 and identify the smallest implementation path.",
+      "context_locators": [
+        "issue #1692",
+        "tools/loom.py",
+        "tools/check_cli_contract.py"
+      ],
+      "read_scope": [
+        "root CLI merge wrapper",
+        "closeout-run wrapper behavior",
+        "CLI contract fixture tests"
+      ],
+      "write_ownership": [
+        ".loom/progress/WI-1692-build-evidence.json:aquinas-1692-implementation-plan"
+      ],
+      "non_goals": [
+        "modify runtime governance contracts",
+        "change README or skill documentation",
+        "merge or close the PR"
+      ],
+      "validation_expectation": "Main executor integrates the plan into tools/loom.py and tools/check_cli_contract.py, then runs focused CLI contract checks.",
+      "output_format": "summary with implementation recommendation, risks, and validation targets",
+      "integration_target": "tools/loom.py; tools/check_cli_contract.py; .loom/specs/WI-1692/*; PR #1707 metadata",
+      "status": "integrated"
+    },
+    {
+      "id": "dirac-1694-docs-inventory-readonly",
+      "task_goal": "Inventory downstream README/skills documentation convergence risks so issue #1692 does not expand into issue #1694.",
+      "context_locators": [
+        "issue #1694",
+        "README.md",
+        "README.zh-CN.md",
+        "skills/registry.json"
+      ],
+      "read_scope": [
+        "documentation and skill entrypoint convergence inventory only"
+      ],
+      "write_ownership": [
+        ".loom/progress/WI-1692-build-evidence.json:dirac-1694-docs-inventory-readonly"
+      ],
+      "non_goals": [
+        "edit documentation",
+        "change controlled-merge implementation",
+        "write PR metadata or Loom carriers"
+      ],
+      "validation_expectation": "Main executor keeps #1692 scoped to the CLI wrapper and records docs convergence as #1694 follow-up.",
+      "output_format": "read-only inventory summary with locators and no patches",
+      "integration_target": ".loom/work-items/WI-1692.md; .loom/progress/WI-1692.md; PR #1707 scope boundary",
+      "status": "integrated"
+    }
+  ],
+  "integration_evidence": [
+    {
+      "locator": "tools/loom.py",
+      "summary": "Implemented explicit merge run --closeout-run orchestration with inline and host_only modes, and fail-closed upgraded closeout PR modes."
+    },
+    {
+      "locator": "tools/check_cli_contract.py",
+      "summary": "Added wrapper contract coverage for default compatibility, inline closeout, host-only closeout, upgraded policy refusal, and merge blocker behavior."
+    },
+    {
+      "locator": ".loom/specs/WI-1692/",
+      "summary": "Recorded the minimal suite scope, plan, implementation contract, evidence map, and task carrier for WI-1692."
+    },
+    {
+      "locator": ".loom/progress/WI-1692.md",
+      "summary": "Recovery boundary limits this PR to issue #1692 and leaves README/skills convergence to issue #1694."
+    }
+  ]
+}

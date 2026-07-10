@@ -1,0 +1,70 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1855",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1855 terminal closeout carrier sync is allowed at head f310c2dd: release v0.25.0 is published and read back at merge commit d9ca2ed4, release closeout-sync wrote terminal closed_out metadata, suite/evidence/carrier validation, fact-chain, shadow parity, and release readback all pass. This review covers carrier-only closeout sync and does not approve new runtime behavior or republish.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T11:15:00Z",
+  "reviewed_head": "f310c2dde2cc6aaecb1c72f660ef04a9f7d3c446",
+  "reviewed_validation_summary": "Pre-release local validation passed on 2026-07-01; PR #1857 local PR gate, hosted checks, and merge check passed; release workflow `loom-cli-release` run 28512888728 published v0.25.0; final release readback for merge commit d9ca2ed4e281cf123fc92a435e335d2600374f4d passed with verdict `published`.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "After the closeout carrier PR merges, close #1850/#1851-#1855 and milestone #22 with release/npm/workflow/readback evidence.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "After the closeout carrier PR merges, close #1850/#1851-#1855 and milestone #22 with release/npm/workflow/readback evidence."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1855.md",
+    "recovery_entry": ".loom/progress/WI-1855.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1855 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1855 --json",
+    "suite_evidence_map": ".loom/specs/WI-1855/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1855/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored closeout carrier review approved the current terminal carrier head for closeout PR consumption."
+  }
+}

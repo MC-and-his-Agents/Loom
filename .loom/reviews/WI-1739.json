@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1739",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1739 closeout PR only terminalizes merged PR #1768 facts, writes closeout metadata, keeps checkpoint at closeout for PR gate consumption, and refreshes status shadow evidence; no implementation or product behavior changes.",
+  "reviewer": "Codex main controller",
+  "authored_at": "2026-06-23T09:12:44Z",
+  "reviewed_head": "c895bf9d786828680fdfd030903e0d629de0a191",
+  "reviewed_validation_summary": "2026-06-23 closeout sync passed for WI-1739: PR #1768 merged at 0fcd272e5d039e2f619480d0514fbc341e19e584; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier closeout-sync --target . --item WI-1739 --terminal-state merged --issue 1739 --pr 1768 --merge-commit 0fcd272e5d039e2f619480d0514fbc341e19e584 --target-branch main --closed-at 2026-06-23T09:06:49Z --evidence-locator 'github.com/MC-and-his-Agents/Loom/issues/1739;github.com/MC-and-his-Agents/Loom/pull/1768' --apply.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1739.md",
+    "recovery_entry": ".loom/progress/WI-1739.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

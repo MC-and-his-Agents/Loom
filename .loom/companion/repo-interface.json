@@ -21,7 +21,7 @@
     "fields": [
       {
         "id": "loom-governance-intensity",
-        "summary": "Loom governance intensity PR metadata carrier binding Work Item, branch/head, suite path, review, release judgment, PR gate, and closeout requiredness.",
+        "summary": "Loom governance intensity PR metadata carrier binding Work Item, branch, suite path, review, release judgment, PR gate, and closeout requiredness.",
         "applicability_locator": "docs/methodology/harness/tiered-gate-consumption-contract.md",
         "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
         "enforcement": "blocking",
@@ -34,7 +34,6 @@
           "repo_specific_field_set": [
             "loom_work_item",
             "branch",
-            "head_sha",
             "governance_intensity",
             "change_class",
             "suite_path",
@@ -52,7 +51,6 @@
           "required_fields": [
             "loom_work_item",
             "branch",
-            "head_sha",
             "governance_intensity",
             "change_class",
             "suite_path",
@@ -78,6 +76,31 @@
             "expected_format": true,
             "suggested_fix": true
           },
+          "binding_priority": [
+            "cli_explicit_input",
+            "pr_body_machine_carrier",
+            "host_readback",
+            "repo_carrier",
+            "human_pr_body_field",
+            "issue_title_or_body"
+          ],
+          "safe_repair": {
+            "allowed_when": "cli_explicit_input, pr_body_machine_carrier, and host_readback agree",
+            "allowed_targets": [
+              "missing_human_backlink",
+              "display_field_format",
+              "deterministic_machine_carrier_rerender"
+            ],
+            "forbidden_when": [
+              "work_item_conflict",
+              "issue_conflict",
+              "pr_conflict",
+              "branch_conflict",
+              "release_judgment_conflict",
+              "closeout_policy_conflict"
+            ],
+            "required_readback": "render, update PR body, read back, then rerun metadata preflight before gate consumption"
+          },
           "migration_mode": "required"
         }
       }
@@ -85,5 +108,44 @@
   },
   "context_schema": {
     "fields": []
+  },
+  "host_planning_taxonomy": {
+    "object_type_mapping": [
+      {
+        "loom_type": "phase",
+        "labels": [
+          "phase",
+          "类型：Phase"
+        ],
+        "title_prefixes": [
+          "Phase:",
+          "阶段："
+        ]
+      },
+      {
+        "loom_type": "fr",
+        "labels": [
+          "fr",
+          "类型：FR"
+        ],
+        "title_prefixes": [
+          "FR：",
+          "FR:"
+        ]
+      },
+      {
+        "loom_type": "work_item",
+        "labels": [
+          "work-item",
+          "类型：Work Item"
+        ],
+        "title_prefixes": [
+          "WI：",
+          "WI:",
+          "Work Item:"
+        ]
+      }
+    ],
+    "missing_type_policy": "advisory_unknown"
   }
 }

@@ -25,6 +25,10 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
+RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "release-readback-fixtures.json"
+WORKSTATION_REGISTRY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "workstation-registry-fixtures.json"
+RUNTIME_PATHS = REPO_ROOT / "skills" / "shared" / "scripts" / "runtime_paths.py"
+CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS = 60
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
     ".loom/work-items/WI-truth.md",
@@ -76,6 +80,11 @@ REQUIRED_COMMANDS = {
     "repair apply",
     "install",
     "upgrade-plan",
+    "runtime-upgrade status",
+    "runtime-upgrade prepare",
+    "runtime-upgrade pr",
+    "runtime-upgrade check",
+    "runtime-upgrade closeout",
     "upgrade",
     "rollback",
     "verify",
@@ -96,7 +105,15 @@ REQUIRED_COMMANDS = {
     "gate review",
     "gate pr",
     "gate merge",
+    "gate freeze check",
+    "gate freeze write",
     "gate closeout",
+    "gate repair-pr",
+    "release readback",
+    "release resume",
+    "release closeout-sync",
+    "closeout run",
+    "closeout batch",
     "host list",
     "host doctor",
     "host install",
@@ -104,9 +121,14 @@ REQUIRED_COMMANDS = {
     "host register",
     "host upgrade",
     "host remove",
+    "workstation register",
+    "workstation list",
+    "workstation unregister",
+    "workstation upgrade",
     "workspace create",
     "workspace locate",
     "workspace check",
+    "workspace audit",
     "workspace retire",
     "issue inspect",
     "issue bind",
@@ -114,14 +136,21 @@ REQUIRED_COMMANDS = {
     "project status",
     "project reconcile",
     "pr inspect",
+    "pr metadata-render",
+    "pr metadata-readback",
+    "pr metadata-update",
     "pr metadata-preflight",
+    "pr-intent prepare",
+    "pr-intent check",
+    "docs-pr prepare",
+    "docs-pr check",
     "pr gate",
     "merge check",
     "merge run",
+    "ship",
     "reconcile",
     "skills list",
     "skills generate",
-    "skills sync",
     "skills check",
     "skills doctor",
     "skills package",
@@ -244,15 +273,23 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
     if env_overrides:
         env.update(env_overrides)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    completed = subprocess.run(
-        [sys.executable, str(LOOM), *args],
-        cwd=REPO_ROOT,
-        env=env,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    env.setdefault("LOOM_SKIP_NPM_LATEST", "1")
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(LOOM), *args],
+            cwd=REPO_ROOT,
+            env=env,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            f"{args} timed out after {CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS}s\n"
+            f"{exc.stderr or ''}\n{exc.stdout or ''}"
+        ) from exc
     if expect is not None and completed.returncode != expect:
         raise AssertionError(f"{args} returned {completed.returncode}, expected {expect}\n{completed.stderr}\n{completed.stdout}")
     raw = completed.stdout or completed.stderr
@@ -260,21 +297,96 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise AssertionError(f"{args} did not emit JSON: {exc}\n{raw}") from exc
+    annotate_contract_artifact_base(payload, args, cwd=REPO_ROOT)
     return completed.returncode, payload
+
+
+def contract_target_base_from_args(args: list[str], *, cwd: Path) -> Path | None:
+    for index, arg in enumerate(args):
+        if arg == "--target" and index + 1 < len(args):
+            raw_target = Path(args[index + 1])
+            return raw_target if raw_target.is_absolute() else (cwd / raw_target).resolve()
+        if arg.startswith("--target="):
+            raw_target = Path(arg.split("=", 1)[1])
+            return raw_target if raw_target.is_absolute() else (cwd / raw_target).resolve()
+    return None
+
+
+def annotate_contract_artifact_base(payload: dict[str, Any], args: list[str], *, cwd: Path) -> None:
+    if payload.get("envelope_schema") != "loom-agent-output-envelope/v1":
+        return
+    artifact_base = contract_target_base_from_args(args, cwd=cwd)
+    if artifact_base is not None:
+        payload["_loom_contract_artifact_base"] = str(artifact_base)
+
+
+def runtime_payload_from_agent_safe_output(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("envelope_schema") != "loom-agent-output-envelope/v1":
+        return payload
+    full_output = payload.get("full_output")
+    locator = full_output.get("artifact_locator") if isinstance(full_output, dict) else None
+    if not isinstance(locator, str) or not locator.strip():
+        raise AssertionError("agent-safe output envelope did not expose full output artifact locator")
+    expected_sha256 = full_output.get("artifact_sha256") if isinstance(full_output, dict) else None
+    if not isinstance(expected_sha256, str) or not expected_sha256.strip():
+        raise AssertionError("agent-safe output envelope did not expose full output artifact sha256")
+    path = Path(locator)
+    if not path.is_absolute():
+        artifact_base_raw = payload.get("_loom_contract_artifact_base")
+        artifact_base = Path(artifact_base_raw) if isinstance(artifact_base_raw, str) and artifact_base_raw else REPO_ROOT
+        path = runtime_locator_path(artifact_base, locator) or (artifact_base / path)
+    artifact_bytes = path.read_bytes()
+    actual_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise AssertionError("agent-safe full output artifact sha256 did not match envelope metadata")
+    artifact = json.loads(artifact_bytes.decode("utf-8"))
+    runtime_payload = artifact.get("payload")
+    if not isinstance(runtime_payload, dict):
+        raise AssertionError("agent-safe full output artifact did not contain a runtime payload")
+    return runtime_payload
+
+
+def runtime_paths_module() -> Any:
+    spec = importlib.util.spec_from_file_location("loom_runtime_paths_contract", RUNTIME_PATHS)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load runtime_paths.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def runtime_locator_path(target_root: Path, locator: str) -> Path | None:
+    module = runtime_paths_module()
+    if not module.is_global_runtime_locator(locator):
+        return None
+    return module.global_runtime_path(target_root, locator)
+
+
+def runtime_locator_exists(target_root: Path, locator: str) -> bool:
+    path = runtime_locator_path(target_root, locator)
+    return bool(path is not None and path.exists())
 
 
 def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    completed = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
-        cwd=cwd,
-        env=env,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    env["LOOM_SOURCE_REPO_ROOT"] = str(REPO_ROOT)
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
+            cwd=cwd,
+            env=env,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            f"loom_flow.py {args} timed out after {CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS}s\n"
+            f"{exc.stderr or ''}\n{exc.stdout or ''}"
+        ) from exc
     if expect is not None and completed.returncode != expect:
         raise AssertionError(f"loom_flow.py {args} returned {completed.returncode}, expected {expect}\n{completed.stderr}\n{completed.stdout}")
     raw = completed.stdout or completed.stderr
@@ -282,18 +394,2532 @@ def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None 
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise AssertionError(f"loom_flow.py {args} did not emit JSON: {exc}\n{raw}") from exc
+    annotate_contract_artifact_base(payload, args, cwd=cwd)
     return completed.returncode, payload
+
+
+def assert_repo_local_closeout_runtime_argument_contract() -> None:
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    completed = subprocess.run(
+        [sys.executable, str(REPO_ROOT / ".loom" / "bin" / "loom_flow.py"), "closeout", "check", "--help"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(f"repo-local closeout runtime help failed\n{completed.stderr}\n{completed.stdout}")
+    help_text = completed.stdout + completed.stderr
+    if "--item" not in help_text:
+        raise AssertionError("repo-local closeout runtime must accept --item for wrapper/runtime contract parity")
+    for flag in ("--implementation-pr", "--release-pr", "--carrier-sync-pr", "--final-closeout-pr", "--pr-role"):
+        if flag not in help_text:
+            raise AssertionError(f"repo-local closeout runtime must accept {flag} for PR role contract parity")
+
+
+def assert_merge_wrapper_pr_argument_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for merge wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    original_emit_flow = module.emit_flow
+    module.emit_flow = fake_emit_flow
+    try:
+        for action, runtime_action in (("check", "check"), ("run", "merge")):
+            args = [
+                action,
+                "1288",
+                "--target",
+                str(REPO_ROOT),
+                "--work-item",
+                "WI-1287",
+                "--head-sha",
+                "fixture-head",
+                "--merge-method",
+                "squash",
+            ]
+            if action == "run":
+                args.append("--apply")
+            status = module.handle_merge(args)
+            if status != 0:
+                raise AssertionError(f"merge {action} wrapper regression did not complete")
+            if captured.get("command") != f"merge {action}":
+                raise AssertionError(f"merge {action} wrapper did not preserve command label")
+            flow_args = captured.get("flow_args")
+            if not isinstance(flow_args, list):
+                raise AssertionError(f"merge {action} wrapper did not delegate to controlled-merge")
+            if flow_args[:2] != ["controlled-merge", runtime_action]:
+                raise AssertionError(f"merge {action} wrapper delegated to the wrong runtime operation")
+            if "--target" not in flow_args or Path(flow_args[flow_args.index("--target") + 1]) != REPO_ROOT:
+                raise AssertionError(f"merge {action} wrapper did not pass the resolved target to controlled-merge")
+            try:
+                pr_index = flow_args.index("--pr")
+            except ValueError as exc:
+                raise AssertionError(f"merge {action} wrapper did not pass --pr to controlled-merge") from exc
+            if flow_args[pr_index + 1] != "1288":
+                raise AssertionError(f"merge {action} wrapper passed the subcommand placeholder instead of the PR number")
+            if "pr" in flow_args:
+                raise AssertionError(f"merge {action} wrapper leaked the literal `pr` placeholder to controlled-merge")
+            if "--merge-method" not in flow_args or flow_args[flow_args.index("--merge-method") + 1] != "squash":
+                raise AssertionError(f"merge {action} wrapper did not preserve merge method")
+            if action == "run" and "--execute" not in flow_args:
+                raise AssertionError("merge run --apply did not delegate to controlled-merge --execute")
+        module.handle_merge([
+            "check",
+            "79",
+            "--target",
+            str(REPO_ROOT),
+            "--owner",
+            "HotCP",
+            "--repo",
+            "HotCP",
+            "--work-item",
+            "GH-78-LOOM-0211-CLEANUP",
+        ])
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list):
+            raise AssertionError("merge target/readback regression did not delegate to controlled-merge")
+        for option, expected in (
+            ("--target", str(REPO_ROOT)),
+            ("--owner", "HotCP"),
+            ("--repo", "HotCP"),
+            ("--item", "GH-78-LOOM-0211-CLEANUP"),
+        ):
+            if option not in flow_args or flow_args[flow_args.index(option) + 1] != expected:
+                raise AssertionError(f"merge wrapper did not pass {option} to controlled-merge")
+        try:
+            module.handle_merge(["check", "pr"])
+        except SystemExit as exc:
+            if exc.code == 0:
+                raise AssertionError("merge wrapper accepted literal `pr` as a PR number")
+        else:
+            raise AssertionError("merge wrapper accepted literal `pr` as a PR number")
+    finally:
+        module.emit_flow = original_emit_flow
+
+
+def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
+    target, fixture, _, fixture_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="merge-metadata-only",
+        branch_protection_contexts=[],
+        ruleset_required_contexts=["loom-pr-merge-gate"],
+        item="repo-native.release-0211",
+    )
+    checks_file = f".loom/fixtures/{fixture['item']}/checks.json"
+    branch_protection_file = f".loom/fixtures/{fixture['item']}/branch-protection.json"
+    ruleset_file = f".loom/fixtures/{fixture['item']}/ruleset.json"
+    companion = target / ".loom" / "companion"
+    companion.mkdir(parents=True, exist_ok=True)
+    bootstrap_init = target / ".loom" / "bootstrap" / "init-result.json"
+    companion_init = companion / "init-result.json"
+    companion_init.write_text(bootstrap_init.read_text(encoding="utf-8"), encoding="utf-8")
+    bootstrap_init.unlink()
+    subprocess.run(
+        ["git", "add", "-A", ".loom/bootstrap/init-result.json", ".loom/companion/init-result.json"],
+        cwd=target,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture metadata-only init-result"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    fixture["head_sha"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
+    _, payload = run_json(
+        [
+            "merge",
+            "check",
+            "1288",
+            "--target",
+            str(target),
+            "--owner",
+            "HotCP",
+            "--repo",
+            "HotCP",
+            "--work-item",
+            fixture["item"],
+            "--head-sha",
+            fixture["head_sha"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--status-checks-file",
+            checks_file,
+            "--branch-protection-file",
+            branch_protection_file,
+            "--ruleset-file",
+            ruleset_file,
+            "--json",
+        ],
+        expect=0,
+        env_overrides={"LOOM_SOURCE_REPO_ROOT": str(REPO_ROOT)},
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if payload.get("result") != "pass":
+        raise AssertionError(f"metadata-only merge check did not pass with companion init-result: {payload.get('missing_inputs')}")
+    missing_text = "\n".join(str(message) for message in payload.get("missing_inputs", []))
+    if "missing init-result" in missing_text or "not a git repository" in missing_text:
+        raise AssertionError("metadata-only merge check leaked bootstrap init-result or git cwd errors")
+
+    loom_flow = load_loom_flow_module()
+    metadata_fields = {
+        "loom_work_item": fixture["item"],
+        "branch": fixture["branch"],
+        "head_sha": fixture["head_sha"],
+        "governance_intensity": "standard",
+        "change_class": "contract",
+        "suite_path": "minimal",
+        "review_requirement": "current_head_review_required",
+        "release_judgment": "no_release",
+        "fact_chain_required": True,
+        "pr_gate_required": True,
+        "closeout_required": True,
+        "upgrade_triggers": [],
+    }
+    opaque_missing = loom_flow.validate_governance_intensity_metadata_fields(metadata_fields)
+    if "fields.loom_work_item" in opaque_missing:
+        raise AssertionError("PR metadata rejected a path-safe opaque Work Item id")
+    unsafe_fields = {**metadata_fields, "loom_work_item": "../escape"}
+    unsafe_missing = loom_flow.validate_governance_intensity_metadata_fields(unsafe_fields)
+    if "fields.loom_work_item" not in unsafe_missing:
+        raise AssertionError("PR metadata accepted a path-unsafe Work Item id")
+    calls: list[list[str]] = []
+    original_gh_json = loom_flow.gh_json
+    original_source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
+
+    def fake_gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
+        calls.append(args)
+        if args[:3] == ["pr", "view", "1288"]:
+            return {"statusCheckRollup": [{"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"}]}, []
+        return original_gh_json(root, args)
+
+    loom_flow.gh_json = fake_gh_json
+    os.environ["LOOM_SOURCE_REPO_ROOT"] = str(REPO_ROOT)
+    try:
+        payload = loom_flow.controlled_merge_payload(
+            target_root=target,
+            output_relative=".loom/bootstrap/init-result.json",
+            expected_item=fixture["item"],
+            owner="HotCP",
+            repo_name="HotCP",
+            pr_number=1288,
+            head_sha=fixture["head_sha"],
+            merge_method="squash",
+            delete_branch=False,
+            execute=False,
+            pr_payload_file=fixture["pr_file"],
+            status_checks_file=None,
+            branch_protection_file=branch_protection_file,
+            ruleset_file=ruleset_file,
+            pr_gate_result_file=None,
+            merge_gate_result_file=None,
+        )
+    finally:
+        loom_flow.gh_json = original_gh_json
+        if original_source_repo_root is None:
+            os.environ.pop("LOOM_SOURCE_REPO_ROOT", None)
+        else:
+            os.environ["LOOM_SOURCE_REPO_ROOT"] = original_source_repo_root
+    if payload.get("result") != "pass":
+        raise AssertionError(f"controlled merge failed metadata-only inline status readback: {payload.get('missing_inputs')}")
+    if not any("--repo" in call and call[call.index("--repo") + 1] == "HotCP/HotCP" for call in calls):
+        raise AssertionError("controlled merge statusCheckRollup readback did not pass --repo owner/repo")
+
+
+def assert_merge_closeout_run_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for merge closeout-run regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    closeout_calls: list[argparse.Namespace] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def passing_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] != ["controlled-merge", "merge"]:
+            raise AssertionError(f"merge --closeout-run delegated unexpected flow args: {flow_args}")
+        if "--execute" not in flow_args:
+            raise AssertionError("merge --closeout-run must execute controlled merge")
+        return {
+            "command": "controlled-merge",
+            "result": "pass",
+            "summary": "merged",
+            "pr": {
+                "number": 1707,
+                "state": "MERGED",
+                "baseRefName": "main",
+                "mergeCommit": {"oid": "fixture-merge-sha"},
+            },
+        }
+
+    def fake_closeout_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+        closeout_calls.append(args)
+        if args.item != "WI-1692" or args.issue != "1692" or args.pr != "1707":
+            raise AssertionError("merge --closeout-run did not preserve Work Item, issue, and PR bindings")
+        if args.branch != "main":
+            raise AssertionError("merge --closeout-run did not pass the closeout target branch")
+        if args.apply is not True:
+            raise AssertionError("merge --closeout-run must apply the closeout run after merge")
+        return {
+            "command": "closeout run",
+            "schema_version": "loom-closeout-run/v1",
+            "result": "pass",
+            "summary": "closeout complete",
+            "issue": {"number": "1692", "state": "CLOSED"},
+            "pr": {"number": "1707", "state": "MERGED"},
+            "terminal_metadata": {
+                "terminal_state": "closed_out",
+                "issue": "1692",
+                "pr": "1707",
+                "merge_commit": "fixture-merge-sha",
+                "target_branch": "main",
+                "closed_at": "fixture-closed-at",
+                "evidence_locator": "host-readback",
+            },
+            "evidence_locators": ["host-readback"],
+        }
+
+    original_flow_payload = module.flow_payload
+    original_closeout_payload = module.run_closeout_payload
+    original_emit = module.emit
+    module.flow_payload = passing_flow_payload
+    module.run_closeout_payload = fake_closeout_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--head-sha",
+                "fixture-head",
+                "--merge-method",
+                "squash",
+                "--apply",
+                "--closeout-run",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("merge --closeout-run did not emit a passing payload")
+        if [call[:2] for call in calls] != [["controlled-merge", "merge"]]:
+            raise AssertionError("merge --closeout-run should only call controlled merge before closeout")
+        if len(closeout_calls) != 1:
+            raise AssertionError("merge --closeout-run did not run closeout exactly once after merge pass")
+        if emitted.get("schema_version") != "loom-merge-run/v1":
+            raise AssertionError("merge --closeout-run must expose the merge-run schema")
+        if emitted.get("closeout_run") is not True or emitted.get("creates_closeout_pr") is not False:
+            raise AssertionError("merge --closeout-run must be explicit and must not create a closeout PR")
+        if emitted.get("closeout_mode") != "inline":
+            raise AssertionError("merge --closeout-run must report inline closeout mode")
+        if [step.get("name") for step in emitted.get("steps", [])] != ["controlled-merge-apply", "closeout-run"]:
+            raise AssertionError("merge --closeout-run emitted an unexpected step sequence")
+
+        def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                return {
+                    "command": "controlled-merge",
+                    "result": "pass",
+                    "summary": "merged",
+                    "pr": {"number": 1707, "state": "MERGED", "baseRefName": "main"},
+                }
+            if flow_args[:2] == ["reconciliation", "sync"]:
+                if "--apply" not in flow_args:
+                    raise AssertionError("host-only closeout must apply reconciliation after merge")
+                return {"command": "reconciliation", "result": "pass", "summary": "issue closed"}
+            if flow_args[:2] == ["closeout", "check"]:
+                return {
+                    "command": "closeout",
+                    "result": "pass",
+                    "summary": "host closeout pass",
+                    "issue": {"number": "1692", "state": "CLOSED"},
+                    "pr": {"number": "1707", "state": "MERGED"},
+                }
+            raise AssertionError(f"host-only merge closeout delegated unexpected flow args: {flow_args}")
+
+        def fail_if_closeout_run(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+            raise AssertionError("host-only closeout mode must not run carrier closeout-run")
+
+        module.flow_payload = host_only_flow_payload
+        module.run_closeout_payload = fail_if_closeout_run
+        calls.clear()
+        closeout_calls.clear()
+        emitted.clear()
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--apply",
+                "--closeout-run",
+                "--closeout-mode",
+                "host_only",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("merge --closeout-run host_only did not pass")
+        if [call[:2] for call in calls] != [["controlled-merge", "merge"], ["reconciliation", "sync"], ["closeout", "check"]]:
+            raise AssertionError("merge --closeout-run host_only did not preserve host-only closeout sequence")
+        if emitted.get("closeout_mode") != "host_only" or emitted.get("creates_closeout_pr") is not False:
+            raise AssertionError("merge --closeout-run host_only must not create a closeout PR")
+
+        module.flow_payload = passing_flow_payload
+        module.run_closeout_payload = fake_closeout_payload
+        calls.clear()
+        closeout_calls.clear()
+        emitted.clear()
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--apply",
+                "--closeout-run",
+                "--closeout-mode",
+                "full_closeout_pr",
+                "--json",
+                "--full-output",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("merge --closeout-run must block full_closeout_pr before merge")
+        if calls or closeout_calls:
+            raise AssertionError("merge --closeout-run full_closeout_pr must not merge or run closeout")
+        if emitted.get("closeout_mode") != "full_closeout_pr" or emitted.get("creates_closeout_pr") is not False:
+            raise AssertionError("merge --closeout-run full_closeout_pr must fail closed without creating a PR")
+
+        def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            return {"command": "controlled-merge", "result": "block", "summary": "merge blocked", "missing_inputs": ["required check pending"]}
+
+        module.flow_payload = blocking_flow_payload
+        module.run_closeout_payload = fake_closeout_payload
+        calls.clear()
+        closeout_calls.clear()
+        emitted.clear()
+        status = module.handle_merge(
+            [
+                "run",
+                "1707",
+                "--work-item",
+                "WI-1692",
+                "--issue",
+                "1692",
+                "--target-branch",
+                "main",
+                "--apply",
+                "--closeout-run",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("merge --closeout-run must block when controlled merge blocks")
+        if closeout_calls:
+            raise AssertionError("merge --closeout-run must not run closeout after controlled merge block")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.run_closeout_payload = original_closeout_payload
+        module.emit = original_emit
+
+
+def assert_ship_dry_run_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "light",
+                            "change_class": "docs_governance",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok"}
+        raise AssertionError(f"ship dry-run delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    original_changed_paths = module.ship_changed_paths_payload
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["docs/adoption/legacy-install-migration.md"],
+        "missing_inputs": [],
+    }
+    try:
+        status = module.handle_ship([
+            "--item",
+            "WI-1690",
+            "--issue",
+            "1690",
+            "--pr",
+            "1704",
+            "--branch",
+            "work/1690-ship-dry-run",
+            "--head-sha",
+            "a" * 40,
+            "--intensity",
+            "auto",
+            "--json",
+        ])
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("ship dry-run wrapper did not emit a passing dry-run plan")
+        if emitted.get("schema_version") != "loom-ship/v1" or emitted.get("mutates") is not False:
+            raise AssertionError("ship dry-run must emit loom-ship/v1 and remain non-mutating")
+        if emitted.get("next_action") != "run loom ship --apply after dry-run blockers are clear":
+            raise AssertionError("ship dry-run must keep the short next_action for the ordinary apply path")
+        expected_prefixes = [
+            ["pr-metadata", "preflight"],
+            ["pr-gate", "check"],
+            ["controlled-merge", "check"],
+        ]
+        if [call[:2] for call in calls] != expected_prefixes:
+            raise AssertionError("ship dry-run did not preserve the expected read-only gate sequence")
+        flattened = [token for call in calls for token in call]
+        if "--execute" in flattened or "--apply" in flattened:
+            raise AssertionError("ship dry-run delegated a mutating runtime flag")
+        policy = emitted.get("closeout_policy", {})
+        if policy.get("policy") != "host_only" or policy.get("creates_closeout_pr_by_default") is not False:
+            raise AssertionError("ship dry-run did not consume light closeout policy")
+        if not any(step.get("name") == "post-merge-closeout" and step.get("result") == "skipped" for step in emitted.get("steps", [])):
+            raise AssertionError("ship dry-run must plan post-merge closeout without executing it")
+        validation_profile = emitted.get("validation_profile", {})
+        if validation_profile.get("selected_profile") != "light" or validation_profile.get("source_surface") != "contract-only":
+            raise AssertionError(f"ship dry-run did not expose the light validation profile for docs-only paths: {validation_profile}")
+        if not any(step.get("name") == "validation-profile" and step.get("result") == "pass" for step in emitted.get("steps", [])):
+            raise AssertionError("ship dry-run must include a validation-profile diagnostic step")
+
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+        module.ship_changed_paths_payload = original_changed_paths
+
+
+def assert_ship_infers_pr_bindings_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship inference regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+    inferred_branch = "work/1738-ship-inference"
+    inferred_head = "f" * 40
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if tuple(flow_args[:2]) in {("pr-metadata", "preflight"), ("pr-gate", "check"), ("controlled-merge", "check")}:
+            if "--branch" in flow_args and flow_args[flow_args.index("--branch") + 1] != inferred_branch:
+                raise AssertionError("ship did not pass inferred branch to delegated gate")
+            if "--head-sha" in flow_args:
+                raise AssertionError("ship must not pass inferred head SHA to delegated gate")
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "light",
+                            "change_class": "docs_governance",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+        raise AssertionError(f"ship inference delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def fake_ship_pr_payload(args: Any, target: Any) -> tuple[dict[str, Any], list[str]]:
+        return {"headRefName": inferred_branch, "headRefOid": inferred_head, "baseRefName": "main"}, []
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
+    original_git_branch = module.git_branch_for_target
+    original_git_head = module.git_head_sha_for_target
+    original_changed_paths = module.ship_changed_paths_payload
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    module.ship_pr_payload = fake_ship_pr_payload
+    module.git_branch_for_target = lambda target: "work/local-checkout"
+    module.git_head_sha_for_target = lambda target: "e" * 40
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["README.md"],
+        "missing_inputs": [],
+    }
+    try:
+        status = module.handle_ship(["--item", "WI-1738", "--pr", "1748", "--json"])
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("ship dry-run did not pass with inferred PR bindings")
+        binding = emitted.get("binding_inference", {})
+        bindings = binding.get("bindings", {}) if isinstance(binding, dict) else {}
+        if bindings.get("branch") != inferred_branch or bindings.get("head_sha") != inferred_head or bindings.get("target_branch") != "main":
+            raise AssertionError("ship did not expose inferred branch/head/target_branch bindings")
+        inferred_fields = {entry.get("field") for entry in binding.get("inferences", []) if isinstance(entry, dict)}
+        if {"branch", "head_sha", "target_branch"} - inferred_fields:
+            raise AssertionError("ship inference did not record inferred binding fields")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
+        module.git_branch_for_target = original_git_branch
+        module.git_head_sha_for_target = original_git_head
+        module.ship_changed_paths_payload = original_changed_paths
+
+
+def assert_ship_pr_readback_uses_api_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship PR readback regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        payload = {
+            "number": 1762,
+            "state": "OPEN",
+            "headRefName": "work/1738-ship-inference",
+            "headRefOid": "a" * 40,
+            "baseRefName": "main",
+            "body": "PR body",
+            "url": "https://github.com/MC-and-his-Agents/Loom/pull/1762",
+        }
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps(payload), stderr="")
+
+    original_run_capture = module.run_capture
+    original_infer_github_repo = module.infer_github_repo
+    module.run_capture = fake_run_capture
+    module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
+    try:
+        args = argparse.Namespace(pr=1762, pr_payload_file=None, owner=None, repo_name=None)
+        payload, errors = module.ship_pr_payload(args, REPO_ROOT)
+        if errors or payload is None:
+            raise AssertionError(f"ship PR readback should pass with gh api payload, got errors={errors}")
+        if payload.get("headRefName") != "work/1738-ship-inference" or payload.get("headRefOid") != "a" * 40:
+            raise AssertionError("ship PR readback must preserve normalized branch/head fields")
+        if not calls or calls[0][:3] != ["gh", "api", "repos/MC-and-his-Agents/Loom/pulls/1762"]:
+            raise AssertionError(f"ship PR readback must use gh api pull request endpoint, got {calls}")
+        if any("pr" in part and "view" in part for part in calls[0]):
+            raise AssertionError("ship PR readback must not use the high-frequency PR view shortcut")
+    finally:
+        module.run_capture = original_run_capture
+        module.infer_github_repo = original_infer_github_repo
+
+
+def assert_ship_changed_paths_readback_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship changed path regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args[:3] == ["gh", "api", "--paginate"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps(["README.md", "tools/loom.py"]), stderr="")
+        raise AssertionError(f"unexpected changed path readback command: {args}")
+
+    original_run_capture = module.run_capture
+    original_infer_github_repo = module.infer_github_repo
+    module.run_capture = fake_run_capture
+    module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
+    try:
+        args = argparse.Namespace(pr=1741, owner=None, repo_name=None)
+        paths, errors = module.ship_pr_changed_paths(args, REPO_ROOT)
+        if errors or paths != ["README.md", "tools/loom.py"]:
+            raise AssertionError(f"ship changed paths readback should normalize PR file paths, got paths={paths} errors={errors}")
+        if not calls or calls[0][3] != "repos/MC-and-his-Agents/Loom/pulls/1741/files":
+            raise AssertionError(f"ship changed paths must read the pull request files endpoint, got {calls}")
+        if "--slurp" not in calls[0] or "--jq" not in calls[0]:
+            raise AssertionError("ship changed paths readback must request a normalized JSON path list")
+    finally:
+        module.run_capture = original_run_capture
+        module.infer_github_repo = original_infer_github_repo
+
+
+def assert_ship_status_preflight_contract(tmp: Path) -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship status regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    target = tmp / "repo"
+    (target / ".loom" / "status").mkdir(parents=True)
+    (target / ".loom" / "status" / "current.md").write_text(
+        "- Current Checkpoint: merge\n"
+        "- Current Stop: WI-1777 active\n"
+        "- Next Step: run ship preflight\n",
+        encoding="utf-8",
+    )
+    emitted: dict[str, Any] = {}
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "-C"] and args[3:] == ["rev-parse", "origin/main"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="b" * 40 + "\n", stderr="")
+        if args[:2] == ["git", "-C"] and args[3:6] == ["merge-base", "--is-ancestor", "a" * 40]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        if args[:2] == ["git", "-C"] and args[3:] == ["status", "--short"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        if args[:2] == ["git", "-C"] and args[3:] == ["rev-list", "-n", "1", "v0.21.0"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="c" * 40 + "\n", stderr="")
+        if args[:3] == ["gh", "api", "repos/MC-and-his-Agents/Loom/issues/1777"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"number": 1777, "state": "closed", "closed_at": "2026-06-23T00:00:00Z", "title": "done"}), stderr="")
+        if args[:3] == ["gh", "api", "repos/MC-and-his-Agents/Loom/milestones/18"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"number": 18, "title": "v0.21.0", "state": "open", "open_issues": 4, "closed_issues": 1}), stderr="")
+        if args[:3] == ["gh", "api", "repos/MC-and-his-Agents/Loom/releases/tags/v0.21.0"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"tag_name": "v0.21.0", "name": "Loom CLI v0.21.0", "draft": False, "prerelease": False}), stderr="")
+        if args[:3] == ["npm", "view", "@mc-and-his-agents/loom@0.21.0"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"version": "0.21.0", "dist-tags": {"latest": "0.21.0"}}), stderr="")
+        raise AssertionError(f"unexpected ship status readback command: {args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_run_capture = module.run_capture
+    original_emit = module.emit
+    original_infer_repo = module.infer_github_repo
+    original_git_branch = module.git_branch_for_target
+    original_git_head = module.git_head_sha_for_target
+    module.run_capture = fake_run_capture
+    module.emit = fake_emit
+    module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
+    module.git_branch_for_target = lambda target: "work/1777-ship-preflight-status"
+    module.git_head_sha_for_target = lambda target: "a" * 40
+    try:
+        if module.resolve_command(["ship", "preflight", "--target", str(target)]) != ("ship preflight", ["--target", str(target)]):
+            raise AssertionError("ship preflight must resolve as a first-class command")
+        clean_result, clean_blockers, clean_fixed, clean_next = module.ship_status_diagnostic(
+            host={"issue": {"state": "open"}, "errors": []},
+            release={"tag": {"exists": False}, "github_release": {"exists": False}, "npm": {"exists": False}, "errors": []},
+            checkout={"stale_against_origin_main": False, "dirty": False, "errors": []},
+            carrier={"state": "terminal"},
+        )
+        if clean_result != "pass" or clean_blockers or clean_fixed or not clean_next:
+            raise AssertionError("ship status clean readback must pass without blockers")
+        light_result, light_blockers, light_fixed, light_next = module.ship_status_diagnostic(
+            host={"issue": {"state": "closed"}, "errors": []},
+            release={"tag": {"exists": False}, "github_release": {"exists": False}, "npm": {"exists": False}, "errors": []},
+            checkout={"stale_against_origin_main": False, "dirty": False, "errors": []},
+            carrier={"state": "active"},
+            adoption_mode="light-governance",
+        )
+        if (
+            light_result != "pass"
+            or light_blockers
+            or "repair_global_current_pointer" not in light_fixed
+            or "loom workstation current --target <repo> --clear --apply --json" not in light_next
+        ):
+            raise AssertionError("light-governance ship status must repair global current instead of blocking on stale repo carrier")
+        if not module.ship_missing_readback("npm ERR! 404 No match found"):
+            raise AssertionError("ship status must treat missing release/package readback as absent, not as an error")
+        readback_errors: list[str] = []
+        malformed = module.ship_json_read(
+            subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="[1]", stderr=""),
+            label="malformed readback",
+            errors=readback_errors,
+        )
+        if malformed is not None or not readback_errors:
+            raise AssertionError("ship status must surface malformed host readback as a readback error")
+        dirty_result, _dirty_blockers, dirty_fixed, dirty_next = module.ship_status_diagnostic(
+            host={"errors": []},
+            release={"tag": {"exists": False}, "github_release": {"exists": False}, "npm": {"exists": False}, "errors": []},
+            checkout={"stale_against_origin_main": False, "dirty": True, "errors": []},
+            carrier={"state": "active"},
+        )
+        if dirty_result != "block" or not dirty_fixed or dirty_next != dirty_fixed[0]:
+            raise AssertionError("ship status dirty checkout must include a one-step fix")
+        status = module.handle_ship([
+            "status",
+            "--target",
+            str(target),
+            "--issue",
+            "1777",
+            "--milestone",
+            "18",
+            "--version",
+            "v0.21.0",
+            "--package",
+            "@mc-and-his-agents/loom",
+            "--json",
+            "--full-output",
+        ])
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError(f"ship status must block on stale checkout, active carrier, or existing release: {emitted}")
+        diagnostic = emitted.get("diagnostic", {})
+        if diagnostic.get("blocked") is not True or not diagnostic.get("next_action"):
+            raise AssertionError(f"ship status must expose blocked/fixed/next_action diagnostic: {diagnostic}")
+        if emitted.get("pr"):
+            raise AssertionError("ship status must not require or synthesize a PR binding")
+        if emitted.get("checkout", {}).get("stale_against_origin_main") is not True:
+            raise AssertionError("ship status must diagnose stale checkout against origin/main")
+        if emitted.get("carrier", {}).get("state") != "active":
+            raise AssertionError("ship status must read active carrier state")
+        if emitted.get("release", {}).get("npm", {}).get("exists") is not True:
+            raise AssertionError("ship status must read npm release existence")
+    finally:
+        module.run_capture = original_run_capture
+        module.emit = original_emit
+        module.infer_github_repo = original_infer_repo
+        module.git_branch_for_target = original_git_branch
+        module.git_head_sha_for_target = original_git_head
+
+
+def assert_ship_validation_profile_selection_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship validation profile regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def payload(paths: list[str], *, requested: str = "auto", closeout_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+        args = argparse.Namespace(validation_profile=requested)
+        changed_paths = {
+            "schema_version": "loom-ship-changed-paths/v1",
+            "result": "pass",
+            "source": "fixture",
+            "changed_paths": paths,
+            "missing_inputs": [],
+        }
+        return module.ship_validation_profile_payload(args, changed_paths, closeout_policy or {"policy": "inline"})
+
+    docs_profile = payload(["docs/adoption/legacy-install-migration.md", "packages/loom-installer/package.json"])
+    if docs_profile.get("selected_profile") != "light" or docs_profile.get("source_surface") != "contract-only":
+        raise AssertionError(f"docs/package tombstone paths must select light validation: {docs_profile}")
+    if "docs_or_package_tombstone_only" not in docs_profile.get("selection_reasons", []):
+        raise AssertionError("light validation profile must explain docs/package tombstone selection")
+
+    runtime_profile = payload(["tools/loom.py", "skills/shared/scripts/loom_flow.py"])
+    if runtime_profile.get("selected_profile") != "full" or runtime_profile.get("source_surface") != "daily-execution-cli-full":
+        raise AssertionError(f"runtime/harness paths must select full validation: {runtime_profile}")
+
+    release_profile = payload(
+        ["docs/evidence/v0.20.0-release-readiness.md"],
+        closeout_policy={"policy": "full_closeout_pr", "release_judgment": "release_required", "upgrade_reasons": ["release_or_version_closeout"]},
+    )
+    if release_profile.get("selected_profile") != "release" or "python3 tools/check_npm_package.py" not in release_profile.get("validation_commands", []):
+        raise AssertionError(f"release closeout must select release validation commands: {release_profile}")
+
+    explicit_full = payload(["README.md"], requested="full")
+    if explicit_full.get("selected_profile") != "full" or explicit_full.get("source_surface") != "daily-execution-cli-full":
+        raise AssertionError(f"explicit full validation profile override was not preserved: {explicit_full}")
+
+    for requested in ("host-consumer", "carrier-only"):
+        consumer_profile = payload(["README.md"], requested=requested)
+        if (
+            consumer_profile.get("selected_profile") != requested
+            or consumer_profile.get("source_surface") is not None
+            or consumer_profile.get("validation_commands") != []
+        ):
+            raise AssertionError(f"{requested} validation profile must not run Loom source checks: {consumer_profile}")
+
+
+def assert_ship_apply_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship apply wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def passing_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] == ["pr-metadata", "update"]:
+            if "--apply" not in flow_args:
+                raise AssertionError("ship --apply safe metadata repair must apply PR metadata update")
+            return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+        if flow_args[:2] == ["carrier", "refresh"]:
+            if "--apply" not in flow_args:
+                raise AssertionError("ship --apply carrier refresh must apply safe carrier refresh")
+            return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+        if flow_args[:1] == ["shadow-parity"]:
+            if "--blocking" not in flow_args or "--surface" not in flow_args or flow_args[flow_args.index("--surface") + 1] != "all":
+                raise AssertionError("ship --apply shadow parity must run blocking all-surface readback")
+            return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "light",
+                            "change_class": "docs_governance",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+        if flow_args[:2] == ["controlled-merge", "merge"]:
+            if "--execute" not in flow_args:
+                raise AssertionError("ship --apply must execute controlled merge with --execute")
+            if "--apply" in flow_args:
+                raise AssertionError("ship --apply must not pass --apply to controlled merge runtime")
+            return {
+                "command": "controlled-merge",
+                "result": "pass",
+                "summary": "merged",
+                "pr": {
+                    "number": 1706,
+                    "state": "MERGED",
+                    "baseRefName": "main",
+                    "mergeCommit": {"oid": "fixture-merge-sha"},
+                },
+            }
+        if flow_args[:2] == ["reconciliation", "sync"]:
+            if "--apply" not in flow_args:
+                raise AssertionError("ship --apply must apply host reconciliation after merge")
+            return {"command": "reconciliation", "result": "pass", "summary": "issue closed"}
+        if flow_args[:2] == ["closeout", "check"]:
+            return {
+                "command": "closeout",
+                "result": "pass",
+                "summary": "closeout pass",
+                "issue": {"number": 1691, "state": "CLOSED"},
+                "pr": {"number": 1706, "state": "MERGED", "baseRefName": "main", "mergeCommit": {"oid": "fixture-merge-sha"}},
+            }
+        raise AssertionError(f"ship apply delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
+    original_changed_paths = module.ship_changed_paths_payload
+    original_write_workstation_current = module.write_workstation_current
+    module.flow_payload = passing_flow_payload
+    module.emit = fake_emit
+    module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["README.md"],
+        "missing_inputs": [],
+    }
+    current_writes: list[dict[str, Any]] = []
+    module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
+    try:
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1691",
+                "--issue",
+                "1691",
+                "--pr",
+                "1706",
+                "--branch",
+                "work/1691-ship-apply",
+                "--head-sha",
+                "b" * 40,
+                "--merge-method",
+                "squash",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("ship --apply wrapper did not emit a passing apply result")
+        if emitted.get("schema_version") != "loom-ship/v1" or emitted.get("mutates") is not True or emitted.get("dry_run") is not False:
+            raise AssertionError("ship --apply must emit mutating loom-ship/v1 apply payload")
+        if emitted.get("creates_closeout_pr") is not False or emitted.get("closeout_mode") != "host_only":
+            raise AssertionError("ship --apply must default to host-only closeout without creating a closeout PR")
+        step_names = [step.get("name") for step in emitted.get("steps", []) if isinstance(step, dict)]
+        if "global-current-closeout" not in step_names or not current_writes or current_writes[-1].get("state") != "no_active_item":
+            raise AssertionError("ship --apply host-only closeout must clear the workstation current pointer")
+        expected_prefixes = [
+            ["pr-metadata", "update"],
+            ["carrier", "refresh"],
+            ["shadow-parity", "--target"],
+            ["pr-metadata", "preflight"],
+            ["pr-gate", "check"],
+            ["controlled-merge", "check"],
+            ["controlled-merge", "merge"],
+            ["reconciliation", "sync"],
+            ["closeout", "check"],
+        ]
+        if [call[:2] for call in calls] != expected_prefixes:
+            raise AssertionError(f"ship --apply delegated unexpected sequence: {[call[:2] for call in calls]}")
+        merge_call = calls[6]
+        if "--merge-method" not in merge_call or merge_call[merge_call.index("--merge-method") + 1] != "squash":
+            raise AssertionError("ship --apply did not preserve merge method")
+        reconciliation_call = calls[7]
+        for flag, expected in {"--item": "WI-1691", "--issue": "1691", "--pr": "1706", "--branch": "main"}.items():
+            if flag not in reconciliation_call or reconciliation_call[reconciliation_call.index(flag) + 1] != expected:
+                raise AssertionError(f"ship --apply did not preserve {flag} for host closeout")
+
+        def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "governance_intensity_carrier": {
+                        "envelope": {
+                            "fields": {
+                                "governance_intensity": "light",
+                                "change_class": "docs_governance",
+                                "release_judgment": "no_release",
+                                "upgrade_triggers": [],
+                            }
+                        }
+                    },
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "block", "summary": "review missing", "missing_inputs": ["review record missing"]}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            raise AssertionError(f"ship --apply should stop before mutating merge or closeout after PR gate block: {flow_args}")
+
+        module.flow_payload = blocking_flow_payload
+        calls.clear()
+        emitted.clear()
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1691",
+                "--issue",
+                "1691",
+                "--pr",
+                "1706",
+                "--branch",
+                "work/1691-ship-apply",
+                "--head-sha",
+                "b" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("ship --apply gate blocker must emit block")
+        if emitted.get("schema_version") != "loom-cli-output/v1":
+            raise AssertionError("ship --apply blocker must stay within the agent-safe summary envelope")
+        if emitted.get("key_gaps") != ["review record missing"]:
+            raise AssertionError("ship --apply must preserve missing_inputs as summary key_gaps")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "resolve `pr-gate`" for finding in findings):
+            raise AssertionError("ship --apply must surface the PR gate next_action in short diagnostics")
+        full_output = emitted.get("full_output") if isinstance(emitted.get("full_output"), dict) else {}
+        if full_output.get("available") is not True:
+            raise AssertionError("ship --apply blocker summary must retain an artifact locator for full diagnostics")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("ship --apply must not merge after a gate blocker")
+
+        def carrier_blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "block", "summary": "carrier stale", "missing_inputs": ["shadow refresh required"]}
+            raise AssertionError(f"ship --apply should stop before preflight after carrier refresh block: {flow_args}")
+
+        module.flow_payload = carrier_blocking_flow_payload
+        calls.clear()
+        emitted.clear()
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1691",
+                "--issue",
+                "1691",
+                "--pr",
+                "1706",
+                "--branch",
+                "work/1691-ship-apply",
+                "--head-sha",
+                "b" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("ship --apply carrier refresh blocker must emit block")
+        if emitted.get("key_gaps") != ["shadow refresh required"]:
+            raise AssertionError("ship --apply must preserve carrier refresh missing_inputs as short diagnostics")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom carrier refresh --target <repo> --item <id> --apply --json" for finding in findings):
+            raise AssertionError("ship --apply must surface the carrier refresh single next action")
+        if [call[:2] for call in calls] != [["pr-metadata", "update"], ["carrier", "refresh"]]:
+            raise AssertionError(f"ship --apply must stop before metadata preflight after carrier refresh block, got {[call[:2] for call in calls]}")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
+        module.ship_changed_paths_payload = original_changed_paths
+        module.write_workstation_current = original_write_workstation_current
+
+
+def assert_ship_closeout_policy_admission_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship closeout policy regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        calls.append(flow_args)
+        if flow_args[:2] == ["pr-metadata", "update"]:
+            return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+        if flow_args[:2] == ["carrier", "refresh"]:
+            return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+        if flow_args[:1] == ["shadow-parity"]:
+            return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+        if flow_args[:2] == ["pr-metadata", "preflight"]:
+            return {
+                "command": "pr-metadata",
+                "result": "pass",
+                "summary": "metadata ok",
+                "governance_intensity_carrier": {
+                    "envelope": {
+                        "fields": {
+                            "governance_intensity": "reinforced",
+                            "change_class": "security",
+                            "release_judgment": "no_release",
+                            "upgrade_triggers": [],
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["pr-gate", "check"]:
+            return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+        if flow_args[:2] == ["controlled-merge", "check"]:
+            return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+        if flow_args[:2] == ["controlled-merge", "merge"]:
+            raise AssertionError("ship must not execute merge when closeout policy requires an explicit path")
+        raise AssertionError(f"ship closeout policy delegated unexpected flow args: {flow_args}")
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
+    original_changed_paths = module.ship_changed_paths_payload
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["skills/shared/scripts/loom_flow.py"],
+        "missing_inputs": [],
+    }
+    try:
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1735",
+                "--issue",
+                "1735",
+                "--pr",
+                "1740",
+                "--branch",
+                "work/1735-ship-contract",
+                "--head-sha",
+                "c" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("ship --apply must block when closeout policy requires an explicit path")
+        if emitted.get("schema_version") != "loom-cli-output/v1":
+            raise AssertionError("ship closeout policy blocker must stay within the agent-safe summary envelope")
+        if emitted.get("key_gaps") != ["closeout policy `full_closeout_pr` is not eligible for default host-only closeout"]:
+            raise AssertionError("ship closeout policy blocker must preserve the policy admission gap")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom closeout queue status --item <id> --issue <n> --pr <n> --json" for finding in findings):
+            raise AssertionError("ship closeout policy admission must point callers to the explicit closeout queue path")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("ship closeout policy admission must stop before merge")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
+        module.ship_changed_paths_payload = original_changed_paths
+
+
+def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for ship inline/host-only closeout e2e regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+    current_writes: list[dict[str, Any]] = []
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def run_host_only_case(name: str, fields: dict[str, Any], expected_policy: str) -> None:
+        calls.clear()
+        emitted.clear()
+        write_count_before = len(current_writes)
+        merge_sha = f"fixture-{name}-merge-sha"
+
+        def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "summary": "metadata ok",
+                    "governance_intensity_carrier": {"envelope": {"fields": fields}},
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                if "--execute" not in flow_args:
+                    raise AssertionError(f"{name} ship --apply must execute controlled merge")
+                return {
+                    "command": "controlled-merge",
+                    "result": "pass",
+                    "summary": "merged",
+                    "pr": {
+                        "number": 1742,
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "mergeCommit": {"oid": merge_sha},
+                    },
+                }
+            if flow_args[:2] == ["reconciliation", "sync"]:
+                if "--apply" not in flow_args:
+                    raise AssertionError(f"{name} host reconciliation must apply after merge")
+                for flag, expected in {"--item": "WI-1742", "--issue": "1742", "--pr": "1742", "--branch": "main"}.items():
+                    if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                        raise AssertionError(f"{name} host reconciliation did not preserve {flag}")
+                return {
+                    "command": "reconciliation",
+                    "result": "pass",
+                    "summary": "issue closed",
+                    "issue": {"number": 1742, "state": "CLOSED"},
+                    "pr": {"number": 1742, "state": "MERGED", "baseRefName": "main", "mergeCommit": {"oid": merge_sha}},
+                }
+            if flow_args[:2] == ["closeout", "check"]:
+                for flag, expected in {"--item": "WI-1742", "--issue": "1742", "--pr": "1742", "--branch": "main"}.items():
+                    if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                        raise AssertionError(f"{name} closeout check did not preserve {flag}")
+                return {
+                    "command": "closeout",
+                    "result": "pass",
+                    "summary": "closeout pass",
+                    "issue": {"number": 1742, "state": "CLOSED"},
+                    "pr": {"number": 1742, "state": "MERGED", "baseRefName": "main", "mergeCommit": {"oid": merge_sha}},
+                    "target_branch": {"name": "main", "contains_merge_commit": True},
+                }
+            raise AssertionError(f"{name} ship apply delegated unexpected flow args: {flow_args}")
+
+        module.flow_payload = host_only_flow_payload
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1742",
+                "--issue",
+                "1742",
+                "--pr",
+                "1742",
+                "--branch",
+                "work/1742-closeout-e2e",
+                "--head-sha",
+                "d" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError(f"{name} ordinary ship --apply fixture did not pass")
+        if emitted.get("creates_closeout_pr") is not False or emitted.get("closeout_mode") != "host_only":
+            raise AssertionError(f"{name} ordinary ship --apply must not create a closeout PR: {emitted}")
+        if emitted.get("target_branch") != "main":
+            raise AssertionError(f"{name} ordinary ship --apply must read back the target branch")
+        expected_sequence = [
+            ["pr-metadata", "update"],
+            ["carrier", "refresh"],
+            ["shadow-parity", "--target"],
+            ["pr-metadata", "preflight"],
+            ["pr-gate", "check"],
+            ["controlled-merge", "check"],
+            ["controlled-merge", "merge"],
+            ["reconciliation", "sync"],
+            ["closeout", "check"],
+        ]
+        if [call[:2] for call in calls] != expected_sequence:
+            raise AssertionError(f"{name} host-only e2e delegated unexpected sequence: {[call[:2] for call in calls]}")
+        closeout_policy = emitted.get("closeout_policy") if isinstance(emitted.get("closeout_policy"), dict) else {}
+        if closeout_policy.get("policy") != expected_policy:
+            raise AssertionError(f"{name} closeout policy drifted: {closeout_policy}")
+        step_names = [step.get("name") for step in emitted.get("steps", []) if isinstance(step, dict)]
+        if "host-reconciliation-sync" not in step_names or "host-closeout-check" not in step_names:
+            raise AssertionError(f"{name} ship --apply must consume host reconciliation and closeout check")
+        if (
+            "global-current-closeout" not in step_names
+            or len(current_writes) != write_count_before + 1
+            or current_writes[-1].get("state") != "no_active_item"
+        ):
+            raise AssertionError(f"{name} ship --apply must clear the workstation current pointer after host-only closeout")
+        closeout_steps = [step for step in emitted.get("steps", []) if isinstance(step, dict) and step.get("name") == "host-closeout-check"]
+        closeout_payload = closeout_steps[-1].get("payload", {}) if closeout_steps else {}
+        if closeout_payload.get("issue", {}).get("state") != "CLOSED":
+            raise AssertionError(f"{name} closeout readback must confirm issue closed")
+        if closeout_payload.get("pr", {}).get("state") != "MERGED":
+            raise AssertionError(f"{name} closeout readback must confirm PR merged")
+        if closeout_payload.get("pr", {}).get("mergeCommit", {}).get("oid") != merge_sha:
+            raise AssertionError(f"{name} closeout readback must preserve merge commit")
+        if closeout_payload.get("target_branch", {}).get("contains_merge_commit") is not True:
+            raise AssertionError(f"{name} closeout readback must confirm target branch contains merge commit")
+        if any(call[:2] == ["closeout-queue", "status"] for call in calls):
+            raise AssertionError(f"{name} ordinary ship --apply must not route through closeout queue")
+
+    def run_versioned_terminal_blocker() -> None:
+        calls.clear()
+        emitted.clear()
+
+        def versioned_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "summary": "metadata ok",
+                    "governance_intensity_carrier": {
+                        "envelope": {
+                            "fields": {
+                                "governance_intensity": "standard",
+                                "change_class": "runtime",
+                                "release_judgment": "no_release",
+                                "upgrade_triggers": ["versioned_terminal_carrier"],
+                            }
+                        }
+                    },
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                raise AssertionError("versioned terminal carrier must block before merge")
+            raise AssertionError(f"versioned terminal carrier delegated unexpected flow args: {flow_args}")
+
+        module.flow_payload = versioned_flow_payload
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1742",
+                "--issue",
+                "1742",
+                "--pr",
+                "1742",
+                "--branch",
+                "work/1742-closeout-e2e",
+                "--head-sha",
+                "e" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("versioned terminal carrier must block default ship --apply")
+        if emitted.get("key_gaps") != ["closeout policy `full_closeout_pr` is not eligible for default host-only closeout"]:
+            raise AssertionError("versioned terminal blocker must preserve explicit closeout gap")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom closeout queue status --item <id> --issue <n> --pr <n> --json" for finding in findings):
+            raise AssertionError("versioned terminal blocker must point to explicit closeout queue path")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("versioned terminal carrier must stop before merge")
+
+    def run_release_closeout_blocker() -> None:
+        calls.clear()
+        emitted.clear()
+
+        def release_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            calls.append(flow_args)
+            if flow_args[:2] == ["pr-metadata", "update"]:
+                return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
+            if flow_args[:2] == ["carrier", "refresh"]:
+                return {"command": "carrier", "result": "pass", "summary": "carrier refreshed", "remaining_refresh": []}
+            if flow_args[:1] == ["shadow-parity"]:
+                return {"command": "shadow-parity", "result": "pass", "summary": "shadow parity ok"}
+            if flow_args[:2] == ["pr-metadata", "preflight"]:
+                return {
+                    "command": "pr-metadata",
+                    "result": "pass",
+                    "summary": "metadata ok",
+                    "governance_intensity_carrier": {
+                        "envelope": {
+                            "fields": {
+                                "governance_intensity": "standard",
+                                "change_class": "release",
+                                "release_judgment": "release_required",
+                                "upgrade_triggers": ["release_or_version_closeout"],
+                            }
+                        }
+                    },
+                }
+            if flow_args[:2] == ["pr-gate", "check"]:
+                return {"command": "pr-gate", "result": "pass", "summary": "pr gate ok"}
+            if flow_args[:2] == ["controlled-merge", "check"]:
+                return {"command": "controlled-merge", "result": "pass", "summary": "merge check ok", "pr": {"baseRefName": "main"}}
+            if flow_args[:2] == ["controlled-merge", "merge"]:
+                raise AssertionError("release closeout policy must block before merge")
+            raise AssertionError(f"release closeout policy delegated unexpected flow args: {flow_args}")
+
+        module.flow_payload = release_flow_payload
+        status = module.handle_ship(
+            [
+                "--item",
+                "WI-1742",
+                "--issue",
+                "1742",
+                "--pr",
+                "1742",
+                "--branch",
+                "work/1742-closeout-e2e",
+                "--head-sha",
+                "f" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout policy must block default ship --apply")
+        if emitted.get("key_gaps") != ["closeout policy `full_closeout_pr` is not eligible for default host-only closeout"]:
+            raise AssertionError("release closeout blocker must preserve explicit closeout gap")
+        findings = emitted.get("actionable_findings", [])
+        if not any(isinstance(finding, dict) and finding.get("next_action") == "loom closeout queue status --item <id> --issue <n> --pr <n> --json" for finding in findings):
+            raise AssertionError("release closeout blocker must point to explicit closeout queue path")
+        if any(call[:2] == ["controlled-merge", "merge"] for call in calls):
+            raise AssertionError("release closeout policy must stop before merge")
+
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    original_ship_pr_payload = module.ship_pr_payload
+    original_changed_paths = module.ship_changed_paths_payload
+    original_write_workstation_current = module.write_workstation_current
+    module.emit = fake_emit
+    module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
+    module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
+        "schema_version": "loom-ship-changed-paths/v1",
+        "result": "pass",
+        "source": "fixture",
+        "changed_paths": ["tools/check_cli_contract.py"],
+        "missing_inputs": [],
+    }
+    module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
+    try:
+        run_host_only_case(
+            "light",
+            {
+                "governance_intensity": "light",
+                "change_class": "docs_governance",
+                "release_judgment": "no_release",
+                "upgrade_triggers": [],
+            },
+            "host_only",
+        )
+        run_host_only_case(
+            "standard",
+            {
+                "governance_intensity": "standard",
+                "change_class": "runtime",
+                "release_judgment": "no_release",
+                "upgrade_triggers": [],
+            },
+            "host_only",
+        )
+        run_versioned_terminal_blocker()
+        run_release_closeout_blocker()
+    finally:
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+        module.ship_pr_payload = original_ship_pr_payload
+        module.ship_changed_paths_payload = original_changed_paths
+        module.write_workstation_current = original_write_workstation_current
+
+
+def assert_ship_docs_entry_contract() -> None:
+    required_snippets = {
+        "README.md": [
+            "## Daily Delivery Path",
+            "loom ship \\",
+            "inline or host-only closeout",
+            "explicit full closeout PR",
+            "The wrapper contract stays narrow and ordered",
+            "validation profile -> closeout policy",
+            "--validation-profile auto",
+            "short wrapper diagnostics",
+            "follow-up issue scope",
+        ],
+        "README.zh-CN.md": [
+            "## 日常交付路径",
+            "loom ship \\",
+            "内联或仅宿主收尾",
+            "显式完整收尾拉取请求",
+            "这个包装器的合同保持收敛且有固定顺序",
+            "validation profile -> closeout policy",
+            "--validation-profile auto",
+            "短诊断输出",
+            "后续 issue 承接",
+        ],
+        "docs/methodology/harness/cli-command-matrix.md": [
+            "loom ship",
+            "Its main-path contract is",
+            "validation profile -> closeout policy",
+            "--validation-profile",
+            "blocker classification stays step-scoped",
+            "remain follow-up issue scope; `loom ship` must block",
+        ],
+        "src/skills/README.md": [
+            "For ordinary delivery after a Work Item has a PR, use `loom ship`",
+            "follow-up closeout PR",
+        ],
+        "src/skills/README.zh-CN.md": [
+            "普通交付默认使用 `loom ship`",
+            "额外创建后续收尾拉取请求",
+            "收尾拉取请求",
+        ],
+        "src/skills/route-matrix.md": [
+            "普通交付 / ship",
+            "`loom ship --target <repo>",
+        ],
+        "src/skills/loom-merge-ready/SKILL.md": [
+            "普通交付默认使用 `loom ship`",
+            "内联或仅宿主收尾",
+        ],
+        "src/skills/loom-retire/SKILL.md": [
+            "普通交付后的合并与收尾默认由 `loom ship` 完成",
+            "仅宿主收尾通过",
+        ],
+    }
+    for relative_path, snippets in required_snippets.items():
+        text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+        for snippet in snippets:
+            if snippet not in text:
+                raise AssertionError(f"{relative_path} missing ship entry snippet `{snippet}`")
+
+    generated_pairs = [
+        ("src/skills/README.md", "skills/README.md"),
+        ("src/skills/README.zh-CN.md", "skills/README.zh-CN.md"),
+        ("src/skills/route-matrix.md", "skills/route-matrix.md"),
+        ("src/skills/loom-merge-ready/SKILL.md", "skills/loom-merge-ready/SKILL.md"),
+        ("src/skills/loom-retire/SKILL.md", "skills/loom-retire/SKILL.md"),
+    ]
+    for source_path, generated_path in generated_pairs:
+        source_text = (REPO_ROOT / source_path).read_text(encoding="utf-8")
+        generated_text = (REPO_ROOT / generated_path).read_text(encoding="utf-8")
+        if source_text != generated_text:
+            raise AssertionError(f"{generated_path} drifted from {source_path}")
+
+
+def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
+    target = tmp / "controlled-merge-triggered-check-rollup"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if pass_payload.get("result") != "pass":
+        raise AssertionError("controlled-merge triggered check fixture could not produce a pr-gate pass")
+
+    fixture_dir = target / ".loom" / "fixtures" / fixture["item"]
+    checks_file = fixture_dir / "checks.json"
+    branch_protection_file = fixture_dir / "branch-protection.json"
+    ruleset_file = fixture_dir / "ruleset.json"
+    checks_file.write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "non-required-failed", "conclusion": "FAILURE", "status": "COMPLETED"},
+                {"name": "non-required-pending", "status": "IN_PROGRESS"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    branch_protection_file.write_text(
+        json.dumps({"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    ruleset_file.write_text(json.dumps([], indent=2) + "\n", encoding="utf-8")
+
+    _, payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            fixture["head_sha"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--status-checks-file",
+            f".loom/fixtures/{fixture['item']}/checks.json",
+            "--branch-protection-file",
+            f".loom/fixtures/{fixture['item']}/branch-protection.json",
+            "--ruleset-file",
+            f".loom/fixtures/{fixture['item']}/ruleset.json",
+        ]
+    )
+    required_checks = payload.get("required_checks", {})
+    missing_inputs = payload.get("missing_inputs", [])
+    if (
+        payload.get("result") != "block"
+        or required_checks.get("result") != "pass"
+        or required_checks.get("missing") != []
+        or required_checks.get("pending") != []
+        or required_checks.get("failing") != []
+        or payload.get("triggered_check_rollup", {}).get("result") != "block"
+        or payload.get("triggered_check_rollup", {}).get("blocking") != ["non-required-failed"]
+        or payload.get("triggered_check_rollup", {}).get("pending") != ["non-required-pending"]
+        or payload.get("controlled_merge_consumption", {}).get("result") != "block"
+        or "triggered check `non-required-failed` failed" not in missing_inputs
+        or "triggered check `non-required-pending` is pending" not in missing_inputs
+    ):
+        raise AssertionError("controlled-merge did not fail closed on failed/pending triggered non-required checks")
+
+
+def assert_closeout_wrapper_argument_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for closeout wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+    flow_payload_calls: list[dict[str, Any]] = []
+    emitted_payloads: list[dict[str, Any]] = []
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    def arg_value(flow_args: list[str], flag: str) -> str | None:
+        if flag not in flow_args:
+            return None
+        index = flow_args.index(flag)
+        return flow_args[index + 1] if index + 1 < len(flow_args) else None
+
+    def int_arg_value(flow_args: list[str], flag: str) -> int | None:
+        value = arg_value(flow_args, flag)
+        return int(value) if value is not None else None
+
+    def closeout_pr_roles_from_flow_args(flow_args: list[str]) -> dict[str, Any]:
+        roles = {
+            role: number
+            for role, number in (
+                ("implementation_pr", int_arg_value(flow_args, "--implementation-pr")),
+                ("release_pr", int_arg_value(flow_args, "--release-pr")),
+                ("carrier_sync_pr", int_arg_value(flow_args, "--carrier-sync-pr")),
+                ("final_closeout_pr", int_arg_value(flow_args, "--final-closeout-pr")),
+            )
+            if number is not None
+        }
+        requested_role = arg_value(flow_args, "--pr-role")
+        legacy_pr = int_arg_value(flow_args, "--pr")
+        if requested_role is not None:
+            current_role = requested_role
+            current_number = roles.get(requested_role, legacy_pr)
+            source = f"--{requested_role.replace('_', '-')}" if requested_role in roles else "--pr plus --pr-role"
+        else:
+            current_role = "implementation_pr" if legacy_pr is not None else None
+            current_number = legacy_pr
+            source = "--pr" if legacy_pr is not None else None
+        return {
+            "schema_version": "loom-closeout-pr-roles/v1",
+            "supported_roles": ["implementation_pr", "release_pr", "carrier_sync_pr", "final_closeout_pr"],
+            "roles": roles,
+            "legacy_pr": legacy_pr,
+            "requested_role": requested_role,
+            "current": {"role": current_role, "number": current_number, "source": source},
+        }
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        flow_payload_calls.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
+        payload: dict[str, Any] = {"command": command, "result": "pass"}
+        if flow_args[:2] == ["closeout", "check"]:
+            pr_roles = closeout_pr_roles_from_flow_args(flow_args)
+            current_pr = pr_roles["current"]["number"] or int_arg_value(flow_args, "--pr")
+            issue_number = int_arg_value(flow_args, "--issue") or 1555
+            payload.update(
+                {
+                    "pr_roles": pr_roles,
+                    "current_pr_role": pr_roles["current"],
+                    "issue": {
+                        "number": issue_number,
+                        "state": "CLOSED",
+                        "closedAt": "2026-06-18T10:00:00Z",
+                        "url": f"https://github.com/MC-and-his-Agents/Loom/issues/{issue_number}",
+                    },
+                    "pr": {
+                        "number": current_pr,
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "mergedAt": "2026-06-18T09:55:00Z",
+                        "url": f"https://github.com/MC-and-his-Agents/Loom/pull/{current_pr}",
+                        "mergeCommit": {"oid": "fixture-merge-sha"},
+                    },
+                }
+            )
+        return payload
+
+    def fake_emit(_payload: dict[str, Any]) -> int:
+        emitted_payloads.append(_payload)
+        return 0
+
+    original_emit_flow = module.emit_flow
+    original_flow_payload = module.flow_payload
+    original_emit = module.emit
+    module.emit_flow = fake_emit_flow
+    module.flow_payload = fake_flow_payload
+    module.emit = fake_emit
+    try:
+        status = module.handle_scenario(
+            "closeout",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1554",
+                "--issue",
+                "1554",
+                "--pr",
+                "1562",
+                "--pr-role",
+                "final_closeout_pr",
+                "--implementation-pr",
+                "1592",
+                "--release-pr",
+                "1592",
+                "--carrier-sync-pr",
+                "1593",
+                "--final-closeout-pr",
+                "1593",
+                "--project",
+                "4",
+                "--phase",
+                "1504",
+                "--fr",
+                "1505",
+                "--branch",
+                "work/1554-wrapper-closeout-contract",
+                "--goal-completion",
+                ".loom/goal-completion.json",
+                "--gate-profile",
+                "closeout-contract",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--comment",
+                "closeout comment",
+                "--issue-payload-file",
+                ".loom/fixtures/issue.json",
+                "--pr-payload-file",
+                ".loom/fixtures/pr.json",
+                "--project-payload-file",
+                ".loom/fixtures/project.json",
+                "--status-checks-file",
+                ".loom/fixtures/checks.json",
+                "--branch-protection-file",
+                ".loom/fixtures/protection.json",
+                "--ruleset-file",
+                ".loom/fixtures/ruleset.json",
+                "--skip-gate",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout wrapper regression did not complete")
+        if captured.get("command") != "closeout":
+            raise AssertionError("closeout wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:2] != ["closeout", "check"]:
+            raise AssertionError("closeout wrapper did not delegate to closeout check")
+        expected_pairs = {
+            "--item": "WI-1554",
+            "--issue": "1554",
+            "--pr": "1562",
+            "--pr-role": "final_closeout_pr",
+            "--implementation-pr": "1592",
+            "--release-pr": "1592",
+            "--carrier-sync-pr": "1593",
+            "--final-closeout-pr": "1593",
+            "--project": "4",
+            "--phase": "1504",
+            "--fr": "1505",
+            "--branch": "work/1554-wrapper-closeout-contract",
+            "--goal-completion": ".loom/goal-completion.json",
+            "--gate-profile": "closeout-contract",
+            "--owner": "MC-and-his-Agents",
+            "--repo": "Loom",
+            "--comment": "closeout comment",
+            "--issue-payload-file": ".loom/fixtures/issue.json",
+            "--pr-payload-file": ".loom/fixtures/pr.json",
+            "--project-payload-file": ".loom/fixtures/project.json",
+            "--status-checks-file": ".loom/fixtures/checks.json",
+            "--branch-protection-file": ".loom/fixtures/protection.json",
+            "--ruleset-file": ".loom/fixtures/ruleset.json",
+        }
+        for flag, expected in expected_pairs.items():
+            if flag not in flow_args:
+                raise AssertionError(f"closeout wrapper did not pass {flag} to runtime")
+            if flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout wrapper changed {flag} value")
+        if "--skip-gate" not in flow_args:
+            raise AssertionError("closeout wrapper did not pass --skip-gate to runtime")
+
+        status = module.handle_gate(["closeout", "--target", ".", "--item", "WI-1554", "--issue", "1554"])
+        if status != 0:
+            raise AssertionError("gate closeout wrapper regression did not complete")
+        if captured.get("command") != "gate closeout":
+            raise AssertionError("gate closeout wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:2] != ["closeout", "check"]:
+            raise AssertionError("gate closeout wrapper did not delegate to closeout check")
+        for flag, expected in (("--item", "WI-1554"), ("--issue", "1554")):
+            if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"gate closeout wrapper did not preserve {flag}")
+
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1555",
+                "--issue",
+                "1555",
+                "--pr",
+                "1563",
+                "--project",
+                "4",
+                "--phase",
+                "1504",
+                "--fr",
+                "1505",
+                "--branch",
+                "work/1555-one-shot-closeout-run",
+                "--goal-completion",
+                ".loom/goal-completion.json",
+                "--gate-profile",
+                "closeout-contract",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--comment",
+                "closeout comment",
+                "--issue-payload-file",
+                ".loom/fixtures/issue.json",
+                "--pr-payload-file",
+                ".loom/fixtures/pr.json",
+                "--project-payload-file",
+                ".loom/fixtures/project.json",
+                "--status-checks-file",
+                ".loom/fixtures/checks.json",
+                "--branch-protection-file",
+                ".loom/fixtures/protection.json",
+                "--ruleset-file",
+                ".loom/fixtures/ruleset.json",
+                "--skip-gate",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run wrapper regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [["reconciliation", "sync"], ["closeout", "check"], ["carrier", "closeout-sync"]]:
+            raise AssertionError(f"closeout run dry-run delegated unexpected runtime sequence: {call_heads}")
+        reconciliation_args = flow_payload_calls[0]["flow_args"]
+        closeout_args = flow_payload_calls[1]["flow_args"]
+        carrier_args = flow_payload_calls[2]["flow_args"]
+        for flag, expected in {
+            "--item": "WI-1555",
+            "--issue": "1555",
+            "--pr": "1563",
+            "--project": "4",
+            "--phase": "1504",
+            "--fr": "1505",
+            "--branch": "work/1555-one-shot-closeout-run",
+            "--owner": "MC-and-his-Agents",
+            "--repo": "Loom",
+            "--comment": "closeout comment",
+            "--issue-payload-file": ".loom/fixtures/issue.json",
+            "--pr-payload-file": ".loom/fixtures/pr.json",
+            "--project-payload-file": ".loom/fixtures/project.json",
+        }.items():
+            if flag not in reconciliation_args or reconciliation_args[reconciliation_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run reconciliation step did not preserve {flag}")
+        if "--dry-run" not in reconciliation_args or "--apply" in reconciliation_args:
+            raise AssertionError("closeout run dry-run did not delegate reconciliation sync as dry-run")
+        for flag, expected in {
+            "--goal-completion": ".loom/goal-completion.json",
+            "--gate-profile": "closeout-contract",
+            "--status-checks-file": ".loom/fixtures/checks.json",
+            "--branch-protection-file": ".loom/fixtures/protection.json",
+            "--ruleset-file": ".loom/fixtures/ruleset.json",
+        }.items():
+            if flag not in closeout_args or closeout_args[closeout_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run closeout-check step did not preserve {flag}")
+        if "--skip-gate" not in closeout_args:
+            raise AssertionError("closeout run closeout-check step did not preserve --skip-gate")
+        for flag, expected in {
+            "--item": "WI-1555",
+            "--terminal-state": "closed_out",
+            "--issue": "1555",
+            "--pr": "1563",
+            "--merge-commit": "fixture-merge-sha",
+            "--target-branch": "main",
+            "--closed-at": "2026-06-18T10:00:00Z",
+            "--evidence-locator": "https://github.com/MC-and-his-Agents/Loom/issues/1555;https://github.com/MC-and-his-Agents/Loom/pull/1563",
+        }.items():
+            if flag not in carrier_args or carrier_args[carrier_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run carrier step did not preserve inferred {flag}")
+        if "--dry-run" not in carrier_args or "--apply" in carrier_args:
+            raise AssertionError("closeout run dry-run did not delegate carrier closeout-sync as dry-run")
+        if not emitted_payloads or emitted_payloads[-1].get("schema_version") != "loom-closeout-run/v1":
+            raise AssertionError("closeout run must emit loom-closeout-run/v1")
+
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1515",
+                "--issue",
+                "1515",
+                "--implementation-pr",
+                "1592",
+                "--release-pr",
+                "1592",
+                "--final-closeout-pr",
+                "1593",
+                "--pr-role",
+                "final_closeout_pr",
+                "--branch",
+                "work/1515-post-release-closeout",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run PR role fixture regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [["reconciliation", "sync"], ["closeout", "check"], ["carrier", "closeout-sync"]]:
+            raise AssertionError(f"closeout run PR role fixture delegated unexpected runtime sequence: {call_heads}")
+        reconciliation_args = flow_payload_calls[0]["flow_args"]
+        closeout_args = flow_payload_calls[1]["flow_args"]
+        carrier_args = flow_payload_calls[2]["flow_args"]
+        for args_name, flow_args in (("reconciliation", reconciliation_args), ("closeout-check", closeout_args)):
+            for flag, expected in {
+                "--implementation-pr": "1592",
+                "--release-pr": "1592",
+                "--final-closeout-pr": "1593",
+                "--pr-role": "final_closeout_pr",
+            }.items():
+                if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                    raise AssertionError(f"closeout run {args_name} step did not preserve {flag} for PR role fixture")
+            if "--pr" in flow_args:
+                raise AssertionError(f"closeout run {args_name} step leaked legacy --pr for role-only fixture")
+        if carrier_args[carrier_args.index("--pr") + 1] != "1593":
+            raise AssertionError("closeout run PR role fixture did not consume final_closeout_pr for carrier metadata")
+        role_payload = emitted_payloads[-1].get("current_pr_role") if emitted_payloads else {}
+        if role_payload != {"role": "final_closeout_pr", "number": 1593, "source": "--final-closeout-pr"}:
+            raise AssertionError(f"closeout run PR role fixture emitted unexpected current role: {role_payload}")
+
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1555",
+                "--issue",
+                "1555",
+                "--pr",
+                "1563",
+                "--branch",
+                "work/1555-one-shot-closeout-run",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run apply wrapper regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [
+            ["reconciliation", "sync"],
+            ["closeout", "check"],
+            ["carrier", "closeout-sync"],
+            ["recovery", "writeback"],
+            ["carrier", "refresh"],
+            ["carrier", "refresh"],
+            ["closeout", "check"],
+        ]:
+            raise AssertionError(f"closeout run apply delegated unexpected runtime sequence: {call_heads}")
+        if "--apply" not in flow_payload_calls[0]["flow_args"] or "--dry-run" in flow_payload_calls[0]["flow_args"]:
+            raise AssertionError("closeout run apply did not delegate reconciliation sync as apply")
+        if "--apply" not in flow_payload_calls[2]["flow_args"] or "--dry-run" in flow_payload_calls[2]["flow_args"]:
+            raise AssertionError("closeout run apply did not delegate carrier closeout-sync as apply")
+        recovery_args = flow_payload_calls[3]["flow_args"]
+        for flag, expected in {
+            "--item": "WI-1555",
+            "--current-checkpoint": "closed_out",
+            "--current-lane": "post-merge-closeout-run",
+        }.items():
+            if flag not in recovery_args or recovery_args[recovery_args.index(flag) + 1] != expected:
+                raise AssertionError(f"closeout run recovery writeback did not preserve {flag}")
+        payload = emitted_payloads[-1] if emitted_payloads else {}
+        if payload.get("result") != "pass" or payload.get("apply") is not True:
+            raise AssertionError("closeout run apply did not emit a passing apply payload")
+
+        def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+            flow_payload_calls.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
+            if flow_args[:2] == ["closeout", "check"]:
+                return {
+                    "command": command,
+                    "result": "block",
+                    "missing_inputs": ["issue is not closed"],
+                    "issue": {"number": 1555, "state": "OPEN"},
+                    "pr": {"number": 1563, "state": "MERGED", "mergeCommit": {"oid": "fixture-merge-sha"}},
+                }
+            return {"command": command, "result": "pass"}
+
+        module.flow_payload = blocking_flow_payload
+        flow_payload_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_run(
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-1555",
+                "--issue",
+                "1555",
+                "--pr",
+                "1563",
+                "--branch",
+                "work/1555-one-shot-closeout-run",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout run apply-block wrapper regression did not complete")
+        call_heads = [call["flow_args"][:2] for call in flow_payload_calls]
+        if call_heads != [["reconciliation", "sync"], ["closeout", "check"]]:
+            raise AssertionError(f"closeout run apply must stop before carrier mutation when closeout-check blocks: {call_heads}")
+        payload = emitted_payloads[-1] if emitted_payloads else {}
+        if payload.get("result") != "block" or payload.get("failure_classifier") != "issue_not_closed":
+            raise AssertionError("closeout run apply block did not classify the first blocking step")
+
+        status = module.handle_pr(["gate", "1569", "--surface", "closeout", "--work-item", "WI-1542"])
+        if status != 0:
+            raise AssertionError("pr gate closeout surface wrapper regression did not complete")
+        if captured.get("command") != "pr gate":
+            raise AssertionError("pr gate wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:2] != ["pr-gate", "check"]:
+            raise AssertionError("pr gate wrapper did not delegate to pr-gate check")
+        expected_pairs = {"--pr": "1569", "--surface": "closeout", "--item": "WI-1542"}
+        for flag, expected in expected_pairs.items():
+            if flag not in flow_args or flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"pr gate wrapper did not preserve {flag}")
+    finally:
+        module.emit_flow = original_emit_flow
+        module.flow_payload = original_flow_payload
+        module.emit = original_emit
+
+
+def assert_closeout_sync_status_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for closeout sync regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    flow_payload_calls: list[list[str]] = []
+    closeout_run_calls: list[dict[str, Any]] = []
+    emitted_payloads: list[dict[str, Any]] = []
+    readback_attempts = {"count": 0}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        flow_payload_calls.append(list(flow_args))
+        if flow_args[:2] == ["pr-metadata", "readback"]:
+            readback_attempts["count"] += 1
+            if "WI-race" in flow_args and readback_attempts["count"] == 1:
+                return {
+                    "command": command,
+                    "result": "block",
+                    "summary": "metadata branch drift",
+                    "missing_inputs": ["fields.branch"],
+                    "fallback_to": "update_pr_body",
+                }
+            return {"command": command, "result": "pass", "summary": "metadata readback pass", "missing_inputs": [], "fallback_to": None}
+        if flow_args[:2] == ["pr-metadata", "update"]:
+            return {"command": command, "result": "pass", "summary": "metadata update pass", "missing_inputs": [], "fallback_to": None}
+        if flow_args[:2] == ["closeout", "check"]:
+            return {
+                "command": command,
+                "result": "pass",
+                "summary": "closeout check pass",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "issue": {"number": 1775, "state": "CLOSED"},
+                "pr": {"number": 1781, "state": "MERGED", "mergeCommit": {"oid": "merge-sha"}, "baseRefName": "main"},
+            }
+        return {"command": command, "result": "pass", "summary": "pass", "missing_inputs": [], "fallback_to": None}
+
+    def fake_run_closeout_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
+        closeout_run_calls.append({"apply": args.apply, "item": args.item, "issue": args.issue, "pr": args.pr, "branch": args.branch})
+        return {
+            "command": "closeout run",
+            "schema_version": "loom-closeout-run/v1",
+            "result": "pass",
+            "summary": "closeout run pass",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "terminal_metadata": {"merge_commit": "merge-sha"},
+        }
+
+    def fake_cleanup(target: Path, args: argparse.Namespace) -> dict[str, Any]:
+        if args.branch == "work/cleanup-needed":
+            return {
+                "schema_version": "loom-closeout-terminal-cleanup/v1",
+                "command": "closeout cleanup-check",
+                "result": "warn",
+                "verdict": "cleanup_needed",
+                "summary": "cleanup needed",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "cleanup_actions": ["git worktree remove /repo/WI", "git branch -d work/cleanup-needed"],
+                "next_action": "git worktree remove /repo/WI; git branch -d work/cleanup-needed",
+            }
+        return {
+            "schema_version": "loom-closeout-terminal-cleanup/v1",
+            "command": "closeout cleanup-check",
+            "result": "pass",
+            "verdict": "clean_terminal",
+            "summary": "clean",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "cleanup_actions": [],
+            "next_action": "No terminal cleanup action required.",
+        }
+
+    def fake_emit(payload: dict[str, Any]) -> int:
+        emitted_payloads.append(payload)
+        return 0
+
+    original_flow_payload = module.flow_payload
+    original_run_closeout_payload = module.run_closeout_payload
+    original_cleanup = module.closeout_terminal_cleanup_payload
+    original_emit = module.emit
+    module.flow_payload = fake_flow_payload
+    module.run_closeout_payload = fake_run_closeout_payload
+    module.closeout_terminal_cleanup_payload = fake_cleanup
+    module.emit = fake_emit
+    try:
+        status = module.handle_closeout_sync(
+            "status",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-status",
+                "--issue",
+                "1775",
+                "--pr",
+                "1781",
+                "--branch",
+                "work/clean-terminal",
+                "--head-sha",
+                "1" * 40,
+                "--json",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout status did not complete")
+        status_payload = emitted_payloads[-1]
+        if status_payload.get("schema_version") != "loom-closeout-sync/v1" or status_payload.get("command") != "closeout status":
+            raise AssertionError("closeout status must emit loom-closeout-sync/v1")
+        if status_payload.get("diagnostic", {}).get("blocked") is not False or status_payload.get("diagnostic", {}).get("cleanup_verdict") != "clean_terminal":
+            raise AssertionError("closeout status must expose a clean short diagnostic")
+        status_heads = [call[:2] for call in flow_payload_calls]
+        if status_heads != [["pr-metadata", "readback"], ["closeout", "check"]]:
+            raise AssertionError(f"closeout status delegated unexpected sequence: {status_heads}")
+        if closeout_run_calls:
+            raise AssertionError("closeout status must not run closeout-run")
+
+        flow_payload_calls.clear()
+        closeout_run_calls.clear()
+        emitted_payloads.clear()
+        status = module.handle_closeout_sync(
+            "sync",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-sync",
+                "--issue",
+                "1775",
+                "--pr",
+                "1781",
+                "--branch",
+                "work/clean-terminal",
+                "--head-sha",
+                "2" * 40,
+                "--json",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout sync dry-run did not complete")
+        sync_payload = emitted_payloads[-1]
+        if sync_payload.get("result") != "pass" or sync_payload.get("diagnostic", {}).get("fixed") is not False:
+            raise AssertionError("closeout sync dry-run must pass without claiming it fixed state")
+        expected_call = {"apply": False, "item": "WI-sync", "issue": 1775, "pr": 1781, "branch": "work/clean-terminal"}
+        if closeout_run_calls != [expected_call]:
+            raise AssertionError(f"closeout sync dry-run did not call closeout-run once: {closeout_run_calls}")
+
+        flow_payload_calls.clear()
+        closeout_run_calls.clear()
+        emitted_payloads.clear()
+        readback_attempts["count"] = 0
+        status = module.handle_closeout_sync(
+            "sync",
+            [
+                "--target",
+                ".",
+                "--item",
+                "WI-race",
+                "--issue",
+                "1775",
+                "--pr",
+                "1781",
+                "--branch",
+                "work/cleanup-needed",
+                "--head-sha",
+                "3" * 40,
+                "--apply",
+                "--json",
+                "--full-output",
+            ],
+        )
+        if status != 0:
+            raise AssertionError("closeout sync apply did not complete")
+        race_payload = emitted_payloads[-1]
+        step_names = [step.get("name") for step in race_payload.get("steps", [])]
+        if step_names[:4] != ["metadata-readback", "metadata-update", "metadata-readback-after-update", "closeout-run"]:
+            raise AssertionError(f"metadata race guard did not stabilize before closeout-run: {step_names}")
+        if race_payload.get("diagnostic", {}).get("fixed") is not True:
+            raise AssertionError("closeout sync apply should report fixed after metadata repair and closeout-run pass")
+        if race_payload.get("diagnostic", {}).get("cleanup_verdict") != "cleanup_needed":
+            raise AssertionError("closeout sync apply should preserve terminal cleanup-needed diagnostic")
+        update_args = next((call for call in flow_payload_calls if call[:2] == ["pr-metadata", "update"]), [])
+        if "--apply" not in update_args:
+            raise AssertionError("metadata race repair must apply before consuming hosted closeout gate")
+    finally:
+        module.flow_payload = original_flow_payload
+        module.run_closeout_payload = original_run_closeout_payload
+        module.closeout_terminal_cleanup_payload = original_cleanup
+        module.emit = original_emit
+
+
+def assert_workspace_audit_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for workspace audit wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return {"command": "work-item-audit", "result": "pass"}
+
+    original_flow_payload = module.flow_payload
+    module.flow_payload = fake_flow_payload
+    try:
+        payload = module.workspace_payload(
+            "audit",
+            argparse.Namespace(target=".", item="WI-1542"),
+        )
+        if payload.get("command") != "workspace audit":
+            raise AssertionError("workspace audit wrapper did not preserve command label")
+        if payload.get("wrapped_command") != "work-item-audit":
+            raise AssertionError("workspace audit wrapper did not record wrapped runtime command")
+        flow_args = captured.get("flow_args")
+        if flow_args != ["work-item-audit", "--target", str(REPO_ROOT), "--item", "WI-1542"]:
+            raise AssertionError(f"workspace audit wrapper delegated unexpected runtime args: {flow_args}")
+    finally:
+        module.flow_payload = original_flow_payload
+
+
+def assert_pr_gate_target_readback_contract(tmp: Path) -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for pr gate target/readback regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.append({"command": command, "flow_args": list(flow_args), "fallback_to": fallback_to})
+        return 0
+
+    original_emit_flow = module.emit_flow
+    old_workspace = os.environ.get("GITHUB_WORKSPACE")
+    checkout = tmp / "github-workspace"
+    checkout.mkdir()
+    explicit_target = tmp / "explicit-target"
+    explicit_target.mkdir()
+    module.emit_flow = fake_emit_flow
+    try:
+        os.environ["GITHUB_WORKSPACE"] = str(checkout)
+        status = module.handle_pr(["gate", "1803", "--head-sha", "a" * 40])
+        if status != 0:
+            raise AssertionError("pr gate wrapper did not complete with GITHUB_WORKSPACE")
+        flow_args = captured[-1]["flow_args"]
+        if flow_args[:2] != ["pr-gate", "check"]:
+            raise AssertionError("pr gate wrapper did not delegate to pr-gate check")
+        if flow_args[flow_args.index("--target") + 1] != str(checkout):
+            raise AssertionError("pr gate wrapper did not infer --target from GITHUB_WORKSPACE")
+
+        captured.clear()
+        status = module.handle_pr(["gate", "1803", "--target", str(explicit_target), "--head-sha", "b" * 40])
+        if status != 0:
+            raise AssertionError("pr gate wrapper did not complete with explicit --target")
+        flow_args = captured[-1]["flow_args"]
+        if flow_args[flow_args.index("--target") + 1] != str(explicit_target):
+            raise AssertionError("explicit pr gate --target must override GITHUB_WORKSPACE")
+    finally:
+        module.emit_flow = original_emit_flow
+        if old_workspace is None:
+            os.environ.pop("GITHUB_WORKSPACE", None)
+        else:
+            os.environ["GITHUB_WORKSPACE"] = old_workspace
+
+    loom_flow = load_loom_flow_module()
+    taxonomy = loom_flow.pr_gate_failure_taxonomy(
+        [
+            "pr: owner/repo",
+            "fact-chain: missing init-result: .loom/bootstrap/init-result.json",
+            "PR body is missing `Loom Work Item: <item>`",
+        ],
+        "block",
+    )
+    if "target_readback_failed" not in taxonomy:
+        raise AssertionError("pr gate target/readback failure was not classified")
+    if "review_missing" in taxonomy or "semantic_review_disposition_missing" in taxonomy:
+        raise AssertionError("target/readback failure must not be reported as a semantic review gap")
+
+    empty_target = tmp / "empty-target"
+    empty_target.mkdir()
+    payload = loom_flow.pr_gate_payload(
+        target_root=empty_target,
+        output_relative=".loom/bootstrap/init-result.json",
+        expected_item=None,
+        owner=None,
+        repo_name=None,
+        pr_number=1803,
+        head_sha="c" * 40,
+        branch_name=None,
+        pr_payload_file=None,
+    )
+    if payload.get("failed_layer") != "target-readback":
+        raise AssertionError("pr gate readback failure did not expose failed_layer=target-readback")
+    if "target checkout or hosted PR binding" not in str(payload.get("summary")):
+        raise AssertionError("pr gate readback failure summary did not prioritize target/readback")
+
+
+def retained_closeout_work_item_id() -> str | None:
+    candidates: list[tuple[str, str, str]] = []
+    for path in sorted((REPO_ROOT / ".loom" / "progress").glob("WI-*.md")):
+        text = path.read_text(encoding="utf-8")
+        item_match = re.search(r"(?im)^\s*-\s*Item ID:\s*(WI-\d+)\s*$", text)
+        checkpoint_match = re.search(r"(?im)^\s*-\s*Current Checkpoint:\s*([A-Za-z_-]+)\s*$", text)
+        if not item_match or not checkpoint_match:
+            continue
+        checkpoint = checkpoint_match.group(1).lower().replace("-", "_")
+        if checkpoint not in {"closed", "closed_out", "done"} or "## Terminal Closeout Metadata" not in text:
+            continue
+        closed_match = re.search(r"(?im)^\s*-\s*Closed At:\s*([^\n]+?)\s*$", text)
+        closed_at = closed_match.group(1).strip() if closed_match else ""
+        candidates.append((closed_at, path.name, item_match.group(1)))
+    if not candidates:
+        return None
+    return sorted(candidates)[-1][2]
 
 
 def active_work_item_id() -> str:
     payload = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
-    item_id = payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id")
+    fact_chain = payload.get("fact_chain", {}) if isinstance(payload.get("fact_chain"), dict) else {}
+    item_id = fact_chain.get("entry_points", {}).get("current_item_id") if isinstance(fact_chain.get("entry_points"), dict) else None
+    if fact_chain.get("mode") == "idle" or item_id == "no_active_item":
+        retained_item = retained_closeout_work_item_id()
+        if retained_item:
+            return retained_item
     if not isinstance(item_id, str) or not item_id:
         raise AssertionError("init-result current_item_id is missing")
     return item_id
 
 
-def run_json_preserving_attempts(args: list[str], *, item: str, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+def run_json_preserving_attempts(
+    args: list[str],
+    *,
+    item: str,
+    expect: int | None = None,
+    env_overrides: dict[str, str] | None = None,
+) -> tuple[int, dict[str, Any]]:
     attempt_root = REPO_ROOT / ".loom" / "runtime" / "attempts" / item
     with tempfile.TemporaryDirectory(prefix="loom-attempt-backup-") as raw_backup:
         backup = Path(raw_backup) / "attempts"
@@ -301,7 +2927,7 @@ def run_json_preserving_attempts(args: list[str], *, item: str, expect: int | No
         if existed:
             shutil.copytree(attempt_root, backup)
         try:
-            return run_json(args, expect=expect)
+            return run_json(args, expect=expect, env_overrides=env_overrides)
         finally:
             if attempt_root.exists():
                 shutil.rmtree(attempt_root)
@@ -364,6 +2990,35 @@ def isolated_codex_workstation(home: Path):
             os.environ["CODEX_HOME"] = old_codex_home
 
 
+@contextmanager
+def isolated_loom_workstation(root: Path):
+    old_root = os.environ.get("LOOM_WORKSTATION_ROOT")
+    os.environ["LOOM_WORKSTATION_ROOT"] = str(root)
+    try:
+        yield
+    finally:
+        if old_root is None:
+            os.environ.pop("LOOM_WORKSTATION_ROOT", None)
+        else:
+            os.environ["LOOM_WORKSTATION_ROOT"] = old_root
+
+
+def register_fixture_codex_plugin() -> None:
+    run_json(
+        [
+            "host",
+            "register",
+            "--host",
+            "codex",
+            "--scope",
+            "user",
+            "--apply",
+            "--json",
+        ],
+        expect=0,
+    )
+
+
 def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: str) -> None:
     suite_gate = payload.get("suite_gate_validation")
     if not isinstance(suite_gate, dict):
@@ -401,7 +3056,7 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
     consumed = suite_gate.get("consumed_locators", {})
     if not isinstance(consumed, dict) or "evidence_map" not in consumed or "task_carriers" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
-    if suite_gate.get("result") != "not_applicable" and "consistency_analysis" not in consumed:
+    if suite_gate.get("result") != "not_applicable" and expected_surface != "closeout" and "consistency_analysis" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
@@ -409,24 +3064,119 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
     suite_validation = payload.get("suite_validation")
     if not isinstance(suite_validation, dict):
         raise AssertionError("build did not expose suite validation")
-    if (
-        suite_validation.get("command") != "suite validate"
-        or suite_validation.get("validator_mode") != "repo-local-cli"
-        or suite_validation.get("mutates") is not False
-    ):
-        raise AssertionError("build suite validation did not consume repo-local CLI JSON")
+    validator_mode = suite_validation.get("validator_mode")
+    cli_json_consumed = (
+        suite_validation.get("command") == "suite validate"
+        and validator_mode in {"repo-local-cli", "global-cli"}
+        and suite_validation.get("mutates") is False
+    )
+    active_marker_consumed = (
+        suite_validation.get("command") == "suite validate"
+        and suite_validation.get("result") == "not_applicable"
+        and validator_mode == "active-fact-chain-marker"
+        and suite_validation.get("mutates") is False
+        and isinstance(suite_validation.get("payload"), dict)
+        and suite_validation["payload"].get("suite_path") == "not_applicable"
+    )
+    if not cli_json_consumed and not active_marker_consumed:
+        raise AssertionError("build suite validation did not consume CLI JSON or an active not_applicable fact-chain marker")
     carrier_validation = payload.get("suite_carrier_validation")
     if not isinstance(carrier_validation, dict):
         raise AssertionError("build did not expose suite carrier validation")
     if (
         "suite carrier validate" not in str(carrier_validation.get("command", ""))
-        or carrier_validation.get("validator_mode") != "repo-local-cli"
+        or carrier_validation.get("validator_mode") not in {"repo-local-cli", "global-cli"}
         or not isinstance(carrier_validation.get("payload"), dict)
     ):
-        raise AssertionError("build suite carrier validation did not consume repo-local CLI JSON")
+        raise AssertionError("build suite carrier validation did not consume Loom CLI JSON")
     step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
     if {"suite-validate", "suite-carrier-validate"} - step_names:
         raise AssertionError("build did not expose suite validation steps")
+
+
+def assert_work_item_activate_from_idle_syncs_fact_chain_mode(tmp: Path) -> None:
+    target = tmp / "idle-activate"
+    target.mkdir()
+    write_idle_fact_chain_target(target)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "skills" / "shared" / "scripts" / "loom_flow.py"),
+            "work-item",
+            "create",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1928",
+            "--goal",
+            "Prove idle to active activation syncs fact-chain mode.",
+            "--scope",
+            "Regression fixture for #1928.",
+            "--execution-path",
+            "issue #1928 -> work-item activation regression",
+            "--workspace-entry",
+            ".",
+            "--validation-entry",
+            "work-item create --activate regression",
+            "--closing-condition",
+            "fact-chain passes after activation",
+            "--init-recovery",
+            "--activate",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    payload = json.loads(completed.stdout)
+    if completed.returncode != 0:
+        raise AssertionError(f"work-item create --activate failed\n{completed.stderr}\n{completed.stdout}")
+    if payload.get("result") != "pass":
+        raise AssertionError("work-item create --activate did not pass from idle")
+    init_result = json.loads((target / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
+    fact_chain = init_result.get("fact_chain", {})
+    if fact_chain.get("mode") != "work-item + recovery-entry + derived status-surface":
+        raise AssertionError("work-item activation did not sync fact_chain.mode from idle to active")
+    _, fact_chain_payload = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0)
+    if (
+        fact_chain_payload.get("result") != "pass"
+        or fact_chain_payload.get("report", {}).get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "WI-1928"
+    ):
+        raise AssertionError("fact-chain did not pass after idle-to-active activation")
+
+
+def assert_build_consumes_global_suite_without_repo_local_tools(tmp: Path) -> None:
+    target = tmp / "global-suite-build"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1930")
+    if (target / "tools" / "loom.py").exists():
+        raise AssertionError("global suite fixture unexpectedly has repo-local tools/loom.py")
+    fake_bin = tmp / "fake-bin"
+    fake_bin.mkdir()
+    fake_loom = fake_bin / "loom"
+    fake_loom.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import subprocess\n"
+        "import sys\n"
+        f"sys.exit(subprocess.run([{sys.executable!r}, {str(LOOM)!r}, *sys.argv[1:]], cwd={str(REPO_ROOT)!r}, env=os.environ.copy()).returncode)\n",
+        encoding="utf-8",
+    )
+    fake_loom.chmod(0o755)
+    status, payload = run_json_preserving_attempts(
+        ["build", "--target", str(target), "--item", fixture["item"], "--json"],
+        item=fixture["item"],
+        env_overrides={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "LOOM_SOURCE_REPO_ROOT": "",
+        },
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if status == 0:
+        raise AssertionError("build fixture unexpectedly reached readiness without build evidence")
+    assert_suite_build_consumption(payload)
 
 
 def assert_review_record_consumed_locators(tmp: Path) -> None:
@@ -536,12 +3286,11 @@ def active_suite_path_not_applicable(active_item: str) -> bool:
     return bool(re.search(r"(?im)^\s*(?:[-*]\s*)?suite path\s*:\s*not_applicable\b", spec_text))
 
 
-def assert_closeout_blocks_missing_suite_evidence(active_item: str) -> None:
+def assert_closeout_blocks_missing_suite_evidence(active_item: str, closeout_payload: dict[str, Any]) -> None:
     if active_suite_path_not_applicable(active_item):
         return
-    _, baseline = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
-    baseline_suite_gate = baseline.get("suite_gate_validation")
-    if isinstance(baseline_suite_gate, dict) and baseline_suite_gate.get("result") == "not_applicable":
+    suite_gate = closeout_payload.get("suite_gate_validation")
+    if isinstance(suite_gate, dict) and suite_gate.get("result") == "not_applicable":
         return
     evidence_map = f".loom/specs/{active_item}/evidence-map.md"
     with preserved_repo_paths((evidence_map,)):
@@ -549,6 +3298,7 @@ def assert_closeout_blocks_missing_suite_evidence(active_item: str) -> None:
         if path.exists():
             path.unlink()
         status, payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+        payload = runtime_payload_from_agent_safe_output(payload)
         if status == 0 or payload.get("result") != "block":
             raise AssertionError("closeout did not fail closed when suite evidence was missing")
         suite_gate = payload.get("suite_gate_validation")
@@ -573,6 +3323,195 @@ def load_loom_flow_module() -> Any:
         if sys.path and sys.path[0] == scripts_root:
             sys.path.pop(0)
     return module
+
+
+def load_governance_surface_module() -> Any:
+    module_path = REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "governance_surface.py"
+    spec = importlib.util.spec_from_file_location("governance_surface_contract", module_path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load governance_surface module for suite path decision checks")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def write_host_planning_taxonomy_companion(
+    target: Path,
+    *,
+    object_type_mapping: list[dict[str, Any]],
+    missing_type_policy: str = "advisory_unknown",
+) -> None:
+    companion = target / ".loom" / "companion"
+    companion.mkdir(parents=True, exist_ok=True)
+    (companion / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+    (companion / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (companion / "repo-interface.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+                "specialized_gates": [],
+                "host_planning_taxonomy": {
+                    "object_type_mapping": object_type_mapping,
+                    "missing_type_policy": missing_type_policy,
+                },
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+@contextmanager
+def patched_github_intake_readbacks(module: Any, issue_payload: dict[str, Any]):
+    original_issue_payload = module.github_issue_payload
+    original_dependencies = module.github_issue_dependencies_payload
+    original_binding = module.host_binding_inspection_payload
+    original_project_drift = module.project_drift_payload
+    module.github_issue_payload = lambda *args, **kwargs: (issue_payload, [])
+    module.github_issue_dependencies_payload = lambda *args, **kwargs: {
+        "availability": "present",
+        "capability": {"status": "supported"},
+        "native_edges": [],
+        "checks": [],
+    }
+    module.host_binding_inspection_payload = lambda *args, **kwargs: {
+        "schema_version": "loom-host-binding-inspection/v1",
+        "result": "pass",
+        "missing_inputs": [],
+        "findings": [],
+    }
+    module.project_drift_payload = lambda *args, **kwargs: {
+        "schema_version": "loom-project-drift/v1",
+        "result": "pass",
+        "missing_inputs": [],
+        "findings": [],
+    }
+    try:
+        yield
+    finally:
+        module.github_issue_payload = original_issue_payload
+        module.github_issue_dependencies_payload = original_dependencies
+        module.host_binding_inspection_payload = original_binding
+        module.project_drift_payload = original_project_drift
+
+
+def run_github_intake_taxonomy_payload(
+    module: Any,
+    target: Path,
+    issue_payload: dict[str, Any],
+    *,
+    phase: int | None = None,
+    fr: int | None = None,
+) -> dict[str, Any]:
+    with patched_github_intake_readbacks(module, issue_payload):
+        return module.github_intake_payload(
+            target_root=target,
+            owner="owner",
+            repo_name="repo",
+            issue_number=int(issue_payload.get("number", 1)),
+            project_number=None,
+            phase_number=phase,
+            fr_number=fr,
+            pr_number=None,
+            branch_name=None,
+            head_sha=None,
+        )
+
+
+def assert_gate_freeze_carrier_shadow_bindings_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    with tempfile.TemporaryDirectory(prefix="loom-freeze-shadow-") as raw_tmp:
+        target = Path(raw_tmp)
+        source = target / "shadow-source.md"
+        source.write_text("current shadow source\n", encoding="utf-8")
+        interop = target / ".loom" / "companion" / "interop.json"
+        interop.parent.mkdir(parents=True, exist_ok=True)
+        shadow_dir = target / ".loom" / "shadow"
+        shadow_dir.mkdir(parents=True, exist_ok=True)
+        interop.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-repo-interop/v1",
+                    "host_adapters": [],
+                    "repo_native_carriers": [],
+                    "shadow_surfaces": {
+                        "review": {
+                            "loom_locator": ".loom/shadow/review-loom.json",
+                            "repo_locator": ".loom/shadow/review-repo.json",
+                        }
+                    },
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        stale_payload = {
+            "result": "match",
+            "source_files": ["shadow-source.md"],
+            "source_sha256": {"shadow-source.md": "0" * 64},
+        }
+        fresh_payload = {
+            "result": "match",
+            "source_files": ["shadow-source.md"],
+            "source_sha256": {"shadow-source.md": loom_flow.sha256_file(source)},
+        }
+        (shadow_dir / "review-loom.json").write_text(json.dumps(stale_payload, indent=2) + "\n", encoding="utf-8")
+        (shadow_dir / "review-repo.json").write_text(json.dumps(fresh_payload, indent=2) + "\n", encoding="utf-8")
+        governance_surface = {
+            "repo_interop": {
+                "availability": "present",
+                "contract": {"locator": ".loom/companion/interop.json"},
+            }
+        }
+
+        binding = loom_flow.gate_freeze_shadow_freshness_binding(target, governance_surface)
+        if binding.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1":
+            raise AssertionError("gate freeze shadow freshness binding schema drifted")
+        if binding.get("result") != "block" or binding.get("failure_kind") != "shadow_source_hash_drift":
+            raise AssertionError(f"gate freeze shadow freshness did not block source hash drift: {binding}")
+        drift_record = next(
+            (
+                record
+                for record in binding.get("records", [])
+                if isinstance(record, dict) and record.get("path") == ".loom/shadow/review-loom.json"
+            ),
+            None,
+        )
+        if not isinstance(drift_record, dict):
+            raise AssertionError("gate freeze shadow freshness did not expose the stale shadow path")
+        expected_record_fields = {
+            "surface": "review",
+            "freshness": "stale",
+            "drift_kind": "shadow_source_hash_drift",
+            "refreshable": True,
+        }
+        for key, expected in expected_record_fields.items():
+            if drift_record.get(key) != expected:
+                raise AssertionError(f"gate freeze shadow freshness {key} drifted: {drift_record}")
+        if not drift_record.get("current_source_sha256") or not drift_record.get("expected_source_sha256"):
+            raise AssertionError("gate freeze shadow freshness must expose current and expected source hashes")
+        suggestions = loom_flow.gate_freeze_refresh_suggestions({"shadow_freshness": binding})
+        if not suggestions or any("loom shadow-parity" in suggestion for suggestion in suggestions):
+            raise AssertionError(f"gate freeze refresh suggestions must use existing refresh paths: {suggestions}")
+        blocking_inputs = loom_flow.gate_freeze_blocking_inputs({"shadow_freshness": binding})
+        if not any(finding.get("failure_kind") == "shadow_source_hash_drift" for finding in blocking_inputs):
+            raise AssertionError(f"gate freeze blocking inputs did not preserve source-hash drift taxonomy: {blocking_inputs}")
 
 
 def assert_reconciliation_suite_taxonomy_contract() -> None:
@@ -666,6 +3605,151 @@ def assert_reconciliation_suite_taxonomy_contract() -> None:
         raise AssertionError("reconciliation did not classify missing suite gate drift")
 
 
+def assert_issue_dependency_machine_block_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    historical_issue_body = (
+        "## Historical Notes\n\n"
+        "- depends on #1514 and blocked by #1513 were prior planning notes only.\n"
+        "- 前置：#1542、#1544 已在历史收口中消费，不代表当前 active blocker。\n"
+        "- 依赖 #1529 的说明只是归档文字，不应生成 active edge。\n"
+    )
+    historical_edges = loom_flow.parse_authored_dependency_edges(historical_issue_body, 1515)
+    if historical_edges:
+        raise AssertionError(f"historical issue prose must not produce authored dependency edges: {historical_edges}")
+    historical_graph = loom_flow.dependency_graph_payload(
+        issue_number=1515,
+        issue_payload={"number": 1515, "state": "closed", "body": historical_issue_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    if historical_graph.get("authored_edges") or historical_graph.get("findings"):
+        raise AssertionError("historical issue prose must not create active dependency drift or findings")
+
+    machine_block_body = (
+        "## Dependency Carrier\n\n"
+        '<!-- loom:issue-dependencies {"schema_version":"loom-issue-dependencies/v1","blocked_by":["#793"],"blocks":[795]} -->\n'
+    )
+    machine_edges = loom_flow.parse_authored_dependency_edges(machine_block_body, 794)
+    edge_keys = {
+        (edge.get("source_issue"), edge.get("blocking_issue"), edge.get("direction"))
+        for edge in machine_edges
+        if isinstance(edge, dict)
+    }
+    if edge_keys != {(794, 793, "blocked_by"), (795, 794, "blocking")}:
+        raise AssertionError(f"structured issue dependency machine block parsed unexpected edges: {machine_edges}")
+    if not all(
+        isinstance(edge, dict)
+        and edge.get("source_of_truth") == "issue_body_machine_block"
+        and edge.get("provenance", {}).get("source_owner") == "github_issue_machine_block"
+        for edge in machine_edges
+    ):
+        raise AssertionError("structured issue dependency machine block must retain machine-block provenance")
+    machine_graph = loom_flow.dependency_graph_payload(
+        issue_number=794,
+        issue_payload={"number": 794, "state": "open", "body": machine_block_body},
+        native_dependency_payload={"availability": "present", "checks": [], "native_edges": []},
+    )
+    missing_native_findings = [
+        finding
+        for finding in machine_graph.get("findings", [])
+        if isinstance(finding, dict) and finding.get("kind") == "missing_native_edge"
+    ]
+    if len(missing_native_findings) != 2:
+        raise AssertionError("structured issue dependency machine block must remain consumable as authored proof")
+
+
+def assert_reconciliation_sync_apply_native_dependency_contract(tmp: Path) -> None:
+    loom_flow = load_loom_flow_module()
+    target = tmp / "reconciliation-native-dependency-apply"
+    target.mkdir()
+    calls: list[tuple[int, int, str]] = []
+    emitted: dict[str, Any] = {}
+    finding = {
+        "category": "drift",
+        "kind": "stale_native_edge",
+        "severity": "fix-needed",
+        "subject": "dependency edge 100 blocked by 99",
+        "evidence": {
+            "edge": {
+                "source_issue": 100,
+                "blocking_issue": 99,
+                "source_of_truth": "github_native_edge",
+                "blocker_state": "closed",
+                "provenance": {
+                    "source_owner": "github",
+                    "source_locator": "graphql:repository.issue.blockedBy",
+                },
+            }
+        },
+    }
+    audit_calls = 0
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def fake_audit(**_kwargs: Any) -> tuple[dict[str, Any], list[str]]:
+        nonlocal audit_calls
+        audit_calls += 1
+        if audit_calls == 1:
+            return {"command": "reconciliation", "operation": "audit", "result": "fix-needed", "findings": [finding]}, []
+        return {"command": "reconciliation", "operation": "audit", "result": "pass", "findings": []}, []
+
+    def fake_set_native_dependency(_root: Path, owner: str, repo_name: str, issue_number: int, blocking_issue_number: int, mutation: str) -> list[str]:
+        if (owner, repo_name) != ("MC-and-his-Agents", "Loom"):
+            return ["wrong repo"]
+        calls.append((issue_number, blocking_issue_number, mutation))
+        return []
+
+    original_emit = loom_flow.emit
+    original_runtime_state = loom_flow.runtime_state_payload
+    original_audit = loom_flow.reconciliation_audit_payload
+    original_set_native_dependency = loom_flow.set_native_dependency
+    loom_flow.emit = fake_emit
+    loom_flow.runtime_state_payload = lambda _target_root: {"result": "pass"}
+    loom_flow.reconciliation_audit_payload = fake_audit
+    loom_flow.set_native_dependency = fake_set_native_dependency
+    try:
+        status = loom_flow.handle_reconciliation(
+            argparse.Namespace(
+                target=str(target),
+                item="WI-100",
+                operation="sync",
+                comment=None,
+                comment_file=None,
+                owner="MC-and-his-Agents",
+                repo_name="Loom",
+                pr=None,
+                pr_role=None,
+                implementation_pr=None,
+                release_pr=None,
+                carrier_sync_pr=None,
+                final_closeout_pr=None,
+                phase=None,
+                fr=None,
+                issue=100,
+                project=None,
+                branch="work/100-closeout",
+                issue_payload_file=None,
+                pr_payload_file=None,
+                project_payload_file=None,
+                dry_run=False,
+                apply=True,
+            )
+        )
+    finally:
+        loom_flow.emit = original_emit
+        loom_flow.runtime_state_payload = original_runtime_state
+        loom_flow.reconciliation_audit_payload = original_audit
+        loom_flow.set_native_dependency = original_set_native_dependency
+    if status != 0 or emitted.get("result") != "pass":
+        raise AssertionError(f"reconciliation sync apply did not pass after native dependency removal: {emitted}")
+    if calls != [(100, 99, "removeBlockedBy")]:
+        raise AssertionError(f"reconciliation sync apply did not execute removeBlockedBy: {calls}")
+    if not emitted.get("applied_actions"):
+        raise AssertionError("reconciliation sync apply did not retain applied action evidence")
+
+
 def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
     loom_flow = load_loom_flow_module()
     target = tmp / "docs-contract-suite-not-applicable"
@@ -744,6 +3828,75 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
                 raise AssertionError("suite not_applicable gate must not require evidence/carrier fallback inputs")
         loom_flow.suite_gate_validation_payload = original_suite_gate_validation_payload
 
+        minimal_target = tmp / "minimal-suite-spec-review"
+        (minimal_target / ".loom/specs/WI-minimal").mkdir(parents=True)
+        (minimal_target / ".loom/reviews").mkdir(parents=True)
+        (minimal_target / ".loom/specs/WI-minimal/spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts not_applicable: rationale: minimal suite review gate fixture does not use full-only artifacts; "
+            "consumer boundary: suite validate and spec review consume spec.md and plan.md only while implementation review remains required; "
+            "recheck condition: scope expands beyond minimal suite.\n",
+            encoding="utf-8",
+        )
+        (minimal_target / ".loom/specs/WI-minimal/plan.md").write_text(
+            "# Plan\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts not_applicable: rationale: minimal suite review gate fixture does not use full-only artifacts; "
+            "consumer boundary: suite validate and spec review consume spec.md and plan.md only while implementation review remains required; "
+            "recheck condition: scope expands beyond minimal suite.\n",
+            encoding="utf-8",
+        )
+        (minimal_target / ".loom/reviews/WI-minimal.spec.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": "WI-minimal",
+                    "decision": "allow",
+                    "kind": "spec_review",
+                    "summary": "minimal suite spec review approved",
+                    "reviewer": "contract-check",
+                    "reviewed_head": "current-head",
+                    "reviewed_validation_summary": "minimal suite fixture validation passed",
+                    "fallback_to": None,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "follow_ups": [],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        minimal_context = {
+            "target_root": minimal_target,
+            "item_id": "WI-minimal",
+            "review_entry": ".loom/reviews/WI-minimal.json",
+            "current_checkpoint": "merge",
+            "associated_artifacts": [],
+        }
+        loom_flow.spec_suite_validation_payload = lambda _context: {
+            "schema_version": "loom-suite-validation-consumption/v1",
+            "command": "suite validate",
+            "result": "pass",
+            "summary": "Suite validate found a minimal suite path decision.",
+            "missing_inputs": [],
+            "blocking_gaps": [],
+            "payload": {
+                "suite_path": "minimal",
+                "spec_locator": ".loom/specs/WI-minimal/spec.md",
+                "plan_locator": ".loom/specs/WI-minimal/plan.md",
+            },
+        }
+        minimal_spec_gate = loom_flow.spec_review_gate_payload(minimal_context)
+        if (
+            minimal_spec_gate.get("result") != "pass"
+            or minimal_spec_gate.get("required") is not True
+            or any("implementation-contract.md" in str(message) for message in minimal_spec_gate.get("missing_inputs", []))
+            or not loom_flow.spec_review_gate_ready_for_implementation_review(minimal_spec_gate)
+        ):
+            raise AssertionError(f"minimal suite spec review gate blocked full-only artifact absence: {minimal_spec_gate}")
+
         loom_flow.spec_suite_validation_payload = lambda _context: {
             "schema_version": "loom-suite-validation-consumption/v1",
             "command": "suite validate",
@@ -778,8 +3931,17 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         loom_flow.git_head_sha = original_git_head_sha
 
 
+SNAPSHOT_RUNTIME_ARTIFACT_PREFIXES = (".loom/tmp",)
+
+
 def snapshot_tree(target: Path) -> list[str]:
-    return sorted(path.relative_to(target).as_posix() for path in target.rglob("*"))
+    entries: list[str] = []
+    for path in target.rglob("*"):
+        relative = path.relative_to(target).as_posix()
+        if any(relative == prefix or relative.startswith(f"{prefix}/") for prefix in SNAPSHOT_RUNTIME_ARTIFACT_PREFIXES):
+            continue
+        entries.append(relative)
+    return sorted(entries)
 
 
 def digest_path(path: Path) -> dict[str, str]:
@@ -1189,94 +4351,300 @@ def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
     target.mkdir()
     home.mkdir()
     with isolated_codex_workstation(home):
-        _, installed = run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(target), "--apply", "--json"], expect=0)
-        if "skills" in installed.get("managed_writes", []):
-            raise AssertionError("plugin install must not write downstream top-level skills")
-        if (target / "skills").exists():
-            raise AssertionError("plugin install created downstream top-level skills")
-        if not (target / "plugins" / "loom" / "skills" / "registry.json").exists():
-            raise AssertionError("plugin install did not write embedded plugin skills")
+        _, dry_run = run_json(["host", "install", "--host", "codex", "--scope", "user", "--target", str(target), "--dry-run", "--json"], expect=0)
+        if dry_run.get("source_kind") != "global-loom-package" or dry_run.get("mutates") is not False:
+            raise AssertionError("user-level host install dry-run did not use the global Loom package")
+        _, installed = run_json(["host", "install", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        if installed.get("source_kind") != "global-loom-package" or installed.get("workstation_install", {}).get("result") != "pass":
+            raise AssertionError("user-level host install did not read back the installed Codex plugin payload")
+        for write in installed.get("writes", []):
+            if Path(write).resolve().is_relative_to(target.resolve()):
+                raise AssertionError(f"user-level host install wrote inside the target repository: {write}")
+        _, registered = run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        if registered.get("source_kind") != "global-loom-package" or registered.get("workstation_registration", {}).get("result") != "pass":
+            raise AssertionError("user-level host register did not read back Codex registration")
+        for write in registered.get("writes", []):
+            if Path(write).resolve().is_relative_to(target.resolve()):
+                raise AssertionError(f"user-level host register wrote inside the target repository: {write}")
+        for unexpected in ("plugins/loom", "skills", ".agents/skills", ".loom/bin", ".loom/installed-state.json"):
+            if (target / unexpected).exists():
+                raise AssertionError(f"user-level host install/register wrote unsupported repository payload: {unexpected}")
 
-        state = json.loads((target / ".loom" / "installed-state.json").read_text(encoding="utf-8"))
-        layer_paths = {layer.get("installed_path") for layer in state.get("layers", []) if isinstance(layer, dict)}
-        layer_types = {layer.get("layer_type") for layer in state.get("layers", []) if isinstance(layer, dict)}
-        if "skills" in layer_paths:
-            raise AssertionError("plugin-mode installed-state must not require top-level skills")
-        if "plugins/loom/skills" not in layer_paths or "plugin-embedded-skills" not in layer_types:
-            raise AssertionError("plugin-mode installed-state must model embedded plugin skills")
-        edges = state.get("installation_graph", {}).get("edges", [])
-        if {"from": "host-adapter", "to": "plugin-embedded-skills", "relationship": "consumes"} not in edges:
-            raise AssertionError("host adapter must consume embedded plugin skills")
 
-        _, host_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(target), "--json"], expect=0)
-        verify_paths = {check["path"] for check in host_verify.get("checks", [])}
-        if "skills/registry.json" in verify_paths:
-            raise AssertionError("host verify must not require downstream top-level skills")
-        if "plugins/loom/skills/registry.json" not in verify_paths:
-            raise AssertionError("host verify must check embedded plugin skills")
+def write_payload_hash(manifest: Path, value: str) -> None:
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.setdefault("x-loom", {})["plugin_payload_hash"] = value
+    manifest.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-        _, skills_check = run_json(["skills", "check", "--target", str(target), "--json"], expect=0)
-        embedded_check_output = json.loads(skills_check["checks"][0]["stdout"])
-        skill_check_paths = {check["path"] for check in embedded_check_output}
-        if "skills/registry.json" in skill_check_paths:
-            raise AssertionError("skills check must not assume full-repo mode for plugin targets")
-        if "plugins/loom/skills/registry.json" not in skill_check_paths:
-            raise AssertionError("skills check must validate embedded plugin skills for plugin targets")
 
-        _, detected = run_json(["detect", "--target", str(target), "--json"], expect=0)
-        detected_kinds = {surface["kind"] for surface in detected["surfaces"]}
-        if detected["classification"] != "current" or "full-repo-skills" in detected_kinds:
-            raise AssertionError("plugin target without top-level skills must classify as current")
+def remove_payload_hash(manifest: Path) -> None:
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.setdefault("x-loom", {}).pop("plugin_payload_hash", None)
+    manifest.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-        old_layout = tmp / "downstream-old-plugin-layout"
-        old_layout.mkdir()
-        run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(old_layout), "--apply", "--json"], expect=0)
-        shutil.copytree(REPO_ROOT / "skills", old_layout / "skills")
-        (old_layout / ".agents").mkdir()
-        shutil.copytree(REPO_ROOT / "skills", old_layout / ".agents" / "skills")
-        _, old_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(old_layout), "--json"], expect=0)
-        if any(check["status"] != "pass" for check in old_verify.get("checks", [])):
-            raise AssertionError("plugin verify must pass even when old top-level Loom skills residue exists")
-        _, repair_plan = run_json(["repair", "plan", "--target", str(old_layout), "--json"], expect=0)
-        repair_actions = {action["id"]: action for action in repair_plan.get("actions", [])}
-        migration = repair_actions.get("plan-top-level-loom-skills-migration")
-        if not migration or migration.get("surface", {}).get("ownership") != "loom-generated" or migration.get("mutates") is not False:
-            raise AssertionError("old plugin layout must produce a non-mutating top-level Loom skills migration plan")
-        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(old_layout), "--json"], expect=0)
-        if "plan-top-level-loom-skills-migration" not in {action["id"] for action in upgrade_plan.get("actions", [])}:
-            raise AssertionError("upgrade-plan must include top-level Loom skills migration guidance")
 
-        mixed_layout = tmp / "downstream-mixed-skills-layout"
-        mixed_layout.mkdir()
-        run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(mixed_layout), "--apply", "--json"], expect=0)
-        shutil.copytree(REPO_ROOT / "skills", mixed_layout / "skills")
-        custom_skill = mixed_layout / "skills" / "target-owned-skill"
-        custom_skill.mkdir()
-        (custom_skill / "SKILL.md").write_text("# Target Owned Skill\n", encoding="utf-8")
-        _, mixed_repair = run_json(["repair", "plan", "--target", str(mixed_layout), "--json"], expect=0)
-        mixed_actions = {action["id"]: action for action in mixed_repair.get("actions", [])}
-        ownership_review = mixed_actions.get("review-top-level-skills-ownership")
-        if not ownership_review or ownership_review.get("surface", {}).get("ownership") != "mixed-or-target-owned":
-            raise AssertionError("mixed top-level skills ownership must fail closed to manual review")
+def assert_codex_payload_readback_contract(tmp: Path) -> None:
+    target = tmp / "codex-payload-readback"
+    home = tmp / "codex-payload-home"
+    bad_source = tmp / "codex-payload-bad-source"
+    target.mkdir()
+    home.mkdir()
+    with isolated_codex_workstation(home):
+        run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.4.0"
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        older_surface_runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.3.0"
+        shutil.copytree(home / "plugins" / "loom", older_surface_runtime)
+        write_payload_hash(older_surface_runtime / ".codex-plugin" / "plugin.json", "stale-older-surface")
+
+        _, current = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        if current.get("plugin_payload_readback", {}).get("freshness") != "already_current":
+            raise AssertionError("host doctor did not report current plugin payload freshness")
+
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", bad_source)
+        (bad_source / ".codex-plugin" / "plugin.json").write_text("{not-json", encoding="utf-8")
+        _, invalid_source = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--source", str(bad_source), "--target", str(target), "--json"], expect=0)
+        source_layer = next(
+            (
+                layer
+                for layer in invalid_source.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "source-payload"
+            ),
+            {},
+        )
+        if invalid_source.get("plugin_payload_readback", {}).get("freshness") != "source_metadata_missing" or not source_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex source payload metadata")
+        if invalid_source.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "source_metadata_missing":
+            raise AssertionError("host doctor version freshness did not reuse explicit Codex source payload readback")
+
+        remove_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json")
+        _, missing_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = missing_marketplace.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "marketplace_source_metadata_missing" or readback.get("action") != "install_plugin":
+            raise AssertionError("host doctor did not identify missing Codex marketplace source metadata")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        marketplace_manifest = home / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
+        marketplace_manifest.write_text("{not-json", encoding="utf-8")
+        _, invalid_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        marketplace_layer = next(
+            (
+                layer
+                for layer in invalid_marketplace.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "marketplace-source"
+            ),
+            {},
+        )
+        if invalid_marketplace.get("plugin_payload_readback", {}).get("freshness") != "marketplace_source_metadata_missing" or not marketplace_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex marketplace source metadata")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        write_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json", "stale-marketplace")
+        _, stale_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = stale_marketplace.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "marketplace_source_stale" or readback.get("action") != "install_plugin":
+            raise AssertionError("host doctor did not identify stale Codex marketplace source")
+
+        shutil.rmtree(home / "plugins" / "loom")
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", home / "plugins" / "loom")
+        remove_payload_hash(runtime / ".codex-plugin" / "plugin.json")
+        _, missing_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = missing_runtime.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "runtime_cache_metadata_missing" or readback.get("action") != "reload_host":
+            raise AssertionError("host doctor did not identify missing Codex runtime cache metadata")
+
+        shutil.rmtree(runtime)
+        shutil.copytree(REPO_ROOT / "plugins" / "loom", runtime)
+        write_payload_hash(runtime / ".codex-plugin" / "plugin.json", "stale-runtime")
+        _, stale_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        readback = stale_runtime.get("plugin_payload_readback", {})
+        if readback.get("freshness") != "runtime_cache_stale" or readback.get("action") != "reload_host":
+            raise AssertionError("host doctor did not identify stale Codex runtime cache")
+
+        runtime_manifest = runtime / ".codex-plugin" / "plugin.json"
+        runtime_manifest.write_text("{not-json", encoding="utf-8")
+        _, invalid_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0)
+        runtime_layer = next(
+            (
+                layer
+                for layer in invalid_runtime.get("plugin_payload_readback", {}).get("layers", [])
+                if layer.get("layer") == "runtime-cache"
+            ),
+            {},
+        )
+        if invalid_runtime.get("plugin_payload_readback", {}).get("freshness") != "runtime_cache_metadata_missing" or not runtime_layer.get("error"):
+            raise AssertionError("host doctor did not fail closed on malformed Codex runtime cache metadata")
+
+
+def assert_version_freshness_contract(tmp: Path) -> None:
+    target = tmp / "version-freshness"
+    home = tmp / "version-freshness-home"
+    target.mkdir()
+    home.mkdir()
+    installed_version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    with isolated_codex_workstation(home):
+        run_json(["install", "--target", str(target), "--apply", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        register_fixture_codex_plugin()
+        runtime = home / ".codex" / "plugins" / "cache" / "local-user-plugins" / "loom" / "0.4.0"
+        shutil.copytree(home / "plugins" / "loom", runtime)
+
+        _, current = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        freshness = current.get("version_freshness", {})
+        if freshness.get("action") != "already_current" or freshness.get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("version did not report current CLI and plugin payload freshness")
+        if freshness.get("surface_compatibility", {}).get("status") != "compatible":
+            raise AssertionError("version did not report compatible plugin surface for current payloads")
+        current_guidance = freshness.get("plugin_payload", {}).get("refresh_guidance", {})
+        if current_guidance.get("status") != "current" or current_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json":
+            raise AssertionError("current plugin payload freshness did not expose host readback guidance")
+        short_output = subprocess.run(
+            [sys.executable, str(LOOM), "version"],
+            cwd=REPO_ROOT,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "LOOM_TEST_NPM_LATEST_VERSION": installed_version},
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+        if short_output.returncode != 0 or "action already_current" not in short_output.stdout:
+            raise AssertionError(f"version short output did not expose freshness action\n{short_output.stderr}\n{short_output.stdout}")
+
+        _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if host_doctor.get("version_freshness", {}).get("action") != "already_current":
+            raise AssertionError("host doctor did not expose version freshness action")
+
+        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        freshness_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "cli-plugin-freshness"), None)
+        if not freshness_action or freshness_action.get("status") != "current":
+            raise AssertionError("upgrade-plan did not expose current CLI/plugin freshness action")
+        if freshness_action.get("readback_command") != "loom host doctor --host codex --scope user --json":
+            raise AssertionError("upgrade-plan current freshness action did not expose host readback command")
+
+        _, stale_cli = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": "99.0.0"})
+        if stale_cli.get("version_freshness", {}).get("action") != "upgrade_cli":
+            raise AssertionError("version did not identify stale CLI")
+
+        write_payload_hash(home / "plugins" / "loom" / ".codex-plugin" / "plugin.json", "stale-marketplace")
+        _, stale_marketplace_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        stale_marketplace_action = next((action for action in stale_marketplace_plan.get("actions", []) if action.get("id") == "cli-plugin-freshness"), None)
+        expected_apply = [
+            "loom host install --host codex --scope user --apply --json",
+            "loom host register --host codex --scope user --apply --json",
+        ]
+        if (
+            not stale_marketplace_action
+            or stale_marketplace_action.get("action") != "refresh_plugin"
+            or stale_marketplace_action.get("apply_commands") != expected_apply
+            or stale_marketplace_action.get("readback_command") != "loom host doctor --host codex --scope user --json"
+        ):
+            raise AssertionError("upgrade-plan did not expose executable stale marketplace plugin refresh guidance")
+        run_json(["host", "install", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        run_json(["host", "register", "--host", "codex", "--scope", "user", "--target", str(target), "--apply", "--json"], expect=0)
+        _, repaired_marketplace = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if repaired_marketplace.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("host install/register guidance did not repair stale plugin marketplace payload")
+
+        write_payload_hash(runtime / ".codex-plugin" / "plugin.json", "stale-runtime")
+        _, stale_plugin = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if stale_plugin.get("version_freshness", {}).get("action") != "refresh_plugin":
+            raise AssertionError("version did not identify stale plugin payload")
+        stale_guidance = stale_plugin.get("version_freshness", {}).get("plugin_payload", {}).get("refresh_guidance", {})
+        if (
+            stale_guidance.get("action") != "reload_host"
+            or stale_guidance.get("reload_required") is not True
+            or stale_guidance.get("apply_commands") != []
+            or stale_guidance.get("readback_command") != "loom host doctor --host codex --scope user --json"
+        ):
+            raise AssertionError("stale runtime payload did not expose reload/readback guidance")
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        runtime_manifest = runtime / ".codex-plugin" / "plugin.json"
+        runtime_payload = json.loads(runtime_manifest.read_text(encoding="utf-8"))
+        runtime_payload.setdefault("x-loom", {})["plugin_surface_version"] = "0.0.0-test"
+        runtime_manifest.write_text(json.dumps(runtime_payload, indent=2) + "\n", encoding="utf-8")
+        _, incompatible_surface = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if (
+            incompatible_surface.get("version_freshness", {}).get("surface_compatibility", {}).get("status") != "incompatible"
+            or "runtime-cache" not in incompatible_surface.get("version_freshness", {}).get("surface_compatibility", {}).get("incompatible_layers", [])
+        ):
+            raise AssertionError("version did not identify plugin surface incompatibility")
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        _, repaired_runtime = run_json(["host", "doctor", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if repaired_runtime.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "already_current":
+            raise AssertionError("simulated Codex reload did not repair stale runtime payload readback")
+
+        remove_payload_hash(runtime / ".codex-plugin" / "plugin.json")
+        _, missing_metadata = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": installed_version})
+        if missing_metadata.get("version_freshness", {}).get("plugin_payload", {}).get("freshness") != "runtime_cache_metadata_missing":
+            raise AssertionError("version did not expose missing plugin payload metadata")
+
+        shutil.rmtree(runtime)
+        shutil.copytree(home / "plugins" / "loom", runtime)
+        _, unreadable = run_json(["version", "--json"], expect=0, env_overrides={"LOOM_TEST_NPM_LATEST_VERSION": "__unreadable__"})
+        if unreadable.get("version_freshness", {}).get("cli", {}).get("freshness") != "npm_unreadable":
+            raise AssertionError("version did not expose npm latest read failure")
 
 
 def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     target = tmp / "metadata-only-adoption"
     target.mkdir()
+    status, install_plan = run_json(["install", "--target", str(target), "--host", "codex", "--json"])
+    if (
+        status == 0
+        or install_plan.get("failed_layer") != "install-apply"
+        or install_plan.get("host_plugin_refresh", {}).get("id") != "host-plugin-refresh-boundary"
+        or "loom host install --host codex --scope user --apply --json" not in install_plan.get("host_plugin_refresh", {}).get("apply_commands", [])
+    ):
+        raise AssertionError("target install did not expose Codex host plugin refresh boundary")
     _, installed = run_json(
-        ["install", "--target", str(target), "--mode", "metadata-only", "--apply", "--json"],
+        ["install", "--target", str(target), "--apply", "--json"],
         expect=0,
     )
+    if installed.get("host_plugin_refresh", {}).get("id") != "host-plugin-refresh-boundary":
+        raise AssertionError("metadata-only install did not preserve separate host plugin refresh guidance")
     managed_writes = set(installed.get("managed_writes", []))
-    if managed_writes != {".loom/installed-state.json"}:
+    if managed_writes != {".loom/installed-state.json", "AGENTS.md"}:
         raise AssertionError(f"metadata-only install wrote unexpected artifacts: {sorted(managed_writes)}")
-    for unexpected in ("plugins/loom/skills", ".agents/skills", "skills"):
+    agents_text = (target / "AGENTS.md").read_text(encoding="utf-8")
+    required_agents_guidance = [
+        "<!-- LOOM_BOOTSTRAP_START -->",
+        "## Loom Execution",
+        "loom route --target . --task",
+        "loom resume --target . --json",
+        "spec_review approved",
+        "next_action",
+        "fallback_to",
+        "Loom closeout",
+    ]
+    missing_agents_guidance = [text for text in required_agents_guidance if text not in agents_text]
+    if missing_agents_guidance:
+        raise AssertionError(f"metadata-only install did not write Loom execution guidance to AGENTS.md: {missing_agents_guidance}")
+    for unexpected in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
         if (target / unexpected).exists():
             raise AssertionError(f"metadata-only install created {unexpected}")
 
     state = json.loads((target / ".loom" / "installed-state.json").read_text(encoding="utf-8"))
     if state.get("repo_payload", {}).get("mode") != "metadata-only":
         raise AssertionError("metadata-only installed-state did not declare repo_payload.mode")
+    if state.get("repo_payload", {}).get("adoption_mode") != "light-governance":
+        raise AssertionError("metadata-only installed-state did not declare the default light-governance adoption mode")
+    if state.get("contract", {}).get("minimum_loom_version") is None:
+        raise AssertionError("metadata-only installed-state did not declare a minimum Loom contract")
+    for local_field in (
+        "target",
+        "installed_at",
+        "upgraded_at",
+        "cli_freshness",
+        "plugin_freshness",
+        "plugin_cache_path",
+        "host_machine_path",
+    ):
+        if local_field in state:
+            raise AssertionError(f"metadata-only installed-state leaked workstation-local field: {local_field}")
     if state.get("skills_provider", {}).get("scope") != "user":
         raise AssertionError("metadata-only installed-state did not declare user skills provider")
     layer_paths = {layer.get("installed_path") for layer in state.get("layers", []) if isinstance(layer, dict)}
@@ -1290,13 +4658,58 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     if validate.get("runtime_state") != "ready":
         raise AssertionError("metadata-only installed-state validate did not pass")
 
-    _, host_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"], expect=0)
-    if host_verify.get("verifies") != "repository-adoption-metadata":
-        raise AssertionError("metadata-only host verify did not verify repository adoption metadata")
+    headless_home = tmp / "metadata-only-headless-codex-home"
+    headless_home.mkdir()
+    with isolated_codex_workstation(headless_home):
+        _, headless_doctor = run_json(["doctor", "--target", str(target), "--json"], expect=0)
+        if headless_doctor.get("result") != "pass":
+            raise AssertionError("metadata-only doctor required Codex Desktop runtime/cache state")
+        if any(check.get("name") == "codex-workstation-registration" for check in headless_doctor.get("checks", [])):
+            raise AssertionError("metadata-only doctor leaked Codex workstation registration into target diagnostics")
+        _, headless_verify = run_json(["verify", "--target", str(target), "--json"], expect=0)
+        if headless_verify.get("result") != "pass" or headless_verify.get("doctor", {}).get("result") != "pass":
+            raise AssertionError("metadata-only verify required Codex Desktop runtime/cache state")
+    assert_global_cli_metadata_only_bootstrap_contract(tmp)
+    assert_light_governance_slim_bootstrap_contract(tmp)
+
+    _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--host", "codex", "--json"], expect=0)
+    refresh_action = next((action for action in upgrade_plan.get("actions", []) if action.get("id") == "host-plugin-refresh-boundary"), None)
+    if (
+        not refresh_action
+        or refresh_action.get("command") != "loom host doctor --host codex --scope user --json"
+        or refresh_action.get("status") != "separate-command"
+        or "does not refresh the Codex workstation plugin cache" not in str(refresh_action.get("reason"))
+    ):
+        raise AssertionError("upgrade-plan did not redirect Codex plugin refresh intent to host commands")
+
+    status, upgrade_payload = run_json(["upgrade", "--target", str(target), "--host", "codex", "--json"])
+    if (
+        status == 0
+        or upgrade_payload.get("failed_layer") != "upgrade-apply"
+        or upgrade_payload.get("host_plugin_refresh", {}).get("id") != "host-plugin-refresh-boundary"
+    ):
+        raise AssertionError("target upgrade did not expose separate Codex host plugin refresh guidance")
+
+    host_home = tmp / "metadata-only-codex-home"
+    host_home.mkdir()
+    with isolated_codex_workstation(host_home):
+        status, missing_provider = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"])
+        if (
+            status == 0
+            or missing_provider.get("result") != "block"
+            or missing_provider.get("failed_layer") != "workstation-registration"
+        ):
+            raise AssertionError("metadata-only host verify did not require Codex user-level provider registration")
+        register_fixture_codex_plugin()
+        _, host_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"], expect=0)
+    if host_verify.get("verifies") != "repository-adoption-metadata-and-codex-user-plugin-provider":
+        raise AssertionError("metadata-only host verify did not verify repository adoption metadata and Codex provider")
+    if host_verify.get("workstation_registration", {}).get("result") != "pass":
+        raise AssertionError("metadata-only host verify did not read back Codex provider registration")
     host_paths = {check["path"]: check["status"] for check in host_verify.get("checks", [])}
     if host_paths.get(".loom/installed-state.json") != "pass":
         raise AssertionError("metadata-only host verify did not check installed-state")
-    for absent in ("plugins/loom/skills", ".agents/skills", "skills"):
+    for absent in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
         if host_paths.get(absent) != "pass":
             raise AssertionError(f"metadata-only host verify did not treat absent {absent} as intentional")
 
@@ -1312,50 +4725,713 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
 
     plugin_payload = target / "plugins" / "loom" / "skills"
     plugin_payload.mkdir(parents=True)
-    status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"])
+    with isolated_codex_workstation(host_home):
+        register_fixture_codex_plugin()
+        status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--target", str(target), "--json"])
     if status == 0 or polluted_verify.get("result") != "block":
         raise AssertionError("metadata-only host verify did not block unexpected embedded skills payload")
+    old_mode = subprocess.run(
+        [sys.executable, str(LOOM), "install", "--target", str(target), "--mode", "plugin", "--json"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if old_mode.returncode == 0:
+        raise AssertionError("loom install still accepted legacy --mode plugin")
+    host_help = subprocess.run(
+        [sys.executable, str(LOOM), "host", "--help"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    host_help_text = host_help.stdout + host_help.stderr
+    if host_help.returncode != 0 or "--mode" in host_help_text or "--skill-id" in host_help_text:
+        raise AssertionError("loom host help still exposes legacy install mode or single-skill arguments")
+    skills_help = subprocess.run(
+        [sys.executable, str(LOOM), "skills", "--help"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    skills_help_text = skills_help.stdout + skills_help.stderr
+    if skills_help.returncode != 0 or "sync" in skills_help_text:
+        raise AssertionError("loom skills help still exposes downstream skills sync")
+    downstream_generate_target = tmp / "downstream-skills-generate"
+    downstream_generate_target.mkdir()
+    status, downstream_generate = run_json(["skills", "generate", "--target", str(downstream_generate_target), "--apply", "--json"])
+    if status == 0 or downstream_generate.get("failed_layer") != "skills-surface":
+        raise AssertionError("skills generate still allowed downstream repository skills payload writes")
+    for unexpected in ("plugins/loom", "plugins/loom/skills", ".agents/skills", "skills", ".loom/bin", ".loom/bootstrap"):
+        if (downstream_generate_target / unexpected).exists():
+            raise AssertionError(f"downstream skills generate wrote unsupported repository payload: {unexpected}")
+    help_result = subprocess.run(
+        [sys.executable, str(LOOM), "--help"],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    help_text = help_result.stdout + help_result.stderr
+    if help_result.returncode != 0 or "repo-local-wrapper repos keep declared .loom/bin carriers as valid wrappers" in help_text:
+        raise AssertionError("loom --help still advertises repo-local-wrapper .loom/bin as current")
+
+
+def assert_adopt_adversarial_wrapper_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for adopt wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    original_emit_flow = module.emit_flow
+    module.emit_flow = fake_emit_flow
+    try:
+        status = module.handle_adopt(["adversarial-test", "--target", "/tmp/adopted", "--record", "--json"])
+        if status != 0:
+            raise AssertionError("adopt adversarial-test wrapper did not complete")
+        if captured.get("command") != "adopt":
+            raise AssertionError("adopt adversarial-test wrapper did not preserve the adopt command label")
+        if captured.get("flow_args") != ["adopt", "adversarial-test", "--target", "/tmp/adopted", "--record"]:
+            raise AssertionError(f"adopt adversarial-test delegated unexpected args: {captured.get('flow_args')}")
+    finally:
+        module.emit_flow = original_emit_flow
+
+
+def assert_install_upgrade_host_boundary_docs() -> None:
+    required = {
+        "README.md": [
+            "`loom install` and `loom upgrade` manage only the target repository's",
+            "`loom host doctor|install|register --host codex --scope user`",
+            "Target repository upgrade commands do not refresh the Codex plugin cache.",
+        ],
+        "README.zh-CN.md": [
+            "`loom install` 和 `loom upgrade` 只管理目标仓库的仅元数据启用状态。",
+            "`loom host doctor|install|register --host codex --scope user`",
+            "目标仓库的 upgrade 命令不会刷新 Codex 插件缓存。",
+        ],
+        "src/skills/README.md": [
+            "loom host doctor --host codex --scope user --json",
+            "loom host install --host codex --scope user --apply --json",
+            "`loom install` and `loom upgrade` manage that target repository state only",
+        ],
+    }
+    for relative, snippets in required.items():
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        missing = [snippet for snippet in snippets if snippet not in text]
+        if missing:
+            raise AssertionError(f"{relative} missing install/upgrade host boundary snippets: {missing}")
+
+
+def collect_mapping_keys(value: Any) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if isinstance(key, str):
+                keys.add(key)
+            keys.update(collect_mapping_keys(child))
+    elif isinstance(value, list):
+        for child in value:
+            keys.update(collect_mapping_keys(child))
+    return keys
+
+
+def classify_workstation_registry_fixture(registry: dict[str, Any]) -> list[str]:
+    classifications: list[str] = []
+    repositories = registry.get("repositories")
+    if not isinstance(repositories, list):
+        return ["schema_unsupported"]
+
+    seen_ids: dict[str, tuple[str, str | None]] = {}
+    for entry in repositories:
+        if not isinstance(entry, dict):
+            classifications.append("schema_unsupported")
+            continue
+        repo_id = entry.get("id")
+        path = entry.get("path")
+        remote = entry.get("remote") if isinstance(entry.get("remote"), dict) else {}
+        remote_hash = remote.get("hash")
+        identity = (path, remote_hash)
+        if isinstance(repo_id, str):
+            previous = seen_ids.get(repo_id)
+            if previous is not None and previous != identity:
+                classifications.append("repo_id_conflict")
+            seen_ids[repo_id] = identity
+        if entry.get("path_state") != "present":
+            classifications.append("path_missing")
+        observed_remote_hash = entry.get("observed_remote_hash")
+        if isinstance(observed_remote_hash, str) and observed_remote_hash != remote_hash:
+            classifications.append("remote_hash_drift")
+        opt_in = entry.get("opt_in") if isinstance(entry.get("opt_in"), dict) else {}
+        if opt_in.get("enabled") is False:
+            classifications.append("opted_out")
+    return classifications
+
+
+def assert_workstation_registry_entry_shape(entry: dict[str, Any], *, fixture_id: str) -> None:
+    required = {"id", "path", "path_state", "remote", "adoption", "opt_in", "last_seen_at"}
+    missing = sorted(required - set(entry))
+    if missing:
+        raise AssertionError(f"{fixture_id} registry entry missing required fields: {missing}")
+    if not isinstance(entry.get("id"), str) or not entry["id"]:
+        raise AssertionError(f"{fixture_id} registry entry id must be a non-empty string")
+    path = entry.get("path")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise AssertionError(f"{fixture_id} registry entry path must be absolute")
+    if entry.get("path_state") not in {"present", "missing", "unknown"}:
+        raise AssertionError(f"{fixture_id} registry entry path_state drifted")
+    remote = entry.get("remote")
+    if not isinstance(remote, dict):
+        raise AssertionError(f"{fixture_id} registry entry remote must be an object")
+    if "canonical_url" not in remote or "hash" not in remote or "observed_at" not in remote:
+        raise AssertionError(f"{fixture_id} registry entry remote fields drifted")
+    remote_hash = remote.get("hash")
+    if remote_hash is not None and (not isinstance(remote_hash, str) or not remote_hash.startswith("sha256:")):
+        raise AssertionError(f"{fixture_id} remote hash must be sha256-prefixed or null")
+    adoption = entry.get("adoption")
+    if not isinstance(adoption, dict):
+        raise AssertionError(f"{fixture_id} registry entry adoption must be an object")
+    if adoption.get("mode") not in {
+        "light-governance",
+        "execution-control",
+        "strong-governance",
+        "attach-only",
+        "metadata-only",
+        "repo-local-wrapper",
+        "legacy-embedded",
+        "unknown",
+    }:
+        raise AssertionError(f"{fixture_id} registry entry adoption mode drifted")
+    opt_in = entry.get("opt_in")
+    if not isinstance(opt_in, dict) or not isinstance(opt_in.get("enabled"), bool) or not opt_in.get("source"):
+        raise AssertionError(f"{fixture_id} registry entry opt_in contract drifted")
+
+
+def assert_workstation_registry_fixture_contract() -> None:
+    fixture_data = json.loads(WORKSTATION_REGISTRY_FIXTURES.read_text(encoding="utf-8"))
+    if fixture_data.get("schema_version") != "loom-workstation-registry-fixtures/v1":
+        raise AssertionError("workstation registry fixture schema drifted")
+    if fixture_data.get("registry_schema_version") != "loom-workstation-repositories/v1":
+        raise AssertionError("workstation registry schema version drifted")
+    documented_by = fixture_data.get("documented_by")
+    if not isinstance(documented_by, list) or "docs/adoption/workstation-registry-contract.md" not in documented_by:
+        raise AssertionError("workstation registry fixtures must link the registry contract")
+    command_surface = set(fixture_data.get("command_surface", []))
+    if {
+        "loom workstation register --json",
+        "loom workstation list --json",
+        "loom workstation unregister --json",
+        "loom workstation upgrade --plan --json",
+        "loom workstation upgrade --apply --json",
+        "loom workstation current --json",
+    } - command_surface:
+        raise AssertionError("workstation registry fixtures must name the future workstation command surface")
+    forbidden_truth_fields = set(fixture_data.get("forbidden_repository_truth_fields", []))
+    if not forbidden_truth_fields:
+        raise AssertionError("workstation registry fixtures must declare forbidden repository truth fields")
+
+    fixtures = fixture_data.get("fixtures")
+    if not isinstance(fixtures, list):
+        raise AssertionError("workstation registry fixtures must be a list")
+    by_id = {fixture.get("id"): fixture for fixture in fixtures if isinstance(fixture, dict)}
+    required_fixture_ids = {
+        "valid-metadata-only-opted-in",
+        "missing-path-fails-closed",
+        "remote-hash-drift-fails-closed",
+        "duplicate-id-fails-closed",
+        "opted-out-list-only",
+    }
+    missing_fixture_ids = sorted(required_fixture_ids - set(by_id))
+    if missing_fixture_ids:
+        raise AssertionError(f"workstation registry fixtures missing required cases: {missing_fixture_ids}")
+
+    for fixture in fixtures:
+        if not isinstance(fixture, dict):
+            raise AssertionError("workstation registry fixture entries must be objects")
+        fixture_id = str(fixture.get("id"))
+        registry = fixture.get("registry")
+        expected = fixture.get("expected")
+        if not isinstance(registry, dict) or not isinstance(expected, dict):
+            raise AssertionError(f"{fixture_id} must include registry and expected objects")
+        if registry.get("schema_version") != "loom-workstation-repositories/v1":
+            raise AssertionError(f"{fixture_id} registry schema_version drifted")
+        if registry.get("authority") != "workstation":
+            raise AssertionError(f"{fixture_id} registry authority must be workstation")
+        if registry.get("registry_path") != "~/.loom/repositories.json":
+            raise AssertionError(f"{fixture_id} registry path must use the logical global path")
+        repositories = registry.get("repositories")
+        if not isinstance(repositories, list) or not repositories:
+            raise AssertionError(f"{fixture_id} registry must include at least one repository entry")
+        forbidden_seen = sorted(forbidden_truth_fields & collect_mapping_keys(registry))
+        if forbidden_seen:
+            raise AssertionError(f"{fixture_id} registry leaks repository truth fields: {forbidden_seen}")
+        for entry in repositories:
+            if not isinstance(entry, dict):
+                raise AssertionError(f"{fixture_id} repository entries must be objects")
+            assert_workstation_registry_entry_shape(entry, fixture_id=fixture_id)
+        classifications = classify_workstation_registry_fixture(registry)
+        expected_classification = expected.get("classification")
+        if expected_classification and expected_classification not in classifications:
+            raise AssertionError(f"{fixture_id} expected classification {expected_classification} was not detected: {classifications}")
+        if expected.get("result") == "block" and not classifications:
+            raise AssertionError(f"{fixture_id} expected block without a fail-closed classification")
+        if fixture_id == "valid-metadata-only-opted-in" and classifications:
+            raise AssertionError(f"{fixture_id} should not produce fail-closed classifications: {classifications}")
+        if fixture_id == "opted-out-list-only" and expected.get("eligible_for_plan") != []:
+            raise AssertionError("opted-out fixture must be list-only and ineligible for upgrade apply planning")
+
+
+def write_workstation_registry_target(target: Path, *, mode: str = "metadata-only", version: str = "v0.26.0") -> None:
+    target.mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "git@github.com:owner/TargetRepo.git"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    installed_state = {
+        "schema_version": "loom-installed-state/v2",
+        "repo_payload": {"mode": mode},
+        "version_context": {"repo_version": version},
+    }
+    installed_state_path = target / ".loom" / "installed-state.json"
+    installed_state_path.parent.mkdir(parents=True)
+    installed_state_path.write_text(json.dumps(installed_state, indent=2) + "\n", encoding="utf-8")
+
+
+def assert_workstation_registry_cli_contract(tmp: Path) -> None:
+    home = tmp / "home"
+    target = tmp / "target-repo"
+    home.mkdir()
+    write_workstation_registry_target(target)
+    registry_path = home / ".loom" / "repositories.json"
+    forbidden_target_writes = ("plugins/loom", "skills", ".agents/skills", ".loom/bin")
+
+    old_latest = os.environ.get("LOOM_TEST_NPM_LATEST_VERSION")
+    os.environ["LOOM_TEST_NPM_LATEST_VERSION"] = "0.27.0"
+    try:
+        with isolated_codex_workstation(home):
+            _, machine_only_plan = run_json(["workstation", "upgrade", "--plan", "--to", "0.27.0", "--json"], expect=0)
+            if machine_only_plan.get("schema") != "loom-workstation-upgrade-plan/v1":
+                raise AssertionError("workstation upgrade --plan did not expose the upgrade plan schema")
+            if machine_only_plan.get("mutates") is not False or machine_only_plan.get("plan_only") is not True:
+                raise AssertionError("workstation upgrade --plan must be non-mutating")
+            if machine_only_plan.get("classification_counts") != {"machine_only": 1}:
+                raise AssertionError("empty workstation upgrade plan must be classified as machine_only")
+            if machine_only_plan.get("repository_plans") != []:
+                raise AssertionError("machine_only workstation upgrade plan must not invent repository plans")
+
+            _, empty = run_json(["workstation", "list", "--json"], expect=0)
+            if empty.get("result") != "pass" or empty.get("repository_count") != 0:
+                raise AssertionError("workstation list did not return an empty registry for a fresh HOME")
+            if registry_path.exists():
+                raise AssertionError("workstation list must not create ~/.loom/repositories.json")
+
+            _, registered = run_json(["workstation", "register", "--target", str(target), "--json"], expect=0)
+            entry = registered.get("repository")
+            if registered.get("result") != "pass" or not isinstance(entry, dict):
+                raise AssertionError("workstation register did not return the registered repository entry")
+            if registered.get("registry_schema") != "loom-workstation-repositories/v1":
+                raise AssertionError("workstation register did not expose the registry schema")
+            if not registry_path.exists():
+                raise AssertionError("workstation register did not write ~/.loom/repositories.json")
+            if entry.get("path") != str(target.resolve()):
+                raise AssertionError("workstation register did not store the absolute target path")
+            if entry.get("remote", {}).get("canonical_url") != "git@github.com:owner/TargetRepo.git":
+                raise AssertionError("workstation register did not read the canonical origin remote")
+            if not str(entry.get("remote", {}).get("hash")).startswith("sha256:"):
+                raise AssertionError("workstation register did not hash the canonical remote")
+            if entry.get("adoption", {}).get("mode") != "metadata-only":
+                raise AssertionError("workstation register did not snapshot metadata-only adoption mode")
+            for unexpected in forbidden_target_writes:
+                if (target / unexpected).exists():
+                    raise AssertionError(f"workstation register wrote unsupported repository payload: {unexpected}")
+
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            if registry.get("schema_version") != "loom-workstation-repositories/v1" or len(registry.get("repositories", [])) != 1:
+                raise AssertionError("workstation register persisted an invalid registry shape")
+
+            _, listed = run_json(["workstation", "list", "--json"], expect=0)
+            if listed.get("eligible_for_plan") != [entry["id"]]:
+                raise AssertionError("workstation list did not mark the opted-in registered repo as eligible")
+
+            _, machine_apply = run_json(
+                ["workstation", "upgrade", "--apply", "--to", "0.27.0", "--json"],
+                expect=0,
+                env_overrides={"LOOM_TEST_WORKSTATION_APPLY": "record"},
+            )
+            if machine_apply.get("plan_only") is not False or machine_apply.get("mutates") is not True:
+                raise AssertionError("workstation upgrade --apply must execute a mutating machine-level refresh")
+            machine_apply_result = machine_apply.get("machine_apply")
+            if not isinstance(machine_apply_result, dict) or machine_apply_result.get("result") != "pass":
+                raise AssertionError(f"workstation upgrade --apply did not report a passing machine apply: {machine_apply_result}")
+            applied_step_ids = {
+                step.get("id")
+                for step in machine_apply_result.get("applied_steps", [])
+                if isinstance(step, dict)
+            }
+            if {"upgrade-cli", "refresh-codex-plugin", "verify-host"} - applied_step_ids:
+                raise AssertionError(f"workstation upgrade --apply missed machine refresh steps: {applied_step_ids}")
+            if machine_apply.get("repository_apply") is not None:
+                raise AssertionError("machine-only workstation upgrade --apply must not mutate repositories without explicit --target")
+
+            _, explicit_repo_apply = run_json(
+                ["workstation", "upgrade", "--apply", "--to", "0.27.0", "--target", str(target), "--json"],
+                expect=0,
+                env_overrides={"LOOM_TEST_WORKSTATION_APPLY": "record"},
+            )
+            repo_apply = explicit_repo_apply.get("repository_apply")
+            if not isinstance(repo_apply, dict) or repo_apply.get("result") != "pass":
+                raise AssertionError(f"explicit single-repo workstation apply did not pass: {repo_apply}")
+            if repo_apply.get("classification") != "repo_auto_commit_candidate":
+                raise AssertionError("explicit single-repo apply must be limited to repo_auto_commit_candidate")
+            if (target / "plugins" / "loom").exists() or (target / ".agents" / "skills").exists() or (target / ".loom" / "bin").exists():
+                raise AssertionError("explicit single-repo workstation apply wrote forbidden plugin/runtime payload")
+
+            noop_target = tmp / "noop-repo"
+            auto_target = tmp / "auto-repo"
+            pr_target = tmp / "pr-repo"
+            blocked_target = tmp / "blocked-repo"
+            write_workstation_registry_target(noop_target, version="v0.27.0")
+            write_workstation_registry_target(auto_target, version="v0.26.0")
+            write_workstation_registry_target(pr_target, mode="legacy-embedded", version="v0.26.0")
+            write_workstation_registry_target(blocked_target, version="v0.26.0")
+            for plan_target in (noop_target, auto_target, pr_target, blocked_target):
+                run_json(["workstation", "register", "--target", str(plan_target), "--json"], expect=0)
+            shutil.rmtree(blocked_target)
+            _, upgrade_plan = run_json(["workstation", "upgrade", "--plan", "--to", "0.27.0", "--json"], expect=1)
+            plans = upgrade_plan.get("repository_plans")
+            if not isinstance(plans, list):
+                raise AssertionError("workstation upgrade --plan must expose repository_plans")
+            plan_classes = {plan.get("classification") for plan in plans if isinstance(plan, dict)}
+            expected_plan_classes = {"repo_noop", "repo_auto_commit_candidate", "repo_pr_required", "blocked"}
+            missing_classes = expected_plan_classes - plan_classes
+            if missing_classes:
+                raise AssertionError(f"workstation upgrade --plan missing classifications: {sorted(missing_classes)}")
+            if upgrade_plan.get("machine_plan", {}).get("classification") != "machine_only":
+                raise AssertionError("workstation upgrade --plan must include a machine_only machine plan")
+            machine_steps = {
+                step.get("id"): step
+                for step in upgrade_plan.get("machine_plan", {}).get("steps", [])
+                if isinstance(step, dict)
+            }
+            if {"upgrade-cli", "refresh-codex-plugin", "verify-host"} - set(machine_steps):
+                raise AssertionError(f"workstation upgrade --plan missing machine refresh steps: {sorted(machine_steps)}")
+            plugin_step = machine_steps.get("refresh-codex-plugin", {})
+            marketplace_upgrade = plugin_step.get("marketplace_upgrade")
+            if not isinstance(marketplace_upgrade, dict) or marketplace_upgrade.get("source") != "MC-and-his-Agents/Loom":
+                raise AssertionError("workstation upgrade plan must expose Codex marketplace plugin refresh guidance")
+            if plugin_step.get("required") is not True:
+                raise AssertionError("workstation upgrade plan must refresh Codex plugin when the CLI target version changes")
+            freshness_cache = upgrade_plan.get("freshness_cache")
+            if (
+                not isinstance(freshness_cache, dict)
+                or freshness_cache.get("read_count") != 1
+                or freshness_cache.get("reused_for_repository_count") != len(plans)
+                or "target_version_change" not in freshness_cache.get("invalidates_on", [])
+            ):
+                raise AssertionError(f"workstation upgrade plan did not expose batch freshness cache semantics: {freshness_cache}")
+            if upgrade_plan.get("mutates") is not False:
+                raise AssertionError("workstation upgrade --plan must not mutate while reporting blocked repositories")
+            for unexpected in forbidden_target_writes:
+                if (auto_target / unexpected).exists() or (pr_target / unexpected).exists():
+                    raise AssertionError(f"workstation upgrade --plan wrote unsupported repository payload: {unexpected}")
+            registry_path.unlink()
+            run_json(["workstation", "register", "--target", str(target), "--json"], expect=0)
+
+            _, opted_out = run_json(["workstation", "unregister", "--target", str(target), "--keep-entry", "--json"], expect=0)
+            if opted_out.get("updated_count") != 1 or opted_out.get("removed_count") != 0:
+                raise AssertionError("workstation unregister --keep-entry did not update exactly one entry")
+            _, list_opted_out = run_json(["workstation", "list", "--json"], expect=0)
+            classifications = {item.get("classification") for item in list_opted_out.get("classifications", [])}
+            if list_opted_out.get("eligible_for_plan") != [] or "opted_out" not in classifications:
+                raise AssertionError("workstation list did not expose opted-out list-only diagnostics")
+
+            _, removed = run_json(["workstation", "unregister", "--id", entry["id"], "--json"], expect=0)
+            if removed.get("removed_count") != 1 or removed.get("repository_count") != 0:
+                raise AssertionError("workstation unregister --id did not remove the registered entry")
+            _, final_list = run_json(["workstation", "list", "--json"], expect=0)
+            if final_list.get("repository_count") != 0:
+                raise AssertionError("workstation list still reports entries after unregister")
+
+            missing_target = tmp / "missing-registered-repo"
+            write_workstation_registry_target(missing_target)
+            _, missing_registered = run_json(["workstation", "register", "--target", str(missing_target), "--json"], expect=0)
+            missing_id = missing_registered.get("repository", {}).get("id")
+            shutil.rmtree(missing_target)
+            _, missing_list = run_json(["workstation", "list", "--json"], expect=1)
+            assert_workstation_registry_cli_blocks(missing_list, "path_missing", missing_id)
+            registry_path.unlink()
+
+            remote_target = tmp / "remote-drift-repo"
+            write_workstation_registry_target(remote_target)
+            _, remote_registered = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=0)
+            remote_id = remote_registered.get("repository", {}).get("id")
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", "git@github.com:owner/ChangedRepo.git"],
+                cwd=remote_target,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _, remote_list = run_json(["workstation", "list", "--json"], expect=1)
+            assert_workstation_registry_cli_blocks(remote_list, "remote_hash_drift", remote_id)
+            _, blocked_register = run_json(["workstation", "register", "--target", str(remote_target), "--json"], expect=1)
+            if blocked_register.get("failed_layer") != "workstation-registry":
+                raise AssertionError("workstation register must fail closed while registry has blocking drift")
+            registry_path.unlink()
+
+            conflict_a = tmp / "conflict-a"
+            conflict_b = tmp / "conflict-b"
+            write_workstation_registry_target(conflict_a)
+            write_workstation_registry_target(conflict_b)
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", "git@github.com:owner/ConflictB.git"],
+                cwd=conflict_b,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _, conflict_registered = run_json(["workstation", "register", "--target", str(conflict_a), "--json"], expect=0)
+            conflict_entry = conflict_registered.get("repository")
+            if not isinstance(conflict_entry, dict):
+                raise AssertionError("workstation register did not provide conflict fixture base entry")
+            conflict_b_remote = "git@github.com:owner/ConflictB.git"
+            conflict_b_entry = json.loads(json.dumps(conflict_entry))
+            conflict_b_entry["path"] = str(conflict_b.resolve())
+            conflict_b_entry["remote"]["canonical_url"] = conflict_b_remote
+            conflict_b_entry["remote"]["hash"] = "sha256:" + hashlib.sha256(conflict_b_remote.encode("utf-8")).hexdigest()
+            conflict_b_entry["remote"]["observed_at"] = conflict_entry["remote"]["observed_at"]
+            conflict_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            conflict_registry["repositories"] = [conflict_entry, conflict_b_entry]
+            registry_path.write_text(json.dumps(conflict_registry, indent=2) + "\n", encoding="utf-8")
+            _, conflict_list = run_json(["workstation", "list", "--json"], expect=1)
+            assert_workstation_registry_cli_blocks(conflict_list, "repo_id_conflict", conflict_entry.get("id"))
+    finally:
+        if old_latest is None:
+            os.environ.pop("LOOM_TEST_NPM_LATEST_VERSION", None)
+        else:
+            os.environ["LOOM_TEST_NPM_LATEST_VERSION"] = old_latest
+
+
+def assert_workstation_current_cli_contract(tmp: Path) -> None:
+    home = tmp / "current-home"
+    target = tmp / "current-target"
+    home.mkdir()
+    write_workstation_registry_target(target, version="v0.28.0")
+    with isolated_codex_workstation(home):
+        _, initial = run_json(["workstation", "current", "--target", str(target), "--json"], expect=0)
+        current = initial.get("current") if isinstance(initial.get("current"), dict) else {}
+        if initial.get("mutates") is not False or current.get("state") != "no_active_item":
+            raise AssertionError(f"workstation current read must be non-mutating and empty by default: {initial}")
+        if (home / ".loom" / "repos").exists():
+            raise AssertionError("workstation current read must not create workstation state")
+
+        _, planned = run_json(
+            [
+                "workstation",
+                "current",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1957",
+                "--issue",
+                "1957",
+                "--pr",
+                "1971",
+                "--branch",
+                "work/1957-1960-host-tax-core",
+                "--json",
+            ],
+            expect=0,
+        )
+        if planned.get("mutates") is not False or planned.get("apply_required") is not True:
+            raise AssertionError(f"workstation current plan must not mutate without --apply: {planned}")
+        if (home / ".loom" / "repos").exists():
+            raise AssertionError("workstation current plan must not create workstation state")
+
+        _, active = run_json(
+            [
+                "workstation",
+                "current",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1957",
+                "--issue",
+                "1957",
+                "--pr",
+                "1971",
+                "--branch",
+                "work/1957-1960-host-tax-core",
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        writes = active.get("writes")
+        active_current = active.get("current") if isinstance(active.get("current"), dict) else {}
+        if active.get("mutates") is not True or not isinstance(writes, list) or len(writes) != 1:
+            raise AssertionError(f"workstation current apply must write exactly one workstation file: {active}")
+        current_path = Path(writes[0])
+        if home.resolve() not in current_path.resolve().parents or not current_path.exists():
+            raise AssertionError(f"workstation current wrote outside isolated HOME: {writes}")
+        if active_current.get("state") != "active" or active_current.get("current_item_id") != "WI-1957":
+            raise AssertionError(f"workstation current apply did not persist the active item: {active_current}")
+        persisted = json.loads(current_path.read_text(encoding="utf-8"))
+        if persisted.get("state") != "active" or persisted.get("target") != str(target.resolve()):
+            raise AssertionError(f"workstation current persisted invalid payload: {persisted}")
+
+        _, cleared = run_json(["workstation", "current", "--target", str(target), "--clear", "--apply", "--json"], expect=0)
+        cleared_current = cleared.get("current") if isinstance(cleared.get("current"), dict) else {}
+        if cleared_current.get("state") != "no_active_item" or cleared_current.get("current_item_id") is not None:
+            raise AssertionError(f"workstation current clear did not remove active item: {cleared_current}")
+        cleared_persisted = json.loads(current_path.read_text(encoding="utf-8"))
+        if cleared_persisted.get("state") != "no_active_item" or cleared_persisted.get("issue") is not None:
+            raise AssertionError(f"workstation current clear persisted invalid payload: {cleared_persisted}")
+
+
+def assert_workstation_registry_cli_blocks(payload: dict[str, Any], classification: str, entry_id: Any) -> None:
+    if payload.get("result") != "block" or payload.get("failed_layer") != "workstation-registry":
+        raise AssertionError(f"workstation registry {classification} did not fail closed: {payload}")
+    classifications = payload.get("classifications")
+    if not isinstance(classifications, list):
+        raise AssertionError(f"workstation registry {classification} did not expose classifications")
+    matched = [
+        item
+        for item in classifications
+        if isinstance(item, dict)
+        and item.get("classification") == classification
+        and item.get("entry_id") == entry_id
+        and item.get("blocking") is True
+    ]
+    if not matched:
+        raise AssertionError(f"workstation registry {classification} blocking classification missing: {classifications}")
+    guidance = matched[0].get("repair_guidance")
+    if not isinstance(guidance, list) or not guidance:
+        raise AssertionError(f"workstation registry {classification} must include repair guidance")
+    if entry_id in payload.get("eligible_for_plan", []):
+        raise AssertionError(f"workstation registry {classification} entry must not be eligible for planning")
+
+
+def assert_global_runtime_path_resolver_contract(tmp: Path) -> None:
+    target = tmp / "runtime-path-resolver"
+    target.mkdir()
+    workstation = tmp / "workstation"
+    runtime_paths = runtime_paths_module()
+    with isolated_loom_workstation(workstation):
+        runtime_locator = ".loom/runtime/pr/body.md"
+        tmp_locator = ".loom/tmp/session/output.json"
+        truth_locator = ".loom/status/current.md"
+        runtime_path = runtime_paths.global_runtime_path(target, runtime_locator)
+        tmp_path = runtime_paths.global_runtime_path(target, tmp_locator)
+        if runtime_path == target / runtime_locator or tmp_path == target / tmp_locator:
+            raise AssertionError("global runtime path resolver returned repo-local cache paths")
+        if workstation.resolve() not in runtime_path.resolve().parents or workstation.resolve() not in tmp_path.resolve().parents:
+            raise AssertionError("global runtime path resolver did not place artifacts under LOOM_WORKSTATION_ROOT")
+        if runtime_path.parts[-3:] != ("runtime", "pr", "body.md"):
+            raise AssertionError(f"runtime locator mapped to unexpected path: {runtime_path}")
+        if tmp_path.parts[-3:] != ("tmp", "session", "output.json"):
+            raise AssertionError(f"tmp locator mapped to unexpected path: {tmp_path}")
+        if runtime_paths.global_runtime_locator_for_path(target, runtime_path) != runtime_locator:
+            raise AssertionError("global runtime path resolver could not round-trip a runtime locator")
+        if runtime_paths.global_runtime_locator_for_path(target, tmp_path) != tmp_locator:
+            raise AssertionError("global runtime path resolver could not round-trip a tmp locator")
+        if runtime_paths.is_global_runtime_locator(truth_locator):
+            raise AssertionError("repo truth carrier was misclassified as a global runtime locator")
+
+        loom_flow = load_loom_flow_module()
+        resolved_runtime, runtime_errors = loom_flow.resolve_artifact_write_path(target, runtime_locator, label="runtime artifact")
+        resolved_truth, truth_errors = loom_flow.resolve_artifact_write_path(target, truth_locator, label="truth carrier")
+        if runtime_errors or resolved_runtime != runtime_path:
+            raise AssertionError(f"loom_flow did not use global runtime resolver: {runtime_errors}, {resolved_runtime}")
+        if truth_errors or resolved_truth != (target / truth_locator).resolve():
+            raise AssertionError("loom_flow moved a repo truth carrier out of the repository")
+
+        resolved_runtime.parent.mkdir(parents=True, exist_ok=True)
+        resolved_runtime.write_text("runtime\n", encoding="utf-8")
+        if (target / runtime_locator).exists():
+            raise AssertionError("runtime resolver created a repo-local .loom/runtime artifact")
+
+
+def assert_cache_absent_gate_contract(tmp: Path) -> None:
+    target = tmp / "cache-absent-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1901")
+    write_state(target, valid_state(target))
+    subprocess.run(["git", "add", ".loom/installed-state.json"], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture installed state"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["reviewed_head"] = reviewed_head
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture review refresh"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    update_fixture_pr_head(target, fixture)
+
+    workstation = tmp / "cache-absent-workstation"
+    with isolated_loom_workstation(workstation):
+        shutil.rmtree(target / ".loom" / "runtime", ignore_errors=True)
+        shutil.rmtree(target / ".loom" / "tmp", ignore_errors=True)
+
+        _, doctor_payload = run_json(["doctor", "--target", str(target), "--json"], expect=0)
+        if doctor_payload.get("result") != "pass":
+            raise AssertionError("doctor must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        _, resume_payload = run_json(["resume", "--target", str(target), "--item", fixture["item"], "--json"], expect=0)
+        if resume_payload.get("result") != "pass":
+            raise AssertionError("resume must not depend on repo-local .loom/runtime or .loom/tmp")
+        full_output = resume_payload.get("full_output")
+        resume_locator = full_output.get("artifact_locator") if isinstance(full_output, dict) else None
+        if not isinstance(resume_locator, str):
+            raise AssertionError("resume did not expose an artifact locator for cache-absent diagnostics")
+        resume_artifact = runtime_locator_path(target, resume_locator)
+        if resume_artifact is None or not resume_artifact.exists():
+            raise AssertionError("resume artifact was not written to the global runtime cache")
+        if (target / resume_locator).exists():
+            raise AssertionError("resume wrote diagnostics to repo-local .loom/tmp")
+        runtime_payload_from_agent_safe_output(resume_payload)
+
+        _, review_payload = run_flow_json(["review", "read", "--target", str(target), "--item", fixture["item"]], expect=0)
+        if review_payload.get("result") != "pass":
+            raise AssertionError("review read must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+        if pr_gate_payload.get("result") != "pass":
+            raise AssertionError("pr gate must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        _, merge_ready_payload = run_json(["merge-ready", "--target", str(target), "--item", fixture["item"], "--json"], expect=0)
+        if merge_ready_payload.get("result") != "pass":
+            raise AssertionError("merge-ready must not depend on repo-local .loom/runtime or .loom/tmp")
+
+        if (target / ".loom" / "runtime").exists() or (target / ".loom" / "tmp").exists():
+            raise AssertionError("cache-absent gate checks recreated repo-local runtime cache directories")
 
 
 def valid_state(target: Path) -> dict[str, Any]:
-    return {
-        "schema_version": "loom-installed-state/v2",
-        "installation_id": "fixture-valid",
-        "target": str(target),
-        "upgrade_eligibility": "current",
-        "layers": [
-            {
-                "id": "runtime",
-                "layer_type": "full-repo-runtime",
-                "installed_path": ".loom/bin",
-                "version_context": {
-                    "repo_version": "v0.13.0",
-                    "runtime_core_version": "1.0.0",
-                },
-                "runtime_state": "ready",
-                "upgrade_eligibility": "current",
-                "provides": ["loom runtime wrappers"],
-                "consumes": [],
-            },
-            {
-                "id": "skills",
-                "layer_type": "generated-skills",
-                "installed_path": "skills",
-                "version_context": {
-                    "skills_registry_version": "1.7.0",
-                    "skill_package_version": "1.0.0",
-                },
-                "runtime_state": "ready",
-                "upgrade_eligibility": "current",
-                "provides": ["scenario skills"],
-                "consumes": ["runtime"],
-            },
-        ],
-        "installation_graph": {
-            "layers": ["runtime", "skills"],
-            "edges": [{"from": "skills", "to": "runtime", "relationship": "consumes"}],
-        },
-    }
+    return global_cli_state(target)
 
 
 GLOBAL_CLI_REQUIRED_COMMANDS = [
@@ -1365,7 +5441,9 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "verify",
     "fact-chain",
     "status",
+    "shadow-parity",
     "story",
+    "workstation current",
 ]
 
 
@@ -1373,9 +5451,12 @@ def global_cli_state(target: Path) -> dict[str, Any]:
     return {
         "schema_version": "loom-installed-state/v2",
         "installation_id": "fixture-global-cli",
-        "target": str(target),
         "upgrade_eligibility": "current",
         "runtime_provider": "global-cli",
+        "contract": {
+            "minimum_loom_version": "v0.13.0",
+            "installed_state_schema": "loom-installed-state/v2",
+        },
         "provider_requirements": {
             "global_cli": {
                 "required": True,
@@ -1384,13 +5465,28 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "package": "@mc-and-his-agents/loom",
                 "executable": "loom",
                 "version_requirement": "v0.13.0",
-                "required_commands": GLOBAL_CLI_REQUIRED_COMMANDS,
-                "compatibility_mode_allowed": True,
+                "required_commands": list(GLOBAL_CLI_REQUIRED_COMMANDS),
+                "compatibility_mode_allowed": False,
             }
         },
         "repo_payload": {
             "mode": "metadata-only",
-            "intentional_absent_paths": ["plugins/loom/skills", ".agents/skills", "skills", ".loom/bin"],
+            "adoption_mode": "light-governance",
+            "intentional_absent_paths": [
+                ".loom/bin",
+                ".loom/runtime",
+                ".loom/tmp",
+                ".loom/shadow",
+                ".loom/status/current.md",
+                ".loom/work-items",
+                ".loom/progress",
+                ".loom/specs",
+                ".loom/reviews",
+                "plugins/loom/.codex-plugin/plugin.json",
+                "plugins/loom/skills",
+                ".agents/skills",
+                "skills",
+            ],
         },
         "layers": [
             {
@@ -1398,7 +5494,7 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "layer_type": "repository-adoption-metadata",
                 "installed_path": ".loom/installed-state.json",
                 "version_context": {
-                    "repo_version": "v0.13.0",
+                    "minimum_loom_contract": "v0.13.0",
                     "installed_state_schema": "loom-installed-state/v2",
                 },
                 "runtime_state": "ready",
@@ -1411,8 +5507,8 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "layer_type": "user-level-skills-provider",
                 "installed_path": "workstation:codex-loom-plugin",
                 "version_context": {
-                    "plugin_surface_version": "v0.13.0",
-                    "host_adapter_version": "v0.13.0",
+                    "minimum_plugin_contract": "v0.13.0",
+                    "minimum_host_adapter_contract": "v0.13.0",
                 },
                 "runtime_state": "ready",
                 "upgrade_eligibility": "current",
@@ -1430,7 +5526,7 @@ def global_cli_state(target: Path) -> dict[str, Any]:
                 "runtime_state": "unknown",
                 "upgrade_eligibility": "unknown",
                 "provides": ["loom command semantics", "runtime provider"],
-                "declared_support": {"commands": GLOBAL_CLI_REQUIRED_COMMANDS},
+                "declared_support": {"commands": list(GLOBAL_CLI_REQUIRED_COMMANDS)},
                 "consumes": [],
             },
         ],
@@ -1448,6 +5544,122 @@ def global_cli_state(target: Path) -> dict[str, Any]:
             "registration_authority": "workstation",
         },
     }
+
+
+def assert_no_repo_local_runtime_bootstrap(target: Path, payload: dict[str, Any]) -> None:
+    declared_paths = {
+        item.get("path")
+        for collection_name in ("initial_artifacts", "planned_writes")
+        for item in payload.get(collection_name, [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    forbidden_paths = {".loom/bootstrap/manifest.json", "Makefile"}
+    forbidden_paths.update(path for path in declared_paths if isinstance(path, str) and path.startswith(".loom/bin/"))
+    if forbidden_paths & declared_paths:
+        raise AssertionError(f"metadata-only bootstrap declared repo-local runtime artifacts: {sorted(forbidden_paths & declared_paths)}")
+    for unexpected in (".loom/bin", ".loom/bootstrap/manifest.json", "Makefile"):
+        if (target / unexpected).exists():
+            raise AssertionError(f"metadata-only bootstrap generated {unexpected}")
+
+    def strings(value: Any) -> list[str]:
+        if isinstance(value, dict):
+            result: list[str] = []
+            for child in value.values():
+                result.extend(strings(child))
+            return result
+        if isinstance(value, list):
+            result = []
+            for child in value:
+                result.extend(strings(child))
+            return result
+        return [value] if isinstance(value, str) else []
+
+    stale = sorted({value for value in strings(payload) if "python3 .loom/bin/" in value})
+    if stale:
+        raise AssertionError(f"metadata-only bootstrap left repo-local runtime locators: {stale[:3]}")
+    for path in target.rglob("*"):
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            if "python3 .loom/bin/" in text:
+                raise AssertionError(f"metadata-only bootstrap wrote repo-local runtime locator in {path.relative_to(target)}")
+
+
+def assert_global_cli_metadata_only_bootstrap_contract(tmp: Path) -> None:
+    target = tmp / "bootstrap-global-cli-metadata-only"
+    target.mkdir()
+    write_state(target, global_cli_state(target))
+    _, payload = run_json(
+        [
+            "init",
+            "bootstrap",
+            "--target",
+            str(target),
+            "--intent",
+            "execution-control",
+            "--write",
+            "--verify",
+            "--json",
+        ],
+        expect=0,
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if payload.get("verification", {}).get("ok") is not True:
+        raise AssertionError(f"metadata-only global-cli bootstrap did not verify: {payload.get('verification')}")
+    assert_no_repo_local_runtime_bootstrap(target, payload)
+
+
+def assert_light_governance_slim_bootstrap_contract(tmp: Path) -> None:
+    target = tmp / "bootstrap-light-governance-slim"
+    target.mkdir()
+    _, payload = run_json(
+        [
+            "init",
+            "bootstrap",
+            "--target",
+            str(target),
+            "--intent",
+            "light-governance",
+            "--write",
+            "--verify",
+            "--json",
+        ],
+        expect=0,
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    if payload.get("verification", {}).get("ok") is not True:
+        raise AssertionError(f"light-governance slim bootstrap did not verify: {payload.get('verification')}")
+    if payload.get("runtime_provider", {}).get("runtime_provider") != "global-cli":
+        raise AssertionError("light-governance bootstrap must default to the global CLI runtime provider")
+    declared_paths = {
+        item.get("path")
+        for collection_name in ("initial_artifacts", "planned_writes")
+        for item in payload.get(collection_name, [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    forbidden = {
+        ".loom/work-items",
+        ".loom/progress",
+        ".loom/specs",
+        ".loom/reviews",
+        ".loom/status/current.md",
+        ".loom/shadow",
+        ".loom/bin",
+        ".loom/runtime",
+        ".loom/tmp",
+    }
+    declared_forbidden = sorted(
+        path
+        for path in declared_paths
+        if any(path == blocked or path.startswith(blocked + "/") for blocked in forbidden)
+    )
+    if declared_forbidden:
+        raise AssertionError(f"light-governance bootstrap declared execution carriers: {declared_forbidden}")
+    for unexpected in forbidden:
+        if (target / unexpected).exists():
+            raise AssertionError(f"light-governance bootstrap created forbidden repo carrier: {unexpected}")
+    loom_files = [path for path in (target / ".loom").rglob("*") if path.is_file()]
+    if len(loom_files) >= 10:
+        raise AssertionError(f"light-governance bootstrap left too many .loom files: {len(loom_files)}")
 
 
 def write_global_cli_fact_chain_fixture(target: Path) -> None:
@@ -1873,15 +6085,14 @@ def assert_generated_skills_surface_parity_contract(skills_check: dict[str, Any]
         skill_id = entry.get("id")
         if not isinstance(skill_id, str) or not skill_id:
             raise AssertionError("src/skills registry contains an invalid skill entry")
-        package_root = REPO_ROOT / "skills" / skill_id
-        runtime_root = package_root / ".loom-runtime"
-        for relative in ("registry.json", "install-layout.json", "route-matrix.md"):
-            source = REPO_ROOT / "src" / "skills" / relative
-            runtime = runtime_root / relative
-            if not runtime.is_file():
-                raise AssertionError(f"{skill_id} package runtime missing {relative}")
-            if source.read_bytes() != runtime.read_bytes():
-                raise AssertionError(f"{skill_id} package runtime drifted for {relative}")
+        for payload_root in (REPO_ROOT / "skills", REPO_ROOT / "plugins" / "loom" / "skills"):
+            package_root = payload_root / skill_id
+            if not (package_root / "SKILL.md").is_file():
+                raise AssertionError(f"{payload_root.relative_to(REPO_ROOT)}/{skill_id} missing SKILL.md")
+            if not (package_root / "contract.json").is_file():
+                raise AssertionError(f"{payload_root.relative_to(REPO_ROOT)}/{skill_id} missing contract.json")
+            if (package_root / "loom-package.json").exists() or (package_root / ".loom-runtime").exists():
+                raise AssertionError(f"{payload_root.relative_to(REPO_ROOT)}/{skill_id} still exposes single-skill package artifacts")
 
 
 def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, project_done: bool = True) -> dict[str, str]:
@@ -2038,7 +6249,7 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
         "number": int(pr_number),
         "state": "MERGED",
         "title": "PR fixture",
-        "body": f"Loom Work Item: {item}\nBranch: {branch}\nHead SHA: {head_sha}\n",
+        "body": f"Loom Work Item: {item}\nBranch: {branch}\n",
         "url": f"https://github.com/owner/repo/pull/{pr_number}",
         "isDraft": False,
         "mergedAt": "2026-05-30T00:00:00Z",
@@ -2094,8 +6305,7 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
     }
 
 
-def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
-    item = "WI-1287"
+def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287") -> dict[str, str]:
     branch = "work/1287-1288-review-head-binding"
     validation_summary = "git diff --check; targeted pr-gate semantic review disposition fixtures passed."
     write_full_suite(target, item)
@@ -2103,7 +6313,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
     (suite_dir / "implementation-contract.md").write_text(
         "# Implementation Contract\n\n"
         "- Contract: pr-gate consumes semantic_review_disposition from the authored review record.\n"
-        "- Boundary: PR payload fixture binds only Work Item, branch, and head SHA.\n",
+        "- Boundary: PR payload fixture binds stable Work Item and branch fields; PR head is read from host payload.\n",
         encoding="utf-8",
     )
     (target / ".github").mkdir(parents=True, exist_ok=True)
@@ -2114,14 +6324,14 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "## Related Work\n\n- Loom Work Item:\n",
         encoding="utf-8",
     )
-    (target / ".gitignore").write_text(".loom/fixtures/\n", encoding="utf-8")
+    (target / ".gitignore").write_text(".loom/fixtures/\n.loom/tmp/\n", encoding="utf-8")
     work_item = target / ".loom" / "work-items" / f"{item}.md"
     work_item.write_text(
         f"# {item}\n\n"
         "## Static Facts\n\n"
         f"- Item ID: {item}\n"
         "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
-        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Scope: `fixture-change.txt`, `.loom/reviews/{item}.json`, and PR payload fixture only.\n"
         f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
         "- Workspace Entry: .\n"
         f"- Recovery Entry: .loom/progress/{item}.md\n"
@@ -2157,6 +6367,45 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "- Evidence Freshness: current\n",
         encoding="utf-8",
     )
+    historical_item = "WI-historical-active"
+    historical_work_item = target / ".loom" / "work-items" / f"{historical_item}.md"
+    historical_work_item.write_text(
+        f"# {historical_item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {historical_item}\n"
+        "- Goal: Historical active carrier fixture.\n"
+        "- Scope: retained carrier only.\n"
+        "- Execution Path: historical issue -> same workspace\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{historical_item}.md\n"
+        f"- Review Entry: .loom/reviews/{historical_item}.json\n"
+        "- Validation Entry: not_applicable\n"
+        "- Closing Condition: not_applicable\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{historical_item}.md`\n",
+        encoding="utf-8",
+    )
+    historical_progress = target / ".loom" / "progress" / f"{historical_item}.md"
+    historical_progress.write_text(
+        f"# {historical_item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {historical_item}\n"
+        "- Current Checkpoint: pre_review\n"
+        "- Current Stop: Historical active carrier should not block the current item once fact-chain selects another item.\n"
+        "- Next Step: not_applicable\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: not_applicable\n"
+        "- Recovery Boundary: historical fixture only.\n"
+        "- Current Lane: historical-active-carrier\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n",
+        encoding="utf-8",
+    )
     status = target / ".loom" / "status" / "current.md"
     status.parent.mkdir(parents=True, exist_ok=True)
     status.write_text(
@@ -2164,7 +6413,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "## Derived Fact Chain View\n\n"
         f"- Item ID: {item}\n"
         "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
-        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Scope: `fixture-change.txt`, `.loom/reviews/{item}.json`, and PR payload fixture only.\n"
         f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
         "- Workspace Entry: .\n"
         f"- Recovery Entry: .loom/progress/{item}.md\n"
@@ -2282,7 +6531,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "number": 1288,
         "state": "OPEN",
         "title": "semantic review disposition fixture",
-        "body": f"Loom Work Item: {item}\nBranch: {branch}\nHead SHA: {head_sha}\n",
+        "body": f"Loom Work Item: {item}\nBranch: {branch}\n",
         "url": "https://github.com/owner/repo/pull/1288",
         "isDraft": False,
         "headRefName": branch,
@@ -2313,16 +6562,47 @@ def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str 
     head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
     payload["state"] = state
     payload["headRefOid"] = head_sha
-    payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\nHead SHA: {head_sha}\n"
+    payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\n"
     if extra:
         payload.update(extra)
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
+def semantic_pr_gate_fixture_payload(
+    target: Path,
+    fixture: dict[str, str],
+    *,
+    surface: str | None = None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
+    gate_freeze_snapshot_file: str | None = None,
+) -> dict[str, Any]:
+    command = [
+        "pr-gate",
+        "check",
+        "--target",
+        str(target),
+        "--item",
+        fixture["item"],
+        "--pr-payload-file",
+        fixture["pr_file"],
+    ]
+    if surface:
+        command.extend(["--surface", surface])
+    if body_file:
+        command.extend(["--body-file", body_file])
+    if compare_body_file:
+        command.extend(["--compare-body-file", compare_body_file])
+    if gate_freeze_snapshot_file:
+        command.extend(["--gate-freeze-snapshot-file", gate_freeze_snapshot_file])
+    _, payload = run_flow_json(command)
+    return payload
+
+
+def gate_freeze_fixture_payload(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
     _, payload = run_flow_json(
         [
-            "pr-gate",
+            "gate-freeze",
             "check",
             "--target",
             str(target),
@@ -2333,6 +6613,1241 @@ def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> d
         ]
     )
     return payload
+
+
+def write_hosted_freeze_admission_inputs(target: Path) -> None:
+    write_governance_metadata_contract_fixture(target)
+    install_bootstrapped_runtime(target)
+    source = target / ".loom" / "companion" / "README.md"
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    shadow_dir = target / ".loom" / "shadow"
+    shadow_dir.mkdir(parents=True, exist_ok=True)
+    shadow_surfaces: dict[str, dict[str, str]] = {}
+    for surface in ("admission", "review", "merge_ready", "closeout"):
+        slug = surface.replace("_", "-")
+        loom_locator = f".loom/shadow/{slug}-loom.json"
+        repo_locator = f".loom/shadow/{slug}-repo.json"
+        payload = {
+            "surface": surface,
+            "result": "match",
+            "source_files": [".loom/companion/README.md"],
+            "source_sha256": {".loom/companion/README.md": source_hash},
+        }
+        (target / loom_locator).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        (target / repo_locator).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        shadow_surfaces[surface] = {
+            "summary": f"Fixture {surface} shadow parity is current.",
+            "loom_locator": loom_locator,
+            "repo_locator": repo_locator,
+        }
+    (target / ".loom" / "companion" / "interop.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-interop/v1",
+                "host_adapters": [],
+                "repo_native_carriers": [],
+                "shadow_surfaces": shadow_surfaces,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "hosted-freeze-admission"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    write_hosted_freeze_admission_inputs(target)
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture hosted freeze admission inputs"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
+    append_governance_intensity_metadata_body(target, fixture)
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    fixture_dir = target / ".loom" / "fixtures" / fixture["item"]
+    body_file = f".loom/fixtures/{fixture['item']}/hosted-pr-body.md"
+    readback_drift_file = f".loom/fixtures/{fixture['item']}/hosted-pr-body-drift.md"
+    snapshot_file = f".loom/fixtures/{fixture['item']}/hosted-freeze-snapshot.json"
+    body_path = target / body_file
+    readback_drift_path = target / readback_drift_file
+    snapshot_path = target / snapshot_file
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    body_path.write_text(pr_payload["body"], encoding="utf-8")
+    readback_drift_path.write_text(pr_payload["body"] + "\nOperator drift after readback.\n", encoding="utf-8")
+
+    pass_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+    )
+    admission = pass_payload.get("hosted_freeze_admission")
+    if not isinstance(admission, dict) or admission.get("schema_version") != "loom-hosted-freeze-admission/v1":
+        raise AssertionError("pr-gate did not expose hosted freeze admission schema")
+    if admission.get("result") != "pass" or pass_payload.get("result") != "pass":
+        raise AssertionError(f"hosted freeze admission positive fixture did not pass: {admission}")
+    if admission.get("artifact_comparison", {}).get("result") != "not_applicable":
+        raise AssertionError("hosted freeze admission without snapshot must mark artifact comparison not_applicable")
+    if admission.get("readback", {}).get("result") != "pass":
+        raise AssertionError("hosted freeze admission did not consume matching PR body readback")
+    if not isinstance(admission.get("carrier_refresh"), dict) or not isinstance(admission.get("shadow_freshness"), dict):
+        raise AssertionError("hosted freeze admission must expose carrier refresh and shadow freshness classifications")
+    if not any(step.get("name") == "hosted-freeze-admission" for step in pass_payload.get("steps", []) if isinstance(step, dict)):
+        raise AssertionError("pr-gate steps must include hosted-freeze-admission before merge checkpoint consumption")
+
+    body_drift_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=readback_drift_file,
+    )
+    body_drift_admission = body_drift_payload.get("hosted_freeze_admission")
+    if body_drift_payload.get("result") != "pass" or body_drift_admission.get("result") != "pass":
+        raise AssertionError("hosted freeze admission must allow readback body drift when metadata machine blocks match")
+    if body_drift_admission.get("readback", {}).get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+        raise AssertionError("hosted freeze admission did not report benign PR body readback drift")
+    if body_drift_admission.get("failure_classifier", {}).get("findings"):
+        raise AssertionError("benign hosted freeze PR body drift must not carry failure classifier findings")
+
+    snapshot = dict(admission.get("recomputed_freeze") or {})
+    snapshot["snapshot_id"] = "0" * 64
+    snapshot_path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
+    snapshot_mismatch_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+        gate_freeze_snapshot_file=snapshot_file,
+    )
+    snapshot_admission = snapshot_mismatch_payload.get("hosted_freeze_admission")
+    if snapshot_mismatch_payload.get("result") != "block" or snapshot_admission.get("result") != "block":
+        raise AssertionError("hosted freeze admission must block snapshot mismatch")
+    if snapshot_admission.get("artifact_comparison", {}).get("result") != "block":
+        raise AssertionError("hosted freeze admission did not expose blocking artifact comparison")
+    if not any(
+        finding.get("classifier") == "hosted_snapshot_mismatch"
+        and "regenerate the freeze snapshot" in str(finding.get("next_action"))
+        for finding in snapshot_admission.get("failure_classifier", {}).get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("hosted snapshot mismatch must carry classifier next action")
+
+
+def assert_host_readback_only_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "host-readback-only-pr-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1965")
+    write_hosted_freeze_admission_inputs(target)
+
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    init_payload = json.loads(init_result.read_text(encoding="utf-8"))
+    init_payload["fact_chain"]["entry_points"]["current_item_id"] = "WI-stale-current"
+    init_payload["fact_chain"]["entry_points"]["work_item"] = ".loom/work-items/WI-stale-current.md"
+    init_payload["fact_chain"]["entry_points"]["recovery_entry"] = ".loom/progress/WI-stale-current.md"
+    init_result.write_text(json.dumps(init_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture stale current pointer"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(
+        target,
+        fixture,
+        extra={
+            "statusCheckRollup": [
+                {"name": "py-compile", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "loom-check", "conclusion": "SUCCESS", "status": "COMPLETED"},
+            ],
+        },
+    )
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "standard",
+            "change_class": "contract",
+            "suite_path": "minimal",
+            "review_requirement": "host_readback_only",
+            "fact_chain_required": False,
+        },
+    )
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    body_file = f".loom/fixtures/{fixture['item']}/host-readback-only-body.md"
+    readback_body_file = f".loom/fixtures/{fixture['item']}/host-readback-only-readback-body.md"
+    (target / body_file).write_text(pr_payload["body"], encoding="utf-8")
+    (target / readback_body_file).write_text(pr_payload["body"] + "\n", encoding="utf-8")
+    payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=readback_body_file,
+    )
+    if payload.get("result") != "pass":
+        raise AssertionError(f"host-readback-only PR gate blocked: {payload.get('missing_inputs')}")
+    serialized = json.dumps(payload, ensure_ascii=False)
+    if "current item mismatch" in serialized or "WI-stale-current" in serialized:
+        raise AssertionError("host-readback-only PR gate leaked stale current pointer into gate result")
+    if payload.get("review_approval", {}).get("status") != "host_readback_only":
+        raise AssertionError("host-readback-only PR gate did not expose the review approval boundary")
+    if payload.get("merge_checkpoint", {}).get("result") != "not_applicable":
+        raise AssertionError("host-readback-only PR gate must not evaluate repo merge checkpoint carriers")
+    admission = payload.get("hosted_freeze_admission", {})
+    if admission.get("result") != "pass" or admission.get("profile") != "host_readback_only":
+        raise AssertionError(f"host-readback-only hosted admission did not pass: {admission}")
+    body_pin = admission.get("input_bindings", {}).get("pr_body_pin", {})
+    if body_pin.get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+        raise AssertionError("host-readback-only body pin must tolerate full-body newline drift when machine blocks match")
+    fact_chain = admission.get("input_bindings", {}).get("fact_chain", {})
+    if fact_chain.get("result") != "not_applicable":
+        raise AssertionError("host-readback-only hosted admission must mark fact-chain not_applicable")
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "standard",
+            "change_class": "contract",
+            "suite_path": "minimal",
+            "review_requirement": "current_head_review_required",
+            "fact_chain_required": False,
+        },
+    )
+    invalid_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        invalid_payload.get("result") != "block"
+        or "PR metadata machine block invalid: loom-governance-intensity" not in invalid_payload.get("missing_inputs", [])
+    ):
+        raise AssertionError("fact_chain_required false without host_readback_only must fail metadata preflight")
+
+
+def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "pr-metadata-suite-not-applicable"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1957")
+    write_hosted_freeze_admission_inputs(target)
+    suite_dir = target / ".loom" / "specs" / fixture["item"]
+    shutil.rmtree(suite_dir)
+    subprocess.run(["git", "add", "-A", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture remove repo suite"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload.update(
+        {
+            "reviewed_head": reviewed_head,
+            "reviewed_validation_summary": fixture["validation_summary"],
+            "reviewed_validation_summary_hash": None,
+            "validation_summary_source": "recovery.latest_validation_summary",
+            "validation_summary_locator": f".loom/progress/{fixture['item']}.md",
+            "summary": "Fixture implementation review approves metadata-declared suite not_applicable without repo-local spec files.",
+            "semantic_review_disposition": {
+                "status": "passed",
+                "reason": "Authored implementation review approved the current head; PR metadata supplies the formal suite not_applicable decision.",
+            },
+            "consumed_inputs": {
+                "work_item": f".loom/work-items/{fixture['item']}.md",
+                "recovery_entry": f".loom/progress/{fixture['item']}.md",
+                "suite_evidence_validation": "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable",
+                "suite_carrier_validation": "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable",
+            },
+        }
+    )
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture metadata suite review"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "reinforced",
+            "change_class": "runtime",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "batch implementation is validated by targeted contract checks instead of repo-local formal suite files",
+                "consumer_boundary": "PR gate, review, merge-ready, and closeout consume this only as formal suite non-applicability",
+                "recheck_condition": "scope expands beyond the declared runtime batch or validation evidence changes",
+                "scope_proof": "fixture intentionally removes .loom/specs/<WI> and relies on PR metadata machine carrier",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    body_file = f".loom/fixtures/{fixture['item']}/body.md"
+    (target / body_file).write_text(str(pr_payload.get("body") or ""), encoding="utf-8")
+    payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=body_file,
+        compare_body_file=body_file,
+    )
+    if payload.get("result") != "pass":
+        raise AssertionError(f"PR metadata suite_not_applicable fixture blocked: {payload.get('missing_inputs')}")
+    serialized_missing = "\n".join(str(message) for message in payload.get("missing_inputs", []))
+    forbidden_fragments = ("missing formal spec suite file", "suite_path_decision", "missing_evidence_map", "missing_task_carrier_locator")
+    if any(fragment in serialized_missing for fragment in forbidden_fragments):
+        raise AssertionError(f"PR metadata suite_not_applicable leaked repo-local suite requirements: {serialized_missing}")
+    spec_review = payload.get("merge_checkpoint", {}).get("spec_review", {})
+    if spec_review.get("result") != "not_applicable":
+        raise AssertionError(f"merge checkpoint did not consume PR metadata suite not_applicable: {spec_review}")
+    governance_gate = next(
+        (
+            step.get("governance_intensity_gate")
+            for step in payload.get("steps", [])
+            if isinstance(step, dict) and step.get("name") == "governance-intensity-gate"
+        ),
+        {},
+    )
+    if governance_gate.get("suite_path_decision", {}).get("source") != "pr_metadata":
+        raise AssertionError(f"governance gate did not identify PR metadata as suite decision source: {governance_gate}")
+    freeze_suite = payload.get("hosted_freeze_admission", {}).get("input_bindings", {}).get("suite_validation", {})
+    if (
+        freeze_suite.get("result") != "not_applicable"
+        or freeze_suite.get("source_locator") != "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable"
+    ):
+        raise AssertionError(f"hosted freeze did not consume PR metadata suite not_applicable: {freeze_suite}")
+
+
+def assert_suite_not_applicable_marker_parser_contract(tmp: Path) -> None:
+    target = tmp / "suite-not-applicable-marker-parser"
+    target.mkdir()
+    accepted = target / "accepted.md"
+    accepted.write_text(
+        "- Suite path: not_applicable\n"
+        "- Plan Locator: not_applicable (suite path: not_applicable)\n",
+        encoding="utf-8",
+    )
+    rejected = target / "rejected.md"
+    rejected.write_text(
+        "- Note: no suite path: not_applicable evidence yet\n"
+        "- Latest Validation Summary: previous fixture mentioned suite path: not_applicable while debugging.\n"
+        "- Plan Locator: .loom/specs/WI-1957/plan.md (suite path: not_applicable)\n",
+        encoding="utf-8",
+    )
+
+    loom_flow = load_loom_flow_module()
+    context = {"target_root": target}
+    accepted_present, accepted_values = loom_flow.suite_path_decision_presence_from_paths(context, ["accepted.md"])
+    if not accepted_present or accepted_values != {"not_applicable"}:
+        raise AssertionError(f"structured suite_not_applicable marker was not consumed: {accepted_values}")
+    rejected_present, rejected_values = loom_flow.suite_path_decision_presence_from_paths(context, ["rejected.md"])
+    if rejected_present or rejected_values:
+        raise AssertionError(f"unstructured suite_not_applicable prose was consumed: {rejected_values}")
+
+    governance_surface = load_governance_surface_module()
+    if governance_surface.suite_path_decision(accepted) != "not_applicable":
+        raise AssertionError("governance surface did not consume structured suite_not_applicable marker")
+    if governance_surface.suite_path_decision(rejected):
+        raise AssertionError("governance surface consumed unstructured suite_not_applicable prose")
+
+
+def assert_runtime_carrier_suite_not_applicable_adoption_fixture(tmp: Path) -> None:
+    target = tmp / "runtime-carrier-suite-not-applicable"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1957")
+    item = fixture["item"]
+    shutil.rmtree(target / ".loom" / "specs" / item)
+    (target / ".loom" / "reviews" / f"{item}.spec.json").unlink()
+    progress_path = target / ".loom" / "progress" / f"{item}.md"
+    progress_text = progress_path.read_text(encoding="utf-8")
+    if "suite path: not_applicable" not in progress_text:
+        progress_text = progress_text.replace(
+            f"- Plan Locator: .loom/specs/{item}/plan.md\n",
+            f"- Plan Locator: not_applicable (suite path: not_applicable)\n",
+            1,
+        )
+    progress_path.write_text(progress_text, encoding="utf-8")
+    subprocess.run(["git", "add", "-A", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture runtime suite not applicable"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload.update(
+        {
+            "reviewed_head": reviewed_head,
+            "reviewed_validation_summary": fixture["validation_summary"],
+            "summary": "Fixture implementation review approves runtime-carrier suite not_applicable without repo-local spec files.",
+            "semantic_review_disposition": {
+                "status": "passed",
+                "reason": "Authored implementation review approved the current head; progress/status declare the formal suite not_applicable decision.",
+            },
+            "consumed_inputs": {
+                "work_item": f".loom/work-items/{item}.md",
+                "recovery_entry": f".loom/progress/{item}.md",
+                "suite_path_decision": f".loom/progress/{item}.md",
+            },
+        }
+    )
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture runtime suite review"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+
+    loom_flow = load_loom_flow_module()
+    context, context_errors = loom_flow.load_retained_item_context(
+        target,
+        ".loom/bootstrap/init-result.json",
+        item,
+        f".loom/work-items/{item}.md",
+    )
+    if context_errors:
+        raise AssertionError(f"runtime carrier suite_not_applicable context failed: {context_errors}")
+    spec_gate = loom_flow.spec_review_gate_payload(context)
+    if spec_gate.get("result") != "not_applicable":
+        raise AssertionError(f"runtime carrier suite_not_applicable did not reach spec gate: {spec_gate}")
+    suite_validation = spec_gate.get("suite_validation", {})
+    if suite_validation.get("validator_mode") != "active-fact-chain-marker":
+        raise AssertionError(f"runtime carrier suite_not_applicable did not use the active fact-chain marker: {suite_validation}")
+
+    status_code, adoption = run_flow_json(["adopt", "verify", "--target", str(target), "--item", item])
+    missing = "\n".join(str(entry) for entry in adoption.get("missing_inputs", []))
+    if "Spec Review Record" in missing or "missing spec review artifact" in missing:
+        raise AssertionError(f"runtime carrier suite_not_applicable still required a spec review artifact: {missing}")
+    if adoption.get("reviews", {}).get("spec", {}).get("status") != "not_applicable":
+        raise AssertionError(f"adoption verify did not classify spec review as not_applicable: {adoption.get('reviews')}")
+    consumer = adoption.get("producer_consumer_roundtrip", {}).get("consumer", {})
+    if consumer.get("review_artifacts", {}).get("Spec Review Record", {}).get("status") != "not_applicable":
+        raise AssertionError(f"adoption PR body did not render Spec Review Record as not_applicable: {consumer}")
+    if status_code not in {0, 1}:
+        raise AssertionError(f"adoption verify returned unexpected status {status_code}: {adoption}")
+
+    _, profile = run_flow_json(["governance-profile", "status", "--target", str(target)], expect=0)
+    missing_by_level = profile.get("maturity", {}).get("missing_by_level", {})
+    standard_missing = set(missing_by_level.get("standard", [])) if isinstance(missing_by_level, dict) else set()
+    forbidden = {"spec_path", "plan_path", "spec_gate"} & standard_missing
+    if forbidden:
+        raise AssertionError(f"runtime carrier suite_not_applicable did not satisfy maturity spec facts: {sorted(forbidden)}")
+
+
+def assert_closeout_freeze_profile_fixture(tmp: Path) -> None:
+    target = tmp / "closeout-freeze-profile"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    write_hosted_freeze_admission_inputs(target)
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture closeout freeze inputs"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    update_fixture_pr_head(
+        target,
+        fixture,
+        state="MERGED",
+        extra={
+            "mergedAt": "2026-06-18T00:00:00Z",
+            "mergeCommit": {"oid": head_sha},
+            "baseRefName": fixture["branch"],
+        },
+    )
+    append_governance_intensity_metadata_body(target, fixture)
+    pr_path = target / fixture["pr_file"]
+    fixture_dir = target / ".loom" / "fixtures" / fixture["item"]
+    release_evidence_file = fixture_dir / "no-release-evidence.md"
+    release_evidence_relative = f".loom/fixtures/{fixture['item']}/no-release-evidence.md"
+    release_evidence_file.write_text(
+        "# No-release Evidence\n\n"
+        "- Judgment: no_release\n"
+        "- Readback: fixture closeout lane changes only local checker/admission behavior and does not publish a release.\n",
+        encoding="utf-8",
+    )
+    pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    pr_payload["body"] = (
+        f"{pr_payload['body'].rstrip()}\n\n"
+        f"No-release evidence locator: {release_evidence_relative}\n"
+        "Closes #1532\n"
+    )
+    pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
+    issue_file = fixture_dir / "issue.json"
+    issue_file.write_text(
+        json.dumps(
+            {
+                "number": 1532,
+                "state": "closed",
+                "title": "closeout freeze fixture",
+                "closed_at": "2026-06-18T00:01:00Z",
+                "html_url": "https://github.com/owner/repo/issues/1532",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    issue_relative = f".loom/fixtures/{fixture['item']}/issue.json"
+    dependency_file = fixture_dir / "dependencies.json"
+    dependency_file.write_text(
+        json.dumps(
+            {
+                "availability": "present",
+                "checks": [],
+                "native_edges": [],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    dependency_relative = f".loom/fixtures/{fixture['item']}/dependencies.json"
+    body_file = f".loom/fixtures/{fixture['item']}/closeout-pr-body.md"
+    readback_drift_file = f".loom/fixtures/{fixture['item']}/closeout-pr-body-drift.md"
+    missing_release_pr_file = f".loom/fixtures/{fixture['item']}/pr-missing-release-evidence.json"
+    (target / body_file).write_text(pr_payload["body"], encoding="utf-8")
+    (target / readback_drift_file).write_text(pr_payload["body"] + "\nOperator drift after readback.\n", encoding="utf-8")
+    missing_release_pr_payload = dict(pr_payload)
+    missing_release_pr_payload["body"] = pr_payload["body"].replace(
+        f"No-release evidence locator: {release_evidence_relative}\n",
+        "",
+    )
+    (target / missing_release_pr_file).write_text(json.dumps(missing_release_pr_payload, indent=2) + "\n", encoding="utf-8")
+
+    def read_only_snapshot() -> dict[str, str]:
+        fetch_head = subprocess.check_output(["git", "rev-parse", "--git-path", "FETCH_HEAD"], cwd=target, text=True).strip()
+        fetch_path = target / fetch_head
+        return {
+            "status": subprocess.check_output(["git", "status", "--short"], cwd=target, text=True),
+            "refs": subprocess.check_output(["git", "for-each-ref", "--format=%(refname):%(objectname)"], cwd=target, text=True),
+            "fetch_head": fetch_path.read_text(encoding="utf-8") if fetch_path.exists() else "<missing>",
+        }
+
+    before_check = read_only_snapshot()
+    _, pass_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+            "--body-file",
+            body_file,
+            "--compare-body-file",
+            body_file,
+        ],
+        expect=0,
+    )
+    after_check = read_only_snapshot()
+    if after_check != before_check:
+        raise AssertionError("closeout freeze check must not mutate git status, refs, or FETCH_HEAD")
+    if pass_payload.get("schema_version") != "loom-closeout-freeze/v1":
+        raise AssertionError("closeout freeze check must emit loom-closeout-freeze/v1")
+    if pass_payload.get("result") != "pass" or pass_payload.get("profile") != "closeout":
+        raise AssertionError(f"closeout freeze positive fixture did not pass: {pass_payload.get('missing_inputs')}")
+    if not str(pass_payload.get("snapshot_id", "")).startswith("sha256:"):
+        raise AssertionError("closeout freeze snapshot_id must be sha256-prefixed")
+    base_snapshot = pass_payload.get("base_freeze_snapshot", {})
+    if base_snapshot.get("schema_version") != "loom-gate-freeze/v1":
+        raise AssertionError("closeout freeze must retain the reused hosted gate freeze snapshot surface")
+    reused_inputs = base_snapshot.get("input_bindings", {})
+    for key in ("carrier_refresh", "shadow_freshness", "readback", "failure_classifier"):
+        if key not in reused_inputs:
+            raise AssertionError(f"closeout freeze did not retain reused {key} input")
+    pending_fields = set(pass_payload.get("pending_contract_fields", []))
+    consumed_fields = set(pass_payload.get("consumed_contract_fields", []))
+    stable_fields = {
+        "carrier_refresh_result",
+        "shadow_freshness",
+        "hosted_snapshot_binding",
+        "failure_classifier_mapping",
+        "readback_drift",
+        "release_evidence_readback",
+    }
+    stale_pending = stable_fields.intersection(pending_fields)
+    if stale_pending:
+        raise AssertionError(f"closeout freeze still marks stable fields pending: {sorted(stale_pending)}")
+    missing_consumed = stable_fields.difference(consumed_fields)
+    if missing_consumed:
+        raise AssertionError(f"closeout freeze did not consume stable fields: {sorted(missing_consumed)}")
+    release_boundary = pass_payload.get("release_boundary", {})
+    if release_boundary.get("result") != "pass" or release_boundary.get("evidence_readback", {}).get("locator") != release_evidence_relative:
+        raise AssertionError("closeout freeze must consume no-release evidence readback instead of PR metadata alone")
+    if pass_payload.get("readiness", {}).get("closeout_pr_allowed") is not True:
+        raise AssertionError("closeout freeze positive fixture must allow closeout PR creation")
+    closeout_specific_gate = pass_payload.get("closeout_specific_gate", {})
+    if (
+        closeout_specific_gate.get("schema_version") != "loom-closeout-specific-gate/v1"
+        or closeout_specific_gate.get("result") != "pass"
+        or closeout_specific_gate.get("verdict") != "closeout_pr_allowed"
+        or closeout_specific_gate.get("escalation_required") is not False
+        or closeout_specific_gate.get("next_action") != "closeout_pr_allowed"
+    ):
+        raise AssertionError(f"closeout freeze must expose passing closeout-specific gate verdict: {closeout_specific_gate}")
+
+    _, missing_release_evidence = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            missing_release_pr_file,
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if missing_release_evidence.get("readiness", {}).get("closeout_pr_allowed") is not False:
+        raise AssertionError("closeout freeze must fail closed when release/no-release evidence is missing")
+    release_gap_gate = missing_release_evidence.get("closeout_specific_gate", {})
+    if (
+        release_gap_gate.get("schema_version") != "loom-closeout-specific-gate/v1"
+        or release_gap_gate.get("result") != "block"
+        or release_gap_gate.get("verdict") != "full_review_required"
+        or release_gap_gate.get("escalation_reason") != "closeout_release_evidence_gap"
+        or release_gap_gate.get("next_action") != "resolve_closeout_freeze_blockers"
+    ):
+        raise AssertionError(f"closeout freeze must expose release-gap closeout-specific escalation: {release_gap_gate}")
+    if not any(
+        blocking.get("input") == "release_boundary"
+        and blocking.get("failure_kind") == "closeout_release_evidence_gap"
+        for blocking in missing_release_evidence.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze missing release/no-release evidence must be a blocking input")
+
+    _, readback_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+            "--body-file",
+            body_file,
+            "--compare-body-file",
+            readback_drift_file,
+        ],
+        expect=0,
+    )
+    if readback_drift.get("result") != "pass" or readback_drift.get("readiness", {}).get("closeout_pr_allowed") is not True:
+        raise AssertionError("closeout freeze must allow PR body readback drift when metadata machine blocks match")
+    if any(
+        blocking.get("input") == "readback"
+        for blocking in readback_drift.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("benign closeout freeze readback drift must not be a blocking input")
+
+    unrelated_issue_file = fixture_dir / "issue-unrelated.json"
+    unrelated_issue_file.write_text(
+        json.dumps(
+            {
+                "number": 9999,
+                "state": "closed",
+                "title": "unrelated closed issue",
+                "closed_at": "2026-06-18T00:01:00Z",
+                "html_url": "https://github.com/owner/repo/issues/9999",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, unrelated_subject = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "9999",
+            "--issue-payload-file",
+            f".loom/fixtures/{fixture['item']}/issue-unrelated.json",
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if not any(
+        blocking.get("failure_kind") == "closeout_terminal_subject_drift"
+        for blocking in unrelated_subject.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze must block unrelated closed issue plus merged PR pairing")
+
+    _, target_branch_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            "main",
+        ],
+        expect=1,
+    )
+    if target_branch_drift.get("terminal_facts", {}).get("target_contains_merge_commit") is not False:
+        raise AssertionError("closeout freeze must not fall back to HEAD for target branch merge containment")
+    if not any(
+        blocking.get("failure_kind") == "closeout_host_git_mismatch"
+        for blocking in target_branch_drift.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze target branch drift must be a blocking input")
+
+    dependency_drift_file = fixture_dir / "dependencies-open-blocker.json"
+    dependency_drift_file.write_text(
+        json.dumps(
+            {
+                "availability": "present",
+                "checks": [],
+                "native_edges": [
+                    {
+                        "source_issue": 1532,
+                        "blocking_issue": 9999,
+                        "direction": "blocked_by",
+                        "blocker_state": "open",
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, dependency_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            f".loom/fixtures/{fixture['item']}/dependencies-open-blocker.json",
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    dependency_binding = dependency_drift.get("carrier_bindings", {}).get("dependency_graph", {})
+    if dependency_binding.get("result") != "block":
+        raise AssertionError("closeout freeze must block dependency graph drift")
+    if not any(
+        finding.get("kind") == "open_blocker_executable_conflict"
+        for finding in dependency_binding.get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("closeout freeze dependency graph must expose the open blocker finding")
+    if not any(
+        finding.get("failure_kind") == "closeout_dependency_graph_drift"
+        for finding in dependency_drift.get("failure_classifier", {}).get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("closeout freeze dependency graph drift must carry a classifier finding")
+
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["semantic_review_disposition"] = {
+        "status": "failed",
+        "reason": "fixture retained review semantic drift",
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    _, review_drift = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if not any(
+        blocking.get("input") == "retained_review"
+        for blocking in review_drift.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    ):
+        raise AssertionError("closeout freeze must block retained review semantic drift")
+    review_payload["semantic_review_disposition"] = {
+        "status": "passed",
+        "reason": "fixture restored retained review semantic disposition",
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+
+    write_path = f".loom/runtime/gate-freeze/{fixture['item']}-closeout.json"
+    _, write_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "write",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+            "--write-path",
+            write_path,
+        ],
+        expect=0,
+    )
+    if write_payload.get("write_artifact", {}).get("locator") != write_path:
+        raise AssertionError("closeout freeze write must retain the closeout snapshot under .loom/runtime/gate-freeze")
+    written_path = runtime_locator_path(target, write_path)
+    if written_path is None or not written_path.exists():
+        raise AssertionError("closeout freeze write did not store the snapshot in the global runtime cache")
+    if (target / write_path).exists():
+        raise AssertionError("closeout freeze write must not create repo-local .loom/runtime cache artifacts")
+    written = json.loads(written_path.read_text(encoding="utf-8"))
+    if written.get("schema_version") != "loom-closeout-freeze/v1":
+        raise AssertionError("closeout freeze write artifact must preserve loom-closeout-freeze/v1")
+
+    task_carrier = target / ".loom" / "specs" / fixture["item"] / "task-carrier.md"
+    task_carrier.write_text(f"{task_carrier.read_text(encoding='utf-8').rstrip()}\n\n- Closeout carrier sync fixture.\n", encoding="utf-8")
+    commit_fixture_file(target, f".loom/specs/{fixture['item']}/task-carrier.md", "fixture closeout allowed carrier drift")
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["reviewed_head"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_payload["semantic_review_disposition"] = {
+        "status": "passed",
+        "reason": "fixture closeout carrier drift review refreshed",
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture closeout review refresh after carrier drift")
+    _, allowed_drift_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=0,
+    )
+    if allowed_drift_payload.get("allowed_paths", {}).get("violations") != []:
+        raise AssertionError("closeout freeze allowed paths must match terminal closeout carrier policy")
+    if f".loom/specs/{fixture['item']}/task-carrier.md" not in allowed_drift_payload.get("allowed_paths", {}).get("changed_paths", []):
+        raise AssertionError("closeout freeze allowed path fixture did not exercise task carrier drift")
+
+    (target / "tools").mkdir(exist_ok=True)
+    (target / "tools" / "loom.py").write_text("print('implementation drift')\n", encoding="utf-8")
+    commit_fixture_file(target, "tools/loom.py", "fixture implementation drift after closeout merge")
+    _, drift_payload = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if drift_payload.get("result") != "block":
+        raise AssertionError("closeout freeze must block implementation drift after the merge commit")
+    allowed_paths = drift_payload.get("allowed_paths", {})
+    if "tools/loom.py" not in allowed_paths.get("violations", []):
+        raise AssertionError("closeout freeze allowed_paths must identify implementation drift")
+    if not any(
+        finding.get("failure_kind") == "closeout_allowed_paths_violation"
+        for finding in drift_payload.get("failure_classifier", {}).get("findings", [])
+        if isinstance(finding, dict)
+    ):
+        raise AssertionError("closeout freeze implementation drift must carry a classifier finding")
+
+    companion_readme = target / ".loom" / "companion" / "README.md"
+    companion_readme.write_text("# Fixture Companion\n\nstale shadow source\n", encoding="utf-8")
+    _, stale_carrier_shadow = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--profile",
+            "closeout",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1532",
+            "--issue-payload-file",
+            issue_relative,
+            "--dependency-payload-file",
+            dependency_relative,
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--target-branch",
+            fixture["branch"],
+        ],
+        expect=1,
+    )
+    if stale_carrier_shadow.get("readiness", {}).get("closeout_pr_allowed") is not False:
+        raise AssertionError("closeout freeze must fail closed when carrier refresh or shadow freshness is stale")
+    stale_inputs = {
+        blocking.get("input")
+        for blocking in stale_carrier_shadow.get("readiness", {}).get("blocking_inputs", [])
+        if isinstance(blocking, dict)
+    }
+    if not {"carrier_refresh", "shadow_freshness"}.issubset(stale_inputs):
+        raise AssertionError("closeout freeze stale carrier/shadow inputs must both block closeout admission")
+
+
+def record_current_fixture_review(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
+    _, record_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--review-file",
+            fixture["review_path"],
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Fixture implementation review approves the current head.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    if record_payload.get("result") != "pass":
+        raise AssertionError(f"review record fixture failed: {record_payload.get('missing_inputs')}")
+    return record_payload
+
+
+def record_current_fixture_spec_review(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
+    _, record_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--review-file",
+            f".loom/reviews/{fixture['item']}.spec.json",
+            "--decision",
+            "allow",
+            "--kind",
+            "spec_review",
+            "--summary",
+            "Fixture spec review approves the current suite path decision.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    if record_payload.get("result") != "pass":
+        raise AssertionError(f"spec review record fixture failed: {record_payload.get('missing_inputs')}")
+    return record_payload
+
+
+def assert_gate_freeze_review_binding_fixture(tmp: Path) -> None:
+    target = tmp / "gate-freeze-review-binding"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+
+    record_payload = record_current_fixture_review(target, fixture)
+    recorded_disposition = record_payload.get("review", {}).get("record", {}).get("semantic_review_disposition", {})
+    if recorded_disposition.get("status") != "passed":
+        raise AssertionError("review record did not write passed semantic_review_disposition")
+
+    fresh_payload = gate_freeze_fixture_payload(target, fixture)
+    fresh_binding = fresh_payload.get("input_bindings", {}).get("review_binding")
+    if not isinstance(fresh_binding, dict) or fresh_binding.get("schema_version") != "loom-gate-freeze-review-binding/v1":
+        raise AssertionError("gate freeze did not emit review binding schema")
+    if (
+        fresh_binding.get("result") != "pass"
+        or fresh_binding.get("decision") != "allow"
+        or fresh_binding.get("kind") != "code_review"
+        or fresh_binding.get("binding_status") != "fresh"
+        or fresh_binding.get("semantic_review_disposition", {}).get("consumable") is not True
+    ):
+        raise AssertionError(f"gate freeze fresh review binding did not pass: {fresh_binding}")
+    if not fresh_binding.get("reviewed_head") or fresh_binding.get("reviewed_head") != fresh_binding.get("current_head"):
+        raise AssertionError("gate freeze fresh review binding did not expose reviewed/current head")
+
+    commit_fixture_file(target, fixture["review_path"], "fixture review carrier-only drift")
+    update_fixture_pr_head(target, fixture)
+    carrier_payload = gate_freeze_fixture_payload(target, fixture)
+    carrier_binding = carrier_payload.get("input_bindings", {}).get("review_binding")
+    carrier_head = carrier_binding.get("head_binding", {}) if isinstance(carrier_binding, dict) else {}
+    if (
+        not isinstance(carrier_binding, dict)
+        or carrier_binding.get("result") != "pass"
+        or carrier_binding.get("binding_status") != "carrier-only"
+        or fixture["review_path"] not in carrier_head.get("changed_paths", [])
+        or carrier_head.get("disallowed_paths") != []
+        or "carrier-only" not in str(carrier_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze carrier-only review binding did not pass with path evidence: {carrier_binding}")
+    carrier_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        carrier_pr_gate_payload.get("result") != "pass"
+        or carrier_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "carrier-only"
+        or carrier_pr_gate_payload.get("governance_lint", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"pr-gate did not consume carrier-only review drift: {carrier_pr_gate_payload.get('missing_inputs')}")
+    append_governance_intensity_metadata_body(target, fixture, include_legacy_bindings=False)
+    machine_only_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        machine_only_pr_gate_payload.get("result") != "pass"
+        or machine_only_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status") != "carrier-only"
+    ):
+        raise AssertionError(
+            f"pr-gate did not consume machine-carrier-only PR binding: {machine_only_pr_gate_payload.get('missing_inputs')}"
+        )
+
+    work_item_path = target / ".loom" / "work-items" / f"{fixture['item']}.md"
+    work_item_path.write_text(
+        work_item_path.read_text(encoding="utf-8").rstrip()
+        + "\n"
+        + f"- `.loom/bootstrap/init-result.json` refreshed for {fixture['item']} final carrier binding.\n",
+        encoding="utf-8",
+    )
+    init_result_path = target / ".loom" / "bootstrap" / "init-result.json"
+    init_result_payload = json.loads(init_result_path.read_text(encoding="utf-8"))
+    init_result_payload["final_carrier_binding_fixture"] = fixture["item"]
+    init_result_path.write_text(json.dumps(init_result_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", f".loom/work-items/{fixture['item']}.md", ".loom/bootstrap/init-result.json"],
+        cwd=target,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture final batch carrier binding"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    batch_carrier_payload = gate_freeze_fixture_payload(target, fixture)
+    batch_carrier_binding = batch_carrier_payload.get("input_bindings", {}).get("review_binding")
+    batch_carrier_head = batch_carrier_binding.get("head_binding", {}) if isinstance(batch_carrier_binding, dict) else {}
+    if (
+        not isinstance(batch_carrier_binding, dict)
+        or batch_carrier_binding.get("result") != "pass"
+        or batch_carrier_binding.get("binding_status") != "carrier-and-generated-only"
+        or f".loom/work-items/{fixture['item']}.md" not in batch_carrier_head.get("carrier_only_paths", [])
+        or ".loom/bootstrap/init-result.json" not in batch_carrier_head.get("generated_only_paths", [])
+        or batch_carrier_head.get("disallowed_paths") != []
+    ):
+        raise AssertionError(f"gate freeze did not accept final batch carrier binding drift: {batch_carrier_binding}")
+    batch_carrier_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        batch_carrier_pr_gate_payload.get("result") != "pass"
+        or batch_carrier_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status")
+        != "carrier-and-generated-only"
+    ):
+        raise AssertionError(
+            f"pr-gate did not consume final batch carrier binding drift: {batch_carrier_pr_gate_payload.get('missing_inputs')}"
+        )
+
+    generated_path = "skills/README.md"
+    (target / "skills").mkdir(parents=True, exist_ok=True)
+    (target / generated_path).write_text("# Generated fixture drift\n", encoding="utf-8")
+    commit_fixture_file(target, generated_path, "fixture generated-only drift after freeze review")
+    update_fixture_pr_head(target, fixture)
+    generated_payload = gate_freeze_fixture_payload(target, fixture)
+    generated_binding = generated_payload.get("input_bindings", {}).get("review_binding")
+    generated_head = generated_binding.get("head_binding", {}) if isinstance(generated_binding, dict) else {}
+    generated_actions = generated_head.get("generated_only_validation_actions", [])
+    if (
+        not isinstance(generated_binding, dict)
+        or generated_binding.get("result") != "pass"
+        or generated_binding.get("binding_status") not in {"generated-only", "carrier-and-generated-only"}
+        or generated_path not in generated_head.get("generated_only_paths", [])
+        or generated_head.get("disallowed_paths") != []
+        or not any("tools/skills_surface.py check" in str(action.get("action")) for action in generated_actions if isinstance(action, dict))
+        or "generated-only" not in str(generated_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze generated-only review binding did not pass with validation action: {generated_binding}")
+    generated_pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        generated_pr_gate_payload.get("result") != "pass"
+        or generated_pr_gate_payload.get("review_approval", {}).get("head_binding", {}).get("status")
+        not in {"generated-only", "carrier-and-generated-only"}
+        or generated_pr_gate_payload.get("governance_lint", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"pr-gate did not consume generated-only review drift: {generated_pr_gate_payload.get('missing_inputs')}")
+
+    (target / "implementation-drift.txt").write_text("unreviewed drift\n", encoding="utf-8")
+    commit_fixture_file(target, "implementation-drift.txt", "fixture implementation drift after freeze review")
+    update_fixture_pr_head(target, fixture)
+    stale_payload = gate_freeze_fixture_payload(target, fixture)
+    stale_binding = stale_payload.get("input_bindings", {}).get("review_binding")
+    stale_head = stale_binding.get("head_binding", {}) if isinstance(stale_binding, dict) else {}
+    if (
+        not isinstance(stale_binding, dict)
+        or stale_binding.get("result") != "block"
+        or stale_binding.get("binding_status") not in {"stale", "implementation-drift-only"}
+        or "implementation-drift.txt" not in stale_head.get("disallowed_paths", [])
+        or "rerun authored Loom review" not in str(stale_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze stale review binding did not block with rerun action: {stale_binding}")
+
+    invalid_target = tmp / "gate-freeze-invalid-disposition"
+    invalid_target.mkdir()
+    invalid_fixture = write_semantic_review_pr_gate_fixture(invalid_target)
+    record_current_fixture_review(invalid_target, invalid_fixture)
+    review_path = invalid_target / invalid_fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["semantic_review_disposition"] = {"status": "commented"}
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    invalid_payload = gate_freeze_fixture_payload(invalid_target, invalid_fixture)
+    invalid_binding = invalid_payload.get("input_bindings", {}).get("review_binding")
+    if (
+        not isinstance(invalid_binding, dict)
+        or invalid_binding.get("result") != "block"
+        or invalid_binding.get("semantic_review_disposition", {}).get("status") != "commented"
+        or "semantic_review_disposition" not in " ".join(invalid_binding.get("missing_inputs", []))
+        or "semantic_review_disposition" not in str(invalid_binding.get("next_action"))
+    ):
+        raise AssertionError(f"gate freeze invalid semantic disposition did not fail closed: {invalid_binding}")
 
 
 def assert_pr_gate_blocks(
@@ -2353,6 +7868,265 @@ def assert_pr_gate_blocks(
         if not isinstance(lite_gate, dict) or lite_gate.get("result") != "block":
             raise AssertionError(f"{label} did not expose blocking docs-governance lite gate evidence")
     return payload
+
+
+def assert_cross_repo_review_gate_fixtures(tmp: Path) -> None:
+    hotcp_target = tmp / "hotcp-review-gate-fixtures"
+    hotcp_target.mkdir()
+    hotcp_fixture = write_semantic_review_pr_gate_fixture(hotcp_target)
+    hotcp_review_path = hotcp_target / hotcp_fixture["review_path"]
+
+    (hotcp_target / "hotcp-unreviewed-drift.txt").write_text("HotCP stale head drift\n", encoding="utf-8")
+    commit_fixture_file(hotcp_target, "hotcp-unreviewed-drift.txt", "fixture HotCP stale head drift")
+    update_fixture_pr_head(hotcp_target, hotcp_fixture)
+    hotcp_stale = semantic_pr_gate_fixture_payload(hotcp_target, hotcp_fixture)
+    if (
+        hotcp_stale.get("result") != "block"
+        or "review_stale" not in hotcp_stale.get("failure_taxonomy", [])
+        or "head_binding_drift" not in hotcp_stale.get("failure_taxonomy", [])
+    ):
+        raise AssertionError("HotCP-style stale/head drift fixture did not fail closed")
+
+    hotcp_review = json.loads(hotcp_review_path.read_text(encoding="utf-8"))
+    hotcp_review["authored_at"] = "2026-05-31T00:00:00Z"
+    hotcp_review_path.write_text(json.dumps(hotcp_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(hotcp_target, hotcp_fixture["review_path"], "fixture HotCP post merge review")
+    update_fixture_pr_head(hotcp_target, hotcp_fixture, state="MERGED", extra={"mergedAt": "2026-05-30T00:00:00Z"})
+    hotcp_post_merge = semantic_pr_gate_fixture_payload(hotcp_target, hotcp_fixture)
+    hotcp_diagnostic = hotcp_post_merge.get("post_merge_review_diagnostic", {})
+    if (
+        hotcp_post_merge.get("result") != "block"
+        or "post_merge_review_bypass" not in hotcp_post_merge.get("failure_taxonomy", [])
+        or hotcp_diagnostic.get("finding", {}).get("kind") != "post_merge_review_bypass"
+        or "backdate review evidence" not in hotcp_diagnostic.get("repair_plan", {}).get("forbidden_repairs", [])
+    ):
+        raise AssertionError("HotCP-style post-merge review fixture did not expose bypass repair semantics")
+
+    hotcp_ci_target = tmp / "hotcp-ci-only-bypass"
+    hotcp_ci_target.mkdir()
+    hotcp_ci_fixture = write_semantic_review_pr_gate_fixture(hotcp_ci_target)
+    hotcp_ci_review_path = hotcp_ci_target / hotcp_ci_fixture["review_path"]
+    hotcp_ci_review = json.loads(hotcp_ci_review_path.read_text(encoding="utf-8"))
+    hotcp_ci_review["semantic_review_disposition"] = {"status": "required"}
+    hotcp_ci_review_path.write_text(json.dumps(hotcp_ci_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(hotcp_ci_target, hotcp_ci_fixture["review_path"], "fixture HotCP CI-only review required")
+    update_fixture_pr_head(
+        hotcp_ci_target,
+        hotcp_ci_fixture,
+        extra={"statusCheckRollup": [{"name": "hotcp-ci", "conclusion": "SUCCESS", "status": "COMPLETED"}]},
+    )
+    hotcp_ci_only = semantic_pr_gate_fixture_payload(hotcp_ci_target, hotcp_ci_fixture)
+    if hotcp_ci_only.get("result") != "block" or "ci_only_bypass" not in hotcp_ci_only.get("failure_taxonomy", []):
+        raise AssertionError("HotCP-style CI-only bypass fixture did not fail closed")
+
+    webenvoy_target, webenvoy_fixture, _, webenvoy_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="webenvoy-guardian-triggered-block",
+        branch_protection_contexts=["loom-pr-merge-gate"],
+    )
+    (webenvoy_dir / "checks-webenvoy-guardian-block.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {
+                    "name": "webenvoy-guardian",
+                    "workflowName": "webenvoy-guardian",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                    "detailsUrl": "https://example.invalid/webenvoy/guardian",
+                },
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, webenvoy_guardian = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(webenvoy_target),
+            "--item",
+            webenvoy_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            webenvoy_fixture["head_sha"],
+            "--pr-payload-file",
+            webenvoy_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-webenvoy-guardian-block.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        webenvoy_guardian.get("result") != "block"
+        or webenvoy_guardian.get("required_checks", {}).get("result") != "pass"
+        or "webenvoy-guardian" not in webenvoy_guardian.get("triggered_check_rollup", {}).get("blocking", [])
+    ):
+        raise AssertionError("WebEnvoy-style guardian block was not consumed as a triggered-check merge blocker")
+    (webenvoy_dir / "checks-webenvoy-guardian-pending.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "webenvoy-guardian", "workflowName": "webenvoy-guardian", "status": "IN_PROGRESS"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, webenvoy_pending = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(webenvoy_target),
+            "--item",
+            webenvoy_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            webenvoy_fixture["head_sha"],
+            "--pr-payload-file",
+            webenvoy_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-webenvoy-guardian-pending.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        webenvoy_pending.get("result") != "block"
+        or webenvoy_pending.get("required_checks", {}).get("result") != "pass"
+        or "webenvoy-guardian" not in webenvoy_pending.get("triggered_check_rollup", {}).get("pending", [])
+    ):
+        raise AssertionError("WebEnvoy-style pending guardian check was not consumed as a triggered-check merge blocker")
+
+    syvert_target = tmp / "syvert-guardian-advisory-cannot-replace-review"
+    syvert_target.mkdir()
+    syvert_fixture = write_semantic_review_pr_gate_fixture(syvert_target)
+    syvert_review_path = syvert_target / syvert_fixture["review_path"]
+    syvert_review = json.loads(syvert_review_path.read_text(encoding="utf-8"))
+    syvert_review["semantic_review_disposition"] = {"status": "required"}
+    syvert_review_path.write_text(json.dumps(syvert_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(syvert_target, syvert_fixture["review_path"], "fixture Syvert advisory review required")
+    update_fixture_pr_head(
+        syvert_target,
+        syvert_fixture,
+        extra={
+            "statusCheckRollup": [
+                {"name": "syvert-guardian", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-integration-advisory", "conclusion": "NEUTRAL", "status": "COMPLETED"},
+            ]
+        },
+    )
+    syvert_advisory = semantic_pr_gate_fixture_payload(syvert_target, syvert_fixture)
+    syvert_disposition = syvert_advisory.get("review_approval", {}).get("semantic_review_disposition", {})
+    if (
+        syvert_advisory.get("result") != "block"
+        or syvert_disposition.get("consumable") is not False
+        or "ci_only_bypass" not in syvert_advisory.get("failure_taxonomy", [])
+        or not any("host-review signal cannot satisfy" in item for item in syvert_advisory.get("missing_inputs", []))
+    ):
+        raise AssertionError("Syvert-style guardian/integration advisory signals replaced Loom semantic review")
+
+    syvert_merge_target, syvert_merge_fixture, _, syvert_merge_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="syvert-verdict-conflict-triggered-block",
+        branch_protection_contexts=["loom-pr-merge-gate"],
+    )
+    (syvert_merge_dir / "checks-syvert-verdict-conflict.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-guardian", "workflowName": "syvert-guardian", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {
+                    "name": "syvert-integration",
+                    "workflowName": "syvert-integration",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                },
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, syvert_conflict = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(syvert_merge_target),
+            "--item",
+            syvert_merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            syvert_merge_fixture["head_sha"],
+            "--pr-payload-file",
+            syvert_merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-syvert-verdict-conflict.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        syvert_conflict.get("result") != "block"
+        or syvert_conflict.get("required_checks", {}).get("result") != "pass"
+        or "syvert-integration" not in syvert_conflict.get("triggered_check_rollup", {}).get("blocking", [])
+    ):
+        raise AssertionError("Syvert-style guardian/integration verdict conflict did not block controlled merge")
+    (syvert_merge_dir / "checks-syvert-verdict-pending.json").write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-guardian", "workflowName": "syvert-guardian", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "syvert-integration", "workflowName": "syvert-integration", "status": "QUEUED"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, syvert_pending = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(syvert_merge_target),
+            "--item",
+            syvert_merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            syvert_merge_fixture["head_sha"],
+            "--pr-payload-file",
+            syvert_merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-syvert-verdict-pending.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        syvert_pending.get("result") != "block"
+        or syvert_pending.get("required_checks", {}).get("result") != "pass"
+        or "syvert-integration" not in syvert_pending.get("triggered_check_rollup", {}).get("pending", [])
+    ):
+        raise AssertionError("Syvert-style pending integration verdict did not block controlled merge")
 
 
 def write_governance_metadata_contract_fixture(target: Path) -> None:
@@ -2422,7 +8196,6 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                 "repo_specific_field_set": [
                                     "loom_work_item",
                                     "branch",
-                                    "head_sha",
                                     "governance_intensity",
                                     "change_class",
                                     "suite_path",
@@ -2438,7 +8211,6 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                 "required_fields": [
                                     "loom_work_item",
                                     "branch",
-                                    "head_sha",
                                     "governance_intensity",
                                     "change_class",
                                     "suite_path",
@@ -2461,6 +8233,31 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                     "expected_format": True,
                                     "suggested_fix": True,
                                 },
+                                "binding_priority": [
+                                    "cli_explicit_input",
+                                    "pr_body_machine_carrier",
+                                    "host_readback",
+                                    "repo_carrier",
+                                    "human_pr_body_field",
+                                    "issue_title_or_body",
+                                ],
+                                "safe_repair": {
+                                    "allowed_when": "cli_explicit_input, pr_body_machine_carrier, and host_readback agree",
+                                    "allowed_targets": [
+                                        "missing_human_backlink",
+                                        "display_field_format",
+                                        "deterministic_machine_carrier_rerender",
+                                    ],
+                                    "forbidden_when": [
+                                        "work_item_conflict",
+                                        "issue_conflict",
+                                        "pr_conflict",
+                                        "branch_conflict",
+                                        "release_judgment_conflict",
+                                        "closeout_policy_conflict",
+                                    ],
+                                    "required_readback": "render, update PR body, read back, then rerun metadata preflight before gate consumption",
+                                },
                                 "migration_mode": "required",
                             },
                         }
@@ -2480,12 +8277,13 @@ def governance_metadata_body(
     item: str = "WI-1321",
     branch: str = "work/1321-governance-intensity-metadata-carrier",
     head_sha: str = "1111111111111111111111111111111111111111",
+    include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
+    surface: str = "merge_ready",
 ) -> str:
     fields: dict[str, Any] = {
         "loom_work_item": item,
         "branch": branch,
-        "head_sha": head_sha,
         "governance_intensity": "standard",
         "change_class": "contract",
         "suite_path": "minimal",
@@ -2506,19 +8304,18 @@ def governance_metadata_body(
     envelope = {
         "schema_version": "loom-repo-pr-metadata/v1",
         "metadata_contract_id": "loom-governance-intensity",
-        "surface": "merge_ready",
+        "surface": surface,
         "fields": fields,
         "source": {"rendered_hash": "sha256:fixture"},
         "parser_version": "loom-pr-metadata-parser/v1",
     }
-    return (
+    legacy_binding = (
         f"Loom Work Item: {item}\n"
-        f"Branch: {branch}\n"
-        f"Head SHA: {head_sha}\n\n"
-        "<!-- loom:repo-pr-metadata\n"
-        f"{json.dumps(envelope, indent=2)}\n"
-        "-->\n"
+        f"Branch: {branch}\n\n"
+        if include_legacy_bindings
+        else f"Loom Work Item: {item}\n\n"
     )
+    return legacy_binding + "<!-- loom:repo-pr-metadata\n" + f"{json.dumps(envelope, indent=2)}\n" + "-->\n"
 
 
 def governance_metadata_preflight_payload(target: Path, body_name: str, *, expect: int = 0) -> dict[str, Any]:
@@ -2538,23 +8335,635 @@ def governance_metadata_preflight_payload(target: Path, body_name: str, *, expec
     return payload
 
 
+def assert_pr_metadata_wrapper_argument_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for pr metadata wrapper regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> int:
+        captured.clear()
+        captured["command"] = command
+        captured["flow_args"] = flow_args
+        captured["fallback_to"] = fallback_to
+        return 0
+
+    original_emit_flow = module.emit_flow
+    module.emit_flow = fake_emit_flow
+    try:
+        status = module.handle_pr(
+            [
+                "metadata-update",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--issue",
+                "1687",
+                "--branch",
+                "work/1541-pr-metadata-update-v2",
+                "--output-file",
+                ".loom/runtime/pr/rendered.md",
+                "--readback-file",
+                ".loom/runtime/pr/readback.md",
+                "--base-body-file",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+                "--governance-intensity",
+                "standard",
+                "--change-class",
+                "contract",
+                "--suite-path",
+                "minimal",
+                "--review-requirement",
+                "current_head_review_required",
+                "--release-judgment",
+                "no_release",
+                "--upgrade-trigger",
+                "fixture",
+                "--covered-issue",
+                "1541",
+                "--covered-issue",
+                "1542",
+                "--excluded-scope",
+                "release publication",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("pr metadata-update wrapper regression did not complete")
+        if captured.get("command") != "pr metadata-update":
+            raise AssertionError("pr metadata-update wrapper did not preserve command label")
+        flow_args = captured.get("flow_args")
+        if not isinstance(flow_args, list) or flow_args[:3] != ["pr-metadata", "update", "--target"]:
+            raise AssertionError("pr metadata-update wrapper did not delegate to pr-metadata update")
+        expected_pairs = {
+            "--surface": "closeout",
+            "--item": "WI-1541",
+            "--issue": "1687",
+            "--branch": "work/1541-pr-metadata-update-v2",
+            "--output-file": ".loom/runtime/pr/rendered.md",
+            "--readback-file": ".loom/runtime/pr/readback.md",
+            "--base-body-file": ".github/PULL_REQUEST_TEMPLATE.md",
+            "--governance-intensity": "standard",
+            "--change-class": "contract",
+            "--suite-path": "minimal",
+            "--review-requirement": "current_head_review_required",
+            "--release-judgment": "no_release",
+            "--upgrade-trigger": "fixture",
+            "--excluded-scope": "release publication",
+        }
+        for flag, expected in expected_pairs.items():
+            if flag not in flow_args:
+                raise AssertionError(f"pr metadata-update wrapper did not pass {flag}")
+            if flow_args[flow_args.index(flag) + 1] != expected:
+                raise AssertionError(f"pr metadata-update wrapper changed {flag} value")
+        covered_issues = [
+            flow_args[index + 1]
+            for index, value in enumerate(flow_args)
+            if value == "--covered-issue" and index + 1 < len(flow_args)
+        ]
+        if covered_issues != ["1541", "1542"]:
+            raise AssertionError(f"pr metadata-update wrapper did not preserve repeatable --covered-issue values: {covered_issues}")
+        if "--dry-run" not in flow_args or "--apply" in flow_args:
+            raise AssertionError("pr metadata-update wrapper must default to dry-run delegation")
+
+        status = module.handle_pr(
+            [
+                "metadata-update",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--apply",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("pr metadata-update wrapper apply regression did not complete")
+        flow_args = captured.get("flow_args")
+        if "--apply" not in flow_args or "--dry-run" in flow_args:
+            raise AssertionError("pr metadata-update wrapper did not forward explicit --apply")
+    finally:
+        module.emit_flow = original_emit_flow
+
+
+def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
+    target = tmp / "governance-metadata-render-readback"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+    (target / ".github").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md", target / ".github" / "PULL_REQUEST_TEMPLATE.md")
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "checkout", "-b", "work/1541-render"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.com"], cwd=target, check=True)
+    (target / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+
+    rendered: Path | None = None
+    with isolated_loom_workstation(tmp / "workstation"):
+        _, render_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "render",
+                "--target",
+                str(target),
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--issue",
+                "1541",
+                "--branch",
+                "work/1541-render",
+                "--output-file",
+                ".loom/runtime/pr/rendered.md",
+            ]
+        )
+        rendered = runtime_locator_path(target, ".loom/runtime/pr/rendered.md")
+        if rendered is None:
+            raise AssertionError("rendered runtime locator did not resolve to a global cache path")
+        repo_local_rendered = target / ".loom" / "runtime" / "pr" / "rendered.md"
+        if repo_local_rendered.exists():
+            raise AssertionError("render wrote the PR body artifact into repo-local .loom/runtime")
+        _, readback_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "readback",
+                "--target",
+                str(target),
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--issue",
+                "1541",
+                "--branch",
+                "work/1541-render",
+                "--body-file",
+                ".loom/runtime/pr/rendered.md",
+            ]
+        )
+        _, update_dry_run_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "update",
+                "--target",
+                str(target),
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--issue",
+                "1541",
+                "--branch",
+                "work/1541-render",
+                "--output-file",
+                ".loom/runtime/pr/update-rendered.md",
+            ]
+        )
+    if render_payload.get("result") != "pass":
+        raise AssertionError(f"render payload failed: {render_payload.get('missing_inputs')}")
+    if render_payload.get("effective_carrier_surface") != "closeout":
+        raise AssertionError("closeout render should emit closeout carrier surface")
+    if not rendered.exists():
+        raise AssertionError("render did not write the global runtime PR body artifact")
+    rendered_body = rendered.read_text(encoding="utf-8")
+    if "- Issue: #1541" not in rendered_body or "- Loom Work Item: WI-1541" not in rendered_body:
+        raise AssertionError("render did not normalize human PR binding line spacing")
+    if readback_payload.get("result") != "pass":
+        raise AssertionError(f"readback payload failed: {readback_payload.get('missing_inputs')}")
+    governance_fields = readback_payload.get("governance_fields")
+    if not isinstance(governance_fields, dict) or governance_fields.get("branch") != "work/1541-render" or "head_sha" in governance_fields:
+        raise AssertionError("readback did not expose parsed governance fields")
+    if (
+        update_dry_run_payload.get("result") != "pass"
+        or update_dry_run_payload.get("dry_run") is not True
+        or update_dry_run_payload.get("host_mutations") is not False
+        or update_dry_run_payload.get("apply_required") is not True
+        or update_dry_run_payload.get("readback") is not None
+    ):
+        raise AssertionError("pr metadata-update must default to dry-run local render/preflight without host mutation")
+
+
+def assert_batch_pr_metadata_fixture(tmp: Path) -> None:
+    target = tmp / "batch-pr-metadata"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+
+    with isolated_loom_workstation(tmp / "workstation"):
+        _, render_payload = run_flow_json(
+            [
+                "pr-metadata",
+                "render",
+                "--target",
+                str(target),
+                "--surface",
+                "merge_ready",
+                "--item",
+                "WI-1962",
+                "--issue",
+                "1962",
+                "--head-sha",
+                "2222222222222222222222222222222222222222",
+                "--branch",
+                "work/1962-batch-implementation-closeout",
+                "--covered-issue",
+                "1965",
+                "--excluded-scope",
+                "release publication",
+                "--output-file",
+                ".loom/runtime/pr/batch-rendered.md",
+            ]
+        )
+        rendered = runtime_locator_path(target, ".loom/runtime/pr/batch-rendered.md")
+
+    if render_payload.get("result") != "pass":
+        raise AssertionError(f"batch metadata render failed: {render_payload.get('missing_inputs')}")
+    fields = render_payload.get("envelope", {}).get("fields")
+    if not isinstance(fields, dict):
+        raise AssertionError("batch metadata render did not expose governance fields")
+    if fields.get("anchor_issue") != 1962:
+        raise AssertionError("batch metadata render did not expose the anchor issue")
+    if fields.get("covered_issues") != [1962, 1965]:
+        raise AssertionError(f"batch metadata render did not normalize covered issues: {fields.get('covered_issues')}")
+    if fields.get("excluded_scope") != ["release publication"]:
+        raise AssertionError("batch metadata render did not preserve excluded scope")
+
+    if rendered is None or not rendered.exists():
+        raise AssertionError("batch metadata render did not write the global runtime PR body artifact")
+    body = rendered.read_text(encoding="utf-8")
+    if "- Covered Issues: #1962, #1965" not in body:
+        raise AssertionError("batch metadata render did not write human covered issue bindings")
+    if "- Excluded Scope: release publication" not in body:
+        raise AssertionError("batch metadata render did not write human excluded scope bindings")
+
+
+def assert_active_workspace_carrier_boundary_fixture(tmp: Path) -> None:
+    target = tmp / "active-workspace-carrier-boundary"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-2003")
+    loom_flow = load_loom_flow_module()
+
+    context = loom_flow.extract_github_host_context(
+        target,
+        ["- Execution Path: issue #2002 -> branch work/2003-boundary -> PR #2003."],
+        default_owner="owner",
+        default_repo="repo",
+    )
+    if not isinstance(context, dict) or context.get("issue_number") != 2002 or context.get("pr_number") != 2003:
+        raise AssertionError(f"bare issue/PR host references were not parsed: {context}")
+
+    live_item = "STALE-0002"
+    (target / ".loom" / "work-items" / f"{live_item}.md").write_text(
+        f"# {live_item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {live_item}\n"
+        "- Goal: Fixture proves live same-workspace carriers still block.\n"
+        "- Scope: retained carrier only.\n"
+        "- Execution Path: live same workspace fixture\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{live_item}.md\n"
+        f"- Review Entry: .loom/reviews/{live_item}.json\n"
+        "- Validation Entry: not_applicable\n"
+        "- Closing Condition: not_applicable\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{live_item}.md`\n"
+        f"- `.loom/progress/{live_item}.md`\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "progress" / f"{live_item}.md").write_text(
+        f"# {live_item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {live_item}\n"
+        "- Current Checkpoint: pre_review\n"
+        "- Current Stop: Live same-workspace carrier should block.\n"
+        "- Next Step: not_applicable\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: not_applicable\n"
+        "- Recovery Boundary: fixture only.\n"
+        "- Current Lane: live-conflict\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = loom_flow.active_workspace_diagnostics(target, fixture["item"], ".")
+    by_item = {entry.get("item_id"): entry for entry in diagnostics if isinstance(entry, dict)}
+    historical = by_item.get("WI-historical-active")
+    if not isinstance(historical, dict) or historical.get("blocking") is not False or historical.get("classification") != "stale_carrier":
+        raise AssertionError(f"tracked historical active carrier should be nonblocking: {historical}")
+    live = by_item.get(live_item)
+    if not isinstance(live, dict) or live.get("blocking") is not True or live.get("classification") != "shared_workspace_conflict":
+        raise AssertionError(f"untracked live same-workspace carrier should block: {live}")
+
+
+def assert_post_review_carrier_paths_partial_context_fixture(tmp: Path) -> None:
+    target = tmp / "post-review-carrier-partial-context"
+    target.mkdir()
+    loom_flow = load_loom_flow_module()
+    review_path = ".loom/reviews/WI-2003.json"
+    (target / review_path).parent.mkdir(parents=True, exist_ok=True)
+    (target / review_path).write_text('{"decision":"allow"}\n', encoding="utf-8")
+
+    allowed = loom_flow.allowed_post_review_carrier_paths(
+        {
+            "target_root": target,
+            "item_id": "WI-2003",
+            "report": {
+                "fact_chain": {
+                    "entry_points": {
+                        "recovery_entry": ".loom/progress/WI-2003.md",
+                        "status_surface": ".loom/status/current.md",
+                    }
+                }
+            },
+        },
+        review_path,
+    )
+    if review_path not in allowed or ".loom/progress/WI-2003.md" not in allowed or ".loom/status/current.md" not in allowed:
+        raise AssertionError(f"partial post-review carrier context did not preserve known locators: {allowed}")
+    if ".loom/reviews/WI-2003.spec.json" not in allowed:
+        raise AssertionError("partial post-review carrier context did not include the expected spec review locator")
+
+
+def assert_batch_host_only_closeout_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for batch closeout regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    emitted_payloads: list[dict[str, Any]] = []
+    gh_calls: list[list[str]] = []
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted_payloads.append(payload)
+        return 0 if payload.get("result") in {"pass", "not_applicable"} else 1
+
+    def fake_run_capture(command: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        gh_calls.append(list(command))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    original_emit = module.emit
+    original_run_capture = module.run_capture
+    module.emit = fake_emit
+    module.run_capture = fake_run_capture
+    try:
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--pr",
+                "1999",
+                "--merge-commit",
+                "3333333333333333333333333333333333333333",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout batch dry-run regression did not complete")
+        dry_run = emitted_payloads[-1]
+        if (
+            dry_run.get("schema_version") != "loom-batch-closeout/v1"
+            or dry_run.get("result") != "pass"
+            or dry_run.get("dry_run") is not True
+            or dry_run.get("host_mutations") is not False
+            or dry_run.get("carrier_mutations") is not False
+            or dry_run.get("creates_closeout_pr") is not False
+            or dry_run.get("covered_issues") != [1962, 1965]
+        ):
+            raise AssertionError("closeout batch dry-run payload drifted")
+        if gh_calls:
+            raise AssertionError("closeout batch dry-run must not call gh")
+
+        emitted_payloads.clear()
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--pr",
+                "1999",
+                "--merge-commit",
+                "3333333333333333333333333333333333333333",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0:
+            raise AssertionError("closeout batch apply regression did not complete")
+        apply_payload = emitted_payloads[-1]
+        if (
+            apply_payload.get("result") != "pass"
+            or apply_payload.get("apply") is not True
+            or apply_payload.get("host_mutations") is not True
+            or apply_payload.get("carrier_mutations") is not False
+            or apply_payload.get("creates_closeout_pr") is not False
+        ):
+            raise AssertionError("closeout batch apply payload drifted")
+        command_heads = [call[:3] for call in gh_calls]
+        expected_heads = [
+            ["gh", "issue", "comment"],
+            ["gh", "issue", "close"],
+            ["gh", "issue", "comment"],
+            ["gh", "issue", "close"],
+        ]
+        if command_heads != expected_heads:
+            raise AssertionError(f"closeout batch apply delegated unexpected commands: {command_heads}")
+
+        emitted_payloads.clear()
+        gh_calls.clear()
+        status = module.handle_closeout_batch(
+            [
+                "--target",
+                ".",
+                "--anchor-issue",
+                "1962",
+                "--issue",
+                "1965",
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted_payloads[-1].get("result") != "block":
+            raise AssertionError("closeout batch must block when the anchor issue is outside the covered issue set")
+        if gh_calls:
+            raise AssertionError("closeout batch anchor blocker must not mutate host state")
+    finally:
+        module.emit = original_emit
+        module.run_capture = original_run_capture
+
+
 def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     target = tmp / "governance-intensity-metadata"
     target.mkdir()
     write_governance_metadata_contract_fixture(target)
+    repo_interface = json.loads((target / ".loom/companion/repo-interface.json").read_text(encoding="utf-8"))
+    machine_carrier = repo_interface["metadata_contract"]["fields"][0]["machine_carrier"]
+    if machine_carrier.get("binding_priority", [])[:3] != [
+        "cli_explicit_input",
+        "pr_body_machine_carrier",
+        "host_readback",
+    ] or "missing_human_backlink" not in machine_carrier.get("safe_repair", {}).get("allowed_targets", []):
+        raise AssertionError("governance intensity metadata contract must expose binding priority and safe repair")
     positive = target / "positive.md"
     positive.write_text(governance_metadata_body(), encoding="utf-8")
     positive_payload = governance_metadata_preflight_payload(target, "positive.md")
     if positive_payload.get("result") != "pass" or not positive_payload.get("governance_intensity_carrier"):
         raise AssertionError("governance intensity metadata positive fixture did not pass")
 
+    missing_issue_backlink = target / "missing-issue-backlink.md"
+    missing_issue_backlink.write_text(governance_metadata_body(), encoding="utf-8")
+    pr_payload = target / "missing-issue-pr.json"
+    pr_payload.write_text(
+        json.dumps(
+            {
+                "number": 2001,
+                "state": "OPEN",
+                "title": "Fixture PR",
+                "body": missing_issue_backlink.read_text(encoding="utf-8"),
+                "isDraft": False,
+                "headRefName": "work/1321-governance-intensity-metadata-carrier",
+                "headRefOid": "1111111111111111111111111111111111111111",
+                "baseRefName": "main",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, missing_issue_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            "missing-issue-backlink.md",
+            "--pr-payload-file",
+            "missing-issue-pr.json",
+            "--issue",
+            "1687",
+        ],
+        expect=1,
+    )
+    repair_action = next(
+        (
+            action
+            for action in missing_issue_payload.get("safe_repair_actions", [])
+            if isinstance(action, dict) and action.get("kind") == "missing_human_backlink"
+        ),
+        None,
+    )
+    if (
+        missing_issue_payload.get("result") != "block"
+        or "PR body is missing Issue backlink: #1687" not in missing_issue_payload.get("missing_inputs", [])
+        or not isinstance(repair_action, dict)
+        or repair_action.get("action") != "update_pr_body_issue_backlink"
+        or repair_action.get("body_line") != "- Issue: #1687"
+        or "--issue 1687" not in str(repair_action.get("next_command"))
+    ):
+        raise AssertionError("missing Issue backlink did not expose a safe PR body repair action")
+
+    light_docs_only = target / "light-docs-only.md"
+    light_docs_only.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "light",
+                "change_class": "docs_only",
+                "suite_path": "not_applicable",
+                "suite_not_applicable": {
+                    "rationale": "non-executable documentation clarification does not need formal suite artifacts",
+                    "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                    "recheck_condition": "scope expands beyond documentation text and current carrier evidence",
+                    "scope_proof": "diff is limited to documentation and current Loom carriers",
+                    "review_requirement": "current_head_review_required",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    light_docs_only_payload = governance_metadata_preflight_payload(target, "light-docs-only.md")
+    if light_docs_only_payload.get("result") != "pass":
+        raise AssertionError(f"light docs-only metadata fixture did not pass: {light_docs_only_payload.get('missing_inputs')}")
+
+    light_fixture = target / "light-fixture.md"
+    light_fixture.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "light",
+                "change_class": "fixture",
+                "suite_path": "minimal",
+            }
+        ),
+        encoding="utf-8",
+    )
+    light_fixture_payload = governance_metadata_preflight_payload(target, "light-fixture.md")
+    if light_fixture_payload.get("result") != "pass":
+        raise AssertionError(f"light fixture metadata fixture did not pass: {light_fixture_payload.get('missing_inputs')}")
+
+    host_readback_only = target / "host-readback-only.md"
+    host_readback_only.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "standard",
+                "change_class": "contract",
+                "suite_path": "minimal",
+                "review_requirement": "host_readback_only",
+                "fact_chain_required": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    host_readback_payload = governance_metadata_preflight_payload(target, "host-readback-only.md")
+    if host_readback_payload.get("result") != "pass":
+        raise AssertionError(f"host-readback-only metadata fixture did not pass: {host_readback_payload.get('missing_inputs')}")
+
     negative_cases: dict[str, dict[str, Any]] = {
         "missing-intensity.md": {"governance_intensity": "__DELETE__"},
         "unknown-intensity.md": {"governance_intensity": "casual"},
+        "host-readback-requires-false-fact-chain.md": {"review_requirement": "host_readback_only"},
+        "false-fact-chain-requires-host-readback.md": {"fact_chain_required": False},
         "light-runtime.md": {"governance_intensity": "light", "change_class": "runtime"},
-        "light-fixture.md": {"governance_intensity": "light", "change_class": "fixture"},
         "light-release-impacting-docs.md": {"governance_intensity": "light", "change_class": "release"},
-        "light-docs-only.md": {"governance_intensity": "light", "change_class": "docs_only", "suite_path": "not_applicable"},
+        "light-workflow.md": {"governance_intensity": "light", "change_class": "workflow"},
+        "light-metadata-schema.md": {"governance_intensity": "light", "change_class": "metadata_schema"},
+        "light-host-write.md": {"governance_intensity": "light", "change_class": "host_write"},
+        "light-permissions.md": {"governance_intensity": "light", "change_class": "permissions"},
+        "light-contract.md": {"governance_intensity": "light", "change_class": "contract"},
         "light-docs-governance-minimal.md": {
             "governance_intensity": "light",
             "change_class": "docs_governance",
@@ -2570,7 +8979,7 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
                 "review_requirement": "current_head_review_required",
             },
         },
-        "head-conflict.md": {"head_sha": "2222222222222222222222222222222222222222"},
+        "branch-conflict.md": {"branch": "feature/not-a-work-branch"},
     }
     for body_name, overrides in negative_cases.items():
         (target / body_name).write_text(governance_metadata_body(fields_override=overrides), encoding="utf-8")
@@ -2579,6 +8988,69 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
             raise AssertionError(f"governance intensity metadata negative fixture did not block: {body_name}")
         if "PR metadata machine block invalid: loom-governance-intensity" not in payload.get("missing_inputs", []):
             raise AssertionError(f"governance intensity metadata fixture did not report invalid block: {body_name}")
+
+    unknown_intensity_payload = governance_metadata_preflight_payload(target, "unknown-intensity.md", expect=1)
+    first_unknown_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in unknown_intensity_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(first_unknown_diagnostic, dict)
+        or first_unknown_diagnostic.get("classifier") != "enum_violation"
+        or "fields.governance_intensity" not in (first_unknown_diagnostic.get("allowed_values") or {})
+        or "allowed values" not in str(first_unknown_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("enum violations must expose legal values and a rewrite next_action")
+
+    branch_conflict_payload = governance_metadata_preflight_payload(target, "branch-conflict.md", expect=1)
+    branch_conflict_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in branch_conflict_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict) and "fields.branch" in diagnostic.get("missing_fields", [])
+        ),
+        None,
+    )
+    if (
+        not isinstance(branch_conflict_diagnostic, dict)
+        or branch_conflict_diagnostic.get("classifier") != "branch_drift"
+        or "--branch" not in str(branch_conflict_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("branch drift diagnostics must expose a targeted next_action")
+
+    surface_mismatch = target / "surface-mismatch.md"
+    surface_mismatch.write_text(governance_metadata_body(surface="closeout"), encoding="utf-8")
+    _, surface_mismatch_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            "surface-mismatch.md",
+        ],
+        expect=1,
+    )
+    surface_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in surface_mismatch_payload.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ),
+        None,
+    )
+    if (
+        not isinstance(surface_diagnostic, dict)
+        or surface_diagnostic.get("classifier") != "surface_drift"
+        or "`merge_ready`" not in str(surface_diagnostic.get("next_action"))
+    ):
+        raise AssertionError("surface drift diagnostics must expose the expected surface next_action")
 
     docs_governance_lite = target / "docs-governance-lite.md"
     docs_governance_lite.write_text(
@@ -2615,6 +9087,39 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     )
     if review_surface_payload.get("result") != "pass":
         raise AssertionError("review surface did not consume the declared merge_ready governance metadata carrier")
+    docs_governance_lite_closeout = target / "docs-governance-lite-closeout.md"
+    docs_governance_lite_closeout.write_text(
+        governance_metadata_body(
+            surface="closeout",
+            fields_override={
+                "governance_intensity": "light",
+                "change_class": "docs_governance",
+                "suite_path": "not_applicable",
+                "suite_not_applicable": {
+                    "rationale": "docs-governance clarification does not need formal suite artifacts",
+                    "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                    "recheck_condition": "scope expands beyond docs-governance methodology or current carrier evidence",
+                    "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                    "review_requirement": "current_head_review_required",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    _, closeout_surface_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "closeout",
+            "--body-file",
+            "docs-governance-lite-closeout.md",
+        ]
+    )
+    if closeout_surface_payload.get("result") != "pass":
+        raise AssertionError("closeout surface did not consume the declared closeout governance metadata carrier")
 
     readback_drift = target / "docs-governance-lite-readback-drift.md"
     readback_drift.write_text(
@@ -2646,14 +9151,392 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
         raise AssertionError("PR body readback drift did not expose body_artifact block evidence")
 
 
+def assert_pr_intent_profile_fixture(tmp: Path) -> None:
+    target = tmp / "pr-intent-profiles"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "checkout", "-b", "work/1806-pr-intent"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.com"], cwd=target, check=True)
+    (target / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+
+    docs_body = ".loom/runtime/pr/WI-1806-docs.md"
+    _, docs_prepare = run_json(
+        [
+            "docs-pr",
+            "prepare",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--output-file",
+            docs_body,
+            "--apply",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        docs_prepare.get("result") != "pass"
+        or docs_prepare.get("profile", {}).get("intent") != "docs-governance-only"
+        or docs_prepare.get("profile", {}).get("suite_path") != "not_applicable"
+        or not (target / ".loom/specs/WI-1806/spec.md").exists()
+        or not runtime_locator_exists(target, docs_body)
+    ):
+        raise AssertionError(f"docs-pr prepare did not produce the docs-governance carrier set: {docs_prepare.get('missing_inputs')}")
+
+    _, docs_check = run_json(
+        [
+            "docs-pr",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            docs_body,
+            "--changed-path",
+            "docs/methodology/harness/pr-intent-profile.md",
+            "--json",
+        ],
+        expect=0,
+    )
+    validations = docs_check.get("validations", {})
+    if (
+        docs_check.get("result") != "pass"
+        or validations.get("suite", {}).get("result") != "not_applicable"
+        or validations.get("metadata", {}).get("result") != "pass"
+        or validations.get("scope", {}).get("result") != "pass"
+        or validations.get("consistency", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"docs-pr check did not consume the shared carrier set: {docs_check.get('missing_inputs')}")
+
+    _, docs_scope_block = run_json(
+        [
+            "docs-pr",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            docs_body,
+            "--changed-path",
+            "tools/loom.py",
+            "--json",
+        ],
+        expect=1,
+    )
+    if (
+        docs_scope_block.get("result") != "block"
+        or "scope path outside intent: tools/loom.py" not in docs_scope_block.get("missing_inputs", [])
+    ):
+        raise AssertionError("docs-pr check did not fail closed on scope drift")
+
+    stale_body = runtime_locator_path(target, ".loom/runtime/pr/WI-1806-docs-stale.md")
+    docs_body_path = runtime_locator_path(target, docs_body)
+    if stale_body is None or docs_body_path is None:
+        raise AssertionError("runtime PR body locators did not resolve to global cache paths")
+    stale_body.parent.mkdir(parents=True, exist_ok=True)
+    stale_body.write_text(
+        docs_body_path.read_text(encoding="utf-8").replace("work/1806-pr-intent", "work/1806-stale-branch"),
+        encoding="utf-8",
+    )
+    _, stale_check = run_json(
+        [
+            "docs-pr",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1806",
+            "--issue",
+            "1806",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            ".loom/runtime/pr/WI-1806-docs-stale.md",
+            "--changed-path",
+            "docs/methodology/harness/pr-intent-profile.md",
+            "--json",
+        ],
+        expect=1,
+    )
+    stale_missing = "\n".join(str(entry) for entry in stale_check.get("missing_inputs", []))
+    if stale_check.get("result") != "block" or "branch" not in stale_missing.lower():
+        raise AssertionError("docs-pr check did not fail closed on stale branch binding")
+
+    (target / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+    (target / ".github" / "workflows" / "loom-check.yml").write_text("env:\n  LOOM_VERSION: 0.23.0\n", encoding="utf-8")
+
+    for intent, item, body_file, changed_path in (
+        ("closeout-only", "WI-1809", ".loom/runtime/pr/WI-1809-closeout.md", ".loom/progress/WI-1809.md"),
+        ("carrier-sync-only", "WI-1813", ".loom/runtime/pr/WI-1813-carrier-sync.md", ".loom/bootstrap/init-result.json"),
+        ("runtime-upgrade-only", "WI-1834", ".loom/runtime/pr/WI-1834-runtime-upgrade.md", ".github/workflows/loom-check.yml"),
+    ):
+        _, prepare_payload = run_json(
+            [
+                "pr-intent",
+                "prepare",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--output-file",
+                body_file,
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            prepare_payload.get("result") != "pass"
+            or prepare_payload.get("profile", {}).get("intent") != intent
+            or prepare_payload.get("profile", {}).get("suite_path") != "not_applicable"
+            or prepare_payload.get("readiness", {}).get("ready_for_hosted_gate") is not False
+            or not prepare_payload.get("metadata_preflight")
+            or not runtime_locator_exists(target, body_file)
+        ):
+            raise AssertionError(f"{intent} prepare did not produce the shared not_applicable carrier set")
+        _, check_payload = run_json(
+            [
+                "pr-intent",
+                "check",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--body-file",
+                body_file,
+                "--changed-path",
+                changed_path,
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            check_payload.get("result") != "pass"
+            or check_payload.get("validations", {}).get("suite", {}).get("result") != "not_applicable"
+            or check_payload.get("validations", {}).get("consistency", {}).get("result") != "pass"
+            or check_payload.get("readiness", {}).get("ready_for_hosted_gate") is not False
+            or check_payload.get("readiness", {}).get("reasons") != ["pr_metadata_stale"]
+        ):
+            raise AssertionError(f"{intent} check did not consume shared not_applicable consistency")
+
+    write_minimal_suite(target, "WI-1850")
+    preserve_body = ".loom/runtime/pr/WI-1850-closeout-preserve-suite.md"
+    _, preserve_prepare = run_json(
+        [
+            "pr-intent",
+            "prepare",
+            "--intent",
+            "closeout-only",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1850",
+            "--issue",
+            "1850",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--output-file",
+            preserve_body,
+            "--apply",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        preserve_prepare.get("result") != "pass"
+        or preserve_prepare.get("profile", {}).get("suite_path") != "minimal"
+        or preserve_prepare.get("suite_path_resolution", {}).get("source") != "preserved_existing_suite"
+        or preserve_prepare.get("metadata_preflight", {}).get("result") != "pass"
+    ):
+        raise AssertionError("closeout-only prepare must preserve an existing minimal suite path")
+    _, preserve_check = run_json(
+        [
+            "pr-intent",
+            "check",
+            "--intent",
+            "closeout-only",
+            "--target",
+            str(target),
+            "--item",
+            "WI-1850",
+            "--issue",
+            "1850",
+            "--head-sha",
+            head_sha,
+            "--branch",
+            "work/1806-pr-intent",
+            "--body-file",
+            preserve_body,
+            "--changed-path",
+            ".loom/progress/WI-1850.md",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        preserve_check.get("result") != "pass"
+        or preserve_check.get("profile", {}).get("suite_path") != "minimal"
+        or preserve_check.get("validations", {}).get("suite", {}).get("result") != "pass"
+        or preserve_check.get("validations", {}).get("evidence", {}).get("result") != "pass"
+        or preserve_check.get("validations", {}).get("carrier", {}).get("result") != "pass"
+        or preserve_check.get("validations", {}).get("consistency", {}).get("result") != "pass"
+    ):
+        raise AssertionError(f"closeout-only check did not preserve existing minimal suite consistency: {preserve_check.get('missing_inputs')}")
+
+    for intent, item, changed_path, expected_release in (
+        ("release-only", "WI-1812", "VERSION", "release_required"),
+        ("fixture-only", "WI-1814", "test/pr-intent-profile.test", "no_release"),
+    ):
+        write_minimal_suite(target, item)
+        body_file = f".loom/runtime/pr/{item}-{intent}.md"
+        _, prepare_payload = run_json(
+            [
+                "pr-intent",
+                "prepare",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--output-file",
+                body_file,
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            prepare_payload.get("result") != "pass"
+            or prepare_payload.get("profile", {}).get("intent") != intent
+            or prepare_payload.get("profile", {}).get("suite_path") != "minimal"
+            or prepare_payload.get("profile", {}).get("release_judgment") != expected_release
+            or not runtime_locator_exists(target, body_file)
+        ):
+            raise AssertionError(f"{intent} prepare did not preserve the minimal suite carrier set")
+        _, check_payload = run_json(
+            [
+                "pr-intent",
+                "check",
+                "--intent",
+                intent,
+                "--target",
+                str(target),
+                "--item",
+                item,
+                "--issue",
+                item.removeprefix("WI-"),
+                "--head-sha",
+                head_sha,
+                "--branch",
+                "work/1806-pr-intent",
+                "--body-file",
+                body_file,
+                "--changed-path",
+                changed_path,
+                "--json",
+            ],
+            expect=0,
+        )
+        validations = check_payload.get("validations", {})
+        if (
+            check_payload.get("result") != "pass"
+            or validations.get("suite", {}).get("result") != "pass"
+            or validations.get("evidence", {}).get("result") != "pass"
+            or validations.get("carrier", {}).get("result") != "pass"
+            or validations.get("consistency", {}).get("result") != "pass"
+        ):
+            raise AssertionError(f"{intent} check did not reuse shared suite/evidence/carrier consistency: {check_payload.get('missing_inputs')}")
+
+        if intent == "release-only":
+            _, release_carrier_check = run_json(
+                [
+                    "pr-intent",
+                    "check",
+                    "--intent",
+                    intent,
+                    "--target",
+                    str(target),
+                    "--item",
+                    item,
+                    "--issue",
+                    item.removeprefix("WI-"),
+                    "--head-sha",
+                    head_sha,
+                    "--branch",
+                    "work/1806-pr-intent",
+                    "--body-file",
+                    body_file,
+                    "--changed-path",
+                    changed_path,
+                    "--changed-path",
+                    f".loom/progress/{item}.md",
+                    "--json",
+                ],
+                expect=0,
+            )
+            if release_carrier_check.get("result") != "pass":
+                raise AssertionError("release-only check did not allow the current Work Item carrier group")
+
+
 def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
     pr_path = target / fixture["pr_file"]
     payload = json.loads(pr_path.read_text(encoding="utf-8"))
-    head_sha = payload["headRefOid"]
     payload["body"] = (
         f"Loom Work Item: {fixture['item']}\n"
-        f"Branch: {fixture['branch']}\n"
-        f"Head SHA: {head_sha}\n\n"
+        f"Branch: {fixture['branch']}\n\n"
         "<!-- loom:repo-pr-metadata\n"
         "{\n"
         '  "schema_version": "loom-repo-pr-metadata/v1",\n'
@@ -2661,8 +9544,7 @@ def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface
         f'  "surface": "{surface}",\n'
         '  "fields": {\n'
         f'    "loom_work_item": "{fixture["item"]}",\n'
-        f'    "branch": "{fixture["branch"]}",\n'
-        f'    "head_sha": "{head_sha}"\n'
+        f'    "branch": "{fixture["branch"]}"\n'
         "  },\n"
         '  "source": {"rendered_hash": "sha256:fixture"},\n'
         '  "parser_version": "repo-parser/v1"\n'
@@ -2676,7 +9558,9 @@ def append_governance_intensity_metadata_body(
     target: Path,
     fixture: dict[str, str],
     *,
+    include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
+    surface: str = "merge_ready",
 ) -> None:
     pr_path = target / fixture["pr_file"]
     payload = json.loads(pr_path.read_text(encoding="utf-8"))
@@ -2684,7 +9568,9 @@ def append_governance_intensity_metadata_body(
         item=fixture["item"],
         branch=fixture["branch"],
         head_sha=payload["headRefOid"],
+        include_legacy_bindings=include_legacy_bindings,
         fields_override=fields_override,
+        surface=surface,
     )
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -2706,17 +9592,147 @@ def write_docs_governance_not_applicable_suite(target: Path, item: str) -> None:
             path.unlink()
     not_applicable_text = (
         "- Suite path: not_applicable\n\n"
-        "- Formal-suite not_applicable: rationale: docs-governance lite fixture only clarifies governance docs "
-        "and current carrier evidence; consumer boundary: suite validate, spec review, implementation review, "
-        "merge-ready, PR gate, hosted CI, and closeout consume this only as the formal suite decision while "
-        "fact-chain, current-head review, PR metadata, no-release judgment, controlled merge, and closeout remain required; "
-        "recheck condition: require a full or minimal suite if scope expands into runtime code, tools, fixtures, "
-        "metadata schema, generated payloads, release mechanics, AGENTS root rules, or external-visible behavior; "
-        "scope proof: fixture diff is limited to governance docs and current Loom carriers; "
-        "review requirement: current_head_review_required.\n"
+        "- Formal-suite not_applicable:\n"
+        "  - rationale: docs-governance lite fixture only clarifies governance docs and current carrier evidence.\n"
+        "  - consumer boundary: suite validate, spec review, implementation review, merge-ready, PR gate, hosted CI, and closeout consume this only as the formal suite decision while fact-chain, current-head review, PR metadata, no-release judgment, controlled merge, and closeout remain required.\n"
+        "  - recheck condition: require a full or minimal suite if scope expands into runtime code, tools, fixtures, metadata schema, generated payloads, release mechanics, AGENTS root rules, or external-visible behavior.\n"
+        "  - scope proof: fixture diff is limited to governance docs and current Loom carriers.\n"
+        "  - review requirement: current_head_review_required.\n"
     )
     (suite_dir / "spec.md").write_text("# Spec\n\n" + not_applicable_text, encoding="utf-8")
     (suite_dir / "plan.md").write_text("# Plan\n\n" + not_applicable_text, encoding="utf-8")
+
+
+def write_governance_intensity_minimal_suite(target: Path, item: str) -> None:
+    suite_dir = target / ".loom" / "specs" / item
+    for extra_artifact in (
+        "suite-index.md",
+        "research.md",
+        "contracts.md",
+        "readiness-checklist.md",
+        "consistency-analysis.md",
+    ):
+        path = suite_dir / extra_artifact
+        if path.exists():
+            path.unlink()
+    (suite_dir / "spec.md").write_text(
+        "# Spec\n\n"
+        "- Suite path: minimal\n\n"
+        "## Scenarios\n\n"
+        "- Scenario S1: A low-risk fixture-only change uses minimal suite evidence.\n\n"
+        "## Acceptance Criteria\n\n"
+        "- AC-1: PR gate consumes light fixture metadata without requiring whole-suite bypass.\n"
+        "- AC-2: Suite validation keeps behavior, test, and carrier evidence present.\n\n"
+        "- full-path-artifacts not_applicable rationale: fixture-only governance intensity gate regression uses the minimal suite path instead of full optional artifacts; "
+        "consumer boundary: suite validate consumes this only as full-artifact non-applicability while minimal suite evidence, implementation review, merge-ready, PR gate, and closeout remain required; "
+        "recheck condition: require full suite artifacts if scope expands beyond fixture or contract-test coverage.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "plan.md").write_text(
+        "# Plan\n\n"
+        "- Suite path: minimal\n\n"
+        "## Validation\n\n"
+        "- S1 -> test evidence: `python3 tools/check_cli_contract.py --surface pr-metadata`.\n"
+        "- AC-1 -> test evidence: `python3 tools/check_cli_contract.py --surface pr-metadata`.\n"
+        "- AC-2 -> test evidence: `python3 tools/check_cli_contract.py --surface pr-metadata`.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "evidence-map.md").write_text(
+        "# Evidence Map\n\n"
+        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| EV-001 | behavior_evidence | .loom/specs/{item}/spec.md | light fixture minimal suite behavior | {item} / governance-intensity-pr-gate | present | PR gate fixture | Re-run contract fixtures after metadata gate changes. |\n"
+        f"| EV-002 | test_evidence | .loom/specs/{item}/plan.md | PR gate fixture coverage | {item} / governance-intensity-pr-gate | present | PR gate fixture | Re-run contract fixtures after metadata gate changes. |\n"
+        f"| EV-003 | fresh_verification_input | .loom/progress/{item}.md | EV-001 EV-002 | {item} / latest validation summary | present | review / merge-ready / closeout | Refresh progress summary after validation changes. |\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "task-carrier.md").write_text(
+        "# Task Carrier\n\n"
+        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| github_issue | https://github.com/owner/repo/issues/1287 | fixture-only PR gate regression | in_progress | primary | .loom/work-items/{item}.md | .loom/work-items/{item}.md#static-facts | .loom/specs/{item}/spec.md#scenario-s1 | .loom/specs/{item}/plan.md#validation | .loom/specs/{item}/plan.md#validation | governance intensity fixture | Recheck before PR gate consumption. |\n",
+        encoding="utf-8",
+    )
+
+
+def prepare_current_head_reviewed_fixture(target: Path, fixture: dict[str, str], commit_message: str) -> None:
+    subprocess.run(["git", "add", "-A"], cwd=target, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", commit_message],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    record_current_fixture_spec_review(target, fixture)
+    commit_fixture_file(target, f".loom/reviews/{fixture['item']}.spec.json", "fixture spec review refresh")
+    record_current_fixture_review(target, fixture)
+    update_fixture_pr_head(target, fixture)
+
+
+def assert_governance_intensity_pr_gate_positive_variants(tmp: Path) -> None:
+    docs_target = tmp / "governance-intensity-pr-gate-docs-only"
+    docs_target.mkdir()
+    docs_fixture = write_semantic_review_pr_gate_fixture(docs_target)
+    write_governance_metadata_contract_fixture(docs_target)
+    write_docs_governance_not_applicable_suite(docs_target, docs_fixture["item"])
+    prepare_current_head_reviewed_fixture(docs_target, docs_fixture, "fixture docs-only light metadata and suite")
+    append_governance_intensity_metadata_body(
+        docs_target,
+        docs_fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_only",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "docs-only fixture does not need formal suite artifacts",
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond documentation text and current carrier evidence",
+                "scope_proof": "diff is limited to documentation and current Loom carriers",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+    docs_suite_payload = run_suite_validate_fixture(docs_target, docs_fixture["item"])
+    if docs_suite_payload.get("result") != "not_applicable":
+        raise AssertionError("light docs-only suite validate fixture did not return not_applicable")
+    docs_payload = semantic_pr_gate_fixture_payload(docs_target, docs_fixture)
+    docs_intensity_gate = docs_payload.get("governance_intensity_gate", {})
+    if (
+        docs_payload.get("result") != "pass"
+        or docs_intensity_gate.get("result") != "pass"
+        or docs_intensity_gate.get("metadata_fields", {}).get("change_class") != "docs_only"
+        or docs_intensity_gate.get("effective_suite_path") != "not_applicable"
+    ):
+        raise AssertionError(f"light docs-only pr-gate fixture blocked: {docs_payload.get('missing_inputs')}")
+
+    fixture_target = tmp / "governance-intensity-pr-gate-fixture"
+    fixture_target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(fixture_target)
+    write_governance_metadata_contract_fixture(fixture_target)
+    write_governance_intensity_minimal_suite(fixture_target, fixture["item"])
+    prepare_current_head_reviewed_fixture(fixture_target, fixture, "fixture light minimal metadata and suite")
+    append_governance_intensity_metadata_body(
+        fixture_target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "fixture",
+            "suite_path": "minimal",
+        },
+    )
+    fixture_suite_payload = run_suite_validate_fixture(fixture_target, fixture["item"])
+    if fixture_suite_payload.get("result") != "pass":
+        raise AssertionError("light fixture minimal suite validate fixture did not pass")
+    fixture_payload = semantic_pr_gate_fixture_payload(fixture_target, fixture)
+    fixture_intensity_gate = fixture_payload.get("governance_intensity_gate", {})
+    if (
+        fixture_payload.get("result") != "pass"
+        or fixture_intensity_gate.get("result") != "pass"
+        or fixture_intensity_gate.get("metadata_fields", {}).get("change_class") != "fixture"
+        or fixture_intensity_gate.get("effective_suite_path") != "minimal"
+    ):
+        raise AssertionError(f"light fixture minimal pr-gate fixture blocked: {fixture_payload.get('missing_inputs')}")
 
 
 def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
@@ -2733,6 +9749,8 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    record_current_fixture_spec_review(target, fixture)
+    commit_fixture_file(target, f".loom/reviews/{fixture['item']}.spec.json", "fixture spec review refresh")
     _, review_record_payload = run_flow_json(
         [
             "review",
@@ -2772,12 +9790,21 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             },
         },
     )
-    suite_payload = run_suite_validate_fixture(target, fixture["item"], expect=1)
+    suite_payload = run_suite_validate_fixture(target, fixture["item"])
     if suite_payload.get("result") != "not_applicable":
         raise AssertionError("docs-governance lite suite validate fixture did not return not_applicable")
     pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
     if pass_payload.get("result") != "pass":
         raise AssertionError(f"docs-governance lite pr-gate fixture blocked: {pass_payload.get('missing_inputs')}")
+    intensity_gate = pass_payload.get("governance_intensity_gate", {})
+    if (
+        intensity_gate.get("result") != "pass"
+        or intensity_gate.get("effective_governance_intensity") != "light"
+        or intensity_gate.get("effective_suite_path") != "not_applicable"
+        or intensity_gate.get("upgrade_reasons") != []
+        or "fact_chain" not in intensity_gate.get("authority_boundary", {}).get("does_not_replace", [])
+    ):
+        raise AssertionError("governance intensity gate did not expose the generalized pass payload")
     lite_gate = pass_payload.get("docs_governance_lite_gate", {})
     if lite_gate.get("result") != "pass":
         raise AssertionError("docs-governance lite pr-gate did not consume the positive gate payload")
@@ -2908,6 +9935,54 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
                 "review_requirement": "current_head_review_required",
             },
         },
+        "workflow change declared as light": {
+            "governance_intensity": "light",
+            "change_class": "workflow",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "workflow changes cannot use docs-governance light bypass",
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "workflow changes alter automation or CI behavior",
+                "scope_proof": "fixture intentionally models workflow change abuse",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+        "PR metadata schema change declared as light": {
+            "governance_intensity": "light",
+            "change_class": "metadata_schema",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "PR metadata schema changes cannot use docs-governance light bypass",
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "metadata schema changes alter gate input parsing",
+                "scope_proof": "fixture intentionally models PR metadata schema abuse",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+        "host write change declared as light": {
+            "governance_intensity": "light",
+            "change_class": "host_write",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "host write changes cannot use docs-governance light bypass",
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "host write changes mutate external control-plane state",
+                "scope_proof": "fixture intentionally models host write abuse",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+        "permissions change declared as light": {
+            "governance_intensity": "light",
+            "change_class": "permissions",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "permission changes cannot use docs-governance light bypass",
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "permission changes alter security or host authorization",
+                "scope_proof": "fixture intentionally models permissions abuse",
+                "review_requirement": "current_head_review_required",
+            },
+        },
     }
     for label, overrides in abuse_cases.items():
         append_governance_intensity_metadata_body(target, fixture, fields_override=overrides)
@@ -2917,30 +9992,6 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             label,
             expected_missing="PR metadata machine block invalid: loom-governance-intensity",
         )
-
-    append_governance_intensity_metadata_body(
-        target,
-        fixture,
-        fields_override={
-            "governance_intensity": "light",
-            "change_class": "docs_governance",
-            "suite_path": "not_applicable",
-            "head_sha": "0" * 40,
-            "suite_not_applicable": {
-                "rationale": "docs-governance lite fixture does not need formal suite artifacts",
-                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
-                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
-                "scope_proof": "diff is limited to governance docs and current Loom carriers",
-                "review_requirement": "current_head_review_required",
-            },
-        },
-    )
-    assert_pr_gate_blocks(
-        target,
-        fixture,
-        "governance metadata carrier/head mismatch",
-        expected_missing="PR metadata machine block invalid: loom-governance-intensity",
-    )
 
     update_fixture_pr_head(target, fixture, extra={"headRefName": "work/1323-mismatched-pr-branch"})
     append_governance_intensity_metadata_body(
@@ -2972,6 +10023,17 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     target.mkdir()
     fixture = write_semantic_review_pr_gate_fixture(target)
     item = fixture["item"]
+    write_hosted_freeze_admission_inputs(target)
+    subprocess.run(["git", "add", "."], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture terminal closeout hosted admission inputs"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    update_fixture_pr_head(target, fixture)
+    record_current_fixture_review(target, fixture)
     progress_path = target / ".loom" / "progress" / f"{item}.md"
     status_path = target / ".loom" / "status" / "current.md"
     task_carrier_path = target / ".loom" / "specs" / item / "task-carrier.md"
@@ -3011,21 +10073,357 @@ def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
     commit_fixture_file(target, f".loom/progress/{item}.md", "fixture terminal closeout progress")
     commit_fixture_file(target, ".loom/status/current.md", "fixture terminal closeout status")
     commit_fixture_file(target, f".loom/specs/{item}/task-carrier.md", "fixture terminal closeout task carrier")
+    _, closeout_review_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--review-file",
+            fixture["review_path"],
+            "--surface",
+            "closeout",
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Fixture closeout carrier-only review approves terminal carrier metadata only.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    closeout_review_record = closeout_review_payload.get("review", {}).get("record", {})
+    if (
+        closeout_review_payload.get("result") != "pass"
+        or closeout_review_record.get("semantic_review_disposition") is not None
+        or closeout_review_record.get("carrier_only_closeout_review", {}).get("status") != "passed"
+    ):
+        raise AssertionError(f"closed_out closeout review record fixture failed: {closeout_review_payload}")
+    commit_fixture_file(target, fixture["review_path"], "fixture terminal closeout review")
     update_fixture_pr_head(target, fixture)
-    append_pr_metadata_surface(target, fixture, surface="closeout")
-    closeout_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    append_governance_intensity_metadata_body(target, fixture, surface="closeout")
+    closeout_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
+    checkpoint_step = next(
+        (
+            step
+            for step in closeout_payload.get("steps", [])
+            if isinstance(step, dict) and step.get("name") == "checkpoint-merge"
+        ),
+        {},
+    )
     if (
         closeout_payload.get("result") != "pass"
         or closeout_payload.get("review_approval", {}).get("status") != "terminal_closeout_retained"
         or closeout_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
-        or closeout_payload.get("steps", [{}])[1].get("terminal_closed_checkpoint") is not True
+        or closeout_payload.get("pr_metadata_preflight", {}).get("surface") != "closeout"
+        or checkpoint_step.get("terminal_closed_checkpoint") is not True
     ):
-        raise AssertionError(f"terminal closeout pr-gate fixture did not pass: {closeout_payload.get('missing_inputs')}")
+        step_names = [
+            step.get("name")
+            for step in closeout_payload.get("steps", [])
+            if isinstance(step, dict)
+        ]
+        raise AssertionError(
+            "terminal closeout pr-gate fixture did not pass: "
+            f"{closeout_payload.get('missing_inputs')}; steps={step_names}"
+        )
+    pr_closeout_gate = closeout_payload.get("closeout_specific_gate", {})
+    if (
+        pr_closeout_gate.get("schema_version") != "loom-closeout-specific-gate/v1"
+        or pr_closeout_gate.get("source") != "pr-gate"
+        or pr_closeout_gate.get("result") != "pass"
+        or pr_closeout_gate.get("verdict") != "closeout_pr_allowed"
+        or pr_closeout_gate.get("next_action") != "closeout_pr_allowed"
+    ):
+        raise AssertionError(f"terminal closeout pr-gate must expose passing closeout-specific gate verdict: {pr_closeout_gate}")
+    pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    hosted_body_file = f".loom/fixtures/{item}/closeout-hosted-pr-body.md"
+    (target / hosted_body_file).write_text(pr_payload["body"], encoding="utf-8")
+    hosted_closeout_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        surface="closeout",
+        body_file=hosted_body_file,
+        compare_body_file=hosted_body_file,
+    )
+    hosted_admission = hosted_closeout_payload.get("hosted_freeze_admission", {})
+    hosted_freeze_surface = (
+        hosted_admission.get("recomputed_freeze", {})
+        .get("snapshot_subject", {})
+        .get("surface")
+    )
+    hosted_carrier_refresh = (
+        hosted_admission.get("recomputed_freeze", {})
+        .get("input_bindings", {})
+        .get("carrier_refresh", {})
+    )
+    if (
+        hosted_closeout_payload.get("result") != "pass"
+        or hosted_admission.get("result") != "pass"
+        or hosted_freeze_surface != "closeout"
+        or hosted_carrier_refresh.get("result") != "pass"
+    ):
+        raise AssertionError(
+            "terminal closeout hosted admission did not preserve closeout surface: "
+            f"result={hosted_closeout_payload.get('result')}; "
+            f"admission={hosted_admission.get('result')}; "
+            f"freeze_surface={hosted_freeze_surface}; "
+            f"carrier_refresh={hosted_carrier_refresh.get('result')}; "
+            f"missing={hosted_closeout_payload.get('missing_inputs')}"
+        )
+    _, direct_carrier_refresh = run_flow_json(
+        [
+            "carrier",
+            "refresh",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--surface",
+            "closeout",
+        ]
+    )
+    if direct_carrier_refresh.get("result") != "pass" or direct_carrier_refresh.get("surface") != "closeout":
+        raise AssertionError(
+            "carrier refresh --surface closeout did not consume terminal closeout carrier paths: "
+            f"{direct_carrier_refresh.get('missing_inputs')}"
+        )
+    _, direct_gate_freeze = run_flow_json(
+        [
+            "gate-freeze",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--surface",
+            "closeout",
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--body-file",
+            hosted_body_file,
+            "--compare-body-file",
+            hosted_body_file,
+        ]
+    )
+    if (
+        direct_gate_freeze.get("result") != "pass"
+        or direct_gate_freeze.get("snapshot_subject", {}).get("surface") != "closeout"
+    ):
+        raise AssertionError(
+            "gate-freeze --surface closeout did not emit a hosted closeout freeze snapshot: "
+            f"{direct_gate_freeze.get('missing_inputs')}"
+        )
 
-    append_pr_metadata_surface(target, fixture, surface="merge_ready")
-    merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    spec_review_path = target / ".loom" / "reviews" / f"{item}.spec.json"
+    spec_review = json.loads(spec_review_path.read_text(encoding="utf-8"))
+    spec_review["reviewed_head"] = "0" * 40
+    spec_review_path.write_text(json.dumps(spec_review, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, f".loom/reviews/{item}.spec.json", "fixture unreachable spec review head")
+    update_fixture_pr_head(target, fixture)
+    append_governance_intensity_metadata_body(target, fixture, surface="closeout")
+    unreachable_spec_head_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="closeout")
+    if (
+        unreachable_spec_head_payload.get("result") != "pass"
+        or unreachable_spec_head_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
+    ):
+        raise AssertionError(
+            "terminal closeout pr-gate did not tolerate hosted-only retained spec review head unreachability: "
+            f"{unreachable_spec_head_payload.get('missing_inputs')}"
+        )
+
+    append_governance_intensity_metadata_body(target, fixture, surface="merge_ready")
+    merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture, surface="merge_ready")
     if merge_ready_payload.get("result") == "pass" or merge_ready_payload.get("terminal_closeout_consumption", {}).get("result") != "block":
         raise AssertionError("terminal closeout retained review bypassed a non-closeout PR metadata surface")
+    if "closeout_specific_gate" in merge_ready_payload:
+        raise AssertionError("non-closeout merge_ready pr-gate must not expose closeout-specific gate verdict")
+
+
+def prepare_controlled_merge_fixture(
+    tmp: Path,
+    *,
+    fixture_name: str,
+    branch_protection_contexts: list[str],
+    ruleset_required_contexts: list[str] | None = None,
+    item: str = "WI-1287",
+) -> tuple[Path, dict[str, Any], dict[str, Any], Path]:
+    merge_target = tmp / fixture_name
+    merge_target.mkdir()
+    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target, item=item)
+    merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
+    if merge_pass_payload.get("result") != "pass":
+        raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
+    fixture_dir = merge_target / ".loom" / "fixtures" / merge_fixture["item"]
+    check_names = sorted({"loom-pr-merge-gate", *branch_protection_contexts, *(ruleset_required_contexts or [])})
+    (fixture_dir / "checks.json").write_text(
+        json.dumps(
+            [{"name": name, "conclusion": "SUCCESS", "status": "COMPLETED"} for name in check_names],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (fixture_dir / "branch-protection.json").write_text(
+        json.dumps({"required_status_checks": {"contexts": branch_protection_contexts}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    ruleset_payload: list[dict[str, Any]] = []
+    if ruleset_required_contexts:
+        ruleset_payload = [
+            {
+                "type": "required_status_checks",
+                "parameters": {
+                    "required_status_checks": [{"context": context} for context in ruleset_required_contexts],
+                },
+            }
+        ]
+    (fixture_dir / "ruleset.json").write_text(json.dumps(ruleset_payload, indent=2) + "\n", encoding="utf-8")
+    return merge_target, merge_fixture, merge_pass_payload, fixture_dir
+
+
+def assert_controlled_merge_ruleset_trigger_fixture(tmp: Path) -> None:
+    merge_target, merge_fixture, _, _ = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="controlled-merge-ruleset-trigger",
+        branch_protection_contexts=[],
+        ruleset_required_contexts=["loom-pr-merge-gate"],
+    )
+    _, payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+        expect=0,
+    )
+    host_enforcement = payload.get("host_enforcement")
+    if payload.get("result") != "pass":
+        raise AssertionError("controlled-merge did not accept active ruleset required context for the triggered check surface")
+    if not isinstance(host_enforcement, dict) or "loom-pr-merge-gate" not in host_enforcement.get("ruleset_required_contexts", []):
+        raise AssertionError("controlled-merge did not expose active ruleset required contexts")
+    if "loom-pr-merge-gate" in host_enforcement.get("branch_protection_required_contexts", []):
+        raise AssertionError("controlled-merge ruleset-trigger fixture incorrectly attributed host enforcement to branch protection")
+    if payload.get("pr_gate", {}).get("result") != "pass" or payload.get("controlled_merge_consumption", {}).get("result") != "pass":
+        raise AssertionError("controlled-merge ruleset-trigger fixture did not preserve pre-merge gate consumption")
+
+
+def assert_gate_repair_pr_evidence_contract(tmp: Path) -> None:
+    target, fixture, _, fixture_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="gate-repair-pr",
+        branch_protection_contexts=[],
+        ruleset_required_contexts=["loom-pr-merge-gate"],
+    )
+    common_args = [
+        "--target",
+        str(target),
+        "--record",
+        "--item",
+        fixture["item"],
+        "--pr",
+        "1288",
+        "--head-sha",
+        fixture["head_sha"],
+        "--pr-payload-file",
+        fixture["pr_file"],
+        "--status-checks-file",
+        ".loom/fixtures/WI-1287/checks.json",
+        "--branch-protection-file",
+        ".loom/fixtures/WI-1287/branch-protection.json",
+        "--ruleset-file",
+        ".loom/fixtures/WI-1287/ruleset.json",
+        "--reason",
+        "audit repaired missing loom-pr-merge-gate enforcement",
+    ]
+    status, missing_payload = run_flow_json(["gate-repair-pr", *common_args], expect=None)
+    if status == 0 or missing_payload.get("result") != "block":
+        raise AssertionError("gate-repair-pr did not block when required enforcement-before evidence was missing")
+    if "enforcement-before readback" not in missing_payload.get("missing_inputs", []):
+        raise AssertionError("gate-repair-pr missing-inputs did not identify enforcement-before evidence")
+    if (target / ".loom" / "companion" / "gate-repair-pr.json").exists():
+        raise AssertionError("gate-repair-pr wrote companion evidence despite missing required fields")
+
+    (fixture_dir / "enforcement-before.json").write_text(
+        json.dumps({"required_contexts": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    status, payload = run_json(
+        [
+            "gate",
+            "repair-pr",
+            *common_args,
+            "--enforcement-before-file",
+            ".loom/fixtures/WI-1287/enforcement-before.json",
+            "--json",
+        ],
+        expect=0,
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    record_path = target / ".loom" / "companion" / "gate-repair-pr.json"
+    if (
+        payload.get("schema_version") != "loom-gate-repair-pr/v1"
+        or payload.get("result") != "pass"
+        or payload.get("host_mutations") is not False
+        or payload.get("ruleset_mutation", {}).get("attempted") is not False
+        or payload.get("semantic_review", {}).get("skipped") is not False
+        or not record_path.is_file()
+    ):
+        raise AssertionError("gate repair-pr wrapper did not record non-host-mutating companion evidence")
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    if (
+        record.get("schema_version") != "loom-gate-repair-pr/v1"
+        or record.get("pr", {}).get("number") != 1288
+        or record.get("pr", {}).get("head_sha") != fixture["head_sha"]
+        or record.get("pr", {}).get("branch") != fixture["branch"]
+        or record.get("review_evidence_locator") != fixture["review_path"]
+        or record.get("restored_readback", {}).get("result") != "pass"
+    ):
+        raise AssertionError("gate repair-pr companion record is missing required audited fields")
+    for key in ("broken_gate_checks", "new_gate_checks", "still_required_checks"):
+        if not isinstance(record.get(key), list) or not record[key]:
+            raise AssertionError(f"gate repair-pr companion record missing {key}")
+    if "loom-pr-merge-gate" not in {entry.get("name") for entry in record["new_gate_checks"] if isinstance(entry, dict)}:
+        raise AssertionError("gate repair-pr did not record the newly enforced gate check")
+    if not isinstance(record.get("enforcement_before"), dict) or not isinstance(record.get("enforcement_after"), dict):
+        raise AssertionError("gate repair-pr did not retain enforcement before/after readbacks")
+
+    _, validate_payload = run_json(["gate", "repair-pr", "--target", str(target), "--json"], expect=0)
+    validate_payload = runtime_payload_from_agent_safe_output(validate_payload)
+    if validate_payload.get("result") != "pass" or validate_payload.get("operation") != "validate":
+        raise AssertionError("gate repair-pr validate mode did not consume the companion evidence record")
+    record["result"] = "block"
+    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    _, blocked_validate = run_json(["gate", "repair-pr", "--target", str(target), "--json"], expect=None)
+    blocked_validate = runtime_payload_from_agent_safe_output(blocked_validate)
+    if blocked_validate.get("result") != "block" or "result must be `pass`" not in blocked_validate.get("missing_inputs", []):
+        raise AssertionError("gate repair-pr validate mode accepted a saved block repair record")
+
+    source = (REPO_ROOT / "skills" / "shared" / "scripts" / "loom_flow.py").read_text(encoding="utf-8")
+    start = source.index("def gate_repair_pr_payload")
+    end = source.index("def handle_gate_repair_pr", start)
+    repair_source = source[start:end]
+    forbidden_mutation_tokens = ("run_process(", "gh pr merge", "gh api", "PATCH", "PUT", "DELETE", "/rulesets")
+    if any(token in repair_source for token in forbidden_mutation_tokens):
+        raise AssertionError("gate repair-pr implementation contains an automatic ruleset/host mutation path")
 
 
 def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
@@ -3042,28 +10440,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         if loom_flow.pr_work_item_from_body(body) != expected:
             raise AssertionError(f"PR body Work Item parser did not preserve `{expected}`")
 
-    _, record_payload = run_flow_json(
-        [
-            "review",
-            "record",
-            "--target",
-            str(target),
-            "--item",
-            fixture["item"],
-            "--review-file",
-            fixture["review_path"],
-            "--decision",
-            "allow",
-            "--kind",
-            "code_review",
-            "--summary",
-            "Fixture implementation review approves the current head.",
-            "--reviewer",
-            "contract-test",
-        ]
-    )
-    if record_payload.get("result") != "pass":
-        raise AssertionError(f"review record fixture failed: {record_payload.get('missing_inputs')}")
+    record_payload = record_current_fixture_review(target, fixture)
     recorded_disposition = record_payload.get("review", {}).get("record", {}).get("semantic_review_disposition", {})
     if recorded_disposition.get("status") != "passed":
         raise AssertionError("review record did not write passed semantic_review_disposition")
@@ -3076,33 +10453,24 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("pr-gate did not consume passed semantic_review_disposition")
     if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
+    with isolated_loom_workstation(tmp / "workstation"):
+        assert_gate_freeze_review_binding_fixture(tmp)
+        assert_hosted_freeze_admission_pr_gate_fixture(tmp)
+        assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp)
+        assert_runtime_carrier_suite_not_applicable_adoption_fixture(tmp)
+        assert_closeout_freeze_profile_fixture(tmp)
     assert_terminal_closeout_pr_gate_fixture(tmp)
+    assert_governance_intensity_pr_gate_positive_variants(tmp)
     assert_docs_governance_lite_pr_gate_fixture(tmp)
+    assert_controlled_merge_ruleset_trigger_fixture(tmp)
+    assert_cross_repo_review_gate_fixtures(tmp)
 
     pr_path = target / fixture["pr_file"]
-    merge_target = tmp / "semantic-review-controlled-merge"
-    merge_target.mkdir()
-    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target)
-    merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
-    if merge_pass_payload.get("result") != "pass":
-        raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
-    fixture_dir = merge_target / ".loom" / "fixtures" / "WI-1287"
-    checks_file = fixture_dir / "checks.json"
-    branch_protection_file = fixture_dir / "branch-protection.json"
-    ruleset_file = fixture_dir / "ruleset.json"
-    checks_file.write_text(
-        json.dumps(
-            [{"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"}],
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+    merge_target, merge_fixture, merge_pass_payload, fixture_dir = prepare_controlled_merge_fixture(
+        tmp,
+        fixture_name="semantic-review-controlled-merge",
+        branch_protection_contexts=["loom-pr-merge-gate"],
     )
-    branch_protection_file.write_text(
-        json.dumps({"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}}, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    ruleset_file.write_text(json.dumps([], indent=2) + "\n", encoding="utf-8")
     _, merge_check_payload = run_flow_json(
         [
             "controlled-merge",
@@ -3132,6 +10500,160 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         or merge_check_payload.get("controlled_merge_consumption", {}).get("result") != "pass"
     ):
         raise AssertionError("controlled-merge did not consume inline pr-gate pass before host merge")
+    if merge_check_payload.get("triggered_check_rollup", {}).get("result") != "pass":
+        raise AssertionError("controlled-merge positive fixture did not allow successful triggered checks")
+
+    failed_triggered_file = fixture_dir / "checks-triggered-failed.json"
+    failed_triggered_file.write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {
+                    "name": "optional-ci",
+                    "workflowName": "optional",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                    "detailsUrl": "https://example.invalid/checks/optional-ci",
+                },
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, failed_triggered_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-triggered-failed.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        failed_triggered_payload.get("result") != "block"
+        or failed_triggered_payload.get("required_checks", {}).get("result") != "pass"
+        or failed_triggered_payload.get("triggered_check_rollup", {}).get("result") != "block"
+        or "triggered checks readback"
+        not in failed_triggered_payload.get("controlled_merge_consumption", {}).get("missing_inputs", [])
+    ):
+        raise AssertionError("controlled-merge did not block non-required failed triggered check")
+
+    pending_triggered_file = fixture_dir / "checks-triggered-pending.json"
+    pending_triggered_file.write_text(
+        json.dumps(
+            [
+                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "optional-pending", "workflowName": "optional", "status": "IN_PROGRESS"},
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _, pending_triggered_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks-triggered-pending.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+    )
+    if (
+        pending_triggered_payload.get("result") != "block"
+        or pending_triggered_payload.get("required_checks", {}).get("result") != "pass"
+        or "optional-pending" not in pending_triggered_payload.get("triggered_check_rollup", {}).get("pending", [])
+    ):
+        raise AssertionError("controlled-merge did not block pending triggered check")
+    terminal_closeout_gate = json.loads(json.dumps(merge_pass_payload))
+    terminal_closeout_gate["merge_checkpoint"] = {
+        "command": "checkpoint",
+        "checkpoint": "merge",
+        "result": "fallback",
+        "fallback_to": "closed_out",
+        "summary": "fixture terminal closeout PR cannot rerun implementation merge checkpoint after closeout.",
+    }
+    terminal_closeout_gate["terminal_closeout_consumption"] = {
+        "result": "pass",
+        "surface": "closeout",
+        "checkpoint": "closed_out",
+        "missing_inputs": [],
+    }
+    terminal_closeout_gate["closeout_specific_gate"] = {
+        "schema_version": "loom-closeout-specific-gate/v1",
+        "result": "pass",
+        "closeout_pr_allowed": True,
+    }
+    terminal_closeout_gate["review_approval"] = {
+        **terminal_closeout_gate.get("review_approval", {}),
+        "status": "terminal_closeout_retained",
+        "decision": "allow",
+        "kind": "code_review",
+        "semantic_review_disposition": {
+            "status": "missing",
+            "consumable": False,
+        },
+    }
+    terminal_closeout_gate_file = fixture_dir / "pr-gate-terminal-closeout-pass.json"
+    terminal_closeout_gate_file.write_text(json.dumps(terminal_closeout_gate, indent=2) + "\n", encoding="utf-8")
+    _, terminal_closeout_merge_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+            "--pr-gate-result-file",
+            ".loom/fixtures/WI-1287/pr-gate-terminal-closeout-pass.json",
+        ],
+        expect=0,
+    )
+    if (
+        terminal_closeout_merge_payload.get("result") != "pass"
+        or terminal_closeout_merge_payload.get("retained_results", {}).get("pr_gate", {}).get("consumption", {}).get("result") != "pass"
+        or terminal_closeout_merge_payload.get("retained_results", {}).get("pr_gate", {}).get("consumption", {}).get("bindings", {}).get("terminal_closeout_consumption", {}).get("result") != "pass"
+    ):
+        raise AssertionError("controlled-merge did not consume terminal closeout retained pr-gate pass")
     retained_gate_file = fixture_dir / "pr-gate-pass.json"
     retained_gate_file.write_text(json.dumps(merge_pass_payload, indent=2) + "\n", encoding="utf-8")
     (merge_target / "retained-gate-drift.txt").write_text("drift after retained pr-gate\n", encoding="utf-8")
@@ -3173,7 +10695,6 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     aggregate_pr_payload["body"] = (
         f"Loom Work Item: {aggregate_item}\n"
         f"Branch: {fixture['branch']}\n"
-        f"Head SHA: {original_pr_payload['headRefOid']}\n"
     )
     pr_path.write_text(json.dumps(aggregate_pr_payload, indent=2) + "\n", encoding="utf-8")
     aggregate_payload = semantic_pr_gate_fixture_payload(target, {**fixture, "item": aggregate_item})
@@ -3231,13 +10752,13 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
     pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\n"
     pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
-    missing_body_head = semantic_pr_gate_fixture_payload(target, fixture)
-    if missing_body_head.get("result") != "block" or "head_binding_drift" not in missing_body_head.get("failure_taxonomy", []):
-        raise AssertionError("missing PR body Head SHA machine carrier did not fail closed")
+    no_body_head = semantic_pr_gate_fixture_payload(target, fixture)
+    if no_body_head.get("result") == "block" and "head_binding_drift" in no_body_head.get("failure_taxonomy", []):
+        raise AssertionError("missing PR body Head SHA must not fail closed after host-readback head binding")
 
     update_fixture_pr_head(target, fixture)
     pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
-    pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: wrong-branch\nHead SHA: {pr_payload['headRefOid']}\n"
+    pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: wrong-branch\n"
     pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
     wrong_body_branch = semantic_pr_gate_fixture_payload(target, fixture)
     if wrong_body_branch.get("result") != "block" or "head_binding_drift" not in wrong_body_branch.get("failure_taxonomy", []):
@@ -3287,6 +10808,8 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
         "check",
         "--target",
         str(pass_target),
+        "--item",
+        fixture["item"],
         "--issue",
         fixture["issue"],
         "--pr",
@@ -3326,6 +10849,113 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     ):
         raise AssertionError("governance chain closeout pass fixture did not consume PR, issue, Project, target branch, merge commit, review, and merge-ready evidence together")
 
+    loom_flow = load_loom_flow_module()
+    carrier_branch = "work/1153-carrier-sync"
+    subprocess.run(["git", "checkout", "-b", carrier_branch, "main"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    carrier_shadow_path = pass_target / ".loom" / "shadow" / "review-carrier-sync.json"
+    carrier_shadow_path.parent.mkdir(parents=True, exist_ok=True)
+    carrier_shadow_path.write_text(
+        json.dumps({"schema_version": "fixture/v1", "source_files": [f".loom/reviews/{fixture['item']}.json"]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", str(carrier_shadow_path.relative_to(pass_target))], cwd=pass_target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture carrier sync"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    carrier_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=pass_target, text=True).strip()
+    subprocess.run(["git", "checkout", "main"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "merge", "--no-ff", carrier_branch, "-m", "fixture carrier merge"], cwd=pass_target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    carrier_merge = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=pass_target, text=True).strip()
+    context, context_errors = loom_flow.load_retained_item_context(
+        pass_target,
+        ".loom/bootstrap/init-result.json",
+        fixture["item"],
+        f".loom/work-items/{fixture['item']}.md",
+    )
+    if context_errors:
+        raise AssertionError(f"governance chain fixture context failed: {context_errors}")
+    implementation_pr = json.loads((pass_target / fixture["pr_file"]).read_text(encoding="utf-8"))
+    carrier_pr = {
+        **implementation_pr,
+        "number": 1200,
+        "body": f"Loom Work Item: {fixture['item']}\nIssue: #{fixture['issue']}\nBranch: {carrier_branch}\n",
+        "headRefName": carrier_branch,
+        "headRefOid": carrier_head,
+        "mergeCommit": {"oid": carrier_merge},
+        "mergedAt": "2026-05-31T00:00:00Z",
+    }
+    role_subchecks = loom_flow.closeout_backlink_subchecks(
+        target_root=pass_target,
+        context=context,
+        profile="closeout-contract",
+        owner="owner",
+        repo_name="repo",
+        pr_number=1200,
+        pr_payload=carrier_pr,
+        merge_ready_pr_number=int(fixture["pr"]),
+        merge_ready_pr_payload=implementation_pr,
+        merge_ready_pr_errors=[],
+        merge_commit_sha=carrier_merge,
+        merge_commit_in_target=True,
+        pr_payload_file=None,
+        status_checks_file=fixture["checks_file"],
+        branch_protection_file=fixture["branch_protection_file"],
+        ruleset_file=fixture["ruleset_file"],
+    )
+    role_subchecks_by_id = {entry.get("id"): entry for entry in role_subchecks if isinstance(entry, dict)}
+    role_merge_ready = role_subchecks_by_id.get("merge_ready_attempt", {})
+    role_host_checks = role_subchecks_by_id.get("host_pr_checks", {})
+    role_backlink = role_subchecks_by_id.get("pr_merge_backlink", {})
+    if (
+        role_merge_ready.get("result") != "pass"
+        or role_merge_ready.get("head_sha") != fixture["head_sha"]
+        or role_merge_ready.get("expected_head_sha") != fixture["head_sha"]
+        or role_merge_ready.get("expected_pr_number") != int(fixture["pr"])
+        or role_merge_ready.get("expected_pr_role") != "implementation_pr"
+        or role_host_checks.get("head_sha") != carrier_head
+        or role_backlink.get("head_sha") != carrier_head
+        or role_backlink.get("merge_commit_sha") != carrier_merge
+    ):
+        raise AssertionError("carrier-sync closeout role did not bind retained merge-ready evidence to implementation PR head while preserving carrier PR host evidence")
+    shutil.rmtree(pass_target / ".loom" / "runtime" / "attempts" / fixture["item"])
+    terminal_role_subchecks = loom_flow.closeout_backlink_subchecks(
+        target_root=pass_target,
+        context=context,
+        profile="closeout-contract",
+        owner="owner",
+        repo_name="repo",
+        pr_number=1200,
+        pr_payload=carrier_pr,
+        merge_ready_pr_number=int(fixture["pr"]),
+        merge_ready_pr_payload=implementation_pr,
+        merge_ready_pr_errors=[],
+        merge_commit_sha=carrier_merge,
+        merge_commit_in_target=True,
+        pr_payload_file=None,
+        status_checks_file=fixture["checks_file"],
+        branch_protection_file=fixture["branch_protection_file"],
+        ruleset_file=fixture["ruleset_file"],
+    )
+    terminal_role_subchecks_by_id = {entry.get("id"): entry for entry in terminal_role_subchecks if isinstance(entry, dict)}
+    terminal_merge_ready = terminal_role_subchecks_by_id.get("merge_ready_attempt", {})
+    if (
+        terminal_merge_ready.get("result") != "pass"
+        or terminal_merge_ready.get("source") != "implementation_pr_host_checks"
+        or terminal_merge_ready.get("head_sha") != fixture["head_sha"]
+        or terminal_merge_ready.get("fallback_reason") != "terminal_closeout_carrier_pr"
+    ):
+        raise AssertionError("terminal closeout carrier PR did not consume implementation PR host checks when merge-ready attempt was absent")
+
+    auto_lookup_command = command.copy()
+    item_index = auto_lookup_command.index("--item")
+    del auto_lookup_command[item_index : item_index + 2]
+    _, auto_lookup_payload = run_flow_json(auto_lookup_command, expect=0)
+    auto_lookup_missing = auto_lookup_payload.get("missing_inputs", [])
+    if (
+        auto_lookup_payload.get("result") != "pass"
+        or not isinstance(auto_lookup_missing, list)
+        or any(isinstance(entry, str) and entry.startswith("retained-item lookup:") for entry in auto_lookup_missing)
+    ):
+        raise AssertionError("closeout --issue did not auto-resolve the canonical retained Work Item")
+
     _, reconciliation_payload = run_flow_json(
         [
             "reconciliation",
@@ -3355,6 +10985,40 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     )
     if reconciliation_payload.get("result") != "pass" or reconciliation_payload.get("findings"):
         raise AssertionError("governance chain reconciliation pass fixture drifted")
+
+    mismatched_item = "WI-closeout-mismatch"
+    (pass_target / ".loom" / "work-items" / f"{mismatched_item}.md").write_text(
+        "# WI-closeout-mismatch\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {mismatched_item}\n"
+        "- Goal: Fixture wrong retained item for closeout item mismatch.\n"
+        "- Scope: Closeout mismatch regression only.\n"
+        "- Execution Path: issue #9999 -> branch fixture -> PR #9999.\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{mismatched_item}.md\n"
+        f"- Review Entry: .loom/reviews/{mismatched_item}.json\n"
+        "- Validation Entry: closeout mismatch fixture\n"
+        "- Closing Condition: closeout must reject issue/item mismatch.\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{mismatched_item}.md`\n"
+        "- `https://github.com/owner/repo/issues/9999`\n",
+        encoding="utf-8",
+    )
+    mismatched_item_command = command.copy()
+    mismatched_item_command[mismatched_item_command.index("--item") + 1] = mismatched_item
+    _, mismatched_item_payload = run_flow_json(mismatched_item_command, expect=1)
+    missing_inputs = mismatched_item_payload.get("missing_inputs", [])
+    if (
+        mismatched_item_payload.get("result") != "block"
+        or not isinstance(missing_inputs, list)
+        or not any(
+            isinstance(entry, str)
+            and entry.startswith("retained-item lookup:")
+            and "does not match retained-item lookup for issue" in entry
+            for entry in missing_inputs
+        )
+    ):
+        raise AssertionError("closeout --item mismatch did not fail closed through retained-item lookup")
 
     review_path = pass_target / ".loom" / "reviews" / f"{fixture['item']}.json"
     review_payload = json.loads(review_path.read_text(encoding="utf-8"))
@@ -3435,10 +11099,10 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
 
 
 def write_terminal_carrier_target(target: Path, item: str) -> None:
-    (target / ".loom" / "bootstrap").mkdir(parents=True)
-    (target / ".loom" / "work-items").mkdir(parents=True)
-    (target / ".loom" / "progress").mkdir(parents=True)
-    (target / ".loom" / "status").mkdir(parents=True)
+    (target / ".loom" / "bootstrap").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "work-items").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "progress").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "status").mkdir(parents=True, exist_ok=True)
     goal = "Fixture for explicit carrier closeout sync."
     scope = "Versioned carrier metadata only; no host mutation."
     execution_path = "fixture -> carrier closeout-sync"
@@ -3580,7 +11244,7 @@ if path.endswith("/issues/2002"):
     print(json.dumps({"id": 2002, "node_id": "I_2002", "number": 2002, "state": "closed", "title": "Closed host issue", "body": "", "html_url": "https://github.com/example/repo/issues/2002", "closed_at": "2026-06-13T02:01:00Z", "labels": []}))
     raise SystemExit(0)
 if path.endswith("/pulls/2003"):
-    print(json.dumps({"number": 2003, "state": "closed", "title": "Merged host PR", "body": "Closes #2002", "html_url": "https://github.com/example/repo/pull/2003", "draft": False, "merged_at": "2026-06-13T02:00:00Z", "merge_commit_sha": "abc123", "head": {"ref": "work/closed-host-carrier", "sha": "def456"}, "base": {"ref": "main"}}))
+    print(json.dumps({"number": 2003, "state": "closed", "title": "Merged host PR", "body": "Closes #2002", "html_url": "https://github.com/example/repo/pull/2003", "draft": False, "merged_at": "2026-06-13T02:00:00Z", "merge_commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "head": {"ref": "work/closed-host-carrier", "sha": "def456"}, "base": {"ref": "main"}}))
     raise SystemExit(0)
 print(json.dumps({"message": "not found"}), file=sys.stderr)
 raise SystemExit(1)
@@ -3595,11 +11259,25 @@ raise SystemExit(1)
 def install_bootstrapped_runtime(target: Path) -> None:
     runtime_target = target / ".loom" / "bin"
     manifest_target = target / ".loom" / "bootstrap" / "manifest.json"
+    source_manifest = REPO_ROOT / ".loom" / "bootstrap" / "manifest.json"
     if runtime_target.exists():
         shutil.rmtree(runtime_target)
     shutil.copytree(REPO_ROOT / ".loom" / "bin", runtime_target)
+    manifest_payload = json.loads(source_manifest.read_text(encoding="utf-8"))
+    host_artifact = next(
+        (
+            artifact
+            for artifact in manifest_payload.get("artifacts", [])
+            if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/github_host.py"
+        ),
+        None,
+    )
+    if not isinstance(host_artifact, dict) or host_artifact.get("sha256") != hashlib.sha256(
+        (runtime_target / "github_host.py").read_bytes()
+    ).hexdigest():
+        raise AssertionError("fresh bootstrap manifest must bind the generated github_host runtime artifact")
     manifest_target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / ".loom" / "bootstrap" / "manifest.json", manifest_target)
+    shutil.copy2(source_manifest, manifest_target)
 
 
 def write_idle_fact_chain_target(target: Path) -> None:
@@ -3663,14 +11341,14 @@ def assert_idle_read_surface_contract(tmp: Path) -> None:
     idle_target = tmp / "idle-read-surface"
     idle_target.mkdir()
     write_idle_fact_chain_target(idle_target)
-    _, fact_chain = run_json(["fact-chain", "--target", str(idle_target), "--json"], expect=0)
+    _, fact_chain = run_json(["fact-chain", "--target", str(idle_target), "--json", "--full-output"], expect=0)
     if (
         fact_chain.get("result") != "pass"
         or fact_chain.get("report", {}).get("repository_execution_state") != "idle"
         or fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
     ):
         raise AssertionError("idle fact-chain did not pass with no_active_item")
-    _, status = run_json(["status", "--target", str(idle_target), "--json"], expect=0)
+    _, status = run_json(["status", "--target", str(idle_target), "--json", "--full-output"], expect=0)
     if (
         status.get("result") != "pass"
         or status.get("item", {}).get("status") != "idle"
@@ -3691,7 +11369,7 @@ def assert_idle_read_surface_contract(tmp: Path) -> None:
     payload = json.loads(init_result.read_text(encoding="utf-8"))
     payload["fact_chain"]["entry_points"]["current_item_id"] = "WI-other"
     init_result.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    status_code, locator_drift = run_json(["fact-chain", "--target", str(locator_drift_target), "--json"])
+    status_code, locator_drift = run_json(["fact-chain", "--target", str(locator_drift_target), "--json", "--full-output"])
     if status_code == 0 or locator_drift.get("result") != "block":
         raise AssertionError("active locator drift did not fail closed")
 
@@ -3703,7 +11381,7 @@ def assert_idle_read_surface_contract(tmp: Path) -> None:
         status_path.read_text(encoding="utf-8").replace("- Goal: Fixture for explicit carrier closeout sync.", "- Goal: stale status value."),
         encoding="utf-8",
     )
-    status_code, stale_status = run_json(["fact-chain", "--target", str(stale_status_target), "--json"])
+    status_code, stale_status = run_json(["fact-chain", "--target", str(stale_status_target), "--json", "--full-output"])
     if status_code == 0 or stale_status.get("result") != "block":
         raise AssertionError("active stale status surface did not fail closed")
 
@@ -3728,7 +11406,7 @@ def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
             "--pr",
             "1299",
             "--merge-commit",
-            "abc123",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "--target-branch",
             "main",
             "--closed-at",
@@ -3761,7 +11439,7 @@ def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
             "--pr",
             "1299",
             "--merge-commit",
-            "abc123",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "--target-branch",
             "main",
             "--closed-at",
@@ -3793,6 +11471,11 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
     item = "WI-repair"
     write_host_complete_active_repair_target(target, item)
     env = write_fake_closed_host_gh(tmp / "fake-gh-bin")
+    fixture_home = tmp / "repair-active-carrier-codex-home"
+    fixture_home.mkdir()
+    with isolated_codex_workstation(fixture_home):
+        register_fixture_codex_plugin()
+    env.update({"HOME": str(fixture_home), "CODEX_HOME": str(fixture_home / ".codex")})
     progress = target / ".loom" / "progress" / f"{item}.md"
     status = target / ".loom" / "status" / "current.md"
     init_result = target / ".loom" / "bootstrap" / "init-result.json"
@@ -3946,13 +11629,13 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
         or "## Terminal Closeout Metadata" not in progress_text
         or "- Issue: 2002" not in progress_text
         or "- PR: 2003" not in progress_text
-        or "- Merge Commit: abc123" not in progress_text
+        or "- Merge Commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in progress_text
         or "- Item ID: no_active_item" not in status_text
         or init_payload.get("fact_chain", {}).get("mode") != "idle"
         or init_payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id") != "no_active_item"
     ):
         raise AssertionError("repair apply did not terminalize active carrier and switch repo to idle")
-    _, fact_chain = run_json(["fact-chain", "--target", str(target), "--json"], expect=0)
+    _, fact_chain = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0, env_overrides=env)
     if (
         fact_chain.get("result") != "pass"
         or fact_chain.get("report", {}).get("repository_execution_state") != "idle"
@@ -3984,6 +11667,406 @@ def assert_repair_apply_carrier_closeout_contract(tmp: Path) -> None:
         or "ambiguous" not in str(ambiguous_plan.get("fail_closed_reason", ""))
     ):
         raise AssertionError("repair plan did not refuse ambiguous retained item matches")
+
+
+def append_terminal_closeout_metadata(
+    target: Path,
+    item: str,
+    *,
+    issue: int,
+    pr: int,
+    merge_commit: str,
+    target_branch: str = "main",
+    closed_at: str = "2026-06-14T00:00:00Z",
+    evidence_locator: str = "fixture closeout evidence",
+) -> None:
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    progress.write_text(
+        progress.read_text(encoding="utf-8").rstrip()
+        + "\n\n"
+        "## Terminal Closeout Metadata\n\n"
+        "- Terminal State: closed_out\n"
+        f"- Issue: {issue}\n"
+        f"- PR: {pr}\n"
+        f"- Merge Commit: {merge_commit}\n"
+        f"- Target Branch: {target_branch}\n"
+        f"- Closed At: {closed_at}\n"
+        f"- Evidence Locator: {evidence_locator}\n",
+        encoding="utf-8",
+    )
+
+
+def assert_closeout_queue_status_contract(tmp: Path) -> None:
+    target = tmp / "closeout-queue-status"
+    target.mkdir()
+    for item in ("WI-9101", "WI-9102", "WI-9103", "WI-9104", "WI-9105"):
+        write_terminal_carrier_target(target, item)
+    append_terminal_closeout_metadata(
+        target,
+        "WI-9101",
+        issue=9101,
+        pr=9201,
+        merge_commit="merge9101",
+        evidence_locator="fixture auto no-op evidence",
+    )
+    for item in ("WI-9103",):
+        progress = target / ".loom" / "progress" / f"{item}.md"
+        status = target / ".loom" / "status" / "current.md"
+        progress.write_text(
+            progress.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+        status.write_text(
+            status.read_text(encoding="utf-8").replace("- Current Checkpoint: closed", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+    queue_file = target / "closeout-queue-fixture.json"
+    queue_file.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "item_id": "WI-9102",
+                        "issue_number": 9102,
+                        "pr_number": 9202,
+                        "host_completion": {
+                            "issue_closed": True,
+                            "pr_merged": True,
+                            "merge_commit": "merge9102",
+                            "target_branch": "main",
+                            "closed_at": "2026-06-14T00:02:00Z",
+                            "evidence_locator": "fixture light carrier sync",
+                        },
+                    },
+                    {
+                        "item_id": "WI-9103",
+                        "issue_number": 9103,
+                        "pr_number": 9203,
+                        "host_completion": {
+                            "issue_closed": True,
+                            "pr_merged": True,
+                            "merge_commit": "merge9103",
+                            "target_branch": "main",
+                            "closed_at": "2026-06-14T00:03:00Z",
+                            "evidence_locator": "fixture batched closeout",
+                        },
+                    },
+                    {
+                        "item_id": "WI-9104",
+                        "issue_number": 9104,
+                        "pr_number": 9204,
+                        "host_completion": {
+                            "issue_closed": False,
+                            "pr_merged": True,
+                            "merge_commit": "merge9104",
+                            "target_branch": "main",
+                            "closed_at": "2026-06-14T00:04:00Z",
+                            "evidence_locator": "fixture full closeout",
+                        },
+                    },
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    before = snapshot_tree(target)
+    status_code, payload = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--queue-file", "closeout-queue-fixture.json", "--json"]
+    )
+    payload = runtime_payload_from_agent_safe_output(payload)
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError("closeout queue status mutated the fixture target")
+    if (
+        status_code == 0
+        or payload.get("command") != "closeout queue status"
+        or payload.get("wrapped_command") != "closeout-queue"
+        or payload.get("schema_version") != "loom-closeout-queue-status/v1"
+        or payload.get("result") != "block"
+        or payload.get("mode") != "blocked"
+        or payload.get("mutates") is not False
+        or payload.get("host_mutations") is not False
+        or payload.get("carrier_mutations") is not False
+    ):
+        raise AssertionError("closeout queue status envelope drifted")
+    by_item = {item.get("item_id"): item for item in payload.get("items", []) if isinstance(item, dict)}
+    expected_modes = {
+        "WI-9101": "auto_no_op",
+        "WI-9102": "light_carrier_sync",
+        "WI-9103": "batched_closeout",
+        "WI-9104": "full_closeout",
+        "WI-9105": "blocked",
+    }
+    actual_modes = {item: by_item.get(item, {}).get("closeout_mode") for item in expected_modes}
+    if actual_modes != expected_modes:
+        raise AssertionError(f"closeout queue status modes drifted: {actual_modes}")
+    if by_item["WI-9101"].get("next_command") is not None:
+        raise AssertionError("auto_no_op queue item must not suggest a next command")
+    if "loom carrier closeout-sync" not in str(by_item["WI-9102"].get("next_command")):
+        raise AssertionError("light_carrier_sync item did not suggest carrier closeout-sync")
+    if by_item["WI-9103"].get("next_command") != "loom repair plan --target <repo> --issue 9103 --json":
+        raise AssertionError("batched_closeout item did not suggest repair plan")
+    if by_item["WI-9104"].get("next_command") != "loom closeout --target <repo> --issue 9104 --pr 9204 --json":
+        raise AssertionError("full_closeout item did not suggest closeout check")
+    if "host_completion" not in by_item["WI-9105"].get("missing_inputs", []):
+        raise AssertionError("blocked item did not report missing host_completion")
+
+    _, light_only = run_json(
+        [
+            "closeout",
+            "queue",
+            "status",
+            "--target",
+            str(target),
+            "--queue-file",
+            "closeout-queue-fixture.json",
+            "--item",
+            "WI-9102",
+            "--json",
+        ],
+        expect=0,
+    )
+    if light_only.get("mode") != "light_carrier_sync" or "loom carrier closeout-sync" not in str(light_only.get("next_command")):
+        raise AssertionError("filtered light_carrier_sync queue status did not expose the item next command")
+
+    status_code, missing_input = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--json"],
+        expect=1,
+    )
+    missing_input = runtime_payload_from_agent_safe_output(missing_input)
+    if (
+        status_code == 0
+        or missing_input.get("mode") != "blocked"
+        or "queue_input" not in missing_input.get("missing_inputs", [])
+        or missing_input.get("mutates") is not False
+        or missing_input.get("host_mutations") is not False
+        or missing_input.get("carrier_mutations") is not False
+    ):
+        raise AssertionError("closeout queue status must require an explicit queue input before scanning retained carriers")
+
+    status_code, missing_item = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--item", "WI-does-not-exist", "--json"],
+        expect=1,
+    )
+    missing_item = runtime_payload_from_agent_safe_output(missing_item)
+    if status_code == 0 or missing_item.get("mode") != "blocked" or "item not found: WI-does-not-exist" not in missing_item.get("missing_inputs", []):
+        raise AssertionError("closeout queue status must block explicit missing item filters")
+
+    status_code, missing_issue = run_json(
+        ["closeout", "queue", "status", "--target", str(target), "--issue", "999999", "--json"],
+        expect=1,
+    )
+    missing_issue = runtime_payload_from_agent_safe_output(missing_issue)
+    if status_code == 0 or missing_issue.get("mode") != "blocked" or "issue not found: 999999" not in missing_issue.get("missing_inputs", []):
+        raise AssertionError("closeout queue status must block explicit missing issue filters")
+
+    status_code, missing_target = run_json(
+        ["closeout", "queue", "status", "--target", str(tmp / "missing-target"), "--json"],
+        expect=1,
+    )
+    if (
+        status_code == 0
+        or missing_target.get("schema_version") != "loom-closeout-queue-status/v1"
+        or missing_target.get("mode") != "blocked"
+        or missing_target.get("mutates") is not False
+        or missing_target.get("host_mutations") is not False
+        or missing_target.get("carrier_mutations") is not False
+    ):
+        raise AssertionError("closeout queue status missing-target envelope drifted")
+
+
+def assert_closeout_mode_docs_skill_protocol_contract() -> None:
+    closeout_gate = (REPO_ROOT / "docs/methodology/harness/closeout-gate.md").read_text(encoding="utf-8")
+    shared_reference = (REPO_ROOT / "skills/shared/references/harness/closeout-gate.md").read_text(encoding="utf-8")
+    src_reference = (REPO_ROOT / "src/skills/shared/references/harness/closeout-gate.md").read_text(encoding="utf-8")
+    if closeout_gate != shared_reference or closeout_gate != src_reference:
+        raise AssertionError("closeout gate docs and skill shared references drifted")
+
+    required_gate_snippets = [
+        "## 2.1 Closeout Mode Protocol",
+        "`inline`",
+        "`auto_no_op`",
+        "`light`",
+        "`batched`",
+        "`full`",
+        "`light_carrier_sync`",
+        "`batched_closeout`",
+        "`full_closeout`",
+        "### 2.1.1 Closeout Policy Decision",
+        "`host_only`",
+        "`batched_carrier_pr`",
+        "`full_closeout_pr`",
+        "`requires_closeout_pr`",
+        "`loom-closeout-specific-gate/v1`",
+        "`closeout_pr_allowed`",
+        "`full_review_required`",
+        "`escalation_required`",
+        "`blocking_inputs`",
+        "`next_action`",
+        "## 2.3 Closeout Retained Work Item Binding",
+        "canonical Work Item identity",
+        "Weak text references",
+    ]
+    for snippet in required_gate_snippets:
+        if snippet not in closeout_gate:
+            raise AssertionError(f"closeout mode protocol docs missing `{snippet}`")
+
+    cli_matrix = (REPO_ROOT / "docs/methodology/harness/cli-command-matrix.md").read_text(encoding="utf-8")
+    required_matrix_snippets = [
+        "| `auto_no_op` | `auto_no_op` |",
+        "| `light_carrier_sync` | `light` |",
+        "| `batched_closeout` | `batched` |",
+        "| `full_closeout` | `full` |",
+        "| `blocked` | `full` until repaired |",
+    ]
+    for snippet in required_matrix_snippets:
+        if snippet not in cli_matrix:
+            raise AssertionError(f"closeout queue mode mapping docs missing `{snippet}`")
+
+    skill_expectations = {
+        "skills/loom-merge-ready/SKILL.md": [
+            "loom-closeout-specific-gate/v1",
+            "closeout_pr_allowed=true",
+            "full_review_required=true",
+            "escalation_required=true",
+            "light_carrier_sync",
+            "batched_closeout",
+            "full_closeout",
+        ],
+        "skills/loom-pre-review/SKILL.md": [
+            "closeout-only carrier PR",
+            "inline",
+            "auto_no_op",
+            "light",
+            "batched",
+            "full",
+            "full_review_required",
+            "escalation_required",
+        ],
+        "skills/loom-retire/SKILL.md": [
+            "retire 不选择 closeout mode",
+            "auto_no_op",
+            "light_carrier_sync",
+            "batched_closeout",
+            "full_closeout",
+            "workspace retire",
+            "carrier closeout-sync --apply",
+        ],
+    }
+    for relative_path, snippets in skill_expectations.items():
+        text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+        for snippet in snippets:
+            if snippet not in text:
+                raise AssertionError(f"{relative_path} missing closeout mode protocol snippet `{snippet}`")
+
+
+def assert_hotcp_stale_active_closeout_regression_fixture(tmp: Path) -> None:
+    target = tmp / "hotcp-stale-active-root"
+    target.mkdir()
+    item = "WI-hotcp-root"
+    write_host_complete_active_repair_target(target, item)
+    env = write_fake_closed_host_gh(tmp / "fake-hotcp-gh-bin")
+    fixture_home = tmp / "hotcp-stale-active-codex-home"
+    fixture_home.mkdir()
+    with isolated_codex_workstation(fixture_home):
+        register_fixture_codex_plugin()
+    env.update({"HOME": str(fixture_home), "CODEX_HOME": str(fixture_home / ".codex")})
+
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    status = target / ".loom" / "status" / "current.md"
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    before = {
+        "progress": progress.read_text(encoding="utf-8"),
+        "status": status.read_text(encoding="utf-8"),
+        "init_result": init_result.read_text(encoding="utf-8"),
+    }
+
+    _, active_fact_chain = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0, env_overrides=env)
+    active_entry_points = active_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
+    if (
+        active_fact_chain.get("result") != "pass"
+        or active_fact_chain.get("report", {}).get("repository_execution_state") == "idle"
+        or active_entry_points.get("current_item_id") != item
+        or "- Current Checkpoint: build" not in before["progress"]
+    ):
+        raise AssertionError("HotCP fixture did not start as a stale active carrier pointing at the completed Work Item")
+
+    _, retire = run_json(["workspace", "retire", "--target", str(target), "--item", item, "--json"], expect=0, env_overrides=env)
+    if (
+        retire.get("result") != "pass"
+        or retire.get("retire_scope") != "local_only"
+        or retire.get("versioned_carrier_updates") != []
+        or progress.read_text(encoding="utf-8") != before["progress"]
+        or status.read_text(encoding="utf-8") != before["status"]
+        or init_result.read_text(encoding="utf-8") != before["init_result"]
+    ):
+        raise AssertionError("workspace retire mutated versioned stale active carriers or did not report local_only scope")
+
+    _, post_retire_plan = run_json(
+        ["repair", "plan", "--target", str(target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    carrier_action = next(
+        (action for action in post_retire_plan.get("actions", []) if isinstance(action, dict) and action.get("kind") == "carrier_closeout_sync"),
+        None,
+    )
+    update_kinds = {update.get("kind") for update in carrier_action.get("versioned_carrier_updates", [])} if isinstance(carrier_action, dict) else set()
+    if (
+        post_retire_plan.get("result") != "pass"
+        or carrier_action is None
+        or carrier_action.get("host_mutations") is not False
+        or carrier_action.get("host_actions") != []
+        or not {"terminal-closeout-metadata", "idle-status-surface", "idle-init-result-fact-chain"}.issubset(update_kinds)
+    ):
+        raise AssertionError("HotCP fixture did not require carrier closeout sync after local workspace retire")
+
+    _, applied = run_json(
+        ["repair", "apply", "--target", str(target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    _, idle_fact_chain = run_json(["fact-chain", "--target", str(target), "--json", "--full-output"], expect=0, env_overrides=env)
+    idle_entry_points = idle_fact_chain.get("report", {}).get("fact_chain", {}).get("entry_points", {})
+    if (
+        applied.get("result") != "pass"
+        or applied.get("mutates") is not True
+        or idle_fact_chain.get("report", {}).get("repository_execution_state") != "idle"
+        or idle_entry_points.get("current_item_id") != "no_active_item"
+        or "## Terminal Closeout Metadata" not in progress.read_text(encoding="utf-8")
+    ):
+        raise AssertionError("HotCP fixture carrier closeout sync did not terminalize stale active carrier into idle fact-chain")
+
+    retained_target = tmp / "hotcp-retained-historical-name"
+    retained_target.mkdir()
+    retained_item = "GH-21-LOOM-UPGRADE-BASELINE"
+    write_host_complete_active_repair_target(retained_target, retained_item)
+    _, retained_plan = run_json(
+        ["repair", "plan", "--target", str(retained_target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    retained_action = next(
+        (action for action in retained_plan.get("actions", []) if isinstance(action, dict) and action.get("kind") == "carrier_closeout_sync"),
+        None,
+    )
+    _, retained_applied = run_json(
+        ["repair", "apply", "--target", str(retained_target), "--issue", "2002", "--json"],
+        expect=0,
+        env_overrides=env,
+    )
+    _, retained_fact_chain = run_json(["fact-chain", "--target", str(retained_target), "--json", "--full-output"], expect=0, env_overrides=env)
+    retained_progress = retained_target / ".loom" / "progress" / f"{retained_item}.md"
+    if (
+        retained_plan.get("result") != "pass"
+        or retained_action is None
+        or retained_applied.get("result") != "pass"
+        or retained_fact_chain.get("report", {}).get("repository_execution_state") != "idle"
+        or "## Terminal Closeout Metadata" not in retained_progress.read_text(encoding="utf-8")
+    ):
+        raise AssertionError("HotCP retained historical item naming fixture did not consume carrier closeout sync")
 
 
 def assert_suite_evidence_surface_fixtures(tmp: Path, *, include_carrier: bool = True) -> None:
@@ -4564,48 +12647,1401 @@ def assert_suite_carrier_aggregate_fixtures(tmp: Path) -> None:
 def assert_governance_closeout_help_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
-    for command in ("reconcile", "gate closeout", "closeout"):
+    routes = {entry["task"]: entry for entry in help_payload.get("task_routes", [])}
+    tiers = help_payload.get("command_tiers", {})
+    for command in ("reconcile", "gate closeout", "closeout", "closeout queue status"):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for governance closeout")
     if matrix["carrier closeout-sync"]["status"] != "implemented" or matrix["carrier closeout-sync"]["domain"] != "harness":
         raise AssertionError("carrier closeout-sync must be declared as a harness command for #1231")
+    for task in ("resume", "prepare-pr", "review", "merge-ready", "release", "release-closeout", "runtime-upgrade", "host-plugin-doctor"):
+        if task not in routes or not routes[task].get("first_command") or not routes[task].get("next_step"):
+            raise AssertionError(f"help task route missing first command or next step: {task}")
+    if "pr-intent check" not in tiers.get("common_path", []) or "release closeout-sync" not in tiers.get("maintenance_path", []):
+        raise AssertionError("help command tiers must separate common and maintenance paths")
+
+
+def assert_closeout_checkpoint_normalization_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    if loom_flow.normalize_checkpoint("closeout") != "closed_out":
+        raise AssertionError("closeout checkpoint must normalize to closed_out")
+    if loom_flow.normalize_checkpoint("review") != "merge":
+        raise AssertionError("review checkpoint must normalize to merge")
 
 
 def assert_active_closeout_contract(active_item: str) -> None:
     status, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+    closeout_payload = runtime_payload_from_agent_safe_output(closeout_payload)
     if closeout_payload["command"] != "closeout" or closeout_payload.get("schema_version") != "loom-scenario-control/v1":
         raise AssertionError("closeout did not wrap the closeout check runtime")
     if closeout_payload.get("result") not in {"pass", "block", "fallback"}:
         raise AssertionError("closeout did not emit a structured pass/block/fallback result")
     assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
     if status == 0:
-        assert_closeout_blocks_missing_suite_evidence(active_item)
+        assert_closeout_blocks_missing_suite_evidence(active_item, closeout_payload)
+
+
+def assert_idle_root_self_governance_direct_contract() -> None:
+    init_result = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
+    fact_chain = init_result.get("fact_chain") if isinstance(init_result, dict) else {}
+    entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else {}
+    if not isinstance(entry_points, dict) or entry_points.get("current_item_id") != "no_active_item":
+        return
+
+    runtime_status, runtime_parity = run_flow_json(["runtime-parity", "validate", "--target", str(REPO_ROOT)], expect=0)
+    if runtime_status != 0 or runtime_parity.get("result") != "pass":
+        raise AssertionError("idle runtime-parity direct check did not pass")
+    work_item_check = next((check for check in runtime_parity.get("checks", []) if check.get("name") == "work_item"), None)
+    if not isinstance(work_item_check, dict) or work_item_check.get("result") != "pass":
+        raise AssertionError("idle runtime-parity did not treat no_active_item as a pass")
+
+    _, adopt_verify = run_flow_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "no_active_item"], expect=0)
+    if adopt_verify.get("result") != "pass" or not isinstance(adopt_verify.get("idle_repository"), dict):
+        raise AssertionError("idle adopt verify direct check did not pass")
+    roundtrip = adopt_verify.get("producer_consumer_roundtrip")
+    if not isinstance(roundtrip, dict) or roundtrip.get("bypass_check", {}).get("result") != "pass":
+        raise AssertionError("idle adopt verify did not preserve producer/consumer roundtrip evidence")
 
 
 def run_governance_closeout_contract() -> None:
     assert_governance_closeout_help_contract()
+    assert_closeout_checkpoint_normalization_contract()
+    assert_closeout_wrapper_argument_contract()
+    assert_repo_local_closeout_runtime_argument_contract()
+    assert_closeout_mode_docs_skill_protocol_contract()
     active_item = active_work_item_id()
     assert_active_closeout_contract(active_item)
+    assert_idle_root_self_governance_direct_contract()
     assert_reconciliation_suite_taxonomy_contract()
+    assert_issue_dependency_machine_block_contract()
     with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
         assert_repair_apply_carrier_closeout_contract(tmp)
+        assert_closeout_queue_status_contract(tmp)
+        assert_hotcp_stale_active_closeout_regression_fixture(tmp)
         assert_idle_read_surface_contract(tmp)
+        assert_reconciliation_sync_apply_native_dependency_contract(tmp)
 
     print("governance closeout surface checks passed")
 
 
 def run_adoption_host_metadata_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-adoption-host-metadata-") as raw_tmp:
-        assert_metadata_only_adoption_contract(Path(raw_tmp))
+        tmp = Path(raw_tmp)
+        assert_codex_payload_readback_contract(tmp)
+        assert_version_freshness_contract(tmp)
+        assert_metadata_only_adoption_contract(tmp)
+        assert_adopt_adversarial_wrapper_contract()
+    assert_install_upgrade_host_boundary_docs()
 
     print("adoption host metadata surface checks passed")
 
 
+def run_workstation_registry_surface() -> None:
+    assert_workstation_registry_fixture_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-workstation-registry-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_workstation_registry_cli_contract(tmp)
+        assert_workstation_current_cli_contract(tmp)
+    print("workstation registry surface checks passed")
+
+
+def commit_all(target: Path, message: str) -> None:
+    subprocess.run(["git", "add", "-A"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "commit", "-m", message], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def prepare_legacy_migration_target(target: Path) -> None:
+    target.mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=target, check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", f"git@github.com:owner/{target.name}.git"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    (target / ".gitignore").write_text(".loom/runtime/\n.loom/tmp/\n", encoding="utf-8")
+    _, installed = run_json(["install", "--target", str(target), "--apply", "--json"], expect=0)
+    if installed.get("result") != "pass":
+        raise AssertionError("legacy migration fixture install did not pass")
+    commit_all(target, "fixture metadata-only install")
+
+
+def assert_legacy_migration_surface(tmp: Path) -> None:
+    no_op = tmp / "legacy-no-op"
+    prepare_legacy_migration_target(no_op)
+    _, no_op_plan = run_json(["migrate-global-cache", "plan", "--target", str(no_op), "--json"], expect=0)
+    if no_op_plan.get("strategy") != "no_op" or no_op_plan.get("mutates") is not False:
+        raise AssertionError(f"legacy migration no-op plan drifted: {no_op_plan}")
+    no_op_slimdown = no_op_plan.get("repo_slimdown", {})
+    retained = {entry.get("locator") for entry in no_op_slimdown.get("retained_repo_truth", []) if isinstance(entry, dict)}
+    if ".loom/installed-state.json" not in retained or no_op_slimdown.get("pr_required_locators"):
+        raise AssertionError(f"metadata-only migration plan did not retain only minimal repo truth: {no_op_slimdown}")
+
+    apply_target = tmp / "legacy-apply"
+    prepare_legacy_migration_target(apply_target)
+    runtime_file = apply_target / ".loom" / "runtime" / "session" / "run.json"
+    tmp_file = apply_target / ".loom" / "tmp" / "logs" / "run.log"
+    runtime_file.parent.mkdir(parents=True)
+    tmp_file.parent.mkdir(parents=True)
+    runtime_file.write_text('{"ok": true}\n', encoding="utf-8")
+    tmp_file.write_text("ok\n", encoding="utf-8")
+    home = tmp / "home"
+    home.mkdir()
+    with isolated_codex_workstation(home), isolated_loom_workstation(home / ".loom"):
+        register_fixture_codex_plugin()
+        _, apply_plan = run_json(["migrate-global-cache", "plan", "--target", str(apply_target), "--json"], expect=0)
+        if apply_plan.get("strategy") != "auto_commit_candidate":
+            raise AssertionError(f"legacy migration apply fixture did not classify cache as auto_commit_candidate: {apply_plan}")
+        slim_entries = {
+            entry.get("locator"): entry
+            for entry in apply_plan.get("repo_slimdown_entries", [])
+            if isinstance(entry, dict)
+        }
+        for locator in (".loom/runtime", ".loom/tmp"):
+            if slim_entries.get(locator, {}).get("classification") != "global_cache_candidate":
+                raise AssertionError(f"{locator} was not classified as a global cache candidate: {slim_entries.get(locator)}")
+        _, applied = run_json(["migrate-global-cache", "apply", "--target", str(apply_target), "--json"], expect=0)
+        if applied.get("result") != "pass" or applied.get("strategy") != "auto_commit_candidate":
+            raise AssertionError(f"legacy migration apply did not pass: {applied}")
+        moved = applied.get("cache_apply", {}).get("moved", [])
+        if len(moved) != 2:
+            raise AssertionError(f"legacy migration apply did not move runtime/tmp files: {moved}")
+        if runtime_file.exists() or tmp_file.exists():
+            raise AssertionError("legacy migration apply left repo-local runtime/tmp files behind")
+        registry = home / ".loom" / "repositories.json"
+        if not registry.exists():
+            raise AssertionError("legacy migration apply did not write workstation registry")
+        validation = applied.get("validation_package", {})
+        if validation.get("result") != "pass":
+            raise AssertionError(f"legacy migration validation package did not pass: {validation}")
+        step_ids = {step.get("id") for step in validation.get("steps", []) if isinstance(step, dict)}
+        expected_steps = {"installed-state-validate", "host-verify", "skills-check", "doctor", "git-status"}
+        if not expected_steps.issubset(step_ids):
+            raise AssertionError(f"legacy migration validation package missed steps: {step_ids}")
+
+    tracked_target = tmp / "legacy-tracked-residue"
+    prepare_legacy_migration_target(tracked_target)
+    residue = tracked_target / "plugins" / "loom" / "payload.txt"
+    residue.parent.mkdir(parents=True)
+    residue.write_text("legacy\n", encoding="utf-8")
+    progress = tracked_target / ".loom" / "progress" / "WI-legacy.md"
+    progress.parent.mkdir(parents=True)
+    progress.write_text("legacy progress\n", encoding="utf-8")
+    commit_all(tracked_target, "fixture tracked legacy residue")
+    _, tracked_plan = run_json(["migrate-global-cache", "plan", "--target", str(tracked_target), "--json"], expect=0)
+    if tracked_plan.get("strategy") != "pr_required":
+        raise AssertionError(f"tracked legacy residue must require PR: {tracked_plan}")
+    pr_required = set(tracked_plan.get("repo_slimdown", {}).get("pr_required_locators", []))
+    if not {"plugins/loom", ".loom/progress"}.issubset(pr_required):
+        raise AssertionError(f"tracked slimdown residue did not require PR: {tracked_plan.get('repo_slimdown')}")
+    status, tracked_apply = run_json(["migrate-global-cache", "apply", "--target", str(tracked_target), "--json"])
+    if status == 0 or tracked_apply.get("result") != "block" or tracked_apply.get("failed_layer") != "legacy-residue":
+        raise AssertionError("tracked legacy residue apply did not fail closed")
+    if not residue.exists() or not progress.exists():
+        raise AssertionError("tracked legacy residue was deleted by apply")
+
+    missing_state = tmp / "legacy-missing-state"
+    missing_state.mkdir()
+    subprocess.run(["git", "init"], cwd=missing_state, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    status, missing_plan = run_json(["migrate-global-cache", "plan", "--target", str(missing_state), "--json"])
+    if status == 0 or missing_plan.get("strategy") != "blocked":
+        raise AssertionError("missing installed-state migration plan did not block")
+
+
+def run_legacy_migration_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-legacy-migration-") as raw_tmp:
+        assert_legacy_migration_surface(Path(raw_tmp))
+    print("legacy migration surface checks passed")
+
+
+def run_runtime_paths_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-runtime-paths-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_global_runtime_path_resolver_contract(tmp)
+        assert_cache_absent_gate_contract(tmp)
+    print("runtime path resolver checks passed")
+
+
+def run_merge_wrapper_surface() -> None:
+    assert_merge_wrapper_pr_argument_contract()
+    assert_merge_closeout_run_wrapper_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-merge-wrapper-") as raw_tmp:
+        assert_controlled_merge_triggered_check_rollup_contract(Path(raw_tmp))
+    print("merge wrapper surface checks passed")
+
+
+def run_ship_wrapper_surface() -> None:
+    assert_ship_dry_run_wrapper_contract()
+    assert_ship_infers_pr_bindings_contract()
+    assert_ship_pr_readback_uses_api_contract()
+    assert_ship_changed_paths_readback_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-ship-status-") as raw_tmp:
+        assert_ship_status_preflight_contract(Path(raw_tmp))
+    assert_ship_validation_profile_selection_contract()
+    assert_ship_apply_wrapper_contract()
+    assert_ship_closeout_policy_admission_contract()
+    assert_ship_inline_host_only_closeout_e2e_contract()
+    assert_ship_docs_entry_contract()
+    print("ship wrapper surface checks passed")
+
+
+def run_closeout_wrapper_surface() -> None:
+    assert_closeout_wrapper_argument_contract()
+    assert_closeout_sync_status_contract()
+    print("closeout wrapper surface checks passed")
+
+
+def run_work_item_audit_surface() -> None:
+    assert_workspace_audit_wrapper_contract()
+    _, payload = run_json(["workspace", "audit", "--target", str(REPO_ROOT), "--json"], expect=None)
+    if payload.get("schema_version") != "loom-active-carrier-audit/v1":
+        raise AssertionError("workspace audit must emit loom-active-carrier-audit/v1")
+    if payload.get("command") != "workspace audit":
+        raise AssertionError("workspace audit must preserve the public command label")
+    if payload.get("wrapped_command") != "work-item-audit":
+        raise AssertionError("workspace audit must expose the wrapped runtime command")
+    if payload.get("result") not in {"pass", "block"}:
+        raise AssertionError("workspace audit result drifted")
+    if not isinstance(payload.get("findings"), list):
+        raise AssertionError("workspace audit must expose findings")
+    if "shadow_freshness" not in payload:
+        raise AssertionError("workspace audit must expose shadow freshness")
+    print("work item audit surface checks passed")
+
+
+def run_release_readback_surface() -> None:
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    for command in ("release readback", "release resume", "release closeout-sync"):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
+            raise AssertionError(f"{command} must be declared as an implemented delivery command")
+
+    expected = {
+        "published": ("release", "resume", "published"),
+        "missing-tag": ("release", "readback", "missing"),
+        "npm-missing": ("release", "readback", "missing"),
+        "drifted-tag": ("release", "readback", "drifted"),
+        "closeout-head-drift": ("release", "readback", "drifted"),
+        "blocked-workflow": ("release", "readback", "blocked"),
+        "multi-worktree-main-busy": ("release", "resume", "blocked"),
+        "no-release-docs-only": ("release", "resume", "no_release"),
+    }
+    for fixture, (domain, operation, verdict) in expected.items():
+        args = [
+            domain,
+            operation,
+            "--target",
+            str(REPO_ROOT),
+            "--fixture-file",
+            str(RELEASE_READBACK_FIXTURES),
+            "--fixture",
+            fixture,
+            "--json",
+        ]
+        if verdict == "no_release":
+            args.extend(["--release-judgment", "no_release"])
+        _, payload = run_json(args, expect=0)
+        if payload.get("schema") != "loom-release-readback/v1" or payload.get("mutates") is not False:
+            raise AssertionError(f"{fixture} release readback did not emit the non-mutating schema contract")
+        observed = payload.get("classification", {}).get("verdict")
+        if observed != verdict:
+            raise AssertionError(f"{fixture} verdict was {observed}, expected {verdict}")
+        diagnostic = payload.get("diagnostic") if isinstance(payload.get("diagnostic"), dict) else {}
+        if diagnostic.get("verdict") != verdict:
+            raise AssertionError(f"{fixture} diagnostic verdict was {diagnostic.get('verdict')}, expected {verdict}")
+        if verdict == "blocked" and diagnostic.get("blocked") is not True:
+            raise AssertionError(f"{fixture} blocked verdict must set diagnostic.blocked")
+        if verdict != "blocked" and diagnostic.get("blocked") is True:
+            raise AssertionError(f"{fixture} non-blocked verdict must not set diagnostic.blocked")
+        if not payload.get("next_action"):
+            raise AssertionError(f"{fixture} did not expose a short next_action")
+        if fixture == "closeout-head-drift" and "--commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" not in payload.get("next_action", ""):
+            raise AssertionError("closeout-head release drift must suggest rerunning readback with the published release commit")
+        target = payload.get("release_target", {})
+        if not all(target.get(field) for field in ("version", "tag", "npm_version", "npm_package")):
+            raise AssertionError(f"{fixture} did not expose target version/tag/npm package readback context")
+        readbacks = payload.get("readbacks", {})
+        for surface in ("tag", "github_release", "npm_package", "workflow_run", "package_surface", "carrier"):
+            if surface not in readbacks:
+                raise AssertionError(f"{fixture} missing {surface} readback")
+        if fixture == "multi-worktree-main-busy" and "merge_fallback" not in readbacks:
+            raise AssertionError(f"{fixture} missing merge_fallback readback")
+        if operation == "resume" and not isinstance(payload.get("resume_contract"), dict):
+            raise AssertionError(f"{fixture} release resume did not expose the non-mutating resume contract")
+
+    spec = importlib.util.spec_from_file_location("loom_cli_release_closeout_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for release closeout-sync regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    merge_sha = "7777777777777777777777777777777777777777"
+    forbidden_pr_view = "gh pr" + " view"
+    if forbidden_pr_view in LOOM.read_text(encoding="utf-8"):
+        raise AssertionError("release closeout-sync must not shell out to the forbidden PR view command; use the Loom host-binding readback surface")
+
+    binding_payload = {
+        "command": "release closeout-sync pr-readback",
+        "result": "block",
+        "binding_chain": {
+            "nodes": {
+                "pr": {
+                    "value": {
+                        "number": 1999,
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "headRefName": "work/release",
+                        "url": "https://github.com/MC-and-his-Agents/Loom/pull/1999",
+                    }
+                },
+                "merge_commit": {"value": {"sha": merge_sha, "status": "present"}},
+            }
+        },
+    }
+    binding_calls: list[list[str]] = []
+
+    def binding_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        binding_calls.append(list(flow_args))
+        return binding_payload
+
+    original_flow_for_pr = module.flow_payload
+    module.flow_payload = binding_flow_payload
+    try:
+        pr_readback = module.release_closeout_pr_readback_payload(
+            target=REPO_ROOT,
+            pr_number="1999",
+            repo="MC-and-his-Agents/Loom",
+            target_commit=merge_sha,
+            pr_payload_file=None,
+        )
+    finally:
+        module.flow_payload = original_flow_for_pr
+    if pr_readback.get("result") != "pass":
+        raise AssertionError(f"release closeout-sync did not consume host-binding PR readback: {pr_readback}")
+    if binding_calls != [["host-binding", "inspect", "--target", str(REPO_ROOT), "--pr", "1999", "--owner", "MC-and-his-Agents", "--repo", "Loom"]]:
+        raise AssertionError(f"release closeout-sync delegated unexpected PR readback: {binding_calls}")
+
+    flow_calls: list[list[str]] = []
+    emitted: dict[str, Any] = {}
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def blocked_only_by_carrier(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "command": kwargs.get("command"),
+            "result": "pass",
+            "classification": {"verdict": "blocked", "gaps": ["carrier_not_terminal"]},
+            "release_target": {
+                "version": "v9.99.9",
+                "target_commit": merge_sha,
+                "repo": "MC-and-his-Agents/Loom",
+            },
+            "readbacks": {
+                "github_release": {"url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.9"}
+            },
+        }
+
+    def published_release(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "command": kwargs.get("command"),
+            "result": "pass",
+            "classification": {"verdict": "published", "gaps": []},
+            "release_target": {
+                "version": "v9.99.9",
+                "target_commit": merge_sha,
+                "repo": "MC-and-his-Agents/Loom",
+            },
+            "readbacks": {
+                "github_release": {"url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v9.99.9"}
+            },
+        }
+
+    def fake_pr_readback(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "command": "release closeout-sync pr-readback",
+            "result": "pass",
+            "pr": {
+                "number": int(kwargs["pr_number"]),
+                "state": "MERGED",
+                "mergeCommit": {"oid": kwargs["target_commit"]},
+                "baseRefName": "main",
+                "mergedAt": "2026-07-01T00:00:00Z",
+                "url": "https://github.com/MC-and-his-Agents/Loom/pull/1999",
+            },
+        }
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        flow_calls.append(list(flow_args))
+        return {"command": command, "result": "pass", "summary": "ok"}
+
+    original_emit = module.emit
+    original_release_readback = module.release_readback_payload
+    original_pr_readback = module.release_closeout_pr_readback_payload
+    original_flow_payload = module.flow_payload
+    module.emit = fake_emit
+    module.release_readback_payload = blocked_only_by_carrier
+    module.release_closeout_pr_readback_payload = fake_pr_readback
+    module.flow_payload = fake_flow_payload
+    try:
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--branch",
+                "work/9999-release-closeout",
+                "--head-sha",
+                "a" * 40,
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass" or emitted.get("dry_run") is not True:
+            raise AssertionError("release closeout-sync dry-run did not emit a passing plan")
+        if [call[:2] for call in flow_calls] != [["carrier", "closeout-sync"]]:
+            raise AssertionError(f"release closeout-sync dry-run delegated unexpected sequence: {[call[:2] for call in flow_calls]}")
+        if "--dry-run" not in flow_calls[0] or "--apply" in flow_calls[0]:
+            raise AssertionError("release closeout-sync dry-run did not delegate carrier closeout-sync as dry-run")
+        if "metadata_update" not in emitted.get("next_commands", {}):
+            raise AssertionError("release closeout-sync must output post-commit PR metadata guidance")
+
+        module.release_readback_payload = published_release
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass":
+            raise AssertionError("release closeout-sync must be idempotent when release readback is already published")
+        if [call[:2] for call in flow_calls] != [["carrier", "closeout-sync"]]:
+            raise AssertionError("release closeout-sync published path must still limit delegation to carrier closeout-sync dry-run")
+
+        module.release_readback_payload = blocked_only_by_carrier
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--branch",
+                "work/9999-release-closeout",
+                "--head-sha",
+                "a" * 40,
+                "--apply",
+                "--json",
+            ]
+        )
+        if status != 0 or emitted.get("result") != "pass" or emitted.get("apply") is not True:
+            raise AssertionError("release closeout-sync apply did not emit a passing payload")
+        readiness = emitted.get("readiness")
+        if (
+            not isinstance(readiness, dict)
+            or readiness.get("schema_version") != "loom-shift-left-readiness/v1"
+            or readiness.get("ready_for_hosted_gate") is not False
+            or "metadata-update" not in str(readiness.get("next_command"))
+        ):
+            raise AssertionError("release closeout-sync apply must point to PR metadata readback before hosted gate")
+        if [call[:2] for call in flow_calls] != [
+            ["carrier", "closeout-sync"],
+            ["recovery", "writeback"],
+            ["carrier", "refresh"],
+            ["carrier", "refresh"],
+        ]:
+            raise AssertionError(f"release closeout-sync apply delegated unexpected sequence: {[call[:2] for call in flow_calls]}")
+        if "--apply" not in flow_calls[0] or "--dry-run" in flow_calls[0]:
+            raise AssertionError("release closeout-sync apply did not delegate carrier closeout-sync as apply")
+        refresh_surfaces = [call[call.index("--surface") + 1] for call in flow_calls if call[:2] == ["carrier", "refresh"]]
+        if refresh_surfaces != ["closeout", "merge_ready"]:
+            raise AssertionError(f"release closeout-sync did not refresh both closeout and merge_ready shadows: {refresh_surfaces}")
+
+        def drifted_release(**kwargs: Any) -> dict[str, Any]:
+            return {
+                "command": kwargs.get("command"),
+                "result": "pass",
+                "classification": {"verdict": "drifted", "gaps": ["tag_target_commit_mismatch"]},
+                "release_target": {"version": "v9.99.9", "target_commit": merge_sha},
+            }
+
+        module.release_readback_payload = drifted_release
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout-sync must block release drift before carrier writes")
+        if emitted.get("readiness", {}).get("reasons") != ["release_readback_mismatch"]:
+            raise AssertionError("release closeout-sync drift blocker must classify release readback mismatch")
+        if flow_calls:
+            raise AssertionError("release closeout-sync drift blocker must not delegate carrier writes")
+
+        def workflow_not_success(**kwargs: Any) -> dict[str, Any]:
+            return {
+                "command": kwargs.get("command"),
+                "result": "pass",
+                "classification": {"verdict": "blocked", "gaps": ["workflow_run_not_success"]},
+                "release_target": {"version": "v9.99.9", "target_commit": merge_sha},
+            }
+
+        module.release_readback_payload = workflow_not_success
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout-sync must block non-carrier release gaps")
+        if flow_calls:
+            raise AssertionError("release closeout-sync non-carrier blocker must not delegate carrier writes")
+
+        def unmerged_pr_readback(**kwargs: Any) -> dict[str, Any]:
+            return {
+                "command": "release closeout-sync pr-readback",
+                "result": "block",
+                "missing_inputs": ["PR is not merged"],
+                "fallback_to": ["verify --pr points at the merged release PR for this version"],
+            }
+
+        module.release_readback_payload = blocked_only_by_carrier
+        module.release_closeout_pr_readback_payload = unmerged_pr_readback
+        flow_calls.clear()
+        emitted.clear()
+        status = module.handle_release(
+            [
+                "closeout-sync",
+                "--target",
+                ".",
+                "--version",
+                "v9.99.9",
+                "--item",
+                "WI-9999",
+                "--pr",
+                "1999",
+                "--apply",
+                "--json",
+            ]
+        )
+        if status == 0 or emitted.get("result") != "block":
+            raise AssertionError("release closeout-sync must block unmerged release PR readback")
+        if flow_calls:
+            raise AssertionError("release closeout-sync PR blocker must not delegate carrier writes")
+    finally:
+        module.emit = original_emit
+        module.release_readback_payload = original_release_readback
+        module.release_closeout_pr_readback_payload = original_pr_readback
+        module.flow_payload = original_flow_payload
+
+    print("release readback surface checks passed")
+
+
+def run_pr_metadata_surface() -> None:
+    assert_pr_metadata_wrapper_argument_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        with isolated_loom_workstation(tmp / "workstation"):
+            assert_governance_metadata_render_readback_fixture(tmp)
+            assert_governance_intensity_metadata_preflight_fixture(tmp)
+            assert_host_readback_only_pr_gate_fixture(tmp)
+            assert_pr_intent_profile_fixture(tmp)
+
+    print("pr metadata surface checks passed")
+
+
+def run_pr_metadata_suite_not_applicable_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-suite-not-applicable-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_suite_not_applicable_marker_parser_contract(tmp)
+        assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp)
+
+    print("pr metadata suite_not_applicable surface checks passed")
+
+
+def run_batch_implementation_closeout_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-batch-implementation-closeout-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_batch_pr_metadata_fixture(tmp)
+        assert_active_workspace_carrier_boundary_fixture(tmp)
+        assert_post_review_carrier_paths_partial_context_fixture(tmp)
+        assert_batch_host_only_closeout_contract()
+
+    print("batch implementation closeout surface checks passed")
+
+
+def run_pr_gate_target_readback_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-pr-gate-target-readback-") as raw_tmp:
+        assert_pr_gate_target_readback_contract(Path(raw_tmp))
+
+    print("pr gate target/readback surface checks passed")
+
+
+def run_controlled_merge_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-controlled-merge-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_controlled_merge_ruleset_trigger_fixture(tmp)
+        assert_merge_metadata_only_target_readback_contract(tmp)
+
+    print("controlled merge surface checks passed")
+
+
+def run_gate_repair_pr_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-gate-repair-pr-") as raw_tmp:
+        assert_gate_repair_pr_evidence_contract(Path(raw_tmp))
+
+    print("gate repair-pr surface checks passed")
+
+
+def run_plain_cli(args: list[str]) -> str:
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.setdefault("LOOM_SKIP_NPM_LATEST", "1")
+    completed = subprocess.run(
+        [sys.executable, str(LOOM), *args],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(f"{args} returned {completed.returncode}\n{completed.stderr}\n{completed.stdout}")
+    return completed.stdout.strip()
+
+
+def run_runtime_upgrade_surface() -> None:
+    short_version = run_plain_cli(["-v"])
+    long_version = run_plain_cli(["--version"])
+    if not short_version or short_version != long_version:
+        raise AssertionError("loom -v and loom --version must emit the same non-empty version")
+
+    _, help_payload = run_json(["runtime-upgrade", "--help"], expect=0)
+    if help_payload.get("result") != "pass" or "pr" not in set(help_payload.get("operations", [])):
+        raise AssertionError("runtime-upgrade help must expose the safe lane pr operation")
+
+    with tempfile.TemporaryDirectory(prefix="loom-runtime-upgrade-") as raw_tmp:
+        target = Path(raw_tmp)
+        old_workstation_root = os.environ.get("LOOM_WORKSTATION_ROOT")
+        os.environ["LOOM_WORKSTATION_ROOT"] = str(target / "workstation")
+        write_governance_metadata_contract_fixture(target)
+        workflow = target / ".github" / "workflows" / "loom-check.yml"
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text(
+            "\n".join(
+                [
+                    "name: Loom",
+                    "on: [pull_request]",
+                    "env:",
+                    "  LOOM_VERSION: 0.23.0",
+                    "jobs:",
+                    "  check:",
+                    "    runs-on: ubuntu-latest",
+                    "    steps:",
+                    "      - run: npm install -g @mc-and-his-agents/loom@${{ env.LOOM_VERSION }}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        _, status_payload = run_json(["runtime-upgrade", "status", "--target", str(target), "--json"], expect=0)
+        if status_payload.get("schema_version") != "loom-runtime-upgrade/v1" or status_payload.get("result") != "pass":
+            raise AssertionError("runtime-upgrade status must pass with a LOOM_VERSION workflow pin")
+        readback = status_payload.get("workflow_pin_readback", {})
+        if readback.get("pin_count") != 1 or readback.get("versions") != ["0.23.0"]:
+            raise AssertionError("runtime-upgrade status did not read the workflow LOOM_VERSION pin")
+        layers = status_payload.get("version_layers", {})
+        if not {"loom_cli", "target_repository_workflow_pin", "codex_plugin_cache"}.issubset(layers):
+            raise AssertionError("runtime-upgrade status must expose CLI, workflow pin, and Codex plugin/cache version layers")
+        if "loom host doctor --host codex --scope user --json" not in str(status_payload.get("codex_plugin_advisory")):
+            raise AssertionError("runtime-upgrade status must expose Codex plugin/cache readback guidance")
+
+        _, missing_item = run_json(["runtime-upgrade", "prepare", "--target", str(target), "--to", "0.24.0", "--json"], expect=1)
+        if missing_item.get("result") != "block" or "missing-work-item" not in {gap.get("id") for gap in missing_item.get("blocking_gaps", [])}:
+            raise AssertionError("runtime-upgrade prepare must require a maintenance Work Item")
+
+        _, reserved_item = run_json(["runtime-upgrade", "prepare", "--target", str(target), "--to", "0.24.0", "--item", "INIT-0001", "--json"], expect=1)
+        if reserved_item.get("result") != "block" or "reserved-work-item" not in {gap.get("id") for gap in reserved_item.get("blocking_gaps", [])}:
+            raise AssertionError("runtime-upgrade prepare must reject INIT-0001 reuse")
+
+        before = workflow.read_text(encoding="utf-8")
+        _, dry_run = run_json(
+            [
+                "runtime-upgrade",
+                "prepare",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--output-file",
+                ".loom/runtime/pr/WI-1834-runtime-upgrade.md",
+                "--json",
+            ],
+            expect=0,
+        )
+        if dry_run.get("result") != "pass" or dry_run.get("mutates") is not False or not dry_run.get("planned_writes"):
+            raise AssertionError("runtime-upgrade prepare dry-run must plan the workflow pin update without mutation")
+        if workflow.read_text(encoding="utf-8") != before:
+            raise AssertionError("runtime-upgrade prepare dry-run mutated the workflow")
+
+        _, apply_payload = run_json(
+            [
+                "runtime-upgrade",
+                "prepare",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--output-file",
+                ".loom/runtime/pr/WI-1834-runtime-upgrade.md",
+                "--apply",
+                "--json",
+            ],
+            expect=0,
+        )
+        if apply_payload.get("result") != "pass" or apply_payload.get("mutates") is not True or not apply_payload.get("applied_writes"):
+            raise AssertionError("runtime-upgrade prepare --apply must report applied workflow pin writes")
+        if "LOOM_VERSION: 0.24.0" not in workflow.read_text(encoding="utf-8"):
+            raise AssertionError("runtime-upgrade prepare --apply did not update LOOM_VERSION")
+        pr_intent_prepare = apply_payload.get("pr_intent_prepare", {})
+        if (
+            pr_intent_prepare.get("result") != "pass"
+            or pr_intent_prepare.get("profile", {}).get("intent") != "runtime-upgrade-only"
+            or not (target / ".loom/specs/WI-1834/spec.md").exists()
+            or not runtime_locator_exists(target, ".loom/runtime/pr/WI-1834-runtime-upgrade.md")
+        ):
+            raise AssertionError("runtime-upgrade prepare --apply must generate the runtime-upgrade-only carrier set")
+
+        _, pr_plan = run_json(
+            [
+                "runtime-upgrade",
+                "pr",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--json",
+            ],
+            expect=0,
+        )
+        if pr_plan.get("result") != "pass" or pr_plan.get("readiness", {}).get("ready_for_hosted_gate") is not False:
+            raise AssertionError("runtime-upgrade pr dry-run must render metadata but keep hosted gate readiness false until PR readback")
+        if "--create" not in str(pr_plan.get("next_action")):
+            raise AssertionError("runtime-upgrade pr dry-run must point to the create/update lane")
+
+        _, blocked_check = run_json(["runtime-upgrade", "check", "--target", str(target), "--to", "0.24.0", "--item", "WI-1834", "--json"], expect=1)
+        blocked_ids = {gap.get("id") for gap in blocked_check.get("blocking_gaps", [])}
+        if blocked_check.get("result") != "block" or not {"missing-pr", "missing-branch", "missing-head_sha"}.issubset(blocked_ids):
+            raise AssertionError("runtime-upgrade check must require PR, branch, and head SHA readback")
+
+        _, ready_check = run_json(
+            [
+                "runtime-upgrade",
+                "check",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--pr",
+                "1839",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--json",
+            ],
+            expect=0,
+        )
+        if ready_check.get("result") != "pass" or ready_check.get("maintenance_profile", {}).get("review_required") is not True:
+            raise AssertionError("runtime-upgrade check must pass only after readback fields are supplied")
+        if ready_check.get("codex_plugin_advisory", {}).get("blocking_by_default") is not False:
+            raise AssertionError("runtime-upgrade check must keep Codex plugin/cache stale as advisory by default")
+
+        _, plugin_block = run_json(
+            [
+                "runtime-upgrade",
+                "check",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--pr",
+                "1839",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--require-plugin-readiness",
+                "--json",
+            ],
+            expect=1,
+        )
+        if "codex-plugin-cache-not-ready" not in {gap.get("id") for gap in plugin_block.get("blocking_gaps", [])}:
+            raise AssertionError("runtime-upgrade check must block stale plugin/cache only when explicitly required")
+
+        _, blocked_closeout = run_json(["runtime-upgrade", "closeout", "--target", str(target), "--item", "WI-1834", "--json"], expect=1)
+        if blocked_closeout.get("result") != "block":
+            raise AssertionError("runtime-upgrade closeout must fail closed without terminal evidence")
+
+        _, closeout_payload = run_json(
+            [
+                "runtime-upgrade",
+                "closeout",
+                "--target",
+                str(target),
+                "--item",
+                "WI-1834",
+                "--pr",
+                "1839",
+                "--merge-commit",
+                "def456",
+                "--target-branch",
+                "main",
+                "--evidence-locator",
+                ".loom/evidence/runtime-upgrade/WI-1834.md",
+                "--json",
+            ],
+            expect=0,
+        )
+        if closeout_payload.get("result") != "pass" or "loom carrier closeout-sync" not in str(closeout_payload.get("carrier_closeout_sync_command")):
+            raise AssertionError("runtime-upgrade closeout must expose carrier closeout-sync command")
+        if old_workstation_root is None:
+            os.environ.pop("LOOM_WORKSTATION_ROOT", None)
+        else:
+            os.environ["LOOM_WORKSTATION_ROOT"] = old_workstation_root
+
+    spec = importlib.util.spec_from_file_location("loom_runtime_upgrade_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for runtime-upgrade contract")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    emitted: dict[str, Any] = {}
+    flow_calls: list[list[str]] = []
+    run_calls: list[list[str]] = []
+
+    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def fake_run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+        run_calls.append(list(args))
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
+        flow_calls.append(list(flow_args))
+        if flow_args[:2] == ["host-binding", "inspect"] and "--issue" in flow_args and "--pr" not in flow_args:
+            return {
+                "command": command,
+                "result": "block",
+                "binding_chain": {
+                    "nodes": {
+                        "work_item": {
+                            "value": {
+                                "number": 1834,
+                                "state": "CLOSED",
+                                "closedAt": "2026-07-01T00:00:00Z",
+                                "url": "https://github.com/MC-and-his-Agents/Loom/issues/1834",
+                                "closingPullRequests": [{"number": 1839}],
+                            }
+                        }
+                    }
+                },
+            }
+        if flow_args[:2] == ["host-binding", "inspect"] and "--pr" in flow_args:
+            return {
+                "command": command,
+                "result": "pass",
+                "binding_chain": {
+                    "nodes": {
+                        "pr": {
+                            "value": {
+                                "number": 1839,
+                                "state": "MERGED",
+                                "baseRefName": "main",
+                                "mergedAt": "2026-07-01T00:01:00Z",
+                                "url": "https://github.com/MC-and-his-Agents/Loom/pull/1839",
+                                "statusCheckRollup": [
+                                    {
+                                        "name": "loom-pr-merge-gate",
+                                        "status": "COMPLETED",
+                                        "conclusion": "SUCCESS",
+                                        "detailsUrl": "https://github.com/MC-and-his-Agents/Loom/actions/runs/1/job/2",
+                                    }
+                                ],
+                            }
+                        },
+                        "merge_commit": {"value": {"sha": "d" * 40, "status": "present"}},
+                    }
+                },
+            }
+        return {"command": command, "result": "pass", "summary": "ok"}
+
+    original_emit = module.emit
+    original_run_capture = module.run_capture
+    original_flow_payload = module.flow_payload
+    module.emit = fake_emit
+    module.run_capture = fake_run_capture
+    module.flow_payload = fake_flow_payload
+    try:
+        status = module.handle_runtime_upgrade(
+            [
+                "closeout",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                "WI-1834",
+                "--issue",
+                "1834",
+                "--sync",
+                "--json",
+            ]
+        )
+    finally:
+        module.emit = original_emit
+        module.run_capture = original_run_capture
+        module.flow_payload = original_flow_payload
+    if status != 0 or emitted.get("result") != "pass":
+        raise AssertionError(f"runtime-upgrade closeout host readback lane did not pass: {emitted}")
+    terminal = emitted.get("terminal_metadata", {})
+    if terminal.get("closed_at") != "2026-07-01T00:00:00Z" or terminal.get("merge_commit") != "d" * 40:
+        raise AssertionError(f"runtime-upgrade closeout did not derive terminal metadata from host readback: {terminal}")
+    if "actions/runs/1/job/2" not in str(terminal.get("evidence_locator")):
+        raise AssertionError("runtime-upgrade closeout must carry hosted run URL evidence when host readback exposes it")
+    if [call[:2] for call in flow_calls[:3]] != [["host-binding", "inspect"], ["host-binding", "inspect"], ["carrier", "closeout-sync"]]:
+        raise AssertionError(f"runtime-upgrade closeout delegated unexpected first flow calls: {flow_calls}")
+    if any(call[:3] == ["gh", "issue", "view"] for call in run_calls):
+        raise AssertionError("runtime-upgrade closeout must not shell out to the forbidden issue view command; use Loom host-binding readback")
+
+    print("runtime-upgrade surface checks passed")
+
+
+def run_host_planning_taxonomy_surface() -> None:
+    module = load_loom_flow_module()
+    with tempfile.TemporaryDirectory(prefix="loom-taxonomy-") as raw_tmp:
+        tmp = Path(raw_tmp)
+
+        webenvoy_target = tmp / "webenvoy-labels"
+        webenvoy_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            webenvoy_target,
+            object_type_mapping=[
+                {"loom_type": "phase", "labels": ["类型：Phase"], "title_prefixes": ["Phase:"]},
+                {"loom_type": "fr", "labels": ["类型：FR"], "title_prefixes": ["FR:"]},
+                {"loom_type": "work_item", "labels": ["类型：Work Item"], "title_prefixes": ["WI:"]},
+            ],
+            missing_type_policy="infer_from_context",
+        )
+        webenvoy_payload = run_github_intake_taxonomy_payload(
+            module,
+            webenvoy_target,
+            {
+                "id": "ISSUE_fixture_1933",
+                "number": 1933,
+                "state": "OPEN",
+                "title": "修复宿主标签映射",
+                "body": "",
+                "url": "https://github.com/WebEnvoy/App/issues/1933",
+                "labels": ["类型：Work Item"],
+            },
+        )
+        if webenvoy_payload.get("result") != "pass" or webenvoy_payload.get("object_type") != "work_item":
+            raise AssertionError(f"repo companion Chinese label mapping did not classify work_item: {webenvoy_payload}")
+        if webenvoy_payload.get("route") != "loom-resume":
+            raise AssertionError(f"companion-mapped work_item did not route to loom-resume: {webenvoy_payload}")
+        if webenvoy_payload.get("type_inference", {}).get("source") != "repo_companion":
+            raise AssertionError("Chinese Work Item label must be consumed from repo companion, not Loom core")
+
+        no_mapping_target = tmp / "no-hardcoded-host-labels"
+        no_mapping_target.mkdir()
+        no_mapping_payload = run_github_intake_taxonomy_payload(
+            module,
+            no_mapping_target,
+            {
+                "id": "ISSUE_fixture_1933_unknown",
+                "number": 1933,
+                "state": "OPEN",
+                "title": "修复宿主标签映射",
+                "body": "",
+                "url": "https://github.com/WebEnvoy/App/issues/1933",
+                "labels": ["类型：Work Item"],
+            },
+        )
+        if no_mapping_payload.get("result") != "pass" or no_mapping_payload.get("object_type") != "unknown":
+            raise AssertionError("WebEnvoy Chinese labels must not be hardcoded into Loom core")
+        if "object_type" in no_mapping_payload.get("missing_inputs", []):
+            raise AssertionError("unknown issue type must be advisory unless a command requires a known type")
+        if not any(finding.get("kind") == "unrecognized_type_label" for finding in no_mapping_payload.get("findings", [])):
+            raise AssertionError("unknown issue type must emit an advisory unrecognized_type_label finding")
+
+        epic_story_target = tmp / "epic-story-task"
+        epic_story_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            epic_story_target,
+            object_type_mapping=[
+                {"loom_type": "phase", "labels": ["epic"], "title_prefixes": ["Epic:"]},
+                {"loom_type": "work_item", "labels": ["story", "task"], "title_prefixes": ["Story:", "Task:"]},
+            ],
+        )
+        epic_payload = run_github_intake_taxonomy_payload(
+            module,
+            epic_story_target,
+            {
+                "id": "ISSUE_fixture_epic",
+                "number": 3001,
+                "state": "OPEN",
+                "title": "Epic: Host adoption cleanup",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3001",
+                "labels": ["epic"],
+            },
+        )
+        if epic_payload.get("object_type") != "phase" or epic_payload.get("route") != "loom-story":
+            raise AssertionError(f"epic label/title mapping did not classify as phase story route: {epic_payload}")
+        story_payload = run_github_intake_taxonomy_payload(
+            module,
+            epic_story_target,
+            {
+                "id": "ISSUE_fixture_story",
+                "number": 3002,
+                "state": "OPEN",
+                "title": "Story: Slim down host closeout",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3002",
+                "labels": ["story"],
+            },
+        )
+        if story_payload.get("object_type") != "work_item" or story_payload.get("route") != "loom-resume":
+            raise AssertionError(f"story mapping did not classify as work_item: {story_payload}")
+
+        infer_target = tmp / "infer-from-context"
+        infer_target.mkdir()
+        write_host_planning_taxonomy_companion(
+            infer_target,
+            object_type_mapping=[],
+            missing_type_policy="infer_from_context",
+        )
+        inferred_payload = run_github_intake_taxonomy_payload(
+            module,
+            infer_target,
+            {
+                "id": "ISSUE_fixture_inferred",
+                "number": 3003,
+                "state": "OPEN",
+                "title": "Unlabeled host task",
+                "body": "",
+                "url": "https://github.com/example/repo/issues/3003",
+                "labels": [],
+            },
+            fr=3000,
+        )
+        if inferred_payload.get("object_type") != "work_item" or inferred_payload.get("type_inference", {}).get("source") != "context":
+            raise AssertionError(f"infer_from_context did not infer work_item from FR context: {inferred_payload}")
+
+    print("host-planning-taxonomy surface checks passed")
+
+
+def run_fr_wi_admission_surface() -> None:
+    module = load_loom_flow_module()
+    with tempfile.TemporaryDirectory(prefix="loom-fr-wi-admission-") as raw_tmp:
+        target = Path(raw_tmp)
+        sentinel = target / "sentinel.txt"
+        sentinel.write_text("must stay untouched\n", encoding="utf-8")
+        before_tree = snapshot_tree(target)
+        state: dict[str, Any] = {
+            "created": False,
+            "linked": False,
+            "dependency": False,
+            "create_calls": 0,
+            "attach_fails": False,
+            "tree_paginated": False,
+            "not_planned": False,
+        }
+        plan_key: str | None = None
+
+        def child_body() -> str:
+            assert plan_key is not None
+            return (
+                "## Loom admission\n\n"
+                '<!-- loom:fr-wi-admission {"fr":"fr:100","plan_key":"'
+                + plan_key
+                + '","schema_version":"loom-fr-wi-admission/v1"} -->\n'
+            )
+
+        def fake_issue(_root: Path, _owner: str, _repo: str, number: int) -> tuple[dict[str, Any] | None, list[str]]:
+            if number == 100:
+                return {
+                    "id": "I_FR_100",
+                    "number": 100,
+                    "state": "CLOSED" if state["not_planned"] else "OPEN",
+                    "stateReason": "not_planned" if state["not_planned"] else None,
+                    "title": "FR: Host-native admission",
+                    "body": "",
+                    "url": "https://github.com/example/repo/issues/100",
+                    "labels": ["fr"],
+                }, []
+            if number == 200 and state["created"]:
+                return {
+                    "id": "I_WI_200",
+                    "number": 200,
+                    "state": "OPEN",
+                    "title": "WI: Narrow child",
+                    "body": child_body(),
+                    "url": "https://github.com/example/repo/issues/200",
+                    "labels": ["work-item"],
+                }, []
+            return None, ["not found"]
+
+        def fake_tree(_root: Path, _owner: str, _repo: str, number: int) -> tuple[dict[str, Any] | None, list[str]]:
+            if number == 100:
+                children = []
+                if state["linked"]:
+                    children.append({"id": "I_WI_200", "number": 200, "title": "WI: Narrow child", "body": child_body(), "state": "OPEN", "url": "https://github.com/example/repo/issues/200", "labels": {"nodes": [{"name": "work-item"}]}})
+                return {"id": "I_FR_100", "number": 100, "parent": None, "subIssues": {"pageInfo": {"hasNextPage": state["tree_paginated"]}, "nodes": children}}, []
+            if number == 200 and state["created"]:
+                return {"id": "I_WI_200", "number": 200, "parent": {"id": "I_FR_100", "number": 100} if state["linked"] else None, "subIssues": {"pageInfo": {"hasNextPage": False}, "nodes": []}}, []
+            return None, ["not found"]
+
+        def fake_graphql(_root: Path, query: str, _variables: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+            if "search(query" in query:
+                return {"search": {"pageInfo": {"hasNextPage": False}, "nodes": []}}, []
+            if "parent: issue" in query:
+                return {"repository": {"parent": {"id": "I_FR_100"}, "child": {"id": "I_WI_200"}}}, []
+            if "addSubIssue" in query:
+                if state["attach_fails"]:
+                    return None, ["simulated parent write failure"]
+                state["linked"] = True
+                return {"addSubIssue": {"clientMutationId": "fixture"}}, []
+            return None, ["unexpected GraphQL query"]
+
+        def fake_create(_root: Path, *, method: str, path: str, request_payload: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+            if method != "POST" or path != "repos/owner/repo/issues":
+                return None, ["wrong create target"]
+            if request_payload.get("labels") != ["work-item"] or "@/etc/passwd" in str(request_payload):
+                return None, ["wrong create payload"]
+            state["created"] = True
+            state["create_calls"] += 1
+            return {"node_id": "I_WI_200", "id": 200, "number": 200, "state": "open", "title": request_payload.get("title"), "body": request_payload.get("body"), "html_url": "https://github.com/example/repo/issues/200", "labels": [{"name": "work-item"}]}, []
+
+        def fake_dependencies(_root: Path, _owner: str, _repo: str, number: int) -> dict[str, Any]:
+            edges = []
+            if number == 200 and state["dependency"]:
+                edges.append({"direction": "blocked_by", "source_issue": 200, "blocking_issue": 99})
+            return {"availability": "present", "complete": True, "native_edges": edges}
+
+        def fake_set_dependency(_root: Path, _owner: str, _repo: str, issue: int, blocker: int, mutation: str) -> list[str]:
+            if (issue, blocker, mutation) != (200, 99, "addBlockedBy"):
+                return ["wrong dependency mutation"]
+            state["dependency"] = True
+            return []
+
+        original_issue = module.github_issue_payload
+        original_tree = module.issue_tree_payload
+        original_graphql = module.gh_graphql_json
+        original_create = module.gh_rest_write_json
+        original_dependencies = module.github_issue_dependencies_payload
+        original_set_dependency = module.set_native_dependency
+        original_surface = module.build_governance_surface
+        module.github_issue_payload = fake_issue
+        module.issue_tree_payload = fake_tree
+        module.gh_graphql_json = fake_graphql
+        module.gh_rest_write_json = fake_create
+        module.github_issue_dependencies_payload = fake_dependencies
+        module.set_native_dependency = fake_set_dependency
+        module.build_governance_surface = lambda _root: {"repo_interface": None}
+        try:
+            planning = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            plan_key = planning.get("proposal", {}).get("work_items", [{}])[0].get("plan_key")
+            if planning.get("result") != "pass" or planning.get("admission_state") != "planning" or state["create_calls"]:
+                raise AssertionError(f"planning FR without a WI must stay read-only: {planning}")
+            state["tree_paginated"] = True
+            paginated = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            state["tree_paginated"] = False
+            if paginated.get("result") != "block" or paginated.get("admission_state") != "host_unreadable":
+                raise AssertionError(f"admission must not interpret an incomplete native child page as empty: {paginated}")
+            state["not_planned"] = True
+            deferred = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="completed", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            state["not_planned"] = False
+            if deferred.get("result") != "pass" or deferred.get("admission_state") != "not_planned":
+                raise AssertionError(f"not-planned FR must not be counted as completed or forced through a WI: {deferred}")
+            executing = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            if executing.get("result") != "block" or executing.get("admission_state") != "needs_breakdown" or executing.get("next_action", "").count("--apply") != 1:
+                raise AssertionError(f"execution without a WI must fail closed with one breakdown action: {executing}")
+
+            applied = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[99], work_item_number=None, apply=True
+            )
+            writes = [entry.get("action") for entry in applied.get("host_writes", []) if isinstance(entry, dict)]
+            if applied.get("result") != "pass" or applied.get("admission_state") != "admitted" or writes != ["create_issue", "add_sub_issue", "add_blocked_by"]:
+                raise AssertionError(f"apply must create, attach, add dependency, and read back the native tree: {applied}")
+
+            state.update({"created": False, "linked": False, "dependency": False, "create_calls": 0, "attach_fails": True})
+            partial = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=None, apply=True
+            )
+            if partial.get("result") != "partial_apply" or partial.get("created_locators") != ["work_item:200"] or "--work-item 200" not in str(partial.get("next_action")):
+                raise AssertionError(f"partial admission must expose the created locator and a recoverable action: {partial}")
+            state["attach_fails"] = False
+            recovered = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=200, apply=True
+            )
+            if recovered.get("result") != "pass" or state["create_calls"] != 1:
+                raise AssertionError(f"partial admission recovery must reuse the existing Work Item without duplication: {recovered}")
+        finally:
+            module.github_issue_payload = original_issue
+            module.issue_tree_payload = original_tree
+            module.gh_graphql_json = original_graphql
+            module.gh_rest_write_json = original_create
+            module.github_issue_dependencies_payload = original_dependencies
+            module.set_native_dependency = original_set_dependency
+            module.build_governance_surface = original_surface
+
+        captured: dict[str, Any] = {}
+
+        def fake_run_process(args: list[str], _cwd: Path, *, timeout_seconds: float | None = None, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["input"] = input_text
+            payload = {"data": {"viewer": {"login": "fixture"}}} if "graphql" in args else {"number": 1}
+            return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+        host_module = sys.modules[module.gh_rest_write_json.__module__]
+        original_run_process = host_module.run_process
+        host_module.run_process = fake_run_process
+        try:
+            hostile = "@/etc/passwd $(not-a-command)\n\"quoted\""
+            payload, errors = module.gh_rest_write_json(target, method="POST", path="repos/owner/repo/issues", request_payload={"title": hostile})
+            rest_input = captured.get("input")
+            graphql_payload, graphql_errors = module.gh_graphql_json(target, "query($title:String!){ viewer { login } }", {"title": hostile})
+            graphql_input = captured.get("input")
+        finally:
+            host_module.run_process = original_run_process
+        if errors or graphql_errors or payload != {"number": 1} or graphql_payload is None or "-F" in captured.get("args", []) or hostile in captured.get("args", []):
+            raise AssertionError("admission host writes must keep hostile issue text in JSON stdin, never gh -F arguments")
+        request_body = json.loads(str(rest_input))
+        if request_body.get("title") != hostile:
+            raise AssertionError("admission JSON stdin lost hostile title fidelity")
+        graphql_request = json.loads(str(graphql_input))
+        if graphql_request.get("variables", {}).get("title") != hostile:
+            raise AssertionError("admission GraphQL JSON stdin lost hostile title fidelity")
+        if snapshot_tree(target) != before_tree:
+            raise AssertionError("FR-to-WI admission must not write repo-local carriers or other files")
+
+    spec = importlib.util.spec_from_file_location("loom_route_admission_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for route admission contract")
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    forwarded: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
+        forwarded.update({"command": command, "flow_args": flow_args, "fallback_to": fallback_to})
+        return 0
+
+    original_emit_flow = cli.emit_flow
+    cli.emit_flow = fake_emit_flow
+    try:
+        status = cli.handle_route(["--target", ".", "--issue", "100", "--task", "Narrow child", "--intent", "build", "--blocked-by", "99", "--apply", "--json"])
+    finally:
+        cli.emit_flow = original_emit_flow
+    if status != 0 or forwarded.get("command") != "route" or forwarded.get("flow_args", [])[:2] != ["github-intake", "admission"]:
+        raise AssertionError(f"loom route --issue did not delegate to the shared admission evaluator: {forwarded}")
+    print("fr-wi-admission surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
+    assert_merge_wrapper_pr_argument_contract()
+    assert_closeout_wrapper_argument_contract()
+    assert_workspace_audit_wrapper_contract()
+    assert_pr_metadata_wrapper_argument_contract()
+    loom_flow = load_loom_flow_module()
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
     commands = set(matrix)
@@ -4621,6 +14057,7 @@ def run_aggregate_cli_contract() -> None:
         "project status",
         "pr gate",
         "merge check",
+        "ship",
         "reconcile",
         "host list",
         "host doctor",
@@ -4648,10 +14085,238 @@ def run_aggregate_cli_contract() -> None:
         "gate review",
         "gate pr",
         "gate merge",
+        "gate freeze check",
+        "gate freeze write",
         "gate closeout",
+        "gate repair-pr",
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #890/#891")
+    for command in ("release readback", "release resume"):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
+            raise AssertionError(f"{command} must be implemented for #1601")
+    for command in ("gate freeze check", "gate freeze write"):
+        if matrix[command]["domain"] != "gate" or matrix[command]["status"] != "implemented":
+            raise AssertionError(f"{command} must be declared as an implemented gate command for #1508")
+
+    freeze_status, freeze_payload = run_json(["gate", "freeze", "check", "--target", str(REPO_ROOT), "--json"], expect=None)
+    freeze_payload = runtime_payload_from_agent_safe_output(freeze_payload)
+    if freeze_status == 0 and freeze_payload.get("result") != "pass":
+        raise AssertionError("gate freeze check returned success without a pass result")
+    if freeze_payload.get("schema_version") != "loom-gate-freeze/v1":
+        raise AssertionError("gate freeze check must emit loom-gate-freeze/v1")
+    if freeze_payload.get("mutates") is not False:
+        raise AssertionError("gate freeze check must remain read-only")
+    if "input_bindings" not in freeze_payload or "readiness" not in freeze_payload:
+        raise AssertionError("gate freeze check must expose input_bindings and readiness diagnostics")
+    classifier_payload = loom_flow.failure_classifier_payload(
+        [
+            {"input": "carrier_refresh", "failure_kind": "carrier_refresh_stale"},
+            {"input": "shadow_freshness", "failure_kind": "shadow_source_hash_drift"},
+            {"input": "review_binding", "failure_kind": "head_binding_drift"},
+            {"input": "suite_evidence_validation", "failure_kind": "stale_evidence"},
+            {"input": "suite_carrier_validation", "failure_kind": "carrier_truth_conflict"},
+            {"input": "command_surface", "failure_kind": "unsupported_command_surface"},
+            {"input": "release_requiredness", "failure_kind": "release_evidence_phase_error"},
+            {"input": "host_readback", "failure_kind": "host_api_unreadable"},
+            {"input": "host_readback", "failure_kind": "permission"},
+            {"input": "hosted_admission", "failure_kind": "hosted_snapshot_mismatch"},
+        ]
+    )
+    required_classifiers = {
+        "carrier_refresh_needed",
+        "shadow_stale",
+        "review_stale",
+        "suite_evidence_contract_invalid",
+        "task_carrier_contract_invalid",
+        "unsupported_command_surface",
+        "release_evidence_phase_error",
+        "host_api_unreadable",
+        "permission",
+        "hosted_snapshot_mismatch",
+    }
+    supported_classifiers = set(classifier_payload.get("supported_classifiers", []))
+    if required_classifiers - supported_classifiers:
+        raise AssertionError(f"failure classifier supported vocabulary missing {sorted(required_classifiers - supported_classifiers)}")
+    observed_classifiers = {finding.get("classifier") for finding in classifier_payload.get("findings", [])}
+    if required_classifiers - observed_classifiers:
+        raise AssertionError(f"failure classifier mapping missing {sorted(required_classifiers - observed_classifiers)}")
+    if not all(finding.get("next_action") for finding in classifier_payload.get("findings", [])):
+        raise AssertionError("failure classifier findings must include next_action")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["host_api_unreadable"]:
+        raise AssertionError("host_api_unreadable next_action must expose the single-command token bridge")
+    if "CODEX_EXPORT_GH_TOKEN=1" not in loom_flow.FAILURE_CLASSIFIER_NEXT_ACTIONS["permission"]:
+        raise AssertionError("permission next_action must expose the single-command token bridge")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: API rate limit exceeded"]) != "host_api_unreadable":
+        raise AssertionError("GitHub API rate-limit diagnostics must classify as host_api_unreadable")
+    if loom_flow.host_api_failure_classifier(["HTTP 403 Forbidden: Resource not accessible by integration"]) != "permission":
+        raise AssertionError("GitHub permission diagnostics must classify as permission")
+    rate_limit_diagnostic = loom_flow.host_api_diagnostic_message(
+        "gh api repos/example/repo",
+        ["HTTP 403 Forbidden: API rate limit exceeded"],
+    )
+    if "classifier=host_api_unreadable" not in rate_limit_diagnostic or "CODEX_EXPORT_GH_TOKEN=1" not in rate_limit_diagnostic:
+        raise AssertionError("host API diagnostics must include classifier and token bridge next_action")
+    subject = freeze_payload.get("snapshot_subject")
+    input_bindings = freeze_payload.get("input_bindings", {})
+    pr_metadata = input_bindings.get("pr_metadata") if isinstance(input_bindings, dict) else None
+    pr_body_pin = input_bindings.get("pr_body_pin") if isinstance(input_bindings, dict) else None
+    carrier_refresh = input_bindings.get("carrier_refresh") if isinstance(input_bindings, dict) else None
+    shadow_freshness = input_bindings.get("shadow_freshness") if isinstance(input_bindings, dict) else None
+    if pr_body_pin is not None and (not isinstance(pr_body_pin, dict) or pr_body_pin.get("schema_version") != "loom-gate-freeze-pr-body-pin/v1"):
+        raise AssertionError("gate freeze check must expose a PR body pin binding")
+    if carrier_refresh is not None and (not isinstance(carrier_refresh, dict) or carrier_refresh.get("schema_version") != "loom-gate-freeze-carrier-refresh/v1"):
+        raise AssertionError("gate freeze check must expose a carrier refresh binding")
+    if shadow_freshness is not None and (not isinstance(shadow_freshness, dict) or shadow_freshness.get("schema_version") != "loom-gate-freeze-shadow-freshness/v1"):
+        raise AssertionError("gate freeze check must expose a shadow freshness binding")
+    if isinstance(subject, dict) and isinstance(pr_metadata, dict) and pr_metadata.get("result") == "pass":
+        for contract in pr_metadata.get("metadata_contracts", []):
+            if not isinstance(contract, dict):
+                continue
+            envelope = contract.get("envelope")
+            fields = envelope.get("fields") if isinstance(envelope, dict) else None
+            if not isinstance(fields, dict):
+                continue
+            expected_bindings = {
+                "loom_work_item": subject.get("item_id"),
+                "branch": subject.get("branch"),
+            }
+            for field_name, expected_value in expected_bindings.items():
+                if isinstance(expected_value, str) and expected_value and fields.get(field_name) != expected_value:
+                    raise AssertionError("gate freeze must not pass stale PR metadata that is not bound to the snapshot subject")
+
+    runtime_pr_dir = REPO_ROOT / ".loom" / "runtime" / "pr"
+    runtime_pr_dir.mkdir(parents=True, exist_ok=True)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
+    rendered_pr_body = runtime_pr_dir / "cli-contract-rendered.md"
+    readback_pr_body = runtime_pr_dir / "cli-contract-readback.md"
+    readback_pr_body_drift = runtime_pr_dir / "cli-contract-readback-drift.md"
+    carrier_drift_body = runtime_pr_dir / "cli-contract-carrier-drift.md"
+    try:
+        freeze_item = active_work_item_id()
+        branch = "work/cli-contract-fixture"
+        body = governance_metadata_body(item=freeze_item, branch=branch, head_sha=head_sha)
+        rendered_pr_body.write_text(body, encoding="utf-8")
+        readback_pr_body.write_text(body, encoding="utf-8")
+        _, body_pin_payload = run_json(
+            [
+                "gate",
+                "freeze",
+                "check",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                freeze_item,
+                "--head-sha",
+                head_sha,
+                "--branch",
+                branch,
+                "--body-file",
+                ".loom/runtime/pr/cli-contract-rendered.md",
+                "--compare-body-file",
+                ".loom/runtime/pr/cli-contract-readback.md",
+                "--json",
+            ],
+            expect=None,
+        )
+        body_pin_payload = runtime_payload_from_agent_safe_output(body_pin_payload)
+        body_pin = body_pin_payload.get("input_bindings", {}).get("pr_body_pin")
+        if not isinstance(body_pin, dict) or body_pin.get("result") != "pass":
+            raise AssertionError(f"gate freeze PR body pin positive fixture did not pass: {body_pin}")
+        if body_pin.get("rendered_body_sha256") != body_pin.get("readback_body_sha256"):
+            raise AssertionError("gate freeze PR body pin did not record matching rendered/readback body hashes")
+        if not body_pin.get("metadata_block_fingerprints"):
+            raise AssertionError("gate freeze PR body pin did not retain metadata block fingerprints")
+
+        readback_pr_body_drift.write_text(body + "\nOperator note added after edit.\n", encoding="utf-8")
+        body_hash_drift_preflight = loom_flow.pr_metadata_preflight_payload(
+            target_root=REPO_ROOT,
+            surface="merge_ready",
+            body_file=".loom/runtime/pr/cli-contract-rendered.md",
+            compare_body_file=".loom/runtime/pr/cli-contract-readback-drift.md",
+        )
+        if body_hash_drift_preflight.get("result") != "pass":
+            raise AssertionError(f"benign full-body drift should keep PR metadata preflight passing: {body_hash_drift_preflight.get('missing_inputs')}")
+        body_hash_drift = loom_flow.gate_freeze_pr_body_pin_binding(body_hash_drift_preflight)
+        if not isinstance(body_hash_drift, dict) or body_hash_drift.get("result") != "pass":
+            raise AssertionError("gate freeze PR body pin must allow full-body drift when machine blocks still match")
+        if body_hash_drift.get("full_body_hash_status") != "metadata_blocks_match_full_body_diff":
+            raise AssertionError("gate freeze PR body pin must report benign full-body hash drift")
+        if body_hash_drift.get("missing_inputs"):
+            raise AssertionError("benign full-body PR body drift must not create blocking readiness inputs")
+
+        carrier_drift_body.write_text(
+            governance_metadata_body(item=freeze_item, branch="work/cli-contract-fixture-drift", head_sha=head_sha),
+            encoding="utf-8",
+        )
+        _, carrier_drift_payload = run_json(
+            [
+                "gate",
+                "freeze",
+                "check",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                freeze_item,
+                "--head-sha",
+                head_sha,
+                "--branch",
+                branch,
+                "--body-file",
+                ".loom/runtime/pr/cli-contract-rendered.md",
+                "--compare-body-file",
+                ".loom/runtime/pr/cli-contract-carrier-drift.md",
+                "--json",
+            ],
+            expect=1,
+        )
+        carrier_drift_payload = runtime_payload_from_agent_safe_output(carrier_drift_payload)
+        carrier_drift = carrier_drift_payload.get("input_bindings", {}).get("pr_body_pin")
+        if not isinstance(carrier_drift, dict) or carrier_drift.get("result") != "block":
+            raise AssertionError("gate freeze PR body pin must block machine carrier binding drift")
+        if not any("PR metadata preflight:" in str(message) for message in carrier_drift.get("missing_inputs", [])):
+            raise AssertionError("gate freeze PR body pin must preserve preflight carrier mismatch messages")
+        carrier_drift_classifiers = {
+            finding.get("classifier")
+            for finding in carrier_drift_payload.get("failure_classifier", {}).get("findings", [])
+            if isinstance(finding, dict)
+        }
+        if "pr_metadata_drift" not in carrier_drift_classifiers:
+            raise AssertionError("gate freeze carrier binding drift must classify as pr_metadata_drift")
+        if not any(
+            finding.get("classifier") == "pr_metadata_drift"
+            and "regenerate or update the PR body machine carrier" in str(finding.get("next_action"))
+            for finding in carrier_drift_payload.get("failure_classifier", {}).get("findings", [])
+            if isinstance(finding, dict)
+        ):
+            raise AssertionError("gate freeze carrier binding drift must expose the classifier-specific next_action")
+    finally:
+        for path in (rendered_pr_body, readback_pr_body, readback_pr_body_drift, carrier_drift_body):
+            if path.exists():
+                path.unlink()
+    assert_gate_freeze_carrier_shadow_bindings_contract()
+    outside_freeze_path = REPO_ROOT / ".loom" / "runtime" / "gate-freeze-outside" / "probe.json"
+    if outside_freeze_path.exists():
+        outside_freeze_path.unlink()
+    _, invalid_write = run_json(
+        [
+            "gate",
+            "freeze",
+            "write",
+            "--target",
+            str(REPO_ROOT),
+            "--write-path",
+            ".loom/runtime/gate-freeze-outside/probe.json",
+            "--json",
+        ],
+        expect=1,
+    )
+    invalid_write = runtime_payload_from_agent_safe_output(invalid_write)
+    if outside_freeze_path.exists():
+        outside_freeze_path.unlink()
+        raise AssertionError("gate freeze write must not write outside .loom/runtime/gate-freeze/")
+    if invalid_write.get("write_artifact", {}).get("result") != "block":
+        raise AssertionError("gate freeze write must block invalid write paths outside .loom/runtime/gate-freeze/")
     for command in (
         "install",
         "upgrade-plan",
@@ -4668,6 +14333,7 @@ def run_aggregate_cli_contract() -> None:
         "build",
         "pre-review",
         "closeout",
+        "closeout queue status",
         "handoff",
         "retire",
     ):
@@ -4695,20 +14361,65 @@ def run_aggregate_cli_contract() -> None:
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
         raise AssertionError("version output did not include repo version context")
 
-    _, body_file_preflight = run_json(
-        [
-            "pr",
-            "metadata-preflight",
-            "--surface",
-            "merge_ready",
-            "--body-file",
-            ".github/PULL_REQUEST_TEMPLATE.md",
-            "--json",
-        ],
-        expect=0,
-    )
-    if body_file_preflight.get("result") != "pass" or "body_artifact" not in body_file_preflight:
-        raise AssertionError("pr metadata-preflight must support PR body-file artifact validation without requiring a live PR")
+    closeout_body = Path(".loom/runtime/check-cli-contract/closeout-body.md")
+    closeout_body.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _, render_payload = run_json(
+            [
+                "pr",
+                "metadata-render",
+                "--surface",
+                "closeout",
+                "--item",
+                "WI-1541",
+                "--branch",
+                "work/1541-pr-metadata-update-v2",
+                "--head-sha",
+                "1" * 40,
+                "--output-file",
+                str(closeout_body),
+                "--json",
+            ],
+            expect=0,
+        )
+        if render_payload.get("result") != "pass" or render_payload.get("effective_carrier_surface") != "closeout":
+            raise AssertionError("pr metadata-render must support closeout surface and emit closeout carrier surface")
+
+        _, readback_payload = run_json(
+            [
+                "pr",
+                "metadata-readback",
+                "--surface",
+                "closeout",
+                "--body-file",
+                str(closeout_body),
+                "--json",
+            ],
+            expect=0,
+        )
+        if readback_payload.get("schema_version") != "loom-pr-metadata-readback/v1" or readback_payload.get("result") != "pass":
+            raise AssertionError("pr metadata-readback must emit a passing loom-pr-metadata-readback/v1 payload for readable body artifacts")
+
+        _, body_file_preflight = run_json(
+            [
+                "pr",
+                "metadata-preflight",
+                "--surface",
+                "closeout",
+                "--body-file",
+                str(closeout_body),
+                "--json",
+            ],
+            expect=0,
+        )
+        if (
+            body_file_preflight.get("schema_version") != "loom-pr-metadata-preflight/v1"
+            or body_file_preflight.get("result") != "pass"
+            or "body_artifact" not in body_file_preflight
+        ):
+            raise AssertionError("pr metadata-preflight must support closeout surface body-file artifact validation without requiring a live PR")
+    finally:
+        closeout_body.unlink(missing_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="loom-cli-contract-") as raw_tmp:
         tmp = Path(raw_tmp)
@@ -4830,7 +14541,7 @@ def run_aggregate_cli_contract() -> None:
             or not_applicable_payload.get("missing_inputs")
         ):
             raise AssertionError("suite inspect not_applicable payload drifted")
-        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable", expect=1)
+        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable")
         if (
             suite_not_applicable_validate.get("result") != "not_applicable"
             or suite_not_applicable_validate.get("payload", {}).get("suite_path") != "not_applicable"
@@ -5368,26 +15079,32 @@ def run_aggregate_cli_contract() -> None:
         valid_target.mkdir()
         write_state(valid_target, valid_state(valid_target))
         run_json(["installed-state", "validate", "--target", str(valid_target), "--json"], expect=0)
-        _, valid_doctor = run_json(["doctor", "--target", str(valid_target), "--json"], expect=0)
-        if valid_doctor["result"] != "pass":
-            raise AssertionError("valid installed-state doctor did not pass")
-        undeclared_suite_check = next((check for check in valid_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
-        if not undeclared_suite_check or undeclared_suite_check.get("result") != "pass" or undeclared_suite_check.get("declared_support") is not False:
-            raise AssertionError("doctor did not pass undeclared suite command support")
-        _, valid_plan = run_json(["repair", "plan", "--target", str(valid_target), "--json"], expect=0)
-        if valid_plan["actions"]:
-            raise AssertionError("current installed-state repair plan should be no-op")
-        _, exported = run_json(["installed-state", "export", "--target", str(valid_target), "--json"], expect=0)
-        if exported["installation_graph"]["layers"] != ["runtime", "skills"]:
-            raise AssertionError("installed-state export did not include graph")
-        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(valid_target), "--json"], expect=0)
-        if upgrade_plan["schema"] != "loom-delivery-control/v1" or not upgrade_plan["actions"]:
-            raise AssertionError("upgrade-plan did not emit delivery control actions")
-        _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
-        if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
-            raise AssertionError("verify did not consume doctor success")
-        if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
-            raise AssertionError("verify should not require suite validation without profile or Work Item demand")
+        valid_home = tmp / "valid-codex-home"
+        valid_home.mkdir()
+        with isolated_codex_workstation(valid_home):
+            register_fixture_codex_plugin()
+            _, valid_doctor = run_json(["doctor", "--target", str(valid_target), "--json"], expect=0)
+            if valid_doctor["result"] != "pass":
+                raise AssertionError("valid installed-state doctor did not pass")
+            undeclared_suite_check = next((check for check in valid_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
+            if not undeclared_suite_check or undeclared_suite_check.get("result") != "pass" or undeclared_suite_check.get("declared_support") is not False:
+                raise AssertionError("doctor did not pass undeclared suite command support")
+            _, valid_plan = run_json(["repair", "plan", "--target", str(valid_target), "--json"], expect=0)
+            if valid_plan["actions"]:
+                raise AssertionError("current installed-state repair plan should be no-op")
+            _, exported = run_json(["installed-state", "export", "--target", str(valid_target), "--json"], expect=0)
+            if exported["installation_graph"]["layers"] != ["adoption-metadata", "user-skills-provider", "global-cli-provider"]:
+                raise AssertionError("installed-state export did not include graph")
+            _, upgrade_plan = run_json(["upgrade-plan", "--target", str(valid_target), "--json"], expect=0)
+            upgrade_plan = runtime_payload_from_agent_safe_output(upgrade_plan)
+            if upgrade_plan["schema"] != "loom-delivery-control/v1" or not upgrade_plan["actions"]:
+                raise AssertionError("upgrade-plan did not emit delivery control actions")
+            _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
+            verify_payload = runtime_payload_from_agent_safe_output(verify_payload)
+            if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
+                raise AssertionError("verify did not consume doctor success")
+            if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
+                raise AssertionError("verify should not require suite validation without profile or Work Item demand")
         repo_local_target = tmp / "repo-local-wrapper-compatibility"
         repo_local_target.mkdir()
         write_state(repo_local_target, valid_state(repo_local_target))
@@ -5397,22 +15114,21 @@ def run_aggregate_cli_contract() -> None:
         _, repo_local_detect = run_json(["detect", "--target", str(repo_local_target), "--json"], expect=0)
         repo_local_runtime = next((surface for surface in repo_local_detect.get("surfaces", []) if surface.get("path") == ".loom/bin"), None)
         if (
-            repo_local_detect.get("classification") != "current"
+            repo_local_detect.get("classification") != "mixed"
             or not repo_local_runtime
             or repo_local_runtime.get("kind") != "legacy-loom-bin"
-            or repo_local_runtime.get("migration_status") != "current"
-            or repo_local_runtime.get("authority") != "loom-cli"
+            or repo_local_runtime.get("migration_status") != "legacy"
         ):
-            raise AssertionError("repo-local-wrapper .loom/bin compatibility fixture was not classified as current CLI-managed runtime")
-        _, repo_local_doctor = run_json(["doctor", "--target", str(repo_local_target), "--json"], expect=0)
-        if repo_local_doctor.get("result") != "pass":
-            raise AssertionError("repo-local-wrapper compatibility doctor did not pass")
-        _, repo_local_verify = run_json(["verify", "--target", str(repo_local_target), "--json"], expect=0)
-        if repo_local_verify.get("result") != "pass" or repo_local_verify.get("doctor", {}).get("result") != "pass":
-            raise AssertionError("repo-local-wrapper compatibility verify did not consume doctor success")
+            raise AssertionError("repo-local-wrapper .loom/bin fixture was not classified as unsupported legacy residue")
+        status, repo_local_doctor = run_json(["doctor", "--target", str(repo_local_target), "--json"])
+        if status == 0 or repo_local_doctor.get("result") != "block":
+            raise AssertionError("repo-local-wrapper legacy residue doctor did not block")
+        status, repo_local_verify = run_json(["verify", "--target", str(repo_local_target), "--json"])
+        if status == 0 or repo_local_verify.get("result") != "block" or repo_local_verify.get("doctor", {}).get("result") != "block":
+            raise AssertionError("repo-local-wrapper legacy residue verify did not consume doctor block")
         _, repo_local_repair = run_json(["repair", "plan", "--target", str(repo_local_target), "--json"], expect=0)
-        if repo_local_repair.get("actions"):
-            raise AssertionError("repo-local-wrapper compatibility fixture should not produce legacy repair actions")
+        if not repo_local_repair.get("actions"):
+            raise AssertionError("repo-local-wrapper legacy residue should produce non-mutating repair guidance")
         global_cli_target = tmp / "global-cli-no-bin"
         global_cli_target.mkdir()
         write_state(global_cli_target, global_cli_state(global_cli_target))
@@ -5430,28 +15146,13 @@ def run_aggregate_cli_contract() -> None:
         global_cli_home = tmp / "global-cli-codex-home"
         global_cli_home.mkdir()
         with isolated_codex_workstation(global_cli_home):
-            run_json(
-                [
-                    "host",
-                    "register",
-                    "--host",
-                    "codex",
-                    "--source",
-                    str(REPO_ROOT / "plugins" / "loom"),
-                    "--scope",
-                    "user",
-                    "--apply",
-                    "--json",
-                ],
-                expect=0,
-            )
             _, global_doctor = run_json(["doctor", "--target", str(global_cli_target), "--json"], expect=0)
             provider_check = next((check for check in global_doctor.get("checks", []) if check.get("name") == "global-cli-runtime-provider"), None)
             if global_doctor.get("result") != "pass" or not provider_check or provider_check.get("result") != "pass":
-                raise AssertionError("global-cli no-bin doctor did not pass provider diagnostics")
+                raise AssertionError("global-cli no-bin doctor required more than repo carriers and global CLI diagnostics")
             _, global_verify = run_json(["verify", "--target", str(global_cli_target), "--json"], expect=0)
             if global_verify.get("result") != "pass" or global_verify.get("doctor", {}).get("result") != "pass":
-                raise AssertionError("global-cli no-bin verify did not consume doctor success")
+                raise AssertionError("global-cli no-bin verify required more than repo carriers and global CLI diagnostics")
             command_mismatch_target = tmp / "global-cli-command-mismatch"
             command_mismatch_target.mkdir()
             command_mismatch_state = global_cli_state(command_mismatch_target)
@@ -5471,11 +15172,11 @@ def run_aggregate_cli_contract() -> None:
                 or command_mismatch_check.get("missing_commands") != ["loom imaginary"]
             ):
                 raise AssertionError("global-cli provider command mismatch did not fail closed with stable diagnostics")
-        _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json"], expect=0)
+        _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json", "--full-output"], expect=0)
         read_entry = global_fact_chain.get("report", {}).get("fact_chain", {}).get("read_entry")
         if not isinstance(read_entry, str) or ".loom/bin" in read_entry or not read_entry.startswith("loom fact-chain "):
             raise AssertionError(f"global-cli fact-chain read_entry was not a global loom command: {read_entry}")
-        _, global_status = run_json(["status", "--target", str(global_cli_target), "--json"])
+        _, global_status = run_json(["status", "--target", str(global_cli_target), "--json", "--full-output"])
         if ".loom/bin" in str(global_status.get("current_runtime_entrypoint", "")) or not str(global_status.get("status_entrypoint", "")).startswith("loom status "):
             raise AssertionError("global-cli status did not report global loom entrypoint")
         governance_spec = importlib.util.spec_from_file_location(
@@ -5496,43 +15197,28 @@ def run_aggregate_cli_contract() -> None:
         (stale_bin_target / ".loom" / "bin").mkdir(parents=True)
         (stale_bin_target / ".loom" / "bin" / "loom_flow.py").write_text("# stale fixture\n", encoding="utf-8")
         _, stale_detect = run_json(["detect", "--target", str(stale_bin_target), "--json"], expect=0)
-        retained = [surface for surface in stale_detect.get("surfaces", []) if surface.get("kind") == "retained-loom-bin"]
-        if stale_detect.get("classification") != "current-with-repairable-residue" or not retained:
-            raise AssertionError("global-cli stale .loom/bin was not classified as repairable residue")
+        legacy_bins = [surface for surface in stale_detect.get("surfaces", []) if surface.get("kind") == "legacy-loom-bin"]
+        if stale_detect.get("classification") != "mixed" or not legacy_bins:
+            raise AssertionError("global-cli stale .loom/bin was not classified as unsupported legacy residue")
         with isolated_codex_workstation(global_cli_home):
-            _, stale_doctor = run_json(["doctor", "--target", str(stale_bin_target), "--json"], expect=0)
-            if stale_doctor.get("result") != "pass":
-                raise AssertionError("global-cli stale .loom/bin should not block doctor as current provider proof")
+            status, stale_doctor = run_json(["doctor", "--target", str(stale_bin_target), "--json"])
+            if status == 0 or stale_doctor.get("result") != "block":
+                raise AssertionError("global-cli stale .loom/bin did not block doctor as unsupported legacy residue")
         _, stale_repair = run_json(["repair", "plan", "--target", str(stale_bin_target), "--json"], expect=0)
-        stale_actions = {action["id"]: action for action in stale_repair.get("actions", [])}
-        stale_migration = stale_actions.get("plan-global-cli-runtime-carrier-migration")
-        if not stale_migration:
-            raise AssertionError("global-cli stale .loom/bin did not produce a runtime-carrier migration plan")
-        if stale_migration.get("status") != "recommended" or stale_migration.get("deletes") != [".loom/bin"] or stale_migration.get("requires_confirmation") is not True:
-            raise AssertionError("global-cli stale .loom/bin did not keep deletion proposal-only with explicit confirmation")
-        if stale_migration.get("blocking_references") or stale_migration.get("guidance_references"):
-            raise AssertionError("global-cli stale .loom/bin should not report gate blockers when carriers already point to global loom commands")
+        if stale_repair.get("mutates") is not False or not stale_repair.get("actions"):
+            raise AssertionError("global-cli stale .loom/bin did not produce non-mutating legacy guidance")
         _, stale_upgrade = run_json(["upgrade-plan", "--target", str(stale_bin_target), "--json"], expect=0)
-        if "plan-global-cli-runtime-carrier-migration" not in {action["id"] for action in stale_upgrade.get("actions", [])}:
-            raise AssertionError("global-cli stale .loom/bin upgrade-plan did not expose runtime-carrier migration guidance")
+        if not stale_upgrade.get("actions"):
+            raise AssertionError("global-cli stale .loom/bin upgrade-plan did not expose legacy guidance")
         blocked_bin_target = tmp / "global-cli-stale-bin-blocked"
         shutil.copytree(stale_bin_target, blocked_bin_target)
         write_global_cli_gate_blocker_fixture(blocked_bin_target)
         _, blocked_repair = run_json(["repair", "plan", "--target", str(blocked_bin_target), "--json"], expect=0)
-        blocked_actions = {action["id"]: action for action in blocked_repair.get("actions", [])}
-        blocked_migration = blocked_actions.get("plan-global-cli-runtime-carrier-migration")
-        deletion_block = blocked_actions.get("block-retained-loom-bin-deletion")
-        if not blocked_migration or not deletion_block or blocked_migration.get("status") != "blocked":
-            raise AssertionError("global-cli blocked stale .loom/bin did not fail closed with a deletion blocker")
-        blocked_paths = {record.get("path") for record in blocked_migration.get("blocking_references", [])}
-        if {".loom/bootstrap/init-result.json", ".loom/status/current.md"} - blocked_paths:
-            raise AssertionError("global-cli blocked stale .loom/bin did not report exact gate blocker paths")
-        if deletion_block.get("blocked_paths") != [".loom/bin"]:
-            raise AssertionError("global-cli blocked stale .loom/bin did not keep retained runtime deletion blocked")
+        if blocked_repair.get("mutates") is not False or not blocked_repair.get("actions"):
+            raise AssertionError("global-cli blocked stale .loom/bin did not fail closed with non-mutating legacy guidance")
         _, blocked_upgrade = run_json(["upgrade-plan", "--target", str(blocked_bin_target), "--json"], expect=0)
-        blocked_upgrade_ids = {action["id"] for action in blocked_upgrade.get("actions", [])}
-        if "plan-global-cli-runtime-carrier-migration" not in blocked_upgrade_ids or "block-retained-loom-bin-deletion" not in blocked_upgrade_ids:
-            raise AssertionError("global-cli blocked stale .loom/bin upgrade-plan did not preserve blocker semantics")
+        if not blocked_upgrade.get("actions"):
+            raise AssertionError("global-cli blocked stale .loom/bin upgrade-plan did not preserve legacy guidance")
         malformed_target = tmp / "global-cli-malformed"
         malformed_target.mkdir()
         malformed_state = global_cli_state(malformed_target)
@@ -5546,18 +15232,22 @@ def run_aggregate_cli_contract() -> None:
         declared_state = valid_state(declared_target)
         declared_state["declared_support"] = {"suite_commands": ["suite inspect", "suite validate", "suite evidence validate", "suite carrier validate"]}
         write_state(declared_target, declared_state)
-        _, declared_doctor = run_json(["doctor", "--target", str(declared_target), "--json"], expect=0)
-        declared_suite_check = next((check for check in declared_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
-        if (
-            declared_doctor.get("result") != "pass"
-            or not declared_suite_check
-            or declared_suite_check.get("declared_support") is not True
-            or declared_suite_check.get("schema_errors")
-        ):
-            raise AssertionError("doctor did not pass declared suite command support")
-        _, declared_verify = run_json(["verify", "--target", str(declared_target), "--json"], expect=0)
-        if declared_verify.get("suite_validation_requirement", {}).get("required") is not False or declared_verify.get("suite_validation") is not None:
-            raise AssertionError("declared suite support alone must not make verify run suite validation")
+        declared_home = tmp / "declared-suite-codex-home"
+        declared_home.mkdir()
+        with isolated_codex_workstation(declared_home):
+            register_fixture_codex_plugin()
+            _, declared_doctor = run_json(["doctor", "--target", str(declared_target), "--json"], expect=0)
+            declared_suite_check = next((check for check in declared_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
+            if (
+                declared_doctor.get("result") != "pass"
+                or not declared_suite_check
+                or declared_suite_check.get("declared_support") is not True
+                or declared_suite_check.get("schema_errors")
+            ):
+                raise AssertionError("doctor did not pass declared suite command support")
+            _, declared_verify = run_json(["verify", "--target", str(declared_target), "--json"], expect=0)
+            if declared_verify.get("suite_validation_requirement", {}).get("required") is not False or declared_verify.get("suite_validation") is not None:
+                raise AssertionError("declared suite support alone must not make verify run suite validation")
         required_target = tmp / "verify-suite-required"
         required_target.mkdir()
         required_state = valid_state(required_target)
@@ -5565,25 +15255,33 @@ def run_aggregate_cli_contract() -> None:
         write_state(required_target, required_state)
         write_minimal_suite(required_target, "WI-verify")
         assert_minimal_suite_happy_path_fixture(required_target, "WI-verify")
-        _, required_verify = run_json(["verify", "--target", str(required_target), "--json"], expect=0)
-        if (
-            required_verify.get("suite_validation_requirement", {}).get("required") is not True
-            or required_verify.get("suite_validation", {}).get("result") != "pass"
-            or required_verify.get("suite_validation", {}).get("item_id") != "WI-verify"
-        ):
-            raise AssertionError("verify did not run required profile suite validation")
+        required_home = tmp / "verify-suite-required-codex-home"
+        required_home.mkdir()
+        with isolated_codex_workstation(required_home):
+            register_fixture_codex_plugin()
+            _, required_verify = run_json(["verify", "--target", str(required_target), "--json"], expect=0)
+            if (
+                required_verify.get("suite_validation_requirement", {}).get("required") is not True
+                or required_verify.get("suite_validation", {}).get("result") != "pass"
+                or required_verify.get("suite_validation", {}).get("item_id") != "WI-verify"
+            ):
+                raise AssertionError("verify did not run required profile suite validation")
         missing_suite_target = tmp / "verify-suite-missing"
         missing_suite_target.mkdir()
         write_state(missing_suite_target, valid_state(missing_suite_target))
-        status, missing_suite_verify = run_json(["verify", "--target", str(missing_suite_target), "--item", "WI-missing", "--json"])
-        if (
-            status == 0
-            or missing_suite_verify.get("result") != "block"
-            or missing_suite_verify.get("failed_layer") != "suite"
-            or missing_suite_verify.get("suite_validation_requirement", {}).get("required") is not True
-            or missing_suite_verify.get("suite_validation", {}).get("result") != "block"
-        ):
-            raise AssertionError("verify did not block when required Work Item suite validation failed")
+        missing_home = tmp / "verify-suite-missing-codex-home"
+        missing_home.mkdir()
+        with isolated_codex_workstation(missing_home):
+            register_fixture_codex_plugin()
+            status, missing_suite_verify = run_json(["verify", "--target", str(missing_suite_target), "--item", "WI-missing", "--json"])
+            if (
+                status == 0
+                or missing_suite_verify.get("result") != "block"
+                or missing_suite_verify.get("failed_layer") != "suite"
+                or missing_suite_verify.get("suite_validation_requirement", {}).get("required") is not True
+                or missing_suite_verify.get("suite_validation", {}).get("result") != "block"
+            ):
+                raise AssertionError("verify did not block when required Work Item suite validation failed")
         drift_target = tmp / "declared-suite-drift"
         drift_target.mkdir()
         drift_state = valid_state(drift_target)
@@ -5610,89 +15308,28 @@ def run_aggregate_cli_contract() -> None:
         if status == 0 or rollback_payload["failed_layer"] != "rollback-ownership":
             raise AssertionError("rollback did not fail closed without rollback ownership")
         _, hosts = run_json(["host", "list", "--target", str(valid_target), "--json"], expect=0)
+        hosts = runtime_payload_from_agent_safe_output(hosts)
         if hosts["schema"] != "loom-host-orchestration/v1" or not any(host["id"] == "codex" for host in hosts["hosts"]):
             raise AssertionError("host list did not emit supported host adapter inventory")
         _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--target", str(valid_target), "--json"], expect=0)
-        if host_doctor["host"] != "codex" or host_doctor["mode"] != "plugin":
-            raise AssertionError("host doctor did not freeze host/mode output")
+        if host_doctor["host"] != "codex" or host_doctor.get("scope") != "user" or host_doctor.get("provider") != "codex-user-plugin":
+            raise AssertionError("host doctor did not freeze codex user-level provider output")
         status, host_install = run_json(["host", "install", "--host", "codex", "--target", str(valid_target), "--json"])
         if status == 0 or host_install["result"] != "block" or host_install["failed_layer"] != "host-install":
             raise AssertionError("host install did not fail closed without --apply")
         managed_target = tmp / "managed-host"
         managed_target.mkdir()
-        _, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"], expect=0)
-        managed_writes = set(managed_install.get("managed_writes", []))
-        if "skills" in managed_writes:
-            raise AssertionError("host plugin install must not write downstream top-level skills")
-        for expected_write in ("plugins/loom/.codex-plugin/plugin.json", "plugins/loom/skills", ".loom/installed-state.json"):
-            if expected_write not in managed_writes:
-                raise AssertionError(f"host install did not write {expected_write}")
-        if (managed_target / "skills").exists():
-            raise AssertionError("host plugin install created downstream top-level skills")
-        _, managed_verify = run_json(["host", "verify", "--host", "codex", "--target", str(managed_target), "--json"], expect=0)
-        if managed_verify["result"] != "pass" or any(check["status"] != "pass" for check in managed_verify["checks"]):
-            raise AssertionError("host verify did not validate CLI-managed plugin payload")
-        if managed_verify.get("verifies") != "target-repository-payload":
-            raise AssertionError("host verify must explicitly verify target repository payload, not workstation registration")
-        isolated_home = tmp / "isolated-codex-home"
-        isolated_home.mkdir()
-        with isolated_codex_workstation(isolated_home):
-            _, fixture_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(managed_target), "--json"], expect=0)
-            if fixture_verify.get("result") != "pass":
-                raise AssertionError("HotCP-style fixture host verify should pass with repo payload current")
-            status, fixture_doctor = run_json(["doctor", "--target", str(managed_target), "--json"])
-            workstation_check = next((check for check in fixture_doctor.get("checks", []) if check.get("name") == "codex-workstation-registration"), None)
-            if (
-                status == 0
-                or fixture_doctor.get("result") != "block"
-                or fixture_doctor.get("failed_layer") != "workstation-registration"
-                or not workstation_check
-                or workstation_check.get("workstation_registration", {}).get("status") != "missing"
-            ):
-                raise AssertionError("HotCP-style fixture doctor did not report missing workstation registration separately")
-            _, fixture_repair = run_json(["repair", "plan", "--target", str(managed_target), "--json"], expect=0)
-            repair_action = next((action for action in fixture_repair.get("actions", []) if action.get("id") == "register-codex-workstation-plugin"), None)
-            if not repair_action or repair_action.get("mutates") is not False or repair_action.get("apply_mutates") is not True:
-                raise AssertionError("repair plan did not recommend non-mutating Codex workstation registration")
-            _, fixture_upgrade = run_json(["upgrade-plan", "--target", str(managed_target), "--json"], expect=0)
-            if not any(action.get("id") == "register-codex-workstation-plugin" for action in fixture_upgrade.get("actions", [])):
-                raise AssertionError("upgrade-plan did not recommend Codex workstation registration")
-            source = managed_target / "plugins" / "loom"
-            _, register_dry_run = run_json(
-                ["host", "register", "--host", "codex", "--source", str(source), "--scope", "user", "--dry-run", "--json"],
-                expect=0,
-            )
-            if (
-                register_dry_run.get("mutates") is not False
-                or not register_dry_run.get("planned_writes")
-                or (isolated_home / "plugins" / "loom").exists()
-                or (isolated_home / ".agents" / "plugins" / "marketplace.json").exists()
-            ):
-                raise AssertionError("host register dry-run mutated isolated workstation state")
-            _, register_apply = run_json(
-                ["host", "register", "--host", "codex", "--source", str(source), "--scope", "user", "--apply", "--json"],
-                expect=0,
-            )
-            registration = register_apply.get("workstation_registration", {})
-            if (
-                register_apply.get("mutates") is not True
-                or registration.get("status") != "registered"
-                or not (isolated_home / "plugins" / "loom" / ".codex-plugin" / "plugin.json").exists()
-                or not (isolated_home / ".agents" / "plugins" / "marketplace.json").exists()
-                or 'plugins."loom@local-user-plugins"' not in (isolated_home / ".codex" / "config.toml").read_text(encoding="utf-8")
-            ):
-                raise AssertionError("host register apply did not create isolated Codex workstation registration")
-            _, registered_doctor = run_json(["doctor", "--target", str(managed_target), "--json"], expect=0)
-            registered_check = next((check for check in registered_doctor.get("checks", []) if check.get("name") == "codex-workstation-registration"), None)
-            if registered_check.get("workstation_registration", {}).get("status") != "registered":
-                raise AssertionError("doctor did not pass after isolated Codex workstation registration")
-        _, managed_skills = run_json(["skills", "check", "--target", str(managed_target), "--json"], expect=0)
-        if managed_skills["result"] != "pass":
-            raise AssertionError("skills check did not validate CLI-managed target payload")
-        _, managed_detect = run_json(["detect", "--target", str(managed_target), "--json"], expect=0)
-        if managed_detect["classification"] != "current":
-            raise AssertionError("CLI-managed host install was not classified as current")
+        managed_home = tmp / "managed-host-codex-home"
+        managed_home.mkdir()
+        with isolated_codex_workstation(managed_home):
+            _, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"], expect=0)
+            if managed_install.get("source_kind") != "global-loom-package" or managed_install.get("workstation_install", {}).get("result") != "pass":
+                raise AssertionError("user-level host plugin install did not pass readback")
+            for unexpected in ("plugins/loom", "skills", ".agents/skills", ".loom/bin", ".loom/installed-state.json"):
+                if (managed_target / unexpected).exists():
+                    raise AssertionError(f"user-level host plugin install wrote unsupported repository payload: {unexpected}")
         _, skills_list = run_json(["skills", "list", "--json"], expect=0)
+        skills_list = runtime_payload_from_agent_safe_output(skills_list)
         if skills_list["schema"] != "loom-skills-surface/v1" or skills_list["root_entry"] != "loom-init":
             raise AssertionError("skills list did not expose generated skills registry")
         status, skills_generate = run_json(["skills", "generate", "--json"])
@@ -5701,8 +15338,14 @@ def run_aggregate_cli_contract() -> None:
         _, skills_check = run_json(["skills", "check", "--target", str(REPO_ROOT), "--json"], expect=0)
         assert_generated_skills_surface_parity_contract(skills_check)
         _, skills_package = run_json(["skills", "package", "--json"], expect=0)
-        if not skills_package["packages"]:
-            raise AssertionError("skills package did not emit package metadata")
+        plugin_payload = skills_package.get("plugin_payload") or {}
+        if (
+            skills_package.get("result") != "pass"
+            or plugin_payload.get("skills_root") != "plugins/loom/skills"
+            or plugin_payload.get("single_skill_packages") is not False
+            or not plugin_payload.get("skills")
+        ):
+            raise AssertionError("skills package did not emit plugin payload metadata")
         _, skills_release_check = run_json(["skills", "release-check", "--json"], expect=0)
         release_check_commands = [
             item.get("command", "")
@@ -5730,55 +15373,80 @@ def run_aggregate_cli_contract() -> None:
         if legacy_evidence.get("tag") != "loom-installer-v0.1.119":
             raise AssertionError("skills release-check did not keep installer tag as legacy baseline evidence")
         _, route_payload = run_json(["route", "--target", str(REPO_ROOT), "--task", "adopt existing repo", "--json"], expect=0)
+        route_payload = runtime_payload_from_agent_safe_output(route_payload)
         if route_payload["command"] != "route" or route_payload["selected_skill"] != "loom-adopt":
             raise AssertionError("route did not expose CLI-first scenario routing")
-        _, status_payload = run_json(["status", "--target", str(REPO_ROOT), "--json"])
+        _, status_payload = run_json(["status", "--target", str(REPO_ROOT), "--json", "--full-output"])
         if status_payload["command"] != "status" or status_payload.get("result") not in {"pass", "block", "fallback"}:
             raise AssertionError("status wrapper did not emit structured status JSON")
         missing_status_target = tmp / "missing-status"
         missing_status_target.mkdir()
-        status, missing_status = run_json(["status", "--target", str(missing_status_target), "--json"])
+        status, missing_status = run_json(["status", "--target", str(missing_status_target), "--json", "--full-output"])
         if status == 0 or missing_status["result"] != "block" or not missing_status.get("blocking_failures"):
             raise AssertionError("status missing-carrier fixture did not fail closed")
-        _, fact_chain_payload = run_json(["fact-chain", "--target", str(REPO_ROOT), "--json"], expect=0)
+        _, fact_chain_payload = run_json(["fact-chain", "--target", str(REPO_ROOT), "--json", "--full-output"], expect=0)
         if fact_chain_payload["command"] != "fact-chain" or fact_chain_payload.get("result") != "pass":
             raise AssertionError("fact-chain wrapper did not consume loom_flow fact-chain JSON")
         _, profile_status = run_json(["profile", "status", "--target", str(REPO_ROOT), "--json"], expect=0)
+        profile_status = runtime_payload_from_agent_safe_output(profile_status)
         if profile_status["command"] != "profile status" or profile_status.get("wrapped_command") != "governance-profile":
             raise AssertionError("profile status did not wrap governance-profile status")
         _, profile_plan = run_json(["profile", "upgrade-plan", "--target", str(REPO_ROOT), "--json"])
+        profile_plan = runtime_payload_from_agent_safe_output(profile_plan)
         if profile_plan["command"] != "profile upgrade-plan" or profile_plan.get("wrapped_command") != "governance-profile":
             raise AssertionError("profile upgrade-plan did not wrap governance-profile upgrade-plan")
         _, profile_upgrade = run_json(["profile", "upgrade", "--target", str(REPO_ROOT), "--to", "standard", "--json"])
+        profile_upgrade = runtime_payload_from_agent_safe_output(profile_upgrade)
         if profile_upgrade["command"] != "profile upgrade" or profile_upgrade.get("wrapped_command") != "governance-profile":
             raise AssertionError("profile upgrade did not wrap governance-profile upgrade")
         _, adoption_verify = run_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        adoption_verify = runtime_payload_from_agent_safe_output(adoption_verify)
         if adoption_verify["command"] != "adopt" or adoption_verify.get("schema_version") != "loom-adoption-verify/v1":
             raise AssertionError("adopt verify did not expose adoption verification JSON")
         _, story_payload = run_json(["story", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"], expect=0)
+        story_payload = runtime_payload_from_agent_safe_output(story_payload)
         if story_payload["command"] != "story" or story_payload.get("wrapped_command") != "flow":
             raise AssertionError("story did not wrap the flow runtime")
         for command_name in ("spec", "plan"):
             status, scenario_payload = run_json([command_name, "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+            scenario_payload = runtime_payload_from_agent_safe_output(scenario_payload)
             if status == 0 or scenario_payload["schema"] != "loom-scenario-control/v1" or not scenario_payload.get("fallback_to"):
                 raise AssertionError(f"{command_name} did not fail closed with a structured locator payload")
         status, build_payload = run_json(["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
-        if build_payload["command"] != "build" or build_payload.get("wrapped_command") != "flow":
-            raise AssertionError("build did not wrap the flow runtime")
+        build_payload = runtime_payload_from_agent_safe_output(build_payload)
+        if (
+            status == 0
+            or build_payload["command"] != "build"
+            or build_payload.get("wrapped_command") != "flow"
+            or build_payload.get("result") != "block"
+            or build_payload.get("fallback_to") != "admission"
+        ):
+            raise AssertionError("build did not fail closed through the flow runtime for a non-current item")
         status, pre_review_payload = run_json(["pre-review", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
-        if pre_review_payload["command"] != "pre-review" or pre_review_payload.get("wrapped_command") != "flow":
-            raise AssertionError("pre-review did not wrap the flow runtime")
+        pre_review_payload = runtime_payload_from_agent_safe_output(pre_review_payload)
+        if (
+            status == 0
+            or pre_review_payload["command"] != "pre-review"
+            or pre_review_payload.get("wrapped_command") != "flow"
+            or pre_review_payload.get("result") != "block"
+            or pre_review_payload.get("fallback_to") != "admission"
+        ):
+            raise AssertionError("pre-review did not fail closed through the flow runtime for a non-current item")
         active_item = active_work_item_id()
         status, active_build = run_json_preserving_attempts(
             ["build", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_build = runtime_payload_from_agent_safe_output(active_build)
         assert_suite_build_consumption(active_build)
+        assert_work_item_activate_from_idle_syncs_fact_chain_mode(tmp)
+        assert_build_consumes_global_suite_without_repo_local_tools(tmp)
         assert_review_record_consumed_locators(tmp)
         _, active_pre_review = run_json_preserving_attempts(
             ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_pre_review = runtime_payload_from_agent_safe_output(active_pre_review)
         assert_suite_gate_consumption(active_pre_review, expected_surface="pre_review")
         active_guard = active_pre_review.get("readiness_cost_guard")
         if not isinstance(active_guard, dict):
@@ -5817,6 +15485,7 @@ def run_aggregate_cli_contract() -> None:
                 ],
                 item=active_item,
             )
+            drift_pre_review = runtime_payload_from_agent_safe_output(drift_pre_review)
         finally:
             if drift_fixture.exists():
                 drift_fixture.unlink()
@@ -5829,33 +15498,41 @@ def run_aggregate_cli_contract() -> None:
             ["gate", "review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_review_gate = runtime_payload_from_agent_safe_output(active_review_gate)
         assert_suite_gate_consumption(active_review_gate, expected_surface="review")
         _, active_merge_ready = run_json_preserving_attempts(
             ["merge-ready", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
         )
+        active_merge_ready = runtime_payload_from_agent_safe_output(active_merge_ready)
         assert_suite_gate_consumption(active_merge_ready, expected_surface="merge_ready")
         status, handoff_payload = run_json(["handoff", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        handoff_payload = runtime_payload_from_agent_safe_output(handoff_payload)
         if handoff_payload["command"] != "handoff" or handoff_payload.get("wrapped_command") != "flow":
             raise AssertionError("handoff did not wrap the flow runtime")
         status, retire_payload = run_json(["retire", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        retire_payload = runtime_payload_from_agent_safe_output(retire_payload)
         if retire_payload["command"] != "retire" or not retire_payload.get("retire_contract"):
             raise AssertionError("retire did not expose structured non-mutating contract")
         assert_active_closeout_contract(active_item)
         assert_reconciliation_suite_taxonomy_contract()
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
+        assert_governance_metadata_render_readback_fixture(tmp)
         assert_governance_intensity_metadata_preflight_fixture(tmp)
         assert_semantic_review_disposition_pr_gate_fixture(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
         assert_repair_apply_carrier_closeout_contract(tmp)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        checkpoint_admission = runtime_payload_from_agent_safe_output(checkpoint_admission)
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")
         _, checkpoint_build = run_json(["checkpoint", "build", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        checkpoint_build = runtime_payload_from_agent_safe_output(checkpoint_build)
         if checkpoint_build["command"] != "checkpoint build" or checkpoint_build.get("checkpoint") != "build":
             raise AssertionError("checkpoint build did not wrap checkpoint JSON")
         _, checkpoint_merge = run_json(["checkpoint", "merge", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        checkpoint_merge = runtime_payload_from_agent_safe_output(checkpoint_merge)
         if checkpoint_merge["command"] != "checkpoint merge" or checkpoint_merge.get("checkpoint") != "merge":
             raise AssertionError("checkpoint merge did not wrap checkpoint JSON")
         for gate_command in (
@@ -5864,13 +15541,14 @@ def run_aggregate_cli_contract() -> None:
             ["gate", "closeout", "--json"],
         ):
             status, gate_payload = run_json(gate_command)
+            gate_payload = runtime_payload_from_agent_safe_output(gate_payload)
             if status == 0 or gate_payload["result"] not in {"block", "fallback"} or not gate_payload.get("fallback_to"):
                 raise AssertionError(f"{gate_command} did not fail closed with structured JSON")
 
         mixed_target = tmp / "mixed"
         mixed_target.mkdir()
         bad_state = valid_state(mixed_target)
-        bad_state["layers"][1]["version_context"]["skill_package_version"] = "unknown"
+        bad_state["layers"][1]["version_context"]["plugin_surface_version"] = "unknown"
         write_state(mixed_target, bad_state)
         status, mixed_payload = run_json(["installed-state", "validate", "--target", str(mixed_target), "--json"])
         if status == 0 or mixed_payload["result"] != "block":
@@ -6054,7 +15732,7 @@ def run_suite_contract_surface() -> None:
             or not_applicable_payload.get("missing_inputs")
         ):
             raise AssertionError("suite inspect not_applicable payload drifted")
-        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable", expect=1)
+        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable")
         if (
             suite_not_applicable_validate.get("result") != "not_applicable"
             or suite_not_applicable_validate.get("payload", {}).get("suite_path") != "not_applicable"
@@ -6465,6 +16143,91 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="adoption-host-metadata",
             fixture_group="adoption-host-metadata",
             run=run_adoption_host_metadata_surface,
+        ),
+        SurfaceCheck(
+            name="workstation-registry",
+            fixture_group="workstation-registry",
+            run=run_workstation_registry_surface,
+        ),
+        SurfaceCheck(
+            name="legacy-migration",
+            fixture_group="legacy-migration",
+            run=run_legacy_migration_surface,
+        ),
+        SurfaceCheck(
+            name="runtime-paths",
+            fixture_group="runtime-paths",
+            run=run_runtime_paths_surface,
+        ),
+        SurfaceCheck(
+            name="merge-wrapper",
+            fixture_group="merge-wrapper",
+            run=run_merge_wrapper_surface,
+        ),
+        SurfaceCheck(
+            name="ship-wrapper",
+            fixture_group="ship-wrapper",
+            run=run_ship_wrapper_surface,
+        ),
+        SurfaceCheck(
+            name="closeout-wrapper",
+            fixture_group="closeout-wrapper",
+            run=run_closeout_wrapper_surface,
+        ),
+        SurfaceCheck(
+            name="work-item-audit",
+            fixture_group="work-item-audit",
+            run=run_work_item_audit_surface,
+        ),
+        SurfaceCheck(
+            name="release-readback",
+            fixture_group="release-readback",
+            run=run_release_readback_surface,
+        ),
+        SurfaceCheck(
+            name="pr-metadata",
+            fixture_group="pr-metadata",
+            run=run_pr_metadata_surface,
+        ),
+        SurfaceCheck(
+            name="pr-metadata-suite-not-applicable",
+            fixture_group="pr-metadata-suite-not-applicable",
+            run=run_pr_metadata_suite_not_applicable_surface,
+        ),
+        SurfaceCheck(
+            name="batch-implementation-closeout",
+            fixture_group="batch-implementation-closeout",
+            run=run_batch_implementation_closeout_surface,
+        ),
+        SurfaceCheck(
+            name="pr-gate-target-readback",
+            fixture_group="pr-gate-target-readback",
+            run=run_pr_gate_target_readback_surface,
+        ),
+        SurfaceCheck(
+            name="controlled-merge",
+            fixture_group="controlled-merge",
+            run=run_controlled_merge_surface,
+        ),
+        SurfaceCheck(
+            name="gate-repair-pr",
+            fixture_group="gate-repair-pr",
+            run=run_gate_repair_pr_surface,
+        ),
+        SurfaceCheck(
+            name="runtime-upgrade",
+            fixture_group="runtime-upgrade",
+            run=run_runtime_upgrade_surface,
+        ),
+        SurfaceCheck(
+            name="host-planning-taxonomy",
+            fixture_group="host-planning-taxonomy",
+            run=run_host_planning_taxonomy_surface,
+        ),
+        SurfaceCheck(
+            name="fr-wi-admission",
+            fixture_group="fr-wi-admission",
+            run=run_fr_wi_admission_surface,
         ),
         SurfaceCheck(
             name="aggregate",

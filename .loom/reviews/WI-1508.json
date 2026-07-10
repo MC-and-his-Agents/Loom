@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1508",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1508 at head 00ff203e4c3d0d85c4e0ab7a0945f98087ae5172: the final checkpoint carrier refresh moves WI-1508 to merge, records PR #1524 ready/readback and gate-freeze pass evidence, and refreshes merge-ready/closeout shadow hashes; implementation scope remains #1508 gate freeze CLI/runtime only.",
+  "reviewer": "codex",
+  "authored_at": "2026-06-16T21:30:56Z",
+  "reviewed_head": "00ff203edcc1518c931f36418c70d9e1cdc58caf",
+  "reviewed_validation_summary": "2026-06-16T21:28Z PR #1524 readback and gate-freeze refresh: `gh pr view 1524 --json number,state,isDraft,headRefName,headRefOid,url` returned OPEN, ready, branch `work/1508-gate-freeze-cli`, head `2f7adcdb34d8729f9687301e0045d47fe1b4c332`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py pr-metadata preflight --target . --surface merge_ready --body-file .loom/runtime/pr/WI-1508-pr-body.md --compare-body-file .loom/runtime/pr/WI-1508-pr-body-readback.md --head-sha 2f7adcdb34d8729f9687301e0045d47fe1b4c332 --branch work/1508-gate-freeze-cli` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py gate freeze check --target . --item WI-1508 --pr 1524 --head-sha 2f7adcdb34d8729f9687301e0045d47fe1b4c332 --branch work/1508-gate-freeze-cli --json` passed with `next_action=hosted_admission_allowed`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed. Hosted `loom-pr-merge-gate` failed before this carrier update because checkpoint was still `build`; prior fixture drift was fixed by `make loom-demo-new-project-sync`, `make loom-demo-new-project-check`, and `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1508.md",
+    "recovery_entry": ".loom/progress/WI-1508.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1508-gate-freeze-cli/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1508-gate-freeze-cli --item WI-1508 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1508-gate-freeze-cli/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1508-gate-freeze-cli --item WI-1508 --json",
+    "suite_evidence_map": ".loom/specs/WI-1508/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1508/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

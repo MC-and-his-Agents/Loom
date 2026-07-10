@@ -1,0 +1,29 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1675",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1675 minimal suite is coherent and scoped to README documentation clarity and README checker-contract alignment only. The suite records product positioning, architecture/workflow explanation, quick start install wording, Chinese localization, doc-sync/release-surface/loom_check README needle alignment, demo/root bootstrap hash evidence, evidence/task carriers, and explicit non-goals for runtime, installer, release, migration, permission, and downstream adoption behavior.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-06-21T09:36:00Z",
+  "reviewed_head": "b30e124d50a19a6e451ce1e2c0636f1c35952f41",
+  "reviewed_validation_summary": "2026-06-21T09:34Z local validation passed for WI-1675: git diff --check; doc-sync check; release-doc-contract check; README badge/body link scan; Chinese README token scan; English/Chinese heading and maintainer-link readback; skills surface check; `loom skills check`; py_compile for loom_check mirrors; loom_check contract-only; installer regression including npm test and npm pack dry-run; demo bootstrap fixture sync followed by `make loom-demo-new-project-check`; root bootstrap hash sync followed by `.loom/bin/loom_init.py verify`, runtime parity, and adopt verify; suite evidence validate; suite carrier validate; suite validate; fact-chain; shadow parity; local PR gate passed for head d3d833067f929431ef247dfce9f362ca7258517a before fixture sync. Full local `python3 tools/loom_check.py` was run after the demo fixture sync and failed only on root-self-adoption because root bootstrap hash carriers were stale; targeted root self-governance checks now pass after hash sync. PR metadata, PR gate, hosted checks, and merge check will be rerun after the fixture implementation commit and review refresh.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1675.md",
+    "recovery_entry": ".loom/progress/WI-1675.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1675/spec.md",
+    "plan": ".loom/specs/WI-1675/plan.md",
+    "implementation_contract": ".loom/specs/WI-1675/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1675/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1675/task-carrier.md",
+    "root_bootstrap_manifest": ".loom/bootstrap/manifest.json",
+    "root_bootstrap_init_result": ".loom/bootstrap/init-result.json",
+    "demo_bootstrap_manifest": "examples/new-project/.loom/bootstrap/manifest.json",
+    "demo_bootstrap_init_result": "examples/new-project/.loom/bootstrap/init-result.json"
+  }
+}

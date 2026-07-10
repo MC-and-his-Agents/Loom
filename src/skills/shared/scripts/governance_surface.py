@@ -333,6 +333,8 @@ def workspace_lifecycle_expectations(workspace_profile: dict[str, object] | None
     }
 GITHUB_STABLE_CHECK_NAMES = ("py-compile", "demo-bootstrap", "repo-local-cli", "loom-check")
 _GITHUB_API_CACHE: dict[tuple[str, ...], Any] = {}
+HOST_GOVERNANCE_CAPABILITY_SCHEMA = "loom-host-governance-capability-diagnosis/v1"
+HOST_GOVERNANCE_CAPABILITY_STATUSES = {"host_enforced", "unconfigured", "unavailable", "unreadable"}
 REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
 REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
 REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
@@ -359,6 +361,7 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "review_instruction_locators",
     "metadata_contract",
     "context_schema",
+    "host_planning_taxonomy",
     "dynamic_tool_locators",
     "policy_locators",
     "hook_locators",
@@ -366,6 +369,8 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "host_truth_locators",
     "advanced_lint_locators",
 }
+HOST_PLANNING_LOOM_TYPES = {"phase", "fr", "work_item"}
+HOST_PLANNING_MISSING_TYPE_POLICIES = {"advisory_unknown", "infer_from_context", "block_unknown"}
 ADVANCED_LINT_TYPES = {"architecture_boundary", "bounded_context", "legacy_access", "host_state_access", "companion_boundary"}
 ADVANCED_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
 FORBIDDEN_COMPANION_TRUTH_FIELDS = {
@@ -702,10 +707,264 @@ ADOPTION_GATE_ROLLOUT_MODES = {
         "blocking": False,
     },
 }
+ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA = "loom-adversarial-adoption-evidence/v1"
+ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR = ".loom/companion/adversarial-adoption.json"
 
 
-def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
+def git_head_sha(root: Path) -> str | None:
+    result = run_process(["git", "rev-parse", "HEAD"], root)
+    if result.returncode != 0:
+        return None
+    head = result.stdout.strip()
+    return head or None
+
+
+def adversarial_evidence_carrier_state(root: Path) -> dict[str, Any]:
+    tracked = run_process(["git", "ls-files", "--error-unmatch", ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR], root)
+    status = run_process(["git", "status", "--porcelain", "--", ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR], root)
+    if tracked.returncode != 0:
+        return {
+            "status": "untracked",
+            "tracked": False,
+            "clean": False,
+            "porcelain": status.stdout.splitlines() if status.returncode == 0 else [],
+            "missing_inputs": [f"{ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR} is not version-controlled"],
+        }
+    if status.returncode != 0:
+        return {
+            "status": "unverified",
+            "tracked": True,
+            "clean": False,
+            "porcelain": [],
+            "missing_inputs": [f"{ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR} git status could not be read"],
+        }
+    porcelain = [line for line in status.stdout.splitlines() if line.strip()]
+    if porcelain:
+        return {
+            "status": "uncommitted",
+            "tracked": True,
+            "clean": False,
+            "porcelain": porcelain,
+            "missing_inputs": [f"{ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR} has uncommitted changes"],
+        }
+    return {
+        "status": "clean",
+        "tracked": True,
+        "clean": True,
+        "porcelain": [],
+        "missing_inputs": [],
+    }
+
+
+def adversarial_evidence_freshness(root: Path, *, evidence_head: object, current_head: str | None) -> dict[str, Any]:
+    carrier_state = adversarial_evidence_carrier_state(root)
+    if evidence_head == current_head:
+        if carrier_state["clean"] is not True:
+            return {
+                "status": carrier_state["status"],
+                "fresh": False,
+                "carrier_only": False,
+                "changed_paths": [],
+                "carrier_state": carrier_state,
+                "missing_inputs": carrier_state["missing_inputs"],
+            }
+        return {
+            "status": "pass",
+            "fresh": True,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": [],
+        }
+    if not isinstance(evidence_head, str) or not evidence_head or not isinstance(current_head, str) or not current_head:
+        return {
+            "status": "stale",
+            "fresh": False,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": ["adversarial adoption evidence is stale for the current head"],
+        }
+
+    ancestor = run_process(["git", "merge-base", "--is-ancestor", evidence_head, current_head], root)
+    if ancestor.returncode != 0:
+        return {
+            "status": "stale",
+            "fresh": False,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": ["adversarial adoption evidence is stale for the current head"],
+        }
+
+    diff = run_process(["git", "diff", "--name-only", "--no-renames", f"{evidence_head}..{current_head}"], root)
+    if diff.returncode != 0:
+        return {
+            "status": "unverified",
+            "fresh": False,
+            "carrier_only": False,
+            "changed_paths": [],
+            "carrier_state": carrier_state,
+            "missing_inputs": ["adversarial adoption evidence head drift could not be read"],
+        }
+    changed_paths = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
+    if changed_paths and set(changed_paths) <= {ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR}:
+        if carrier_state["clean"] is not True:
+            return {
+                "status": carrier_state["status"],
+                "fresh": False,
+                "carrier_only": False,
+                "changed_paths": changed_paths,
+                "carrier_state": carrier_state,
+                "missing_inputs": carrier_state["missing_inputs"],
+            }
+        return {
+            "status": "carrier-only",
+            "fresh": True,
+            "carrier_only": True,
+            "changed_paths": changed_paths,
+            "carrier_state": carrier_state,
+            "missing_inputs": [],
+        }
+    return {
+        "status": "stale",
+        "fresh": False,
+        "carrier_only": False,
+        "changed_paths": changed_paths,
+        "carrier_state": carrier_state,
+        "missing_inputs": ["adversarial adoption evidence is stale for the current head"],
+    }
+
+
+def required_status_contexts_from_branch_rules(payload: Any) -> list[str]:
+    rules = payload
+    if isinstance(payload, dict):
+        rules = payload.get("rules") or payload.get("data")
+    if not isinstance(rules, list):
+        return []
+    contexts: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters") if isinstance(rule.get("parameters"), dict) else {}
+        checks = parameters.get("required_status_checks")
+        if isinstance(checks, list):
+            for check in checks:
+                if isinstance(check, dict) and isinstance(check.get("context"), str):
+                    contexts.append(check["context"])
+                elif isinstance(check, str):
+                    contexts.append(check)
+        for fallback_key in ("contexts", "required_contexts"):
+            fallback_contexts = parameters.get(fallback_key)
+            if isinstance(fallback_contexts, list):
+                contexts.extend(str(context) for context in fallback_contexts if isinstance(context, str) and context.strip())
+    return sorted(set(contexts))
+
+
+def active_ruleset_details(
+    root: Path,
+    *,
+    owner: str,
+    repo: str,
+    rulesets: list[dict[str, Any]],
+    requests: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    details: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for entry in rulesets:
+        if entry.get("target") not in {"branch", "push"} or entry.get("enforcement") != "active":
+            continue
+        if isinstance(entry.get("rules"), list):
+            details.append(entry)
+            continue
+        ruleset_id = entry.get("id") or entry.get("databaseId")
+        if ruleset_id in (None, ""):
+            errors.append(f"active ruleset `{entry.get('name', 'unknown')}` is missing an id")
+            continue
+        path = f"repos/{owner}/{repo}/rulesets/{ruleset_id}"
+        requests.append({"method": "GET", "path": path, "purpose": "active ruleset required checks"})
+        detail, detail_errors = gh_json(root, ["api", path])
+        if detail_errors or detail is None:
+            errors.extend(f"{path}: {message}" for message in detail_errors)
+            continue
+        details.append(detail)
+    return details, errors
+
+
+def adversarial_adoption_evidence_status(root: Path) -> dict[str, Any]:
+    current_head = git_head_sha(root)
+    evidence_path = root / ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR
+    base: dict[str, Any] = {
+        "schema_version": "loom-adversarial-adoption-evidence-consumption/v1",
+        "evidence_locator": ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+        "current_head": current_head,
+        "head_sha": None,
+        "generated_at": None,
+        "status": "missing",
+        "result": "block",
+        "fresh": False,
+        "missing_inputs": [ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR],
+        "recommended_action": "run `loom adopt adversarial-test --target <repo> --record --json`",
+    }
+    if not evidence_path.exists():
+        return base
+    payload = safe_read_json(evidence_path)
+    if payload is None:
+        return {
+            **base,
+            "status": "invalid",
+            "missing_inputs": [f"invalid evidence: {ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR}"],
+        }
+    base["head_sha"] = payload.get("head_sha")
+    base["generated_at"] = payload.get("generated_at")
+    if payload.get("schema_version") != ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA:
+        return {**base, "status": "invalid", "missing_inputs": [f"schema_version must be `{ADVERSARIAL_ADOPTION_EVIDENCE_SCHEMA}`"]}
+    if payload.get("result") != "pass":
+        return {**base, "status": "failing", "missing_inputs": ["adversarial adoption evidence result is not pass"]}
+    if not isinstance(current_head, str) or not current_head:
+        return {**base, "status": "unverified", "missing_inputs": ["current git head is unavailable"]}
+    freshness = adversarial_evidence_freshness(root, evidence_head=payload.get("head_sha"), current_head=current_head)
+    if freshness["fresh"] is not True:
+        return {
+            **base,
+            "status": freshness["status"],
+            "carrier_only": freshness["carrier_only"],
+            "head_binding": {
+                "status": freshness["status"],
+                "recorded_head": payload.get("head_sha"),
+                "current_head": current_head,
+                "carrier_only": freshness["carrier_only"],
+                "changed_paths": freshness["changed_paths"],
+                "carrier_state": freshness["carrier_state"],
+            },
+            "carrier_state": freshness["carrier_state"],
+            "changed_paths": freshness["changed_paths"],
+            "missing_inputs": freshness["missing_inputs"],
+        }
+    return {
+        **base,
+        "status": freshness["status"],
+        "result": "pass",
+        "fresh": True,
+        "carrier_only": freshness["carrier_only"],
+        "head_binding": {
+            "status": freshness["status"],
+            "recorded_head": payload.get("head_sha"),
+            "current_head": current_head,
+            "carrier_only": freshness["carrier_only"],
+            "changed_paths": freshness["changed_paths"],
+            "carrier_state": freshness["carrier_state"],
+        },
+        "carrier_state": freshness["carrier_state"],
+        "changed_paths": freshness["changed_paths"],
+        "missing_inputs": [],
+    }
+
+
+def adoption_gate_rollout_status(*, maturity_current: str, adversarial_evidence: dict[str, Any] | None = None) -> dict[str, Any]:
     strong_maturity_passed = maturity_current == "strong"
+    adversarial_evidence = adversarial_evidence if isinstance(adversarial_evidence, dict) else {}
+    adversarial_status = "pass" if adversarial_evidence.get("result") == "pass" and adversarial_evidence.get("fresh") is True else str(adversarial_evidence.get("status", "missing"))
     blocking_preconditions = [
         {
             "id": "strong_maturity",
@@ -717,10 +976,10 @@ def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
         },
         {
             "id": "adversarial_adoption_checks",
-            "status": "missing",
+            "status": adversarial_status,
             "layer": "core",
-            "evidence_locator": None,
-            "version_controlled": False,
+            "evidence_locator": adversarial_evidence.get("evidence_locator") or ADVERSARIAL_ADOPTION_EVIDENCE_LOCATOR,
+            "version_controlled": adversarial_status == "pass",
             "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence",
         },
         {
@@ -1391,6 +1650,85 @@ def validate_context_schema(
         elif not target.exists():
             missing_inputs.append(f"{field_prefix} `mapping_rule_locator` points to missing path `{locator}`")
     return missing_inputs
+
+
+def empty_host_planning_taxonomy() -> dict[str, Any]:
+    return {
+        "availability": "absent",
+        "object_type_mapping": [],
+        "missing_type_policy": "advisory_unknown",
+        "summary": "no host planning taxonomy mapping is declared.",
+        "missing_inputs": [],
+    }
+
+
+def validate_host_planning_taxonomy(entry: object) -> tuple[dict[str, Any], list[str]]:
+    base = empty_host_planning_taxonomy()
+    if entry is None:
+        return base, []
+    if not isinstance(entry, dict):
+        base.update(
+            {
+                "availability": "incomplete",
+                "summary": "host planning taxonomy mapping must be an object.",
+                "missing_inputs": ["host_planning_taxonomy must be an object"],
+            }
+        )
+        return base, list(base["missing_inputs"])
+
+    missing_inputs: list[str] = []
+    policy = entry.get("missing_type_policy", "advisory_unknown")
+    if policy not in HOST_PLANNING_MISSING_TYPE_POLICIES:
+        missing_inputs.append(
+            "host_planning_taxonomy.missing_type_policy must be `advisory_unknown`, `infer_from_context`, or `block_unknown`"
+        )
+        policy = "advisory_unknown"
+
+    mappings = entry.get("object_type_mapping", [])
+    normalized_mappings: list[dict[str, Any]] = []
+    if not isinstance(mappings, list):
+        missing_inputs.append("host_planning_taxonomy.object_type_mapping must be a list")
+    else:
+        for index, mapping in enumerate(mappings):
+            prefix = f"host_planning_taxonomy.object_type_mapping[{index}]"
+            if not isinstance(mapping, dict):
+                missing_inputs.append(f"{prefix} must be an object")
+                continue
+            loom_type = mapping.get("loom_type")
+            if loom_type not in HOST_PLANNING_LOOM_TYPES:
+                missing_inputs.append(f"{prefix}.loom_type must be `phase`, `fr`, or `work_item`")
+                continue
+            normalized: dict[str, Any] = {"loom_type": loom_type, "labels": [], "title_prefixes": []}
+            for field in ("labels", "title_prefixes"):
+                raw_values = mapping.get(field, [])
+                if raw_values is None:
+                    raw_values = []
+                if not isinstance(raw_values, list):
+                    missing_inputs.append(f"{prefix}.{field} must be a list")
+                    continue
+                values = []
+                for value_index, value in enumerate(raw_values):
+                    if not isinstance(value, str) or not value.strip():
+                        missing_inputs.append(f"{prefix}.{field}[{value_index}] must be a non-empty string")
+                        continue
+                    values.append(value.strip())
+                normalized[field] = values
+            if not normalized["labels"] and not normalized["title_prefixes"]:
+                missing_inputs.append(f"{prefix} must declare at least one label or title_prefix")
+            normalized_mappings.append(normalized)
+
+    result = {
+        "availability": "incomplete" if missing_inputs else "present",
+        "object_type_mapping": normalized_mappings,
+        "missing_type_policy": policy,
+        "summary": (
+            "host planning taxonomy mapping is readable."
+            if not missing_inputs
+            else "host planning taxonomy mapping is incomplete."
+        ),
+        "missing_inputs": missing_inputs,
+    }
+    return result, missing_inputs
 
 
 def locator_field_missing(value: object) -> bool:
@@ -2475,6 +2813,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "hook_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "advanced_lint_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "host_planning_taxonomy": empty_host_planning_taxonomy(),
         "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
@@ -2631,6 +2970,11 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             entry=context_schema,
                         )
                     )
+                host_planning_taxonomy, taxonomy_errors = validate_host_planning_taxonomy(
+                    interface_payload.get("host_planning_taxonomy")
+                )
+                repo_interface_surface["host_planning_taxonomy"] = host_planning_taxonomy
+                missing_inputs.extend(taxonomy_errors)
                 dynamic_tool_locators = interface_payload.get("dynamic_tool_locators")
                 if dynamic_tool_locators is not None:
                     repo_interface_surface["tool_availability"] = dynamic_tool_availability_payload(
@@ -3100,6 +3444,27 @@ def bootstrap_host_binding_branch(root: Path) -> str:
     return ""
 
 
+SUITE_PATH_DECISION_FIELD_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?suite path(?: consumed)?\s*:\s*([A-Za-z0-9_-]+)\b",
+    re.IGNORECASE,
+)
+SUITE_PATH_DECISION_PLAN_LOCATOR_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?plan locator\s*:\s*not_applicable\s*\([^)]*\bsuite path(?: consumed)?\s*:\s*([A-Za-z0-9_-]+)\b[^)]*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def suite_path_decision_from_line(line: str) -> str:
+    for pattern in (SUITE_PATH_DECISION_FIELD_RE, SUITE_PATH_DECISION_PLAN_LOCATOR_RE):
+        match = pattern.search(line)
+        if not match:
+            continue
+        value = match.group(1).strip().lower().replace("-", "_")
+        if value in {"full", "minimal", "not_applicable"}:
+            return value
+    return ""
+
+
 def suite_path_decision(path: Path) -> str:
     if not path.exists():
         return ""
@@ -3108,12 +3473,26 @@ def suite_path_decision(path: Path) -> str:
     except OSError:
         return ""
     for line in text.splitlines():
-        match = re.match(r"\s*-\s*Suite path:\s*([A-Za-z0-9_-]+)\s*$", line)
-        if match:
-            value = match.group(1).strip()
-            if value in {"full", "minimal", "not_applicable"}:
-                return value
+        value = suite_path_decision_from_line(line)
+        if value:
+            return value
     return ""
+
+
+def active_suite_path_decision(root: Path, active_item_id: str) -> tuple[str, str]:
+    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
+    suite_path = suite_path_decision(spec_path)
+    if suite_path:
+        return suite_path, relative_locator(spec_path, root)
+    active = active_entry_points(root)
+    for relative in (active.get("recovery_entry"), active.get("status_surface")):
+        if not isinstance(relative, str) or not relative.strip() or relative == NOT_APPLICABLE:
+            continue
+        path = root / relative
+        suite_path = suite_path_decision(path)
+        if suite_path:
+            return suite_path, relative
+    return "", ""
 
 
 def approved_spec_review_locator(root: Path, active_item_id: str) -> str:
@@ -3142,14 +3521,16 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
     status_locator = active.get("status_surface") or ".loom/status/current.md"
     spec_path = root / f".loom/specs/{active_item_id}/spec.md"
     plan_path = root / f".loom/specs/{active_item_id}/plan.md"
+    suite_path, suite_locator = active_suite_path_decision(root, active_item_id)
+    suite_not_applicable = suite_path == NOT_APPLICABLE
 
     present_locators = {
         "work_item": "" if idle else active_or_first(root, active.get("work_item"), item_dir, ".md"),
         "recovery": "" if idle else active_or_first(root, active.get("recovery_entry"), recovery_dir, ".md"),
         "review": "" if idle else current_review_locator(root, review_dir, active_item_id),
         "status_surface": existing_locator(root, status_locator),
-        "spec_path": "" if idle else relative_locator(spec_path, root) if spec_path.exists() else "",
-        "plan_path": "" if idle else relative_locator(plan_path, root) if plan_path.exists() else "",
+        "spec_path": "" if idle else relative_locator(spec_path, root) if spec_path.exists() else suite_locator if suite_not_applicable else "",
+        "plan_path": "" if idle else relative_locator(plan_path, root) if plan_path.exists() else suite_locator if suite_not_applicable else "",
     }
 
     summary: dict[str, dict[str, str]] = {}
@@ -3170,9 +3551,8 @@ def detect_spec_gate_inputs(root: Path, active_item_id: str) -> dict[str, dict[s
             "suite_path_decision": carrier_entry(NOT_APPLICABLE, NOT_APPLICABLE, "idle fact chain"),
             "spec_review": carrier_entry(NOT_APPLICABLE, NOT_APPLICABLE, "idle fact chain"),
         }
-    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
-    suite_path = suite_path_decision(spec_path)
-    suite_locator = relative_locator(spec_path, root) if suite_path == "not_applicable" else ""
+    suite_path, suite_locator = active_suite_path_decision(root, active_item_id)
+    suite_locator = suite_locator if suite_path == NOT_APPLICABLE else ""
     spec_review = approved_spec_review_locator(root, active_item_id)
     return {
         "suite_path_decision": carrier_entry(
@@ -3280,6 +3660,63 @@ def local_workflow_presence(root: Path) -> dict[str, Any]:
     }
 
 
+def classify_github_control_plane_error(message: str) -> str:
+    normalized = message.lower()
+    if "403" in normalized or "forbidden" in normalized or "resource not accessible" in normalized:
+        if "ruleset" in normalized or "rulesets" in normalized:
+            return "ruleset_permission_denied"
+        return "permission_denied"
+    if "private" in normalized and ("not found" in normalized or "404" in normalized or "access" in normalized):
+        return "private_repository_unreadable"
+    if "upgrade" in normalized or "plan" in normalized or "advanced security" in normalized:
+        return "plan_unavailable"
+    if "not found" in normalized or "404" in normalized:
+        return "private_repository_unreadable"
+    return "host_api_unavailable"
+
+
+def host_governance_capability_diagnosis(surface: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    reasons = sorted({classify_github_control_plane_error(message) for message in errors})
+    host_enforcement = surface.get("host_enforcement") if isinstance(surface.get("host_enforcement"), dict) else {}
+    rulesets = surface.get("rulesets") if isinstance(surface.get("rulesets"), dict) else {}
+    api_snapshot = surface.get("api_snapshot") if isinstance(surface.get("api_snapshot"), dict) else {}
+    api_errors = api_snapshot.get("errors") if isinstance(api_snapshot.get("errors"), list) else []
+    reasons.extend(
+        reason
+        for reason in sorted({classify_github_control_plane_error(str(message)) for message in api_errors})
+        if reason not in reasons
+    )
+
+    if reasons and any(reason != "host_api_unavailable" for reason in reasons):
+        status = "unreadable"
+        guidance = "grant the token read access to repository branch protection/rulesets or run from an account that can read private repository governance settings"
+    elif reasons:
+        status = "unavailable"
+        guidance = "install and authenticate gh, then retry the GitHub governance readback"
+    elif host_enforcement.get("branch_protection_or_ruleset") is True and host_enforcement.get("required_checks") is True:
+        status = "host_enforced"
+        guidance = "keep branch protection or rulesets requiring Loom stable checks enabled"
+    else:
+        status = "unconfigured"
+        guidance = "enable branch protection or an active ruleset and require Loom stable checks"
+    status = status if status in HOST_GOVERNANCE_CAPABILITY_STATUSES else "unavailable"
+
+    return {
+        "schema_version": HOST_GOVERNANCE_CAPABILITY_SCHEMA,
+        "status": status,
+        "reason": reasons[0] if reasons else ("host_enforced" if status == "host_enforced" else "missing_host_enforcement"),
+        "setup_guidance": guidance,
+        "signals": {
+            "repository": surface.get("repository", "unknown"),
+            "default_branch": surface.get("default_branch", "unknown"),
+            "branch_protection": surface.get("branch_protection", "unknown"),
+            "rulesets_enforced": rulesets.get("enforced", "unknown"),
+            "required_checks": host_enforcement.get("required_checks", "unknown"),
+            "pr_reviews": surface.get("pr_reviews", "unknown"),
+        },
+    }
+
+
 def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     owner, repo = detect_github_repo(root)
     requests: list[dict[str, Any]] = []
@@ -3290,11 +3727,13 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
         "default_branch": "unknown",
         "branch_protection": "unknown",
         "required_checks": "unknown",
+        "branch_protection_required_checks": [],
         "pr_reviews": "unknown",
         "rulesets": {
             "status": "unknown",
             "enforced": "unknown",
             "count": "unknown",
+            "required_checks": "unknown",
         },
         "ci_check_presence": ci_presence,
         "host_enforcement": {
@@ -3303,12 +3742,14 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
             "verification_status": "unverified",
         },
         "api_snapshot": host_api_snapshot(requests=requests, errors=["not read yet"]),
+        "host_governance_capability": {},
     }
     missing_inputs: list[str] = []
 
     if not owner or not repo:
         missing_inputs.append("cannot resolve GitHub repository from git origin")
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     requests.append({"method": "GET", "path": f"repos/{owner}/{repo}", "purpose": "repository default branch"})
@@ -3316,6 +3757,7 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     if repo_errors or repo_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in repo_errors)
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     full_name = repo_payload.get("full_name")
@@ -3327,6 +3769,7 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     if surface["default_branch"] == "unknown":
         missing_inputs.append("github control plane: default branch is unavailable")
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     encoded_branch = quote(str(surface["default_branch"]), safe="")
@@ -3335,33 +3778,28 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     if branch_errors or branch_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in branch_errors)
         surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
+        surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, missing_inputs)
         return surface, missing_inputs
 
     protected = branch_payload.get("protected")
     if isinstance(protected, bool):
         surface["branch_protection"] = "enabled" if protected else "disabled"
+    branch_required_checks: list[str] = []
     protection = branch_payload.get("protection")
     if isinstance(protection, dict):
         required_status = protection.get("required_status_checks")
         if isinstance(required_status, dict):
             contexts = required_status.get("contexts")
             if isinstance(contexts, list) and all(isinstance(item, str) for item in contexts):
-                surface["required_checks"] = contexts
+                branch_required_checks = contexts
             else:
-                surface["required_checks"] = []
+                branch_required_checks = []
         pull_request_reviews = protection.get("required_pull_request_reviews")
         if isinstance(pull_request_reviews, dict):
             surface["pr_reviews"] = "required"
         elif surface["branch_protection"] == "enabled":
             surface["pr_reviews"] = "not_required"
-    required_checks = surface["required_checks"]
-    if isinstance(required_checks, list):
-        ci_presence["required_checks_configured"] = all(name in required_checks for name in GITHUB_STABLE_CHECK_NAMES)
-    ci_presence["host_enforcement_status"] = (
-        "verified"
-        if surface["branch_protection"] == "enabled" and ci_presence["required_checks_configured"] is True
-        else "unverified"
-    )
+    surface["branch_protection_required_checks"] = branch_required_checks
 
     requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/actions/workflows", "purpose": "workflow presence"})
     workflows_payload, workflow_errors = gh_json(root, ["api", f"repos/{owner}/{repo}/actions/workflows"])
@@ -3399,8 +3837,9 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
 
     requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/rulesets", "purpose": "branch ruleset enforcement"})
     rulesets, ruleset_errors = gh_json_list(root, ["api", f"repos/{owner}/{repo}/rulesets"])
+    ruleset_required_checks: list[str] = []
     if ruleset_errors:
-        surface["rulesets"] = {"status": "unverified", "enforced": "unknown", "count": "unknown"}
+        surface["rulesets"] = {"status": "unverified", "enforced": "unknown", "count": "unknown", "required_checks": "unknown"}
         snapshot_errors.extend(f"github rulesets read: {message}" for message in ruleset_errors)
     else:
         enforced_rulesets = [
@@ -3408,11 +3847,38 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
             for entry in rulesets
             if entry.get("target") in {"branch", "push"} and entry.get("enforcement") == "active"
         ]
+        ruleset_details, ruleset_detail_errors = active_ruleset_details(
+            root,
+            owner=owner,
+            repo=repo,
+            rulesets=rulesets,
+            requests=requests,
+        )
+        if ruleset_detail_errors:
+            snapshot_errors.extend(f"github ruleset detail read: {message}" for message in ruleset_detail_errors)
+        else:
+            for detail in ruleset_details:
+                ruleset_required_checks.extend(required_status_contexts_from_branch_rules(detail))
+            ruleset_required_checks = sorted(set(ruleset_required_checks))
         surface["rulesets"] = {
-            "status": "verified",
+            "status": "unverified" if ruleset_detail_errors else "verified",
             "enforced": bool(enforced_rulesets),
             "count": len(rulesets),
+            "active_count": len(enforced_rulesets),
+            "required_checks": "unknown" if ruleset_detail_errors else ruleset_required_checks,
+            "details_read": False if ruleset_detail_errors else bool(enforced_rulesets),
         }
+
+    combined_required_checks = sorted(set(branch_required_checks + ruleset_required_checks))
+    surface["required_checks"] = combined_required_checks
+    ci_presence["required_checks_configured"] = all(name in combined_required_checks for name in GITHUB_STABLE_CHECK_NAMES)
+    ci_presence["host_enforcement_status"] = (
+        "verified"
+        if (surface["branch_protection"] == "enabled" or surface["rulesets"].get("enforced") is True)
+        and ci_presence["required_checks_configured"] is True
+        and not snapshot_errors
+        else "unverified"
+    )
 
     branch_or_ruleset = surface["branch_protection"] == "enabled" or surface["rulesets"].get("enforced") is True
     required_checks_configured = ci_presence.get("required_checks_configured") is True
@@ -3424,6 +3890,7 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
         "verification_status": "verified" if not snapshot_errors else "unverified",
     }
     surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=snapshot_errors)
+    surface["host_governance_capability"] = host_governance_capability_diagnosis(surface, snapshot_errors)
     return surface, missing_inputs
 
 
@@ -3523,6 +3990,7 @@ def maturity_status(
     repo_interop: dict[str, Any],
     github_control_plane: dict[str, Any],
     host_binding: dict[str, Any],
+    adversarial_adoption_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     carrier_present = {
         key: value.get("status") == "present"
@@ -3533,9 +4001,10 @@ def maturity_status(
         for key, value in (spec_gate_inputs or {}).items()
     }
     formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or spec_gate_present_inputs.get("suite_path_decision", False)
+    spec_path_present = carrier_present.get("spec_path", False) or spec_gate_present_inputs.get("suite_path_decision", False)
     spec_gate_present = (
         carrier_present.get("review", False)
-        and carrier_present.get("spec_path", False)
+        and spec_path_present
         and formal_spec_or_not_applicable_present
     )
     repo_interface_present = repo_interface.get("availability") == "present"
@@ -3634,7 +4103,10 @@ def maturity_status(
             "max_default_maturity": "light",
             "applied": repository_mode == "new",
         },
-        "gate_rollout": adoption_gate_rollout_status(maturity_current=current),
+        "gate_rollout": adoption_gate_rollout_status(
+            maturity_current=current,
+            adversarial_evidence=adversarial_adoption_evidence,
+        ),
     }
 
 
@@ -3649,6 +4121,7 @@ def governance_control_plane(
     host_binding: dict[str, Any],
     workspace_profile: dict[str, Any],
     gate_starter: dict[str, Any],
+    adversarial_adoption_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "schema_version": GOVERNANCE_CONTROL_VERSION,
@@ -3659,6 +4132,7 @@ def governance_control_plane(
         },
         "workspace_profile": workspace_profile,
         "gate_starter": gate_starter,
+        "adversarial_adoption_evidence": adversarial_adoption_evidence,
         "host_binding": host_binding,
         "taxonomy": GATE_FAILURE_TAXONOMY,
         "gate_chain": GATE_CHAIN,
@@ -3670,6 +4144,7 @@ def governance_control_plane(
             repo_interop=repo_interop,
             github_control_plane=github_control_plane,
             host_binding=host_binding,
+            adversarial_adoption_evidence=adversarial_adoption_evidence,
         ),
     }
 
@@ -3702,6 +4177,7 @@ def build_governance_surface(
     )
     workspace_profile = detect_workspace_profile(root, host_binding=host_binding)
     gate_starter = detect_gate_starter(root)
+    adversarial_adoption_evidence = adversarial_adoption_evidence_status(root)
     control_plane = governance_control_plane(
         repository_mode=repository_mode,
         carrier_summary=carrier_summary,
@@ -3712,6 +4188,7 @@ def build_governance_surface(
         host_binding=host_binding,
         workspace_profile=workspace_profile,
         gate_starter=gate_starter,
+        adversarial_adoption_evidence=adversarial_adoption_evidence,
     )
 
     missing_inputs: list[str] = []

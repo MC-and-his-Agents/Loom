@@ -1,0 +1,255 @@
+{
+  "schema_version": "loom-closeout-freeze-terminal-profile-fixtures/v1",
+  "contract_profile": "loom-closeout-freeze/v1",
+  "owning_work_item": "#1531",
+  "scope": {
+    "minimum_mergeable_slice": [
+      "terminal profile schema",
+      "authority boundary",
+      "field source and staleness rules",
+      "closeout mode taxonomy",
+      "two-phase consumer contract",
+      "pending field inventory",
+      "non-executable fixture inventory"
+    ],
+    "non_goals": [
+      "implement gate freeze --profile closeout",
+      "change hosted gate behavior",
+      "change implementation closeout behavior",
+      "change release closeout semantics",
+      "mutate shared Loom carriers"
+    ]
+  },
+  "dependency_graph": [
+    {
+      "work_item": "#1531",
+      "role": "Define loom-closeout-freeze/v1 terminal profile",
+      "can_merge_before": [
+        "#1532",
+        "#1533",
+        "#1534"
+      ],
+      "consumes": [
+        "#1507",
+        "#1508",
+        "#1509",
+        "#1511"
+      ],
+      "pending_on": [
+        "#1510"
+      ],
+      "minimum_slice": "Contract/docs/fixture inventory only; no behavior implementation."
+    },
+    {
+      "work_item": "#1532",
+      "role": "Local closeout freeze admission",
+      "requires_stable_inputs": [
+        "#1531",
+        "#1510"
+      ],
+      "minimum_slice": "Read-only CLI design for check/write --profile closeout, admission inputs, snapshot/hash output, and next-action shape.",
+      "must_wait_for": [
+        "#1510 consumable carrier/shadow surface"
+      ]
+    },
+    {
+      "work_item": "#1533",
+      "role": "Closeout-specific hosted/repo-local gate",
+      "requires_stable_inputs": [
+        "#1532",
+        "#1512"
+      ],
+      "minimum_slice": "Snapshot/hash consumption, allowed paths, retained review, escalation verdict, and closeout-only gate output.",
+      "must_wait_for": [
+        "#1512 hosted admission surface"
+      ]
+    },
+    {
+      "work_item": "#1534",
+      "role": "Docs, skills, fixtures convergence",
+      "requires_stable_inputs": [
+        "#1533",
+        "#1513"
+      ],
+      "minimum_slice": "Closeout mode user docs, skills protocol, executable fixtures, and reference integrity.",
+      "must_wait_for": [
+        "#1533 closeout-specific gate output",
+        "#1513 final classifier mapping"
+      ]
+    }
+  ],
+  "pending_contract_fields": [
+    {
+      "field": "carrier_refresh_result",
+      "blocked_by": "#1510",
+      "interim_handling": "Expose as pending_contract_field; consumers must not infer final carrier refresh field names."
+    },
+    {
+      "field": "shadow_freshness",
+      "blocked_by": "#1510",
+      "interim_handling": "Expose as pending_contract_field; consumers may cite existing shadow locators only."
+    },
+    {
+      "field": "hosted_snapshot_binding",
+      "blocked_by": "#1512",
+      "interim_handling": "Expose as pending_contract_field; local admission cannot claim hosted consumption."
+    },
+    {
+      "field": "failure_classifier_mapping",
+      "blocked_by": "#1513",
+      "interim_handling": "Use generic closeout profile kinds until final classifier names are frozen."
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "light-closeout-only-carrier-pr",
+      "mode": "light",
+      "input": {
+        "schema_version": "loom-closeout-freeze/v1",
+        "profile": "closeout",
+        "mode": "light",
+        "terminal_subject": {
+          "work_item": "WI-1531",
+          "closeout_issue": 1531,
+          "implementation_pr": "<merged-implementation-pr>",
+          "closeout_pr": {
+            "number": "<closeout-pr>",
+            "branch": "work/1531-closeout-freeze-contract",
+            "base": "main",
+            "head_sha": "0123456789abcdef0123456789abcdef01234567"
+          },
+          "merge_commit": "89abcdef0123456789abcdef0123456789abcdef",
+          "target_branch": "main",
+          "workspace": "/Users/mc/dev/Loom-1531-closeout-freeze-contract",
+          "source_commands": [
+            "gh issue view <closeout-issue> --json number,state,closedAt",
+            "gh pr view <merged-implementation-pr> --json number,mergedAt,headRefOid,mergeCommit",
+            "git merge-base --is-ancestor 89abcdef0123456789abcdef0123456789abcdef origin/main"
+          ]
+        },
+        "terminal_facts": {
+          "issue_state": "closed",
+          "pr_merged": true,
+          "target_contains_merge_commit": true,
+          "dependency_graph": "pass",
+          "fact_chain_idle": "pending_until_carrier_sync"
+        },
+        "carrier_bindings": {
+          "progress_terminal_metadata": ".loom/progress/WI-1531.md",
+          "status_surface": "readback_only",
+          "retained_review": ".loom/reviews/WI-1531.json",
+          "closeout_evidence": "github:issue/1531#event-closed",
+          "release_boundary": "no_release"
+        },
+        "allowed_paths": {
+          "result": "pass",
+          "patterns": [
+            ".loom/progress/WI-1531.md",
+            ".loom/reviews/WI-1531.json",
+            ".loom/shadow/closeout-*.json"
+          ]
+        },
+        "pending_contract_fields": [
+          "carrier_refresh_result",
+          "shadow_freshness",
+          "hosted_snapshot_binding",
+          "failure_classifier_mapping"
+        ]
+      },
+      "expect": {
+        "readiness": "pass",
+        "closeout_pr_allowed": true,
+        "full_review_required": false,
+        "can_merge_before": [
+          "#1532",
+          "#1533",
+          "#1534"
+        ]
+      }
+    },
+    {
+      "name": "implementation-drift-escalates-full",
+      "mode": "light",
+      "input": {
+        "schema_version": "loom-closeout-freeze/v1",
+        "profile": "closeout",
+        "mode": "light",
+        "allowed_paths": {
+          "result": "block",
+          "violations": [
+            "tools/loom.py",
+            "skills/shared/scripts/loom_flow.py"
+          ]
+        },
+        "readiness": {
+          "blocking_inputs": [
+            {
+              "failure_kind": "closeout_allowed_paths_violation",
+              "consumer_impact": "closeout-only PR includes implementation behavior drift"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "readiness": "block",
+        "closeout_pr_allowed": false,
+        "full_review_required": true,
+        "next_action": "remove non-closeout changes or convert the PR to full review"
+      }
+    },
+    {
+      "name": "batched-closeout-mixed-risk-blocks",
+      "mode": "batched",
+      "input": {
+        "schema_version": "loom-closeout-freeze/v1",
+        "profile": "closeout",
+        "mode": "batched",
+        "terminal_subject": {
+          "work_items": [
+            "WI-1531",
+            "WI-1515"
+          ]
+        },
+        "release_boundary": {
+          "result": "block",
+          "reason": "batch mixes no-release closeout with release closeout semantics"
+        },
+        "readiness": {
+          "blocking_inputs": [
+            {
+              "failure_kind": "closeout_batch_mixed_risk",
+              "consumer_impact": "batched closeout cannot hide release judgment or implementation risk"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "readiness": "block",
+        "full_review_required": true,
+        "next_action": "split safe terminal items from risky items or use full mode"
+      }
+    },
+    {
+      "name": "shadow-fields-pending-until-1510",
+      "mode": "auto_no_op",
+      "input": {
+        "schema_version": "loom-closeout-freeze/v1",
+        "profile": "closeout",
+        "mode": "auto_no_op",
+        "carrier_bindings": {
+          "shadow_freshness": "pending_contract_field"
+        },
+        "pending_contract_fields": [
+          "shadow_freshness"
+        ]
+      },
+      "expect": {
+        "readiness": "block",
+        "blocked_by": [
+          "#1510"
+        ],
+        "next_action": "wait for the #1510 carrier/shadow surface before implementing #1532/#1533 consumption"
+      }
+    }
+  ]
+}

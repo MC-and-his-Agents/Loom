@@ -1,0 +1,85 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1543",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1543 implementation remains approved after the demo bootstrap fixture sync: the read-only closeout queue/status entrypoint and generated runtime copies are unchanged in scope, the stable examples/new-project fixture now matches the generated loom_flow.py/runtime manifest hashes, and the hosted demo-bootstrap/repo-local-cli/loom-check failure was classified as fixture drift rather than implementation or host flake.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-06-17T16:22:00Z",
+  "reviewed_head": "58be86cc9b2c20590561d2a3c413acc2c2e0070b",
+  "reviewed_validation_summary": "2026-06-17T16:22Z WI-1543 targeted validation passed at head 58be86cc9b2c20590561d2a3c413acc2c2e0070b: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/loom_flow.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py tools/check_demo_bootstrap_fixture.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift`; `git diff --check`.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "reviewer-blocker-default-scan",
+      "summary": "Read-only reviewer found default no-filter queue status scanned all retained Work Items and produced broad blocked output.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "accepted",
+        "summary": "Command now blocks without `--issue`, `--item`, or `--queue-file` and reports `queue_input`; direct guard and governance closeout fixture cover it."
+      }
+    },
+    {
+      "id": "reviewer-blocker-filter-miss",
+      "summary": "Read-only reviewer found explicit missing `--item` or `--issue` filters returned `auto_no_op`.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "accepted",
+        "summary": "Filter misses now return `block` with the missing item or issue; direct guards and governance closeout fixture cover it."
+      }
+    },
+    {
+      "id": "reviewer-blocker-missing-target-envelope",
+      "summary": "Read-only reviewer found missing target paths did not include stable no-mutation queue/status envelope fields.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "accepted",
+        "summary": "Missing target now emits `loom-closeout-queue-status/v1`, `mode=blocked`, and no-mutation fields; direct guard and governance closeout fixture cover it."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1532/#1533 can consume the read-only queue/status entrypoint after merge.",
+    "#1513 can map queue/status failures into the broader classifier taxonomy later.",
+    "#1515 should consume #1543 after target-branch readback before final milestone closeout."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1543.md",
+    "recovery_entry": ".loom/progress/WI-1543.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1543 --json",
+    "suite_evidence_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1543 --json",
+    "suite_carrier_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1543 --json",
+    "suite_evidence_map": ".loom/specs/WI-1543/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1543/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ],
+    "same_class_review": {
+      "result": "pass",
+      "summary": "Checked CLI routing, runtime schema, no-mutation fields, queue input guard, filter miss handling, missing target envelope, generated skills runtime parity, command matrix documentation, and exclusion boundaries for hosted admission, classifier taxonomy, closeout freeze profile semantics, release behavior, and external host writes."
+    },
+    "demo_bootstrap_fixture": "PYTHONDONTWRITEBYTECODE=1 python3 tools/check_demo_bootstrap_fixture.py",
+    "fixture_drift_classification": {
+      "result": "pass",
+      "summary": "Hosted demo-bootstrap, repo-local-cli, and loom-check failures on PR #1552 head 0433ff1f were classified as demo bootstrap stable fixture drift; make loom-demo-new-project-sync refreshed examples/new-project .loom/bin/loom_flow.py plus init-result/manifest hashes."
+    }
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current WI-1543 read-only queue/status slice after fixture sync."
+  }
+}

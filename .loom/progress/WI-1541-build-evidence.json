@@ -1,0 +1,95 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1541-pr-metadata-update-worker",
+      "task_goal": "Implement the #1541 PR metadata render/readback/update slice in a fresh origin/main worktree without touching shared Loom truth carriers.",
+      "context_locators": [
+        "subagent 019ed7cd-d144-7193-8315-c76b3467cd19",
+        "GitHub issue #1541",
+        "/Users/mc/dev/Loom-1541-pr-metadata-update-v2",
+        "/Users/mc/dev/Loom-1541-pr-metadata-render-readback"
+      ],
+      "read_scope": [
+        "Current main worktree, old stale #1541 implementation worktree, PR metadata command surface, generated runtime copies, focused CLI contract fixtures"
+      ],
+      "write_ownership": [
+        "tools/loom.py",
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py",
+        "tools/check_cli_contract.py",
+        ".github/PULL_REQUEST_TEMPLATE.md"
+      ],
+      "non_goals": [
+        "No .loom status/progress/review/shadow writes",
+        "No GitHub PR or issue mutation",
+        "No #1512 hosted admission behavior",
+        "No #1533 closeout-specific gate behavior",
+        "No #1555 one-shot closeout run"
+      ],
+      "validation_expectation": "Main thread reviews the worker commit, records Loom carriers/reviews, and performs live PR metadata-update readback on the PR.",
+      "output_format": "Short implementation summary with changed files, commit, validation commands, and residual risks.",
+      "integration_target": [
+        "tools/loom.py",
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py",
+        "tools/check_cli_contract.py",
+        ".github/PULL_REQUEST_TEMPLATE.md"
+      ],
+      "status": "integrated",
+      "summary": "Worker added metadata-render, metadata-readback, metadata-update, focused pr-metadata contract checks, PR template guidance, and generated runtime copy parity."
+    },
+    {
+      "id": "WI-1541-readonly-diff-review",
+      "task_goal": "Read-only review the #1541 worker worktree diff for scope and synchronization risk.",
+      "context_locators": [
+        "subagent 019ed7d6-0da3-7192-bfbd-f6db132553ca",
+        "/Users/mc/dev/Loom-1541-pr-metadata-update-v2"
+      ],
+      "read_scope": [
+        "git status/diff/log, PR metadata source files, runtime copy status"
+      ],
+      "write_ownership": [
+        "read-only/no-write"
+      ],
+      "non_goals": [
+        "No file edits",
+        "No GitHub updates",
+        "No carrier writes"
+      ],
+      "validation_expectation": "Main thread or worker handles any accepted findings.",
+      "output_format": "Short risk summary.",
+      "integration_target": [
+        "worker feedback for runtime copy synchronization"
+      ],
+      "status": "integrated",
+      "summary": "Read-only review found the command surface was on-scope and flagged generated runtime copy parity; worker then synchronized generated copies and reran generated-tree-drift."
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1541-pr-metadata-surface",
+      "status": "integrated",
+      "summary": "Main thread accepted the #1541 worker implementation after rerunning targeted validation and spot-reviewing render/readback/update paths.",
+      "locators": [
+        "tools/loom.py",
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        "skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py",
+        "tools/check_cli_contract.py",
+        ".github/PULL_REQUEST_TEMPLATE.md"
+      ]
+    },
+    {
+      "id": "WI-1541-targeted-validation",
+      "status": "integrated",
+      "summary": "Targeted validation passed for py_compile_clean, pr metadata help, focused pr-metadata contract checks, generated runtime parity, and git diff --check.",
+      "locators": [
+        ".loom/progress/WI-1541.md",
+        ".loom/specs/WI-1541/evidence-map.md"
+      ]
+    }
+  ]
+}

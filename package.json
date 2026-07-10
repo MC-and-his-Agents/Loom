@@ -1,6 +1,6 @@
 {
   "name": "@mc-and-his-agents/loom",
-  "version": "0.14.0",
+  "version": "0.28.0",
   "description": "CLI-first Loom control-plane entry for agent-first project operating layers.",
   "type": "module",
   "bin": {
@@ -9,13 +9,13 @@
   "files": [
     "bin/loom.mjs",
     "tools",
-    "skills",
-    "plugins/loom/.codex-plugin/plugin.json",
+    "plugins/loom",
     "src/skills",
     "docs/adoption/cli-only-install-contract.md",
     "docs/adoption/loom-cli-release-surface.md",
     "docs/adoption/version-authority-map.md",
     "docs/adoption/codex-install.md",
+    "docs/adoption/legacy-install-migration.md",
     "docs/adoption/github-profile.md",
     "docs/methodology/harness/cli-command-matrix.md",
     "docs/methodology/harness/full-spec-suite-cli-surface.md",

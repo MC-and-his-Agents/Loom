@@ -90,6 +90,24 @@ GitHub profile 至少应能表达：
 - Project view、checklist、`tasks.md` 或外部 tracker 只能补充组织视图或 task carrier，不能替代 parent/sub-issue 与 `blocked-by/blocks`。
 - 若 GitHub 原生关系暂时无法表达，issue comment 必须记录缺口、等价 locator 和重新同步条件。
 
+### 按需 FR → Work Item admission
+
+FR 在规划态可以没有 Work Item；只有它要进入 branch、build、PR、ship 或 completed/closeout 语义时，才必须先取得 `admitted` Work Item。
+
+- `loom route --target <repo> --issue <fr> --task <scope> --json` 只读地给出最小 proposal；只有显式 `--apply` 才会创建或补齐原生 GitHub child 与声明的 `--blocked-by` 关系。
+- apply 是可重入 reconciliation，不宣称 GitHub 多次 API 写入是原子事务。中途失败返回 `partial_apply`、已创建的 typed locator 与包含 `--work-item` 的恢复动作；恢复必须复用该 Work Item，不能按标题猜测或重复创建。
+- admission 只消费 GitHub issue type、native parent/sub-issue、native dependency 与 host readback；不得写入 `.loom` current、progress、shadow、review ledger、手写 head 或 closeout carrier。
+- 未拆分 FR 的执行意图返回 `needs_breakdown`；`duplicate`、`invalid`、`cancelled`、`superseded`、`deferred` 与 `not planned` 只能表示非完成例外，不能伪装为 completed。
+- PR binding 与 FR/Phase close guard 是后续消费者：implementation PR 的 primary issue 必须是 `work_item`，而不是 FR 或 Phase。
+
+### FR/Phase host-native close guard
+
+`issues.closed` guard 只读取 GitHub default-branch 所定义的 workflow 与宿主 API；它只 checkout default branch 的 evaluator，不 checkout 或执行 issue、branch 或 PR 内容，也不读取或修补 `.loom` carrier。
+
+- 只有 `completed` 的 FR/Phase 才需证明完整 `Phase -> FR -> Work Item` native tree、已关闭 native blockers，以及每个 Work Item 的 default-branch merged PR、GitHub `reviewDecision: APPROVED` 与完整成功的 `statusCheckRollup`。issue comment 只能补充说明，不能单独成为 completed 证据。
+- `not planned`、`duplicate`、`invalid`、`cancelled`、`superseded` 是非完成关闭；不会被当作 completed。`deferred` 还必须有非空 `Activation Policy` 与 `Successor: phase|fr|work_item:<number>`，否则自动 reopen。
+- 分页、权限或任何 host read 不完整也自动 reopen。每个 issue 的 guard 串行执行；先用 snapshot 中完整读取的 comment marker 去重，再 reopen/readback，必要时再次完整分页读取 comments 后写入一条带稳定 marker 的 remediation。若去重读取失败，workflow 明确失败而不静默跳过 remediation。
+
 GitHub task carrier 边界：
 
 - GitHub issue / sub-issue 可以作为 execution breakdown unit 的 `github_issue` carrier，但只有被明确 author 为 `Work Item` 的 issue 才能进入正式执行。
@@ -141,6 +159,23 @@ GitHub host 下的 strong governance 默认要求：
 - closeout 必须消费 `reconciliation audit`
 - 若仓库声明了目标 `release / version`，closeout 必须能区分 `merged but unreleased`、`released but unreconciled` 与 release evidence gap
 - merge 默认走受控 PR 合入，默认方法为 `squash`
+
+### Capability enforcement
+
+GitHub profile 中的 governance capability 只能用两种 enforcement profile 表达：
+
+- `host-enforced`：GitHub branch protection、ruleset、required checks、PR merge policy 或等价宿主控制面已被 verified host read 证明正在强制执行。
+- `advisory/local-enforced`：本地脚本、repo-local alias、非 required workflow、人工约定、shadow parity 或报告型检查。该 profile 必须带 `risk_label: low_assurance`，并声明 fallback / rollback；它不能计入 strong governance maturity。
+
+`release`、`security`、`payment`、`data_migration` capability 默认必须保持 `host-enforced`。降级到 `advisory/local-enforced` 需要显式批准和版本控制内证据，并且只作为临时 rollout 状态，不作为 strong maturity 证据。
+
+PR metadata、merge evidence、release evidence 与 closeout evidence 必须记录 governance mode。`advisory/local-enforced` 记录必须同时写出 `low_assurance` 风险标签和未宿主强制状态；readback/status 不得把该状态渲染成 `host-enforced` 或 strong governance。若 release / security / payment / data migration 事项缺少显式降级批准，gate 必须 fail closed。
+
+### Semantic review 与 checks 边界
+
+GitHub required checks、非 required triggered checks、guardian、integration、advisory verdict、GitHub review comment 和 CI-only signal 都不能替代 Loom semantic review。strong governance 的合并放行必须消费同一 PR head 上的 authored Loom review record、`pr gate`、`merge check` 和 host readback；checks 只能证明执行/宿主状态，不能自行成为 approval truth。
+
+`SKIPPED` / `NEUTRAL` triggered checks 可以作为 allowed non-success readback 进入 controlled merge JSON；failed、cancelled、timed out、action required、startup failure、unknown、pending、queued、in progress 或 unreadable triggered checks 必须 fail closed。
 
 ## 6. 三档 profile
 

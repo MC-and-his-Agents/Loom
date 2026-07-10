@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1596",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Closeout review allow for WI-1596 at head 48ab12e5: post-merge carrier sync records only completed release facts, terminal issue state, and v0.15.0 release evidence. No implementation behavior changes were added.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-19T07:50:00Z",
+  "reviewed_head": "48ab12e55e68ba0d21fa15a91544d352b26d1c50",
+  "reviewed_validation_summary": "2026-06-19: controlled merge PR #1612 passed and merged; loom-cli-release run 27812319903 succeeded; release readback classified v0.15.0 as published with tag v0.15.0 -> b27df020d2cbf54a0a29e7440ecad540108bfb45, GitHub Release published at 2026-06-19T07:40:56Z, npm @mc-and-his-agents/loom@0.15.0 latest, and isolated npm exec smoke reported repo_version v0.15.0.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1596.md",
+    "recovery_entry": ".loom/progress/WI-1596.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1596 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1596 --json",
+    "suite_evidence_map": ".loom/specs/WI-1596/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1596/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored closeout review approved the post-merge carrier sync head for terminal closeout consumption."
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1865",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "Carrier-only closeout review allows PR #1868 for WI-1865. Scope is limited to terminal release closeout carrier metadata, status/progress closeout readback, and closeout/merge-ready shadow refresh after v0.26.0 was already published and read back. This review does not approve new product runtime behavior; it only confirms the closeout carrier diff is bounded to Loom governance surfaces and remains tied to head c2209798e20b378a8e4e17e563a1d3c125eca7ef.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-01T14:36:51Z",
+  "reviewed_head": "c2209798e20b378a8e4e17e563a1d3c125eca7ef",
+  "reviewed_validation_summary": "v0.26.0 release validation passed: release PR #1867 merged at d892586713de176144a908166c8b7a512c2421af; release workflow run 28524645818 succeeded; tag v0.26.0 resolves to d892586713de176144a908166c8b7a512c2421af; GitHub Release https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.26.0 is published; npm @mc-and-his-agents/loom@0.26.0 exists with latest=0.26.0; release readback verdict is published; carrier closeout-sync wrote terminal state closed_out.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1865.md",
+    "recovery_entry": ".loom/progress/WI-1865.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1865-v0.26.0-release/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1865-v0.26.0-release --item WI-1865 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1865-v0.26.0-release/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1865-v0.26.0-release --item WI-1865 --json",
+    "suite_evidence_map": ".loom/specs/WI-1865/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1865/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

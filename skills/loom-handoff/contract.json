@@ -42,12 +42,12 @@
     ]
   },
   "routing": {
-    "reference": ".loom-runtime/route-matrix.md",
+    "reference": "../route-matrix.md",
     "explicit_name": "loom-handoff"
   },
   "installation": {
-    "registry": ".loom-runtime/registry.json",
-    "upgrade_contract": ".loom-runtime/upgrade-contract.json",
-    "layout_manifest": ".loom-runtime/install-layout.json"
+    "registry": "../registry.json",
+    "upgrade_contract": "../upgrade-contract.json",
+    "layout_manifest": "../install-layout.json"
   }
 }

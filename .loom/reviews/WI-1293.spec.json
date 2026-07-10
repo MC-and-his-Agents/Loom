@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1293",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Terminal spec review allows WI-1293 release evidence sync at head e7cc381b4362a671e0b92cccc792f07978c9463f: the suite acceptance is satisfied by the merged v0.16.0 release PR, successful loom-cli-release run 27824752283, tag/GitHub Release/npm/global CLI smoke readbacks, release-readback classification `published`, and issue #1293 CLOSED/COMPLETED. This closeout sync only terminalizes the already-completed release facts in carriers and evidence.",
+  "reviewer": "Codex main-control",
+  "authored_at": "2026-06-19T12:21:31Z",
+  "reviewed_head": "e7cc381b4362a671e0b92cccc792f07978c9463f",
+  "reviewed_validation_summary": "2026-06-19T12:07Z-2026-06-19T12:12Z post-merge release readback passed: PR #1646 merged at `2699282273b413d12a65a16b070c800cb4172aac`; `loom-cli-release` run `27824752283` completed successfully; `python3 tools/loom.py release readback --target . --version v0.16.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` classified the release as `published`; `v0.16.0` resolves to the merge commit; GitHub Release `v0.16.0` is published; npm reports `@mc-and-his-agents/loom@0.16.0` with `latest=0.16.0`; isolated `/tmp` smoke `npm exec --yes --package @mc-and-his-agents/loom@0.16.0 -- loom version --json` returned `repo_version=v0.16.0`; issue #1293 is CLOSED/COMPLETED at 2026-06-19T12:12:08Z.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1293.md",
+    "recovery_entry": ".loom/progress/WI-1293.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1293/spec.md",
+    "suite_plan": ".loom/specs/WI-1293/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1293/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1293/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

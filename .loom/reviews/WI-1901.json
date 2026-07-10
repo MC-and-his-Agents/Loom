@@ -1,0 +1,61 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1901",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review previously passed for WI-1901 runtime-paths contract coverage, and closeout carrier-only review passed for closeout sync PR #1940 at head b92fdcd16aad9d407fe803e091919ae35389e3d7. The closeout review approves only terminal carrier metadata consumption for the post-merge closeout branch; it does not approve product implementation behavior. Evidence consumed: closeout run apply passed, closeout check passed with GitHub readback, shadow parity passed, suite carrier validate passed, and git diff --check passed.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-07-03T10:25:25Z",
+  "reviewed_head": "b92fdcd16aad9d407fe803e091919ae35389e3d7",
+  "reviewed_validation_summary": "2026-07-03T09:52Z on head 09ddffc0797e59e64b8e924d299170c32e229080, passed `python3 tools/py_compile_clean.py tools/check_cli_contract.py`, `python3 tools/check_cli_contract.py --surface runtime-paths`, `python3 tools/loom.py suite validate --target . --item WI-1901 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1901 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1901 --json`, `python3 tools/loom.py build --target . --item WI-1901 --build-evidence .loom/progress/WI-1901-build-evidence.json --json`, `python3 tools/loom.py fact-chain --target . --json`, and `git diff --check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1901.md",
+    "recovery_entry": ".loom/progress/WI-1901.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1901 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1901 --json",
+    "suite_evidence_map": ".loom/specs/WI-1901/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1901/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the implementation before merge; current closeout PR contains terminal carrier metadata only."
+  },
+  "carrier_only_closeout_review": {
+    "status": "passed",
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1955",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1955 terminal release closeout carrier sync is approved for closeout PR gate consumption. Release v0.27.1 is published and read back at merge commit c38b1f04aedba0d4c8c9d84a2cc062ead1d41299; release closeout-sync wrote terminal closed_out metadata, and suite evidence/carrier validation, shadow parity, release readback, and diff hygiene pass. This review covers carrier-only closeout sync and does not approve new runtime behavior or republish.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-04T05:23:17Z",
+  "reviewed_head": "c38b1f04aedba0d4c8c9d84a2cc062ead1d41299",
+  "reviewed_validation_summary": "2026-07-04T05:21Z closeout validation on branch `work/1955-v0.27.1-closeout`: `git diff --check` passed; `python3 tools/loom.py release readback --target . --version v0.27.1 --commit c38b1f04aedba0d4c8c9d84a2cc062ead1d41299 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json` returned published; `python3 tools/loom.py suite evidence validate --target . --item WI-1955 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1955 --json` passed; release workflow `loom-cli-release` run 28695863790 succeeded; tag v0.27.1 resolves to c38b1f04aedba0d4c8c9d84a2cc062ead1d41299; GitHub Release https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.27.1 is published; npm @mc-and-his-agents/loom@0.27.1 exists with latest=0.27.1.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1955.md",
+    "recovery_entry": ".loom/progress/WI-1955.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+        "engine_adapter": null,
+        "engine_evidence": null,
+        "normalized_findings": null,
+        "release_readback": "v0.27.1 published at merge commit c38b1f04aedba0d4c8c9d84a2cc062ead1d41299",
+        "release_url": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.27.1",
+        "release_workflow_run": "https://github.com/MC-and-his-Agents/Loom/actions/runs/28695863790",
+        "npm_package": "@mc-and-his-agents/loom@0.27.1",
+        "suite_evidence_validation": "pass",
+        "suite_carrier_validation": "pass",
+        "shadow_parity": "pass"
+      },
+      "carrier_only_closeout_review": {
+        "status": "passed",
+        "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+      },
+      "semantic_review_disposition": {
+        "status": "passed",
+        "reason": "Authored closeout carrier review approved the current terminal closeout carrier head for closeout PR gate consumption.",
+        "change_class": "docs_governance",
+        "substitute_validation": "release readback, suite evidence validation, suite carrier validation, shadow parity, and git diff check",
+        "authority": "codex-main-thread",
+        "risk_acceptance": "Bounded to carrier-only terminal closeout sync after release publication; no runtime behavior, packaging, or publication side effect is introduced.",
+        "one_shot": true
+      }
+    }

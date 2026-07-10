@@ -35,4 +35,6 @@
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate -> suite-evidence-validate -> suite-carrier-validate -> governance-lint -> pr-metadata-preflight -> pre-review-readiness-cost-guard` 顺序列出
 
+输出只能内联 agent-safe summary 和 locator。完整诊断只可通过 artifact locator 在明确调试、审计或阻断分类时读取；不得把完整命令 JSON、完整状态表或长 stdout 复制进 review 前输入。
+
 这个 skill 不产生 reviewer 结论；它只提供进入 review 前的统一机械判断。

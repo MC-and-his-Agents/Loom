@@ -2,6 +2,8 @@
 
 Loom 可以提供 repo-local gate starter aliases，让新仓库在没有宿主控制面之前也能启动一致的本地检查入口。
 
+v0.17.0 之后，这个页面只保留 source-repo regression、历史 fixture 和迁移诊断语境。下游仓库的当前支持路径是 metadata-only adoption + 全局 `loom` CLI + Codex 用户级 plugin；不得把本页的 `.loom/bin` 示例当作 repo-local runtime/plugin/skills 安装说明。
+
 这些 aliases 是 Loom source/runtime 的可执行启动器，不是 GitHub、CI、branch protection 或 merge queue 的替代物。
 
 ## Stable Aliases

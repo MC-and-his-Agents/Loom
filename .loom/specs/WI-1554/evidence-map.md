@@ -1,0 +1,8 @@
+# WI-1554 Evidence Map
+
+| Evidence ID | Evidence Type | Source Locator | Consumes | Binding | Freshness | Consumer Boundary | Remediation Direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | `tools/loom.py` | `.loom/specs/WI-1554/spec.md` S1 S2 S3 S4 S5 | merge wrapper `pr-number` parsing, closeout parameter forwarding, and gate closeout runtime delegation | present | CLI wrapper, controlled merge entrypoint, and closeout check facade | Re-run merge-wrapper and governance-closeout contract checks after wrapper changes. |
+| EV-002 | test_evidence | `tools/check_cli_contract.py` | `.loom/specs/WI-1554/spec.md` S1 S2 S3 S4 S5 | deterministic merge-wrapper and governance-closeout wrapper regression surfaces | present | local and CI CLI contract checks | Extend the focused surfaces if merge or closeout wrapper arguments change. |
+| EV-003 | fresh_verification_input | `2026-06-17T20:24Z validation summary in .loom/progress/WI-1554.md` | EV-001; EV-002 | branch work/1554-wrapper-closeout-contract targeted validation for PR #1562 head 90c12dce0d134dc9e398284e2beb2788c5be1e74 | present | review, merge-ready, PR gate, hosted checks, and milestone closeout | Re-run targeted validation after code, fixture, PR metadata, review, or carrier input changes. |
+| EV-004 | build_evidence | `.loom/progress/WI-1554-build-evidence.json` | EV-001; EV-002; EV-003 | integrated implementation, read-only review, ownership, and validation evidence for build checkpoint consumption | present | build / review / merge-ready | Refresh when implementation, validation evidence, review findings, or ownership changes. |

@@ -1,0 +1,35 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1776",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1776 adds a release readback verdict contract over existing readback surfaces. The implementation keeps release readback/resume non-mutating, adds package surface and carrier terminal status to the evidence set, emits diagnostic.next_action, and covers published/missing/drifted/blocked/no-release states with fixtures.",
+  "reviewer": "Codex main controller",
+  "authored_at": "2026-06-23T16:58:00Z",
+  "reviewed_head": "c0cab81258b7aa30ac43f89f15832aec061990a4",
+  "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` with gaps `tag_missing`, `github_release_missing`, `npm_version_missing`, `workflow_run_target_commit_missing`, `version_file_mismatch`, and `package_json_version_mismatch`; next action: align VERSION and package.json with the release target before publishing.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1778 owns v0.21.0 version bump, publication, and terminal release closeout.",
+    "#1774 backlog owns automatic host-safe worktree locator generation and destructive cleanup automation."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1776.md",
+    "recovery_entry": ".loom/progress/WI-1776.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1776 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1776 --json",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1776/task-carrier.md"
+    ],
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1776 --json",
+    "suite_evidence_map": ".loom/specs/WI-1776/evidence-map.md",
+    "implementation_contract": ".loom/specs/WI-1776/implementation-contract.md"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved release readback behavior at 07727d011a84997394b8db7fc96db5b182d9d43e; closeout review also consumes upstream gate fix merge c0cab81258b7aa30ac43f89f15832aec061990a4 so #1784 can read the hosted closeout surface."
+  }
+}

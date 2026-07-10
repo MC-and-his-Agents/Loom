@@ -1,0 +1,42 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1834",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1834 minimal suite at head 848d23490f10b55981d857a4dda371be09b1eda9; fixture and recovery carrier synchronization remain within the existing runtime-upgrade minimal suite scope.",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T03:45:00Z",
+  "reviewed_head": "848d23490f10b55981d857a4dda371be09b1eda9",
+  "reviewed_validation_summary": "make py-compile; python3 tools/check_cli_contract.py --surface governance-closeout; python3 tools/check_npm_package.py; python3 tools/check_npm_package.py --surface runtime-copy-parity; python3 tools/loom.py resume --target . --item WI-1834 --json; git diff --check passed after normalizing review checkpoint to merge. Earlier runtime-upgrade, pr-metadata, aggregate, skills release-check, README/README.zh-CN, hosted loom-check, node-installer, and release-judgment evidence remain valid for the implementation surface.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Complete hosted PR gate and #1838 release/readback/closeout after merge."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1834.md",
+    "recovery_entry": ".loom/progress/WI-1834.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1834 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1834 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1834 --json",
+    "suite_spec": ".loom/specs/WI-1834/spec.md",
+    "suite_plan": ".loom/specs/WI-1834/plan.md",
+    "suite_implementation_contract": ".loom/specs/WI-1834/implementation-contract.md",
+    "suite_evidence_map": ".loom/specs/WI-1834/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1834/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md",
+      "docs/methodology/templates/evidence-map.md",
+      "docs/methodology/harness/task-carrier-contract.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored review approved the current PR head after final recovery and fixture carrier synchronization."
+  }
+}

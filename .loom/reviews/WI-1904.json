@@ -1,0 +1,41 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1904",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "FR-4 post-merge closeout carrier sync is approved: PR #1948 is merged at aa3ce1d9aa8a8ba7dd9ca366b3105789c6b3fd2a, issues #1904/#1905/#1906/#1907 are closed with closeout evidence, and this review is limited to terminal carrier/status/shadow/task-carrier synchronization without implementation or FR-5 scope.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-07-03T17:41:47Z",
+  "reviewed_head": "aa3ce1d9aa8a8ba7dd9ca366b3105789c6b3fd2a",
+  "reviewed_validation_summary": "2026-07-03T17:18Z on branch `work/1904-1907-workstation-upgrade-batch`, passed demo bootstrap fixture sync validation (`make loom-demo-new-project-check`), `git diff --check`, `python3 tools/py_compile_clean.py examples/new-project/.loom/bin/loom_flow.py`, and `python3 tools/check_npm_package.py --surface aggregate` after FR-4 batch validation and PR #1948 metadata/readback.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1904.md",
+    "recovery_entry": ".loom/progress/WI-1904.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  },
+  "carrier_only_closeout_review": {
+    "status": "passed",
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+  }
+}

@@ -1,0 +1,7 @@
+# WI-1904 Evidence Map
+
+| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | .loom/specs/WI-1904/spec.md | S1 S2 S3 S4 / A1 A2 A3 A4 A5 A6 | WI-1904 / FR-4 workstation upgrade batch #1904-#1907 | present | Review, PR gate, merge-ready, and closeout may consume this only as scenario and acceptance mapping evidence. | Re-run workstation-registry and adoption-host-metadata checks after workstation upgrade CLI, registry schema, host plugin freshness, or repo apply boundary changes. |
+| EV-002 | test_evidence | .loom/specs/WI-1904/plan.md | validation strategy / acceptance test mapping | WI-1904 / focused CLI contract and package validation | present | Review, PR gate, merge-ready, and closeout may consume this only as planned validation coverage. | Re-run the listed validation commands after modifying tools, fixtures, docs, runtime copies, or package surfaces in this batch. |
+| EV-003 | fresh_verification_input | .loom/progress/WI-1904.md | EV-001 EV-002 / latest validation summary | WI-1904 / branch work/1904-1907-workstation-upgrade-batch | present | Review, PR gate, merge-ready, and closeout may consume this as the current local validation summary for this batch. | Refresh progress/status and rerun affected checks after any additional implementation, carrier, or review-gate change. |

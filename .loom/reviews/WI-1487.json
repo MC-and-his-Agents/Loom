@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1487",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1487 at head fdf52344: recovery model and handoff output contract define thread rotation triggers, minimal handoff package fields, agent-safe summary/artifact locator boundaries, and the ban on replaying old full thread turns; the added minimal suite carriers only satisfy PR gate consumption and do not introduce a scheduler or repo-local runtime path.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T13:58:00Z",
+  "reviewed_head": "fdf52344b1cdbd69328f6252e879affc919389d5",
+  "reviewed_validation_summary": "2026-06-20 WI-1487 docs/contract validation passed after minimal suite carrier addition: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 tools/loom.py suite validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1487 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1487 --json`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1487.md",
+    "recovery_entry": ".loom/progress/WI-1487.md",
+    "status_surface": ".loom/status/current.md",
+    "suite": [
+      ".loom/specs/WI-1487/spec.md",
+      ".loom/specs/WI-1487/plan.md",
+      ".loom/specs/WI-1487/implementation-contract.md",
+      ".loom/specs/WI-1487/evidence-map.md",
+      ".loom/specs/WI-1487/task-carrier.md"
+    ],
+    "build_checkpoint": "pass",
+    "docs_sources": [
+      "docs/methodology/harness/recovery-model.md",
+      "skills/shared/references/harness/recovery-model.md",
+      "skills/loom-handoff/references/output-contract.md",
+      "src/skills/shared/references/harness/recovery-model.md",
+      "src/skills/loom-handoff/references/output-contract.md",
+      "plugins/loom/skills/shared/references/harness/recovery-model.md",
+      "plugins/loom/skills/loom-handoff/references/output-contract.md"
+    ],
+    "validation": [
+      "git diff --check",
+      "python3 tools/py_compile_clean.py tools/loom.py test/output_envelope_test.py",
+      "python3 tools/loom.py fact-chain --target . --json",
+      "python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking",
+      "python3 tools/skills_surface.py check --surface generated-tree-drift",
+      "python3 tools/loom.py suite validate --target . --item WI-1487 --json",
+      "python3 tools/loom.py suite evidence validate --target . --item WI-1487 --json",
+      "python3 tools/loom.py suite carrier validate --target . --item WI-1487 --json"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

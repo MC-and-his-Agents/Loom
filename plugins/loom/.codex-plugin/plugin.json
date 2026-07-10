@@ -15,12 +15,16 @@
     "host_adapter_version": "1.0.0",
     "version_authority": "docs/adoption/version-authority-map.md",
     "default_entry": "loom-init",
-    "distribution_model": "codex-skills-provider",
-    "repository_payload_modes": [
-      "metadata-only",
-      "embedded"
-    ],
-    "default_repository_payload_mode": "metadata-only"
+    "distribution_model": "codex-user-plugin-provider",
+    "provider_scope": "user",
+    "payload_root": "skills",
+    "source_package": "@mc-and-his-agents/loom",
+    "source_package_version": "0.28.0",
+    "source_git_sha": "unreleased",
+    "source_git_sha_status": "pending_release_commit",
+    "plugin_payload_version": "0.28.0",
+    "plugin_payload_hash": "5458291459f134299ac51cb5bf169623bd3d1fd1443d116861997a839916709d",
+    "repository_payload": false
   },
   "keywords": [
     "loom",

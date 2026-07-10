@@ -1,0 +1,61 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1800",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Carrier-sync review allows WI-1800 at PR #1818 head c1b63455: the diff is limited to terminal closeout carrier/evidence files, release readback is published, closeout check passes, and no runtime, package, or release-surface behavior changes are introduced.",
+  "reviewer": "codex-main-controller",
+  "authored_at": "2026-06-30T09:37:12Z",
+  "reviewed_head": "c1b63455f6a493e571c9469a7d9f62c72bae8705",
+  "reviewed_validation_summary": "2026-06-30 local convergence after PR #1816 hosted failure classification: suite validate/evidence/carrier pass for WI-1800; demo bootstrap fixture drift check pass; root loom_init verify pass; fact-chain pass for WI-1800; runtime-parity validate pass; governance-profile status pass; carrier refresh dry-run reports only merge-ready/closeout shadow refresh needed after status update.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1800.md",
+    "recovery_entry": ".loom/progress/WI-1800.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "carrier_sync_pr": "https://github.com/MC-and-his-Agents/Loom/pull/1818",
+    "goal_completion_evidence": ".loom/progress/WI-1800-goal-completion.json",
+    "release_readback": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py release readback --target . --version 0.21.2 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit f0594b3f900504b574c8f52af602ac9130e38476 --workflow loom-cli-release --release-judgment release_required --json",
+    "closeout_readback": "CODEX_EXPORT_GH_TOKEN=1 PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py closeout --target . --item WI-1800 --issue 1800 --pr 1816 --implementation-pr 1816 --branch work/1800-global-cli-strong-governance-hardening --owner MC-and-his-Agents --repo Loom --goal-completion .loom/progress/WI-1800-goal-completion.json --json",
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1800 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1800 --json",
+    "suite_evidence_map": ".loom/specs/WI-1800/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1800/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored carrier-sync review approved the current head for final closeout carrier consumption."
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1865",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows the WI-1865 release suite. The minimal suite is appropriate for a release-authority Work Item: it covers v0.26.0 version/package/plugin metadata, release readiness evidence, release PR gate, publication readback, and terminal carrier closeout, without adding new product runtime behavior beyond merged implementation PR #1866.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-01T14:16:14Z",
+  "reviewed_head": "46e61ec8753521b9c5aa1b66afc23bea591dfbcc",
+  "reviewed_validation_summary": "Pre-release validation passed: py_compile_clean for release tooling, version_surface_check, check_release_surface, check_npm_package aggregate with payload file count 388 and plugin payload hash c451654a83380621ed7af0ff2eafa461512a0cc8c67d6373f4429ffc5526c00e, npm pack dry-run entryCount 388, release-readback CLI contract in 1.93s, aggregate CLI contract in 350.93s, suite validate/evidence/carrier for WI-1865, fact-chain, and pre-publication release readback verdict missing as expected.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1865.md",
+    "recovery_entry": ".loom/progress/WI-1865.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom.worktrees/1865-v0.26.0-release/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1865/spec.md",
+    "suite_plan": ".loom/specs/WI-1865/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1865/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1865/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

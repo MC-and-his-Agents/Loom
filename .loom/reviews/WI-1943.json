@@ -1,0 +1,41 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1943",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Carrier-only closeout review passed for WI-1943 final terminal sync after issue #1943 closed and final closeout PR #1945 merged at 7793ae15c60b5adfc32d5063c2f244ca24c213cb. This review approves only progress/status/shadow terminal carrier updates and does not approve new product implementation behavior.",
+  "reviewer": "codex-main",
+  "authored_at": "2026-07-03T16:05:37Z",
+  "reviewed_head": "7793ae15c60b5adfc32d5063c2f244ca24c213cb",
+  "reviewed_validation_summary": "2026-07-03T14:21Z on branch `work/1943-terminal-closeout-gate`, passed `python3 tools/loom.py suite validate --target . --item WI-1943 --json`, `git diff --check`, and `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; earlier implementation checks and PR #1942 replay remain passing. `python3 tools/loom_check.py --profile source --source-surface contract-only .` remains blocked in unrelated demo consumer profile checks.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1943.md",
+    "recovery_entry": ".loom/progress/WI-1943.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  },
+  "carrier_only_closeout_review": {
+    "status": "passed",
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+  }
+}

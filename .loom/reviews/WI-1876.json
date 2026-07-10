@@ -1,0 +1,41 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1876",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "Closeout carrier-only review: WI-1876/#1876/#1878 已完成 v0.26.2 发布读回，当前 head 仅同步 terminal carrier、review validation summary、evidence-map freshness、issue closeout evidence 和 shadow hashes；不批准新的 runtime 行为。",
+  "reviewer": "codex",
+  "authored_at": "2026-07-01T20:39:58Z",
+  "reviewed_head": "3483236bff42d2b532f2995fa21031b6c8f3dc01",
+  "reviewed_validation_summary": "2026-07-01 implementation validation passed at PR head `15828345b56250b9e7b662b3d0e1089a3bfff839`: focused output envelope / target resolution tests, py-compile-clean, controlled-merge, governance-closeout, aggregate CLI contract, version/release/package checks, suite validators, build evidence, skills surface, source contract-only loom_check, checkpoint merge, shadow parity, PR gate, merge check, and git diff checks passed. Post-merge release readback passed for `v0.26.2` at `c0a25a6ab52782b6bb87c0dfd14e2a6028cf1840`: tag, GitHub Release, npm `@mc-and-his-agents/loom@0.26.2` with `latest=0.26.2`, release workflow run `28545028638`, package surface, #1878 merge, #1876 CLOSED/COMPLETED, and terminal carrier closeout all read back consistently.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1876.md",
+    "recovery_entry": ".loom/progress/WI-1876.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  },
+  "carrier_only_closeout_review": {
+    "status": "passed",
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+  }
+}

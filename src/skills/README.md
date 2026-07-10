@@ -4,18 +4,22 @@ Language: English | [中文版本](./README.zh-CN.md)
 
 `skills/` is the generated, checked-in Loom skills install surface. The editable source truth lives in `src/skills/`.
 
-This directory is the Loom source repository's generated skill payload surface.
-Each `skills/<skill-id>` directory is also a self-contained single-skill
-package. Downstream Codex plugin installs consume the same generated payload
-embedded under `plugins/loom/skills/`, not as a required target-repository
-top-level `skills/` directory. Methodology and architecture documents stay
-behind this layer; users should enter through skills instead of internal
-governance docs.
+This directory is the Loom source repository's generated skills mirror. The
+published skills payload is the Codex user plugin payload under
+`plugins/loom/skills/`. Each `skills/<skill-id>` directory remains a source
+organization and compatibility mirror, not a self-contained single-skill
+package. Methodology and architecture documents stay behind this layer; users
+should enter through skills instead of internal governance docs.
 
-By default, start from `loom-init`. It is the unique root entry for Loom and is responsible for two things:
+By default, start from `loom-init` for adoption, routing, and work recovery. It is the unique root entry for Loom and is responsible for two things:
 
 - initialize Loom or retrofit Loom into an existing repository
 - route the operator to the correct scenario skill when no explicit skill was named
+
+For ordinary delivery after a Work Item has a PR, use `loom ship` as the primary
+CLI path. It consumes PR metadata, the PR gate, controlled merge, and the
+closeout policy so light and standard changes can merge and close out without a
+follow-up closeout PR.
 
 The `skills/` layer consumes the current strong-governance control plane with these fixed constraints:
 
@@ -25,7 +29,10 @@ The `skills/` layer consumes the current strong-governance control plane with th
 - the release chain converges on `spec gate -> build gate -> review gate -> merge gate`
 - `status control plane` only reads and summarizes fact-chain and host control-plane truth, and does not author a second source of truth
 - profile maturity upgrades through `light -> standard -> strong`, while item maturity still advances through the governance state machine
-- merge is controlled by GitHub or an equivalent host control plane; Loom only consumes and summarizes the prerequisites for GitHub controlled merge
+- merge is controlled by GitHub or an equivalent host control plane; `loom ship`
+  is the default CLI wrapper that consumes the prerequisites, executes host
+  merge when requested, and performs inline or host-only closeout when the
+  closeout policy allows it
 
 ## Skills Library
 
@@ -45,6 +52,12 @@ Loom exposes one root entry and ten scenario skills:
 | `loom-retire` | Cleans up or retires the current worksite. |
 | `loom-merge-ready` | Performs the final `merge gate` summary before GitHub-controlled merge. |
 
+Primary delivery command:
+
+```bash
+loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json
+```
+
 ## Entry Model
 
 Loom supports two entry modes:
@@ -60,39 +73,28 @@ Routing only decides the scene skill. It does not replace the stable control pla
 - execution entry stays on `Work Item`
 - gates stay on the shared `gate chain`
 - status reads stay on the shared `status control plane`
-- merge stays on the host platform control plane
+- merge stays on the host platform control plane, with `loom ship` as the
+  ordinary delivery wrapper
 
 ## Install Model
 
-The primary install model is the root `loom` CLI:
+The primary install model is the global `loom` CLI plus the Codex user plugin:
 
 ```bash
 npm install -g @mc-and-his-agents/loom
-loom host install --host codex --mode plugin --target . --apply --json
-loom host verify --host codex --mode plugin --target . --json
+loom host doctor --host codex --scope user --json
+loom host install --host codex --scope user --apply --json
+loom host register --host codex --source <global-loom-package>/plugins/loom --scope user --apply --json
+loom install --target . --apply --json
 loom skills check --target . --json
 ```
 
-For downstream Codex plugin mode, `loom host install` writes
-`plugins/loom/.codex-plugin/plugin.json`, `plugins/loom/skills/`, and
-`.loom/installed-state.json`. It does not write or require downstream top-level
-`skills/` by default.
-
-## Advanced / Compatibility
-
-Single-skill installation is supported for advanced compatibility, not as the default user journey:
-
-```bash
-loom host install --host codex --mode skill --skill-id <skill-id> --target . --apply --json
-```
-
-Legacy compatibility evidence may still refer to
-`npx @mc-and-his-agents/loom-installer add skill <skill-id>`, but that command
-is not the primary install path and must not replace the root `loom` CLI flow.
-
-A single installed skill only exposes that named skill to the host. It does not expose the full `loom-init` routing surface unless `loom-init` itself is installed, and it should not be presented as the complete Loom experience.
-
-Every generated single-skill package contains `loom-package.json`, a package-internal `.loom-runtime/`, and a launcher that resolves runtime from inside the package.
+Target repositories use metadata-only adoption. They must not receive
+`plugins/loom/skills/`, `.agents/skills/`, root `skills/`, `loom-package.json`,
+or package-internal `.loom-runtime/` as Loom install artifacts.
+`loom install` and `loom upgrade` manage that target repository state only; the
+Codex workstation plugin provider is inspected and refreshed through
+`loom host doctor|install|register --host codex --scope user`.
 
 ## Internal Contracts
 
@@ -103,7 +105,7 @@ These files are part of the runtime contract and should remain stable:
 - [upgrade-contract.json](./upgrade-contract.json)
 - [distribution-and-adapter-contract.md](./distribution-and-adapter-contract.md)
 
-Shared runtime scripts, assets, and references live under [shared/](./shared/). They are consumed by scenario skills and by release tooling when generating plugin or single-skill payloads.
+Shared runtime scripts, assets, and references live under [shared/](./shared/). They are consumed by scenario skills and by release tooling when generating the Codex user plugin payload.
 
 Generated surface checks:
 

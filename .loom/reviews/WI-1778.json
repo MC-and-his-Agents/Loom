@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1778",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1778 final closeout review allows carrier-only closeout head 5214d631689171ba0bc055a1f5f70c595a0e1a21: it only records release closeout readback after PR #1788 merge, v0.21.0 tag/GitHub Release/npm publication, #1778/#1774 closure, and milestone #18 closure; no implementation or release surface changes.",
+  "reviewer": "codex-main-controller",
+  "authored_at": "2026-06-23T18:48:06Z",
+  "reviewed_head": "5214d631689171ba0bc055a1f5f70c595a0e1a21",
+  "reviewed_validation_summary": "2026-06-23 post-merge release readback passed at release merge commit a1867d5744794a53bd994bbb9b31244accb871f0: `loom.py release readback --version v0.21.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --commit a1867d5744794a53bd994bbb9b31244accb871f0 --release-judgment release_required --json` found tag v0.21.0 pointing to the merge commit, GitHub Release v0.21.0 published at 2026-06-23T18:42:31Z, npm @mc-and-his-agents/loom@0.21.0 published with latest dist-tag 0.21.0, loom-cli-release run 28048511623 passed, #1778 and parent #1774 closed at 2026-06-23T18:44:56Z, and milestone #18 closed with open_issues=0.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1778.md",
+    "recovery_entry": ".loom/progress/WI-1778.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/default-codex-exec",
+    "engine_evidence": "docs/evidence/v0.21.0-release-readiness.md",
+    "normalized_findings": "docs/evidence/v0.21.0-release-readiness.md",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1778 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1778 --json",
+    "suite_evidence_map": ".loom/specs/WI-1778/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1778/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored final closeout review approved the carrier-only terminal readback head for closeout gate consumption."
+  }
+}

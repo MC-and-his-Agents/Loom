@@ -3,10 +3,29 @@
 The `loom` CLI is the primary control plane for the CLI-first operating layer. The current matrix is exposed mechanically through:
 
 ```bash
-python3 tools/loom.py help --json
+loom help --json
 ```
 
 The JSON output is the canonical machine-readable matrix for tests and downstream consumers. This document freezes the naming rules and command families for human review.
+Inside the Loom source checkout, maintainers may also run
+`python3 tools/loom.py help --json` as a local development entrypoint. Downstream
+operators should use the global `loom` CLI.
+
+## Output Contract
+
+Supported agent-facing commands default to context-safe stdout. `loom ... --json`
+emits direct JSON only when it fits the effective stdout budget; otherwise it
+emits a compact summary envelope with an artifact locator. Complete diagnostics
+belong behind the artifact locator and should not be pasted into handoff,
+review, or closeout text by default. Commands that support `--full-output` use
+it only for explicit debugging, audit, or blocker classification.
+
+The default stdout hard budget is 16 KiB and the summary target is 4 KiB. The
+effective values are configurable per process with
+`LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES`,
+`LOOM_AGENT_SAFE_SUMMARY_TARGET_BYTES`, and `LOOM_OUTPUT_ARTIFACT_DIR`.
+Relative output artifact directories are resolved from the command's resolved
+`--target` root for target-aware commands, and from the process cwd otherwise.
 
 Regression bucket / named surface / fast-vs-full validation semantics for long-running black-box checks are frozen in [regression-surface-contract.md](./regression-surface-contract.md). The command matrix may expose selectors or aggregate outputs for those surfaces, but it does not redefine that vocabulary here.
 
@@ -23,7 +42,8 @@ Regression bucket / named surface / fast-vs-full validation semantics for long-r
 | Command | Status | Contract |
 | --- | --- | --- |
 | `loom version` | implemented | Emits repository, skills, plugin, host-adapter, runtime, and package version context. |
-| `loom help` | implemented | Emits the full command matrix and fail-closed rules. |
+| `loom -v` / `loom --version` | implemented | Emits the current Loom CLI version as a short human-readable string. |
+| `loom help` | implemented | Emits task-oriented command routes, command tiers, the full command matrix, and fail-closed rules. |
 | `loom installed-state show` | implemented | Reads `loom-installed-state/v2` from the target repo. |
 | `loom installed-state validate` | implemented | Validates schema, layers, graph, and version metadata. |
 | `loom installed-state export` | implemented | Emits valid installed-state plus installation graph. |
@@ -37,7 +57,7 @@ Regression bucket / named surface / fast-vs-full validation semantics for long-r
 #893 implements the host-control command family:
 
 ```text
-loom workspace create|locate|check|retire
+loom workspace create|locate|check|audit|retire
 loom issue inspect|bind|reconcile
 loom project status|reconcile
 loom pr inspect|metadata-preflight|gate
@@ -46,6 +66,46 @@ loom reconcile
 ```
 
 These commands use JSON wrappers over existing harness control-plane readers. GitHub and git remain the host-owned truth sources; Loom only freezes the command names, output shape, fail-closed reasons, and fallback names.
+
+Standard Loom-governed merge usage is:
+
+```bash
+loom pr gate <pr> --head-sha <head-sha> --work-item <WI> --json
+loom merge check <pr> --head-sha <head-sha> --work-item <WI> --json
+loom merge run <pr> --head-sha <head-sha> --work-item <WI> --merge-method merge --delete-branch --apply --json
+```
+
+`loom pr gate` consumes the authored Loom semantic review record for the current PR head. `loom merge check` consumes the retained PR gate, required checks, triggered check rollup, branch protection or ruleset readback, and mergeability without mutating host state. `loom merge run --apply` delegates the host merge only after those inputs pass.
+
+#1806 adds shared PR intent profile helpers for PR types whose carrier set is
+known before review:
+
+```text
+loom pr-intent prepare --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only|runtime-upgrade-only
+loom pr-intent check --intent docs-governance-only|closeout-only|release-only|carrier-sync-only|fixture-only|runtime-upgrade-only
+loom docs-pr prepare
+loom docs-pr check
+```
+
+`prepare` is dry-run by default and writes only under `--apply`. It uses the
+shared suite scaffold / not_applicable decision plus PR metadata render path to
+produce a complete carrier set bound to the current branch and head SHA.
+`check` is read-only. It consumes suite validation, evidence/carrier validation
+where applicable, PR metadata preflight, changed-path scope proof, and
+cross-surface consistency. Partial, stale, manual drift, head SHA mismatch, or
+scope mismatch fails closed. A suite `not_applicable` result is a successful
+formal-suite decision for docs/governance-only, closeout-only,
+carrier-sync-only, and runtime-upgrade-only profiles; it does not bypass
+review, PR gate, merge-ready, release/no-release readback, host reconciliation,
+or closeout evidence.
+For closeout-only and carrier-sync-only profiles, if the Work Item already has
+a valid `minimal` or `full` suite, `prepare` and `check` preserve that suite
+path instead of forcing `not_applicable`; terminal carrier sync must not rewrite
+the original Work Item suite truth.
+`prepare` and `check` also emit `loom-shift-left-readiness/v1`, including
+`ready_for_hosted_gate`, structured drift reasons, and the next local command.
+`loom docs-pr prepare|check` is only the short path for
+`docs-governance-only`.
 
 #894 implements the host adapter command family:
 
@@ -58,10 +118,12 @@ loom host list|doctor|install|verify|upgrade|remove
 #895 implements the generated SKILLS command family:
 
 ```text
-loom skills list|generate|sync|check|doctor|package|release-check
+loom skills list|generate|check|doctor|package|release-check
 ```
 
-`skills generate` and `skills sync` require `--apply`; check, doctor, package, and release-check are read-only.
+`skills generate` requires `--apply` and only mutates the Loom source repository
+skills mirror plus Codex plugin payload. Check, doctor, package, and
+release-check are read-only.
 
 #1261 splits the generated SKILLS validation bucket into named diagnostic surfaces without changing the aggregate command contract:
 
@@ -112,10 +174,11 @@ loom profile status|upgrade-plan|upgrade
 loom status
 loom fact-chain
 loom checkpoint admission|build|merge
-loom gate pre-review|spec-review|review|pr|merge|closeout
+loom gate pre-review|spec-review|review|pr|merge|freeze check|freeze write|closeout
+loom closeout queue status
 ```
 
-`status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate closeout` checks closeout state but does not sync or close host objects.
+`status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate freeze check` validates the hosted gate input snapshot without writing. `gate freeze write` writes only a repo-local runtime snapshot under `.loom/runtime/gate-freeze/`. `gate closeout` checks closeout state but does not sync or close host objects.
 
 For #1229, the contract now reserves an explicit idle repository state for these read surfaces:
 
@@ -124,7 +187,32 @@ For #1229, the contract now reserves an explicit idle repository state for these
 - `loom status`
   - may render repository execution state `idle` without inventing an active Work Item
 
-`workspace retire` remains local-only. Versioned terminal carrier updates use the explicit `carrier closeout-sync` command so local cleanup, host closeout sync, and repo carrier closeout sync do not share an ambiguous command name.
+`workspace audit` is a read-only startup hygiene check over active carrier drift, host-complete carrier residue, and shadow freshness; it does not mutate host state or repo carriers. `workspace retire` remains local-only. Versioned terminal carrier updates use the explicit `carrier closeout-sync` command so local cleanup, host closeout sync, and repo carrier closeout sync do not share an ambiguous command name.
+
+Idle closeout recovery is intentionally split into explicit layers:
+
+| Layer | Command family | Writes host state | Writes versioned carriers | Primary use |
+| --- | --- | --- | --- | --- |
+| Startup carrier audit | `loom workspace audit` | no | no | Detect active Work Item residue before starting or resuming a Work Item, and point to the next explicit repair command. |
+| Closeout residue queue read | `loom closeout queue status` | no | no | Classify retained post-merge closeout residue and suggest the next read-only or explicit sync command. |
+| Local worksite retirement | `loom workspace retire` | no | no | Produce local-only cleanup/retire evidence while leaving `.loom/progress/**`, `.loom/status/current.md`, and `.loom/bootstrap/init-result.json` unchanged. |
+| Host closeout sync | host-owned merge/readback plus `reconciliation audit|sync` / `closeout check|sync` | yes, only through explicit host sync paths | no | Align GitHub issue, PR, Project, target branch, and merge commit truth. |
+| Repo carrier closeout sync | `loom carrier closeout-sync` | no | yes, only with `--apply` | Repair HotCP-style stale active carriers after host truth already proves completion. |
+
+`closeout queue status` is read-only. It reports retained Work Items, host completion evidence when provided by a queue fixture or terminal metadata, carrier checkpoint state, closeout mode, next action, and next command. It does not replace `closeout check`, `reconciliation audit|sync`, or `carrier closeout-sync`.
+
+Queue/status closeout modes are operational diagnostics over the canonical
+closeout mode protocol in [closeout-gate.md](./closeout-gate.md#21-closeout-mode-protocol):
+
+| queue/status mode | Canonical closeout mode | Next command boundary |
+| --- | --- | --- |
+| `auto_no_op` | `auto_no_op` | No command; host and repo terminal evidence already agree. |
+| `light_carrier_sync` | `light` | `loom carrier closeout-sync ... --apply` or a closeout-only PR; no host mutation. |
+| `batched_closeout` | `batched` | `loom repair plan ... --json` before any grouped carrier sync. |
+| `full_closeout` | `full` | `loom closeout --target <repo> --issue <n> --pr <n> --json` plus review / guardian escalation when signaled. |
+| `blocked` | `full` until repaired | Restore missing host completion, dependency graph, review, release/no-release, or carrier evidence first. |
+
+The HotCP-style stale carrier regression fixture covers this sequence: `workspace retire` stays `local_only`; `repair plan/apply` or `carrier closeout-sync` exposes repo-local `carrier_closeout_sync`; the final fact-chain reads `idle` with `current_item_id = no_active_item`.
 
 ## Carrier Commands
 
@@ -141,6 +229,12 @@ loom carrier closeout-sync
 ```text
 loom install
 loom upgrade-plan
+loom runtime-upgrade status
+loom runtime-upgrade prepare
+loom runtime-upgrade pr
+loom runtime-upgrade check
+loom runtime-upgrade closeout
+loom release closeout-sync
 loom upgrade
 loom rollback
 loom verify
@@ -148,13 +242,14 @@ loom verify
 
 `install` writes `loom-installed-state/v2` only when `--apply` is present and
 the target artifact/scope is explicit. Metadata-only repository adoption,
-embedded repository payload, compatibility skills export, single-skill export,
-workstation registration, and runtime carrier changes are separate operations
+workstation registration, and legacy residue diagnosis are separate operations
 under the [installation taxonomy](../../adoption/installation-taxonomy.md).
-The runtime provider mode is also explicit: `global-cli` repositories expect the
-installed root `loom` command and do not require `.loom/bin`, while
-`repo-local-wrapper` repositories keep `.loom/bin` or equivalent wrappers only
-when installed-state declares that carrier role.
+Embedded repository payloads, compatibility skills export, single-skill export,
+and repo-local runtime carrier changes are legacy or diagnostic vocabulary, not
+the current downstream install target. The runtime provider mode is explicit:
+`global-cli` repositories expect the installed root `loom` command and do not
+require `.loom/bin`; `repo-local-wrapper` is retained for migration diagnostics
+only and must not be recommended as a supported runtime face after v0.17.0.
 `upgrade-plan` is non-mutating and emits ordered repair /
 legacy-classification / no-op actions. `verify` consumes `doctor` so
 installed-state, declared adoption mode, provider readiness, and legacy-surface
@@ -162,6 +257,49 @@ readiness stay aligned. `upgrade` requires `--apply` and refuses to mutate while
 installed-state is invalid or legacy surfaces remain unclassified. `rollback`
 remains a structured fail-closed command because rollback/delete ownership
 cannot be inferred from installed surface detection.
+
+`runtime-upgrade status|prepare|pr|check|closeout` is the single-repository
+maintenance profile for repositories that pin Loom in GitHub workflow files.
+It reports three version layers: the current Loom CLI, the target repository
+workflow pin (`LOOM_VERSION` and package specs), and the local Codex
+plugin/cache surface. `prepare --apply` may update only the repository workflow
+pin and emits PR metadata / suite `not_applicable` / carrier closeout guidance
+for a real maintenance Work Item. `pr --create|--update` renders, writes, and
+reads back PR metadata before the hosted gate so head drift is visible locally.
+`closeout --issue <n> --sync --create-pr` reads the host issue/PR state for
+`closedAt`, merge commit, target branch, and hosted run URL, then syncs terminal
+carrier metadata and prepares the closeout carrier PR. Carrier-only review
+evidence in this lane covers only terminal carrier metadata drift; it must not
+be represented as product implementation approval. The runtime-upgrade family
+never runs `loom host install/register` or mutates the user workstation plugin
+cache. `status`, `prepare`, and `check`
+point stale or unreadable plugin/cache users to `loom host doctor --host codex
+--scope user --json` and the explicit `loom host install|register --host codex
+--scope user --apply --json` commands. `check` treats plugin/cache stale state
+as advisory by default because it is workstation-local, and makes it blocking
+only when the PR explicitly claims Codex runtime/plugin readiness. `check`
+remains read-only and fail-closed when the target version, Work Item, PR,
+branch, head SHA, or workflow pin readback is missing or drifted. The profile
+does not bypass semantic review, hosted checks, PR gate, head binding, or
+closeout evidence.
+
+`release closeout-sync` is the release-aftercare wrapper for repositories whose
+release artifacts are already published and read back. It accepts a release
+version, Work Item, and merged release PR, then composes existing release
+readback, `carrier closeout-sync`, recovery/status writeback, closeout and
+merge-ready shadow refresh, and post-commit PR metadata/gate next commands. It
+does not publish, republish, edit GitHub Releases, modify npm, or merge a PR.
+Release artifact drift blocks before any carrier write. The only blocked
+release-readback verdict it may repair is `carrier_not_terminal`.
+
+For normal post-merge closeout, prefer `loom closeout run ... --apply` as the
+common path. It composes host reconciliation, terminal carrier metadata,
+recovery/status writeback, shadow refresh, and final closeout check, then emits
+one next command instead of asking the operator to rebuild those arguments by
+hand. When release readback runs from a later closeout carrier head, the
+published release PR merge commit remains the release artifact anchor; rerun
+readback with `--commit <release-merge-commit>` rather than treating the
+closeout carrier head as the release commit.
 
 Copyable validation commands for a `global-cli` repository:
 
@@ -184,15 +322,80 @@ loom plan
 loom build
 loom pre-review
 loom closeout
+loom closeout queue status
+loom ship
 loom handoff
 loom retire
 ```
 
-`story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling; it does not write terminal carrier metadata.
+`story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `closeout queue status` is a read-only post-merge residue queue view; it suggests follow-up commands but does not perform host sync or carrier sync. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling; it does not write terminal carrier metadata.
+
+`loom ship` is the ordinary delivery wrapper once a Work Item already has a PR.
+Its main-path contract is:
+
+- dry-run order is fixed: `pr-metadata preflight -> pr gate -> controlled merge
+  check -> validation profile -> closeout policy`;
+- validation profile selection is read-only: `auto` reads PR changed paths,
+  chooses `light`, `standard`, `full`, or `release`, and reports the
+  corresponding `loom_check --source-surface` command; `--validation-profile
+  full` and other explicit profiles override path inference;
+- `--apply` may prepend one deterministic `safe metadata repair` step, but only
+  when `--issue`, `--branch`, and `--head-sha` are all explicit;
+- that auto-repair boundary is limited to deterministic PR metadata rendering
+  and must fail closed on Work Item, branch, head SHA, release, or closeout
+  conflicts instead of choosing a side;
+- default `--json` output stays on short wrapper diagnostics. When the payload
+  fits budget it may include `steps`, `first_blocker`, `missing_inputs`,
+  `closeout_policy`, and `next_action`; when it does not fit budget it must
+  degrade to an agent-safe summary envelope with blocker summary, `key_gaps`,
+  `next_action`, and an artifact locator for the full structured payload.
+  `--full-output` is reserved for explicit debugging, audit, or blocker
+  classification;
+- blocker classification stays step-scoped. Current wrapper blocker names are
+  `safe-metadata-repair`, `pr-metadata-preflight`, `pr-gate`,
+  `controlled-merge-check`, `ship-apply-admission`, `controlled-merge-apply`,
+  `host-reconciliation-sync`, and `host-closeout-check`;
+- closeout policy decides whether `loom ship --apply` may continue through the
+  current ordinary inline/host-only host-closeout path or must stop before
+  merge and hand off to an explicit batched carrier or full closeout path.
+
+The current implementation only executes the ordinary inline/host-only host
+closeout path. Batched carrier writes and explicit full closeout PR execution
+remain follow-up issue scope; `loom ship` must block and point callers at the
+explicit path rather than inferring the missing path.
 
 ## Reserved Phase Commands
 
 No command in the #889/#892/#896 implementation batch remains reserved. Later phase issues may still reserve additional names outside #885 scope.
+
+## Gate Freeze Surface
+
+#1507 freezes the `loom-gate-freeze/v1` snapshot contract in
+[gate-freeze.md](./gate-freeze.md). The implemented command family is:
+
+```text
+loom gate freeze check
+loom gate freeze write
+```
+
+These names are present in `loom help --json` and covered by CLI contract
+checks. Consumers must still read the current command matrix before suggesting
+either command as an executable repair command. If a freeze snapshot needs to suggest an
+unimplemented command, it must emit `unsupported_command_surface` and provide an
+existing supported alternative path.
+
+Troubleshooting and evidence notes for #1507/#1512/#1513/#1541/#1554:
+
+- `unsupported_command_surface` is the stable classifier when a freeze
+  `next_action` or `refresh_suggestion` points at a command not present in the
+  current matrix.
+- Preferred repair commands stay within the implemented surface, for example
+  `loom gate freeze check`, `loom gate freeze write`, repo-local carrier refresh
+  paths, and `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback>`.
+- Freeze/hosted-admission docs must not recommend unsupported wrapper/runtime
+  drift such as imaginary `loom` aliases; when no implemented command exists,
+  the document should say the path is deferred to a later Work Item rather than
+  invent a command.
 
 ## Planned Suite Commands
 
@@ -353,9 +556,10 @@ For #929-#943 it also checks:
 - host-control, host, and skills command names are implemented in `loom help --json`;
 - `loom host list` emits `loom-host-orchestration/v1`;
 - `loom host install` fails closed without `--apply`;
-- `loom skills list` emits the generated registry and root entry;
+- `loom skills list` emits the Codex plugin payload registry and root entry;
 - `loom skills generate` fails closed without `--apply`;
-- `loom skills package` emits package metadata for generated skills.
+- `loom skills package` emits Codex plugin payload metadata and confirms no
+  single-skill package semantics are exposed.
 
 For #910-#914 it also checks:
 

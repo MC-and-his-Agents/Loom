@@ -40,9 +40,9 @@ Loom 把 review 分成四层：
 
 默认入口：
 
-- `python3 skills/loom-review/scripts/loom-review.py flow review --target <repo> [--item <id>]`
-- `python3 skills/shared/scripts/loom_flow.py review run --target <repo> [--item <id>]`
-- `python3 skills/shared/scripts/loom_flow.py review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
+- `loom review --target <repo> [--item <id>] --json`
+- `loom review run --target <repo> [--item <id>]`
+- `loom review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
 
 其中：
 
@@ -51,6 +51,7 @@ Loom 把 review 分成四层：
 - `review record` 仍只写入单一 `review_entry` 指向的 JSON
 - 结构化审查结论可通过 `--findings-file <path>` 写入同一 review record
 - `--blocking-issue` / `--follow-up` 只保留兼容 authored 入口，不得与 `--findings-file` 混用
+- 默认输出只传递 agent-safe summary、事实载体 locator 和 artifact locator；完整 raw output 只作为 runtime evidence/artifact，不得内联进 review truth
 
 默认 engine 按宿主 proof 选择：
 

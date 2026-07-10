@@ -80,13 +80,7 @@ jobs:
       - name: Validate root self-governance carrier
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          ACTIVE_ITEM="$(python3 -c 'import json, pathlib; print(json.loads(pathlib.Path(".loom/bootstrap/init-result.json").read_text(encoding="utf-8"))["fact_chain"]["entry_points"]["current_item_id"])')"
-          python3 .loom/bin/loom_init.py verify --target .
-          python3 .loom/bin/loom_flow.py governance-profile status --target .
-          python3 .loom/bin/loom_flow.py runtime-parity validate --target .
-          python3 .loom/bin/loom_flow.py adopt verify --target . --item "${ACTIVE_ITEM}"
-          python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run
+        run: PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_check.py --source-surface root-self-adoption .
 
   loom-check:
     runs-on: ubuntu-latest

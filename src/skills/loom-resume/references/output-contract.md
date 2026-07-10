@@ -66,4 +66,6 @@
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> workspace-locate` 顺序列出
 
+输出只能内联 agent-safe summary 和 locator。完整诊断只可通过 artifact locator 在明确调试、审计或阻断分类时读取；不得把完整命令 JSON、长 stdout 或旧线程完整 turns 复制进线程正文。
+
 这个 skill 不回写任何载体；如果恢复链路不可继续，只返回阻断或回退语义。

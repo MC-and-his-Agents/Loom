@@ -1,0 +1,33 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1643",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Manual semantic review approves post-release closeout carrier sync PR #1657 at reachable carrier head 661eebb0345669972dcbae6d6002462f3a91b2bf. The diff is limited to WI-1643 progress/status/shadow carriers, updates the stale pre-merge release state to the published v0.17.0 evidence, and does not change runtime behavior, package payload, release workflow, tag, GitHub Release, or npm package. No blocking issues found. The current PR head only updates this review binding for hosted shallow-clone consumption.",
+  "reviewer": "codex-manual-review",
+  "authored_at": "2026-06-20T11:02:00Z",
+  "reviewed_head": "661eebb0345669972dcbae6d6002462f3a91b2bf",
+  "reviewed_validation_summary": "2026-06-20 post-release readback passed: PR #1656 merged at e6baa02f584a052c218616c3d5d711e00ed8bd94; loom-cli-release.yml run 27868683974 succeeded on main; tag v0.17.0 peels to e6baa02f584a052c218616c3d5d711e00ed8bd94; GitHub Release https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.17.0 was published at 2026-06-20T10:44:33Z; npm @mc-and-his-agents/loom@0.17.0 was published with latest=0.17.0; python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json passed with classification published and gaps [].",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1643.md",
+    "recovery_entry": ".loom/progress/WI-1643.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_decision": ".loom/specs/WI-1643/spec.md",
+    "suite_evidence_map": ".loom/specs/WI-1643/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1643/task-carrier.md",
+    "release_readback": "python3 tools/loom.py release readback --target . --version v0.17.0 --package @mc-and-his-agents/loom --repo MC-and-his-Agents/Loom --release-judgment release_required --json",
+    "release_workflow": "loom-cli-release.yml run 27868683974",
+    "github_release": "https://github.com/MC-and-his-Agents/Loom/releases/tag/v0.17.0",
+    "npm_package": "@mc-and-his-agents/loom@0.17.0",
+    "package_validation": "python3 tools/check_npm_package.py",
+    "release_surface_validation": "python3 tools/check_release_surface.py"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Post-release closeout carrier sync is approved for closeout consumption; published release evidence has been read back and carrier changes are limited to WI-1643 status/progress/shadow facts."
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1542",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allow: WI-1542 is limited to the read-only active Work Item startup audit surface, wrapper/runtime contract, classifier consumption, focused fixtures, generated runtime parity, and demo bootstrap fixture sync. Hosted admission, one-shot closeout run, closeout queue UX, closeout profile semantics, release behavior, and host writes remain out of scope.",
+  "reviewer": "Codex main thread",
+  "authored_at": "2026-06-18T08:47:00+08:00",
+  "reviewed_head": "f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a",
+  "reviewed_validation_summary": "2026-06-18T08:45+08:00 targeted checks passed at review target head f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py tools/loom.py tools/check_cli_contract.py test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 test/work_item_audit_test.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface work-item-audit; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check --surface generated-tree-drift; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1542; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1542 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py workspace audit --target . --json; git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1542.md",
+    "recovery_entry": ".loom/progress/WI-1542.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_locator": ".loom/specs/WI-1542/suite-index.md",
+    "path_decision_locator": ".loom/specs/WI-1542/spec.md",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1542 --json",
+    "head_binding": {
+      "reviewed_head": "f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a",
+      "current_head": "f1ee85b7decf9bf4b387f9000d1265c81bfa8d5a",
+      "status": "fresh",
+      "stale": false
+    }
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored spec review approved the minimal suite and scope boundary for the current #1542 startup audit slice."
+  }
+}

@@ -26,12 +26,26 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 
 统一入口固定为：
 
-- `python3 scripts/loom-pre-review.py flow pre-review --target <repo> [--item <id>]`
+- `loom pre-review --target <repo> [--item <id>] --json`
 
-该入口消费 repo-local `loom suite evidence validate --json` 与
-`loom suite carrier validate --json` 输出作为 gate input evidence。缺少可读 CLI
+该入口消费全局 `loom suite evidence validate --json` 与
+`loom suite carrier validate --json` 输出作为 gate input evidence。缺少可读的全局 CLI
 JSON 或返回 blocking/fallback 时 fail closed；skill 不重写 evidence-map 或
 task-carrier 规则。
+
+默认输出只传递 agent-safe summary / artifact locator。完整诊断必须由执行者显式加 `--full-output`，且不得内联进线程或 handoff。
+
+当事项已经绑定 PR 或进入 build checkpoint 时，进入 formal review 前应先用
+`loom gate freeze check|write` 冻结当前 PR metadata、head、carrier、shadow 与
+release-boundary 输入，再让 `flow pre-review` 消费冻结后的 readback 结果。缺少
+freeze 读回或 freeze 自身返回 blocking/fallback 时，回到 freeze repair path，
+不要跳过冻结入口直接拼 review 前检查链。
+
+若输入是 closeout-only carrier PR，pre-review 先读取 closeout mode protocol：
+`inline`、`auto_no_op`、`light`、`batched` 可以继续 closeout admission 路径；
+`full`、`blocked`、`full_review_required` 或 `escalation_required` 必须进入
+full semantic review / guardian 或 blocker repair。该判断只选择审查路径，不写
+closeout truth，也不把 queue/status runtime mode 当成新的事实源。
 
 ## 3. 固定编排
 

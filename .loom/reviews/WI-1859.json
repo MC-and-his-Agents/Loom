@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1859",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "允许 head db84dc84c3e00a9ceb08ee969e97fc16308676d3: WI-1859 runtime-upgrade safe lane 的实现、生成 fixture、review/progress 与派生 status surface 已重新同步；fact-chain 和 root verify 已确认 status surface fresh。该提交只同步 Loom carrier，不降低 review、PR metadata、hosted gate、release readback 或 closeout evidence 要求。",
+  "reviewer": "codex-main-agent",
+  "authored_at": "2026-07-01T13:48:20Z",
+  "reviewed_head": "db84dc84c3e00a9ceb08ee969e97fc16308676d3",
+  "reviewed_validation_summary": "`PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py` passed; `python3 tools/check_cli_contract.py --surface runtime-upgrade` passed; `python3 src/skills/shared/scripts/loom_flow.py host-binding inspect --target . --issue 1834` returned closedAt and closing PR readback; `python3 tools/loom.py runtime-upgrade closeout --target . --item WI-1834 --issue 1834 --json` passed in dry-run with inferred PR, merge commit, target branch, and closed_at; `python3 tools/check_npm_package.py --surface runtime-copy-parity` passed; `python3 tools/check_npm_package.py --surface plugin-payload-hash` passed with plugin payload hash `2763bc7cf503ef57dea03d5ed1fa21dd6a14ca052d169e2964afcb9ee5d162b9`; `python3 tools/check_npm_package.py --surface aggregate` passed; `python3 tools/loom_init.py verify --target .` passed after carrier refresh; `python3 tools/check_cli_contract.py --surface aggregate` passed in 414.22s; `python3 tools/loom_check.py` passed 45 source/distribution surfaces; `make loom-demo-new-project-check` passed after fixture sync; `python3 tools/check_npm_package.py --surface aggregate` passed after fixture sync and cache cleanup.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1859.md",
+    "recovery_entry": ".loom/progress/WI-1859.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane --item WI-1859 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom.worktrees/1859-runtime-upgrade-safe-lane --item WI-1859 --json",
+    "suite_evidence_map": ".loom/specs/WI-1859/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1859/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}

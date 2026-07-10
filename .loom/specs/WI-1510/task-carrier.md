@@ -1,0 +1,5 @@
+# WI-1510 Task Carrier
+
+| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1510 | Issue OPEN / branch work/1510-carrier-shadow-freeze / carrier refresh and shadow freshness freeze input slice | in_progress | primary | .loom/work-items/WI-1510.md | .loom/specs/WI-1510/plan.md#implementation-steps | .loom/specs/WI-1510/spec.md#acceptance-scenarios | .loom/specs/WI-1510/plan.md#validation | .loom/specs/WI-1510/evidence-map.md | GitHub issue #1510; milestone/12 gate freeze hard dependency for hosted admission #1512 | Recheck PR body/head, current review, targeted CLI contract validation, carrier refresh dry-run, shadow parity, target branch, merge commit, and closeout evidence before merge-ready or milestone closeout. |

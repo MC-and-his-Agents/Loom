@@ -1,0 +1,129 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1554-main-thread-wrapper-contract-implementation",
+      "task_goal": "Implement the remaining #1554 CLI wrapper/runtime parameter contract slice for merge and closeout command surfaces.",
+      "context_locators": [
+        ".loom/work-items/WI-1554.md",
+        ".loom/progress/WI-1554.md",
+        ".loom/specs/WI-1554/spec.md",
+        ".loom/specs/WI-1554/plan.md",
+        ".loom/specs/WI-1554/implementation-contract.md",
+        ".loom/specs/WI-1554/evidence-map.md",
+        ".loom/specs/WI-1554/task-carrier.md",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        "PR #1562"
+      ],
+      "read_scope": [
+        "WI-1554 issue/spec/plan/evidence carriers, wrapper/runtime parameter parsing, focused CLI contract surfaces, PR metadata, and hosted failure readback for PR #1562"
+      ],
+      "write_ownership": [
+        ".loom/bootstrap/init-result.json",
+        ".loom/progress/WI-1554.md",
+        ".loom/progress/WI-1554-build-evidence.json",
+        ".loom/status/current.md",
+        ".loom/work-items/WI-1554.md",
+        ".loom/specs/WI-1554/spec.md",
+        ".loom/specs/WI-1554/plan.md",
+        ".loom/specs/WI-1554/implementation-contract.md",
+        ".loom/specs/WI-1554/evidence-map.md",
+        ".loom/specs/WI-1554/task-carrier.md",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        "PR #1562 body metadata"
+      ],
+      "non_goals": [
+        "No #1555 one-shot post-merge closeout run",
+        "No hosted admission, classifier taxonomy, release/no-release closeout, closeout freeze profile semantic, or closeout gate semantic change",
+        "No host issue/PR closeout, merge, release, tag, npm publish, or external live write"
+      ],
+      "validation_expectation": "Consume suite validate/evidence/carrier validation, py_compile_clean, focused merge-wrapper and governance-closeout CLI contract checks, closeout/gate closeout smoke checks, PR metadata preflight/readback, git diff --check, and PR gate readback before merge-ready.",
+      "output_format": "Committed PR branch updates plus WI-1554 carrier/status/progress/review evidence and concise validation summary.",
+      "integration_target": [
+        ".loom/progress/WI-1554.md",
+        ".loom/progress/WI-1554-build-evidence.json",
+        ".loom/status/current.md",
+        ".loom/work-items/WI-1554.md",
+        ".loom/specs/WI-1554/spec.md",
+        ".loom/specs/WI-1554/plan.md",
+        ".loom/specs/WI-1554/implementation-contract.md",
+        ".loom/specs/WI-1554/evidence-map.md",
+        ".loom/specs/WI-1554/task-carrier.md",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        "PR #1562"
+      ],
+      "status": "integrated",
+      "summary": "Main-thread implementation integrated the #1554 wrapper/runtime parameter contract slice into PR #1562. The code change is limited to tools/loom.py argument forwarding and tools/check_cli_contract.py focused regression coverage; carrier updates align WI-1554 with the current PR head."
+    },
+    {
+      "id": "WI-1554-readonly-review",
+      "task_goal": "Review PR #1562 for semantic blockers and boundary violations before recording current-head Loom review.",
+      "context_locators": [
+        "subagent 019ed748-d35f-7601-96dc-68bb23f5d81c",
+        "PR #1562",
+        ".loom/specs/WI-1554/spec.md",
+        ".loom/specs/WI-1554/plan.md",
+        "tools/loom.py",
+        "tools/check_cli_contract.py"
+      ],
+      "read_scope": [
+        "Current PR diff, WI-1554 suite contract, PR metadata, CI failure classification, and current carrier status"
+      ],
+      "write_ownership": [
+        "read-only review; no file ownership"
+      ],
+      "non_goals": [
+        "No edits, commits, pushes, PR/issue writes, host writes, or action reruns"
+      ],
+      "validation_expectation": "Report blocker findings, boundary risks, and whether CI failures are implementation-related.",
+      "output_format": "Short verdict with file/line findings, evidence, risks, and boundary statement.",
+      "integration_target": [
+        ".loom/specs/WI-1554/spec.md",
+        ".loom/specs/WI-1554/plan.md",
+        ".loom/progress/WI-1554-build-evidence.json",
+        ".loom/reviews/WI-1554.json"
+      ],
+      "status": "integrated",
+      "summary": "Read-only review initially blocked review on stale first-slice spec/plan language and unsubmitted WI-1554 carrier activation. The main thread integrated those findings by aligning spec/plan/evidence/task-carrier with PR #1562 and activating WI-1554 as the current fact chain before review."
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1554-wrapper-runtime-contract",
+      "status": "integrated",
+      "summary": "tools/loom.py now forwards runtime-supported closeout check parameters from the closeout facade, keeps gate closeout as a read-only closeout check facade, and retains numeric merge PR parsing for check/run.",
+      "locators": [
+        "tools/loom.py",
+        "tools/check_cli_contract.py"
+      ]
+    },
+    {
+      "id": "WI-1554-carrier-contract-alignment",
+      "status": "integrated",
+      "summary": "WI-1554 Work Item, progress, status, spec, plan, implementation contract, evidence map, and task carrier are aligned with PR #1562 and no longer describe the old first-slice-only contract.",
+      "locators": [
+        ".loom/bootstrap/init-result.json",
+        ".loom/progress/WI-1554.md",
+        ".loom/status/current.md",
+        ".loom/work-items/WI-1554.md",
+        ".loom/specs/WI-1554/spec.md",
+        ".loom/specs/WI-1554/plan.md",
+        ".loom/specs/WI-1554/implementation-contract.md",
+        ".loom/specs/WI-1554/evidence-map.md",
+        ".loom/specs/WI-1554/task-carrier.md"
+      ]
+    },
+    {
+      "id": "WI-1554-targeted-validation",
+      "status": "integrated",
+      "summary": "Targeted validation passed for suite validate/evidence/carrier, py_compile_clean, focused merge-wrapper and governance-closeout contract surfaces, closeout/gate closeout smoke checks, PR metadata preflight/readback, and git diff --check.",
+      "locators": [
+        ".loom/progress/WI-1554.md",
+        "PR #1562"
+      ]
+    }
+  ]
+}

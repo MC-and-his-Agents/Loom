@@ -1,0 +1,26 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1892",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review approved at head 3826c0e99b2167f05832dfd502383194c13d7905: minimal suite is appropriate for this bounded docs-only install-boundary Work Item; A1-A5 map to README, global CLI/user plugin contract, host adapter matrix, targeted validation, and no-payload-change review; deferred workstation upgrade and migration behavior remains outside this WI.",
+  "reviewer": "Codex",
+  "authored_at": "2026-07-02T19:22:00Z",
+  "reviewed_head": "3826c0e99b2167f05832dfd502383194c13d7905",
+  "reviewed_validation_summary": "2026-07-02T19:15Z local pass after hosted-failure fix: check_release_surface.py --surface release-doc-contract, targeted rg boundary search, suite validate, suite evidence validate, suite carrier validate, fact-chain, and git diff --check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "spec": ".loom/specs/WI-1892/spec.md",
+    "plan": ".loom/specs/WI-1892/plan.md",
+    "implementation_contract": ".loom/specs/WI-1892/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1892/evidence-map.md",
+    "task_carrier": ".loom/specs/WI-1892/task-carrier.md"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Formal spec suite is approved for implementation review consumption."
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "loom_ref": "0123456789abcdef0123456789abcdef01234567",
+  "host_facts": {
+    "schema_version": "loom-delivery-gate-host-facts/v1",
+    "event": "pull_request",
+    "repository": {
+      "owner": "WebEnvoy",
+      "name": "Lode"
+    },
+    "changed_paths": [
+      "src/provider/runtime.py"
+    ]
+  },
+  "expected": {
+    "reusable_mode": true,
+    "loom_source_path": "loom",
+    "candidate_path": "candidate"
+  }
+}

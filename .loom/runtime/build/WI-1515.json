@@ -1,0 +1,136 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "main-agent-release-closeout",
+      "task_goal": "Prepare WI-1515 milestone/12 release-required closeout evidence and v0.14.2 release PR inputs.",
+      "context_locators": [
+        "#1505",
+        "#1515",
+        "docs/evidence/v0.14.2-release-readiness.md",
+        ".loom/work-items/WI-1515.md",
+        ".loom/progress/WI-1515.md",
+        ".loom/specs/WI-1515/plan.md",
+        ".loom/specs/WI-1515/**",
+        ".loom/status/current.md"
+      ],
+      "read_scope": [
+        "milestone/12 issue and PR readback",
+        "latest release and package version surfaces",
+        "release workflow contract",
+        "npm package dry-run surface",
+        "suite, fact-chain, audit, and CLI contract validation output"
+      ],
+      "write_ownership": [
+        "VERSION",
+        "package.json",
+        "skills/*/loom-package.json",
+        "docs/evidence/v0.14.2-release-readiness.md",
+        ".loom/work-items/WI-1515.md",
+        ".loom/progress/WI-1515.md",
+        ".loom/specs/WI-1515/plan.md",
+        ".loom/specs/WI-1515/spec.md",
+        ".loom/specs/WI-1515/evidence-map.md",
+        ".loom/specs/WI-1515/task-carrier.md",
+        ".loom/runtime/build/WI-1515.json",
+        ".loom/status/current.md"
+      ],
+      "non_goals": [
+        "do not implement new gate behavior in #1515",
+        "do not change release/no-release judgment semantics",
+        "do not merge the release PR without explicit user approval",
+        "do not create tags, GitHub Releases, or npm publications before merge authorization",
+        "do not close #1515 or #1505 before post-merge release evidence and closeout reconciliation"
+      ],
+      "validation_expectation": "Run version, release, npm package, skills, CLI contract, suite, fact-chain, audit, and diff checks before opening the release PR.",
+      "output_format": "release readiness evidence, scoped Loom carriers, validation summary, review record, PR metadata, and post-merge closeout plan",
+      "integration_target": ".loom/progress/WI-1515.md",
+      "status": "integrated"
+    },
+    {
+      "id": "sagan-release-scope-review",
+      "task_goal": "Review WI-1515 release/no-release scope and milestone/12 dependency readiness.",
+      "context_locators": [
+        "#1515",
+        "#1505",
+        "milestone/12",
+        "docs/evidence/v0.14.2-release-readiness.md"
+      ],
+      "read_scope": [
+        "GitHub issue/PR state",
+        "release evidence",
+        "milestone/12 child issue completion status"
+      ],
+      "write_ownership": [
+        "session-output:sagan-release-scope-summary"
+      ],
+      "non_goals": [
+        "do not modify files",
+        "do not update GitHub",
+        "do not authorize publication"
+      ],
+      "validation_expectation": "Main thread integrates any findings into WI-1515 evidence before review.",
+      "output_format": "summary, blockers, evidence locators, and remaining risks",
+      "integration_target": "docs/evidence/v0.14.2-release-readiness.md",
+      "status": "integrated"
+    },
+    {
+      "id": "huygens-release-risk-review",
+      "task_goal": "Review WI-1515 release PR diff for stale carrier, release, and publication risks.",
+      "context_locators": [
+        ".loom/status/current.md",
+        ".loom/reviews/WI-1515.json",
+        "VERSION",
+        "package.json",
+        "skills/*/loom-package.json",
+        ".github/workflows/loom-cli-release.yml"
+      ],
+      "read_scope": [
+        "release diff",
+        "status carrier",
+        "review scaffold",
+        "release workflow"
+      ],
+      "write_ownership": [
+        "session-output:huygens-release-risk-summary"
+      ],
+      "non_goals": [
+        "do not modify files",
+        "do not push",
+        "do not create PRs",
+        "do not publish releases"
+      ],
+      "validation_expectation": "Main thread fixes any blocking findings and reruns targeted validation before opening PR.",
+      "output_format": "verdict, findings, evidence, and remaining risks",
+      "integration_target": ".loom/status/current.md",
+      "status": "integrated"
+    }
+  ],
+  "integration_evidence": [
+    {
+      "carrier": "plan",
+      "locator": ".loom/specs/WI-1515/plan.md",
+      "summary": "Defines the release closeout execution order, ownership boundaries, validation inputs, authorization boundary, post-merge readback, and rollback limits for WI-1515."
+    },
+    {
+      "carrier": "release_readiness",
+      "locator": "docs/evidence/v0.14.2-release-readiness.md",
+      "summary": "Records release_required judgment for v0.14.2 because #1554/#1555 changed CLI/runtime behavior after v0.14.1, with pre-merge validation and post-merge evidence still pending."
+    },
+    {
+      "carrier": "version_authority",
+      "locator": "VERSION, package.json, skills/*/loom-package.json",
+      "summary": "Bumps Loom release authority surfaces to v0.14.2 while leaving the deprecated installer package unchanged."
+    },
+    {
+      "carrier": "suite",
+      "locator": ".loom/specs/WI-1515/spec.md",
+      "summary": "Declares formal-suite not_applicable with rationale, consumer boundary, recheck condition, scope proof, and review requirement for release closeout evidence work."
+    },
+    {
+      "carrier": "status",
+      "locator": ".loom/status/current.md",
+      "summary": "Binds the active fact-chain view and runtime evidence to WI-1515 release_pr_ready_pending_review_and_authorization, with publication blocked on explicit user approval."
+    }
+  ]
+}

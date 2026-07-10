@@ -33,6 +33,8 @@
   - 定义 agent / tool / validation / failure / tracker event evidence 的字段、fake orchestration fixtures 与禁止承载 authored truth 的边界
 - [subagent-driven-execution.md](./subagent-driven-execution.md)
   - 定义 subagent-driven build mode 的 ownership、integration、repeated blocker 与主执行者回写边界
+- [lane-orchestration.md](./lane-orchestration.md)
+  - 定义 high-throughput milestone / FR 推进中的 lane descriptor、shared carrier 串行写、stale result 与冲突处理合同
 - [item-context-contract.md](./item-context-contract.md)
   - 定义当前活跃 `Work Item` 的最小 machine-readable 上下文字段与读取边界
 - [status-surface-contract.md](./status-surface-contract.md)
@@ -49,6 +51,8 @@
   - 定义 execution breakdown unit 如何由 GitHub issue、Project item、checklist、`tasks.md`、external tracker 或 `not_applicable` 承接，并保护 `Work Item` truth
 - [gate-chain.md](./gate-chain.md)
   - 定义 implementation review、`merge-ready`、`controlled merge`、`closeout` 的强前置消费链
+- [gate-freeze.md](./gate-freeze.md)
+  - 定义 `loom-gate-freeze/v1` 门禁输入冻结快照合同、字段、词表、failure classifier 与 hosted admission 消费边界；本合同不实现 CLI 或 workflow
 - [tiered-gate-consumption-contract.md](./tiered-gate-consumption-contract.md)
   - 定义治理强度字段、`suite_path: not_applicable` 与 fail-closed gate 消费合同
   - Final closeout and release/no-release convergence for #1314 is indexed at [../../evidence/governance-intensity-final-closeout.md](../../evidence/governance-intensity-final-closeout.md)
@@ -85,6 +89,8 @@
   - 定义 closeout / reconciliation 统一状态面的 drift 审计合同
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
+- [repo-global-artifact-classification.md](./repo-global-artifact-classification.md)
+  - 定义 repo truth、workstation registry、global runtime cache、diagnostic artifact 与 repo carrier 摘要/locator 的分类边界
 - [review-execution.md](./review-execution.md)
   - 定义正式 review 执行层、review record 与 merge checkpoint 的对接边界
 - [automation-frontload.md](./automation-frontload.md)

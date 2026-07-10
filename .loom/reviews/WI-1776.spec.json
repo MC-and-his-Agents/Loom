@@ -1,0 +1,37 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1776",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1776 minimal suite is approved for the bounded release readback verdict slice. Scope is limited to verdict taxonomy, package/carrier readback composition, fixture coverage, and short diagnostics; publishing, version bumping, destructive cleanup, and host-safe worktree locator automation remain out of scope.",
+  "reviewer": "Codex main controller",
+  "authored_at": "2026-06-23T16:58:00Z",
+  "reviewed_head": "07727d011a84997394b8db7fc96db5b182d9d43e",
+  "reviewed_validation_summary": "2026-06-23 local validation passed on branch `work/1776-release-readback-verdict`: git diff --check; python3 -m json.tool docs/evidence/fixtures/release-readback-fixtures.json >/dev/null; python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --surface release-readback. Live v0.21.0 dry-run readback returned verdict `blocked` because VERSION/package.json still target 0.20.0 and v0.21.0 release artifacts are missing.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1778 owns v0.21.0 version bump, publication, and terminal release closeout.",
+    "#1774 backlog owns automatic host-safe worktree locator generation and destructive cleanup automation."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1776.md",
+    "recovery_entry": ".loom/progress/WI-1776.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1776 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1776 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1776 --json",
+    "suite_spec": ".loom/specs/WI-1776/spec.md",
+    "suite_plan": ".loom/specs/WI-1776/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1776/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1776/task-carrier.md"
+    ],
+    "implementation_contract": ".loom/specs/WI-1776/implementation-contract.md"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored spec review approved the minimal suite and scope boundary for reviewed head 07727d011a84997394b8db7fc96db5b182d9d43e."
+  }
+}

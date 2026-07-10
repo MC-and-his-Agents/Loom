@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -44,6 +45,15 @@ from loom_flow import (
 )
 
 IDLE_ITEM_ID = "no_active_item"
+
+
+def resolve_target_arg(raw_target: str) -> Path:
+    target = Path(raw_target).expanduser()
+    if target.is_absolute():
+        return target.resolve()
+    invocation_cwd = os.environ.get("LOOM_INVOCATION_CWD")
+    base = Path(invocation_cwd).expanduser() if invocation_cwd else Path.cwd()
+    return (base / target).resolve()
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -406,6 +416,7 @@ def full_closeout_status_payload(
 
     payload, errors = closeout_payload(
         target_root=root,
+        expected_item=None,
         phase_number=phase_number,
         fr_number=fr_number,
         issue_number=issue_number,
@@ -548,7 +559,7 @@ def idle_status_payload(
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    target_root = Path(args.target).expanduser().resolve()
+    target_root = resolve_target_arg(args.target)
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(

@@ -118,7 +118,23 @@ Loom 默认承认两种恢复形态：
 - merge checkpoint 已需要稳定消费风险、验证摘要与回退边界
 - 不存在单一稳定宿主载体，或当前仓库同时存在多个运行 / 状态入口
 
-## 7. 边界约束
+## 7. 线程轮换与交接包
+
+当当前线程接近上下文预算、工具输出污染明显、handoff / resume 成本升高，或下一步需要新的执行者继续时，必须通过交接包迁移到新线程。交接包只辅助恢复，不替代恢复主入口、状态面、review、PR body、release evidence 或 closeout evidence。
+
+最小交接包只允许包含：
+
+- 当前事项 id、分支、PR、`head_sha`、必要 `run_id`
+- 恢复主入口、状态面、review、PR body、验证摘要等事实载体 locator
+- 全局 `loom` CLI 产生的 agent-safe summary
+- 完整诊断 artifact locator
+- 当前停点、下一步、阻断项和验证摘要的 locator 或短摘要
+
+完整诊断必须通过全局 `loom` CLI run artifact、ignored artifact path 或显式 locator 读取；不得把 artifact 当作 authored truth carrier，也不得把宿主仓库恢复成 repo-local plugin/runtime/skills 安装目标。
+
+新线程恢复时应先读取交接包中的事实载体 locator 和 agent-safe summary。除非用户明确要求审计旧对话本身，新线程不得读取旧线程完整 turns、长日志或完整 stdout 来恢复状态。
+
+## 8. 边界约束
 
 - 不得只依赖聊天记录、分支名或个人记忆恢复
 - 不得在多个文档中并行维护“下一步”

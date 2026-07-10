@@ -294,6 +294,14 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
             "The `loom` CLI release line is the primary release line",
             "GitHub `v*` tag and GitHub Release",
             "Installer npm state is never publish evidence for this judgment",
+            "HotCP-style stale carrier fixture",
+            "carrier closeout-sync",
+            "workspace retire",
+            "idle` / `no_active_item",
+            "`loom release readback` is the local read-only entry for a release intent",
+            "`partial_published`",
+            "`docs/evidence/fixtures/release-readback-fixtures.json`",
+            "auth and host-access diagnosis remains owned by #1597",
         ),
         errors,
         surface_label=surface_label,
@@ -314,9 +322,12 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         README,
         (
-            "Loom CLI release surface",
-            "loom-installer deprecated legacy line",
-            "users do not install them as a separate surface",
+            "Loom is CLI-first",
+            "global `loom` command",
+            "metadata-only repository adoption",
+            "Codex user-level plugin",
+            "Work Item",
+            "gate chain",
         ),
         errors,
         surface_label=surface_label,
@@ -325,9 +336,11 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         README_ZH,
         (
-            "Loom CLI 发布面",
-            "loom-installer deprecated legacy line",
-            "用户不再把它们作为独立安装面安装",
+            "命令行优先设计",
+            "Codex 用户级插件",
+            "仅元数据的仓库采用",
+            "工作项",
+            "固定门控链",
         ),
         errors,
         surface_label=surface_label,
@@ -373,13 +386,14 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
         (
             "For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release",
             "when the `NPM_TOKEN` secret is missing for an npm publish",
-            "must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit",
+            "A later CLI source merge with an already published version returns `release_pending` and never republishes that version.",
+            "an explicit `workflow_dispatch` publish request names a `VERSION` tag that points at another commit",
         ),
         errors,
         surface_label=surface_label,
         evidence_locator=locator,
     )
-    require_needles(
+    workflow = require_needles(
         CLI_RELEASE,
         (
             "name: loom-cli-release",
@@ -388,6 +402,7 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
             "push",
             "AUTO_PUBLISH_ALLOWED",
             "cli_publish_behavior_changed",
+            "reason=release_pending",
             "version-already-published-on-different-commit",
             "PACKAGE_TAG_PREFIX: 'v'",
             "NPM_PACKAGE_NAME: '@mc-and-his-agents/loom'",
@@ -395,6 +410,7 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
             "npm publish --access public --provenance",
             "npm view \"${NPM_PACKAGE_NAME}@${NPM_VERSION}\" version",
             "npm pack --dry-run --json --ignore-scripts",
+            "python3 tools/stamp_plugin_payload_metadata.py --source-git-sha \"${{ github.sha }}\" --write --json",
             "python3 tools/check_npm_package.py",
             "no-cli-behavior-change",
             "gh release create",
@@ -403,6 +419,78 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
         surface_label=surface_label,
         evidence_locator=locator,
     )
+    judgment_start = workflow.find("  release-judgment:\n")
+    publisher_start = workflow.find("  release-publisher:\n")
+    if judgment_start < 0 or publisher_start < 0 or publisher_start <= judgment_start:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-missing-permission-split",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary="release workflow must separate release-judgment from release-publisher",
+        )
+        return
+    judgment = workflow[judgment_start:publisher_start]
+    publisher = workflow[publisher_start:]
+    pending_index = judgment.find('reason=release_pending')
+    explicit_publish_index = judgment.find('if [ "$PUBLISH_REQUESTED" != "true" ]')
+    collision_index = judgment.find('reason=version-already-published-on-different-commit')
+    if min(pending_index, explicit_publish_index, collision_index) < 0 or not (
+        explicit_publish_index < pending_index < collision_index
+    ):
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-release-pending-admission",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary=(
+                "normal main pushes with an earlier published VERSION must return release_pending, "
+                "while explicit publish requests remain fail-closed"
+            ),
+        )
+    for needle in ("contents: read", "persist-credentials: false"):
+        if needle not in judgment:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-judgment-permission",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary=f"release-judgment must contain `{needle}`",
+            )
+    for needle in ("contents: write", "id-token: write", "secrets.NPM_TOKEN", "npm publish", "git tag -a", "gh release create"):
+        if needle in judgment:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-judgment-privilege-leak",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary=f"release-judgment must not contain `{needle}`",
+            )
+    for needle in (
+        "needs: release-judgment",
+        "github.event_name == 'push'",
+        "github.event_name == 'workflow_dispatch'",
+        "needs.release-judgment.outputs.publish_allowed == 'true'",
+        "contents: write",
+        "id-token: write",
+        "secrets.NPM_TOKEN",
+        "npm publish",
+        "git tag -a",
+        "gh release create",
+    ):
+        if needle not in publisher:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-publisher-contract",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary=f"release-publisher must contain `{needle}`",
+            )
 
 
 def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
@@ -434,19 +522,8 @@ def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
     require_needles(
         INSTALLER_PR,
         (
-            "node packages/loom-installer/scripts/check-version-bump.mjs",
+            "Run tombstone regression",
             "python3 tools/check_release_surface.py",
-        ),
-        errors,
-        surface_label=surface_label,
-        evidence_locator=locator,
-    )
-    bump_check = require_needles(
-        INSTALLER_BUMP_CHECK,
-        (
-            "packages/loom-installer/src/",
-            "packages/loom-installer/package.json",
-            "no installer shim changes",
         ),
         errors,
         surface_label=surface_label,
@@ -492,15 +569,16 @@ def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
                 summary=f"installer release workflow must not contain active publish capability `{needle}`",
             )
 
-    for needle in ("plugins/loom/.codex-plugin/", "skills/"):
-        if needle in bump_check and "ignoredCompatibilityPaths" not in bump_check:
+    if INSTALLER_BUMP_CHECK.exists():
+        bump_check = INSTALLER_BUMP_CHECK.read_text(encoding="utf-8")
+        if "version bump gate retired" not in bump_check:
             add_error(
                 errors,
                 surface_label=surface_label,
-                failure_label=f"{surface_label}-shim-bump-scope-expanded",
+                failure_label=f"{surface_label}-active-bump-gate",
                 evidence_locator=locator,
                 source_locator=relative_to_root(INSTALLER_BUMP_CHECK),
-                summary=f"installer version bump check must not classify `{needle}` as shim behavior",
+                summary="installer version bump check must stay retired for the tombstone package",
             )
 
 

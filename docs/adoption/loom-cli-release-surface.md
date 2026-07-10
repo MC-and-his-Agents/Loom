@@ -12,7 +12,7 @@ The `loom` CLI release line is the primary release line for Loom execution behav
 | Published Loom CLI release | GitHub `v*` tag and GitHub Release | The tag must point at the release commit. Release notes must describe the CLI/runtime behavior being shipped or explicitly state that no CLI behavior changed. |
 | Deprecated installer legacy artifact | `packages/loom-installer/package.json` | Historical evidence only. The last active release baseline is `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`; it is not a current publish path. |
 
-The `loom` CLI release line is the only active CLI release line. It is not synchronized with the deprecated installer package version, plugin surface version, skill package version, runtime contract version, or schema version.
+The `loom` CLI release line is the only active CLI release line. It is not synchronized with the deprecated installer package version, plugin surface version, skill contract version, runtime contract version, or schema version. The Codex plugin payload version follows the root Loom release because the payload is published inside the root `@mc-and-his-agents/loom` package, while the plugin surface version remains a separate host-interface compatibility line.
 
 ## Distribution Channel
 
@@ -56,13 +56,38 @@ The judgment may be:
 - `release-missing`: the tag exists and npm package version is present, but the GitHub Release is missing.
 - `npm-version-missing`: the tag points at the current release commit, but the matching npm package version is missing.
 - `tag-release-missing-npm-version-exists`: the npm package version exists, but the matching GitHub tag and release evidence are missing.
-- `version-already-published-on-different-commit`: CLI publish behavior changed but the current `VERSION` tag already points at another commit; the workflow must fail instead of overwriting history.
+- `release_pending`: a normal `main` push changed CLI behavior while the current `VERSION` tag already names an earlier release. It succeeds without publishing; a later release Work Item must merge a new, unoccupied candidate version.
+- `version-already-published-on-different-commit`: an explicit `workflow_dispatch` publish request names a `VERSION` tag that points at another commit. The workflow must fail instead of overwriting history.
 - `release-judgment-only`: CLI publish behavior changed on an event that is not allowed to publish; the workflow records the judgment and must not create tags, publish npm, or create releases.
 - `no-cli-behavior-change`: the merge did not touch CLI publish behavior.
 
-For pull requests, the workflow records judgment and runs npm package dry-run checks but must not create tags, publish npm, or create releases. For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release when CLI publish behavior changed and the root `VERSION` is an unpublished candidate. `workflow_dispatch` with `publish=true` remains a repair path for missing tag, npm, or release evidence, not the only publish path.
+For pull requests, the read-only `release-judgment` job records judgment and runs npm package dry-run checks but must not create tags, publish npm, or create releases. It has only `contents: read`, no `id-token`, and no persisted checkout credential. The separate `release-publisher` job is never scheduled for pull requests. For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release only when the root `VERSION` is a new, unoccupied candidate. A later CLI source merge with an already published version returns `release_pending` and never republishes that version. `workflow_dispatch` with `publish=true` remains a repair path for missing tag, npm, or release evidence bound to the current release commit, not the only publish path.
 
-When publishing is allowed or explicitly requested, the workflow must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit, when `package.json` does not match `VERSION`, or when the `NPM_TOKEN` secret is missing for an npm publish. It must never overwrite an existing tag, npm version, or release. Installer npm state is never publish evidence for this judgment.
+An explicit publish request must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit, when `package.json` does not match `VERSION`, or when the `NPM_TOKEN` secret is missing for an npm publish. A normal `main` push with an earlier published version returns `release_pending` instead. The workflow must never overwrite an existing tag, npm version, or release. Installer npm state is never publish evidence for this judgment.
+
+## Release Resume Readback
+
+`loom release readback` is the local read-only entry for a release intent. It
+reads the target `VERSION`, matching GitHub `v*` tag, GitHub Release, npm
+`@mc-and-his-agents/loom` package version, and the `loom-cli-release` workflow
+run. It classifies the release state as:
+
+- `unpublished`: no tag, GitHub Release, or npm package version exists for a release-required intent.
+- `published`: tag, GitHub Release, npm package version, and workflow run read back consistently.
+- `partial_published`: at least one release artifact exists but the release evidence set is incomplete or mismatched.
+- `no_release`: the release judgment explicitly declares that no publish is required.
+
+`loom release resume` consumes the same readback classifier and only returns
+the next recovery action. It must not trigger `workflow_dispatch`, create tags,
+publish npm, create GitHub Releases, update PR metadata, or write closeout
+carriers. Host API or registry read failures are classified as readback
+blockers; auth and host-access diagnosis remains owned by #1597.
+
+The v0.14.2 manual recovery sample is retained in
+`docs/evidence/fixtures/release-readback-fixtures.json`: the first main-push
+release run failed, and a later `workflow_dispatch` run restored tag,
+GitHub Release, npm package, and workflow run readback for the same release
+line.
 
 ## Release Validation Evidence Contract
 
@@ -78,12 +103,13 @@ The labels below are stable evidence labels. Named release/package checks are ta
 | `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
 | `npm-package-manifest` | `python3 tools/check_npm_package.py --surface npm-package-manifest` | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
 | `npm-pack-payload` | `python3 tools/check_npm_package.py --surface npm-pack-payload`, `npm pack --dry-run --json --ignore-scripts`, or `npm run test:package` when it consumes the same payload proof | Proves the dry-run package payload contains required CLI/runtime/docs/skills/plugin files and excludes repository-internal or deprecated installer surfaces. |
+| `plugin-payload-hash` | `python3 tools/check_npm_package.py --surface plugin-payload-hash` | Proves the installable `plugins/loom` payload has a deterministic SHA-256 digest over sorted relative paths and bytes, ignoring OS/Python cache artifacts. |
 | `installed-global-cli-smoke` | `python3 tools/check_release_surface.py --surface installed-global-cli-smoke` | Proves the packed package can be installed into a temporary global prefix, exposes the `loom` bin, and runs release-required version/help smoke from the installed package instead of only the source checkout. |
 
 Aggregate release/package validation remains available through:
 
 - `python3 tools/check_release_surface.py` or explicit `python3 tools/check_release_surface.py --surface aggregate-release-surface`, which runs the named release contract, workflow, installer sunset, forbidden-pattern, and installed/global CLI smoke surfaces.
-- `python3 tools/check_npm_package.py` or explicit `python3 tools/check_npm_package.py --surface aggregate`, which runs the named `npm-package-manifest` and `npm-pack-payload` surfaces.
+- `python3 tools/check_npm_package.py` or explicit `python3 tools/check_npm_package.py --surface aggregate`, which runs the named `npm-package-manifest`, `npm-pack-payload`, and `plugin-payload-hash` surfaces.
 - `npm run test:package`, when a release/package validation summary needs the packaged npm payload proof as well as the raw checker output.
 
 All release validation evidence must retain:
@@ -104,9 +130,9 @@ When release-required work publishes a Loom CLI release, pre-merge evidence must
 
 - the Work Item, branch, PR, current head, base, and parent release-required issue;
 - the chosen `VERSION` and matching `package.json` npm version;
-- generated `skills/*/loom-package.json` repo version surfaces synchronized when the release ships generated skills/runtime payloads;
+- plugin payload release metadata, `plugin_payload_hash`, `plugins/loom/skills/registry.json`, generated skills mirror, and skill `contract.json` surfaces synchronized when the release ships skills payload changes;
 - target GitHub `v*` tag and npm `@mc-and-his-agents/loom` version are unoccupied before publish;
-- `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, `installed-global-cli-smoke`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
+- `release-doc-contract`, `release-workflow-contract`, `installer-sunset-guard`, `forbidden-release-surface-patterns`, `npm-package-manifest`, `npm-pack-payload`, `plugin-payload-hash`, `installed-global-cli-smoke`, CLI contract, skills, and any issue-specific regression checks pass on the release PR head;
 - PR-event `release-judgment-only`, if present, is recorded only as pre-merge judgment evidence and not as final release evidence.
 
 Post-merge release closeout evidence must show:
@@ -126,12 +152,21 @@ If release execution is unavailable, blocked, or partially complete, closeout mu
 When a Work Item does not publish a release, closeout must record an explicit `no_release` rationale. The rationale is valid only when it states:
 
 - the changed scope does not ship user-visible CLI, skills, package, workflow, release validation, npm payload, runtime provider, or external-visible behavior;
-- `VERSION`, `package.json`, generated `skills/*/loom-package.json`, release workflows, npm publish behavior, and package payload semantics were not changed, or any touched release-control docs/checks are contract-only and do not publish by themselves;
+- `VERSION`, `package.json`, plugin payload registry/contract surfaces, release workflows, npm publish behavior, and package payload semantics were not changed, or any touched release-control docs/checks are contract-only and do not publish by themselves;
 - release-surface validation that is relevant to the touched docs/checks passed or was intentionally not required with a recheck condition;
 - PR-event `release-judgment-only` is not being used as final no-release proof;
 - current head, PR, merge commit or target branch readback, review/gate status, and closeout evidence locator remain bound to the same Work Item.
 
 No-release evidence does not replace review, fact-chain, PR metadata preflight, hosted checks, controlled merge, target branch readback, reconciliation audit, or closeout.
+
+For idle closeout sync work, a valid no-release rationale may cite the HotCP-style stale carrier fixture only when the change is documentation, help text, checker coverage, or carrier evidence. The rationale must still retain the command evidence that proves the recovery path:
+
+- `workspace retire` remains local-only and does not write versioned carriers.
+- host closeout sync/readback proves issue, Project, PR, merge commit, and target branch truth.
+- `carrier closeout-sync` writes terminal carrier metadata without host mutation.
+- `fact-chain` reads back `idle` / `no_active_item` after carrier sync.
+
+Release readiness checks must cover the user-facing command names and the fixture story so release/no-release closeout can distinguish documentation/checker-only work from a CLI behavior shipment.
 
 ## Installer Sunset
 

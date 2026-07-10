@@ -120,11 +120,17 @@ Mutating actions require an explicit execution flag on the underlying command. `
 
 The CLI separates:
 
-- Codex full-repo/native skills discovery as the default path.
-- Adapter-managed plugin and single-skill installation through `loom-installer`.
+- Codex user-level plugin discovery as the default path.
+- Codex user-level plugin installation and registration from the global Loom
+  package.
 - Contract-only hosts such as OpenCode, Gemini, and Cursor until adapter CLIs are available.
 
-`host list` and `host doctor` are read-only. `host install` and `host upgrade` fail closed unless `--apply` is present and the built installer shim is available. `host remove` remains non-mutating in this phase and reports the missing rollback/delete ownership contract.
+`host list`, `host doctor`, and `host verify` are read-only. `host verify`
+checks both metadata-only repository adoption and Codex user-level plugin
+provider registration for Codex targets. `host install` mutates only Codex
+user-level plugin cache state and requires `--apply`.
+`host upgrade` and `host remove` no longer mutate repo-local host payloads and
+fail closed with the global install fallback.
 
 ## Delivery Commands
 
@@ -138,7 +144,9 @@ The delivery layer is the CLI-owned install-state control plane:
 - `upgrade` requires `--apply` and refuses to mutate until installed-state validates and legacy surfaces are consumed.
 - `rollback` is intentionally fail-closed until a concrete rollback artifact and delete ownership are supplied.
 
-Installer-managed host adapter installs may still be delegated through `loom host install|upgrade|verify`; top-level delivery commands own the repository installed-state boundary and do not infer host lifecycle mutations.
+Host adapter repository payload installs are no longer delegated through the
+root `loom` CLI. Top-level delivery commands own the repository installed-state
+boundary and do not infer host lifecycle mutations.
 
 Delivery commands therefore freeze the following provider boundary:
 
@@ -150,9 +158,14 @@ Delivery commands therefore freeze the following provider boundary:
 
 ## Skills Commands
 
-`loom skills list`, `loom skills generate`, `loom skills sync`, `loom skills check`, `loom skills doctor`, `loom skills package`, and `loom skills release-check` implement the #895 generated SKILLS surface with `loom-skills-surface/v1`.
+`loom skills list`, `loom skills generate`, `loom skills check`, `loom skills doctor`, `loom skills package`, and `loom skills release-check` implement the #895 generated SKILLS surface with `loom-skills-surface/v1`.
 
-`skills list` and `skills package` read checked-in generated package metadata. `skills check`, `skills doctor`, and `skills release-check` delegate to the existing surface, host adapter, and version checks. `skills generate` and `skills sync` mutate `skills/`, so they fail closed unless `--apply` is supplied.
+`skills list` and `skills package` read the checked-in Codex plugin payload
+metadata under `plugins/loom/skills`. `skills check`, `skills doctor`, and
+`skills release-check` delegate to the existing source surface, host adapter,
+and version checks. `skills generate` mutates only the Loom source repository
+skills mirror and Codex plugin payload, so it fails closed unless `--apply` is
+supplied and the target is the source repository.
 
 `loom skills check --target <repo> --json` remains the aggregate merge-ready and release-readiness entrypoint for generated SKILLS validation. The aggregate must continue to consume the script-level skills surface check instead of promoting separate package semantics into the CLI.
 

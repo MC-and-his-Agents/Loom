@@ -1,0 +1,9 @@
+# WI-1508 Evidence Map
+
+| Evidence ID | Evidence Type | Source Locator | Consumes | Binding | Freshness | Consumer Boundary | Remediation Direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | `tools/loom.py` | `.loom/specs/WI-1508/spec.md` S1 S2 S5 | WI-1508 / command matrix and gate route | present | CLI contract / review / merge-ready | Re-run `python3 tools/loom.py help --json` and `python3 tools/loom.py gate freeze check --target . --item WI-1508 --json` after route changes. |
+| EV-002 | behavior_evidence | `src/skills/shared/scripts/loom_flow.py` | `.loom/specs/WI-1508/spec.md` S1 S2 S3 S4 | WI-1508 / `loom-gate-freeze/v1` payload assembly | present | CLI contract / review / merge-ready / remaining follow-on planning | Re-run freeze check/write and inspect `input_bindings`, `readiness`, and `write_artifact` after runtime changes. |
+| EV-003 | generated_surface_evidence | `skills/shared/scripts/loom_flow.py`, `.loom/bin/loom_flow.py`, `skills/loom-*/.loom-runtime/shared/scripts/loom_flow.py`, `examples/new-project/.loom/bin/loom_flow.py` | `.loom/specs/WI-1508/spec.md` S5 | WI-1508 / generated runtime copies | present | generated-tree drift / distribution checks | Re-run `python3 tools/skills_surface.py check --surface generated-tree-drift` after shared runtime edits. |
+| EV-004 | test_evidence | `tools/check_cli_contract.py` | `.loom/specs/WI-1508/spec.md` S1 S3 S5 | WI-1508 / CLI contract coverage | present | local validation / hosted CI | Re-run `python3 tools/check_cli_contract.py` after command matrix or payload shape changes. |
+| EV-005 | fresh_verification_input | `.loom/progress/WI-1508.md` | EV-001 EV-002 EV-003 EV-004 | WI-1508 / latest validation summary / branch `work/1508-gate-freeze-cli` | present | review / merge-ready | Refresh after validation, PR creation/update, hosted checks readback, review, or merge-ready. |

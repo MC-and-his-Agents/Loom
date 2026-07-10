@@ -27,7 +27,9 @@ description: 负责恢复当前事项的执行入口。Use when Codex needs to t
 
 它依赖统一恢复摘要入口：
 
-- `python3 scripts/loom-resume.py flow resume --target <repo> [--item <id>]`
+- `loom resume --target <repo> [--item <id>] --json`
+
+默认只消费 agent-safe summary、事实载体 locator 和 artifact locator；不得把完整命令 JSON、长 stdout 或旧线程完整 turns 作为恢复输入。只有明确调试完整诊断时才加 `--full-output`。
 
 ## 3. 固定编排
 
@@ -80,3 +82,7 @@ description: 负责恢复当前事项的执行入口。Use when Codex needs to t
 
 - [references/input-signals.md](./references/input-signals.md)
 - [references/output-contract.md](./references/output-contract.md)
+
+恢复当前 lane 与 lane 交接边界时，消费的共享合同见：
+
+- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)

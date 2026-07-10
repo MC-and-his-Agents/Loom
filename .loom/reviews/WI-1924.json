@@ -1,0 +1,41 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1924",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Closeout carrier-only review allow: PR #1926 only syncs terminal Loom carrier/shadow evidence after implementation PR #1925 merged; it does not approve product implementation behavior.",
+  "reviewer": "codex-main-thread",
+  "authored_at": "2026-07-03T03:09:44Z",
+  "reviewed_head": "f3b79d439514a390dccb76ebef6c83d461dc8b22",
+  "reviewed_validation_summary": "2026-07-03T02:41Z local pass: `python3 tools/py_compile_clean.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py`; `python3 tools/skills_surface.py check --surface generated-tree-drift`; `python3 .loom/bin/loom_flow.py runtime-parity validate --target .`; `python3 examples/new-project/.loom/bin/loom_flow.py runtime-parity validate --target examples/new-project`; `python3 tools/loom_check.py --profile source --source-surface installed-runtime .`; `python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .`; `python3 tools/check_npm_package.py`; `python3 tools/loom.py skills release-check --json`; `python3 tools/loom_check.py --profile source --source-surface source-self-fixture .`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1924.md",
+    "recovery_entry": ".loom/progress/WI-1924.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  },
+  "carrier_only_closeout_review": {
+    "status": "passed",
+    "reason": "Authored closeout review approved only terminal carrier metadata consumption; it does not approve product implementation behavior."
+  }
+}

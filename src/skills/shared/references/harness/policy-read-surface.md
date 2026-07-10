@@ -67,4 +67,3 @@ These values are never top-level command results. Top-level `result` remains `pa
 
 `loom_status` exposes the latest derived `policy_readiness` from `governance_surface.repo_interface`.
 `flow review`, `flow merge-ready`, and `closeout` expose the applicable policy evidence under `repo_specific_requirements.policy_readiness`.
-

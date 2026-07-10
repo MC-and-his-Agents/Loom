@@ -25,12 +25,14 @@ description: 负责 bounded implementation/build 执行轮。Use when Codex need
 
 统一入口固定为：
 
-- `python3 scripts/loom-build.py flow build --target <repo> [--item <id>] [--build-evidence <path>]`
+- `loom build --target <repo> [--item <id>] [--build-evidence <path>] --json`
 
-该入口必须消费 repo-local `loom suite validate --json` 与
+该入口必须消费全局 `loom suite validate --json` 与
 `loom suite carrier validate --json` 输出作为 build readiness 的机器输入。
-缺少可读 CLI JSON 时 fail closed；不得在 skill runtime 中重新实现 suite path、
+缺少可读的全局 CLI agent-safe JSON 时 fail closed；不得在 skill runtime 中重新实现 suite path、
 scenario mapping 或 task-carrier 判定。
+
+默认输出只传递 agent-safe summary / artifact locator。完整诊断必须由执行者显式加 `--full-output`，且不得内联进线程或 handoff。
 
 ## 3. Subagent-Driven Ownership Contract
 
@@ -71,9 +73,9 @@ subagent-driven mode 必须先声明以下字段：
 
 只有当 `flow build` 返回 pass，且 build evidence 证明所有委派输出已集成、无 ownership overlap、无 repeated blocker 时，才允许继续进入 pre-review / review。
 
-Build readiness 只消费 `suite validate` / `suite carrier validate` 已输出的
+Build readiness 只消费全局 `loom suite validate` / `loom suite carrier validate` 已输出的
 full/minimal suite path 决策与 carrier readiness，不重新定义 suite 工件、
-evidence-map、consistency-analysis 或 gate-chain。full path 必须由 CLI JSON 证明
+evidence-map、consistency-analysis 或 gate-chain。full path 必须由 agent-safe CLI JSON 或其 artifact locator 证明
 必需工件可读且 fresh；minimal path 必须保留合法 `not_applicable` rationale，并把
 recheck condition 传递给后续 pre-review / review。
 
@@ -87,5 +89,6 @@ Build readiness 消费的共享合同见：
 - [spec-suite.md](../shared/references/templates/spec-suite.md)
 - [execution-breakdown.md](../shared/references/templates/execution-breakdown.md)
 - [task-carrier-contract.md](../shared/references/harness/task-carrier-contract.md)
+- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)
 - [evidence-map.md](../shared/references/templates/evidence-map.md)
 - [consistency-analysis.md](../shared/references/templates/consistency-analysis.md)

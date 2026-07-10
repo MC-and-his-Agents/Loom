@@ -1,0 +1,57 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1511",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1511 post-merge closeout carrier head 49626af is approved: progress/status terminal checkpoint and shadow hashes record the already merged PR #1528 and closed issue #1511 without changing runtime behavior.",
+  "reviewer": "Codex main",
+  "authored_at": "2026-06-17T03:30:00Z",
+  "reviewed_head": "49626af1688cd56ddfe24e67765040b1d2d0fcad",
+  "reviewed_validation_summary": "2026-06-17T03:20Z WI-1511 post-merge carrier closeout sync validation passed: `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1511 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py closeout check --target .`; `git diff --check`. Terminal metadata consumes PR #1528 merge commit 5cd30fbf1db3e48a31342a91f9e7b4ad9f54a2d1 and issue #1511 completed closeout evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1511.md",
+    "recovery_entry": ".loom/progress/WI-1511.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1511-review-head-freeze/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-1511-review-head-freeze --item WI-1511 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-1511-review-head-freeze/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-1511-review-head-freeze --item WI-1511 --json",
+    "suite_evidence_map": ".loom/specs/WI-1511/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1511/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored review approved the current terminal closeout carrier head for post-merge carrier consumption only; implementation merge-ready was consumed by PR #1528."
+  }
+}
