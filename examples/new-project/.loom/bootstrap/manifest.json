@@ -174,7 +174,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "0a4a64452522b4274933482aeca8abf3a0f7aaf9a4f8bcbdddcbb5b3fe061714"
+      "sha256": "ffc8ed963df537b01f4f2cf11d01444cf1472dd3e48b40a81320f47540f1345b"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -198,7 +198,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "ad0f71ba440609e3a7b5444abf29e3044c198e99545ead1ea7fd1f9c32382cfa"
+      "sha256": "543ace953ed03182efba704137e0b6eaee53ebe1059341cfb6f447576e0166f8"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",

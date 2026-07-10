@@ -11039,15 +11039,63 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                     result = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target)
                     return result.stdout.strip()
 
+                source_metadata_contract = root / ".loom" / "companion" / "repo-interface.json"
+                target_metadata_contract = positive_target / ".loom" / "companion" / "repo-interface.json"
+                try:
+                    bootstrap_metadata_contract = target_metadata_contract.read_text(encoding="utf-8")
+                    source_metadata_contract_text = source_metadata_contract.read_text(encoding="utf-8")
+                    target_metadata_contract.write_text(source_metadata_contract_text, encoding="utf-8")
+                except OSError as exc:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` fixture must restore the source PR metadata contract after bootstrap: {exc}"))
+                    bootstrap_metadata_contract = None
+                    source_metadata_contract_text = None
+
                 def write_json_fixture(target: Path, relative: str, payload: object) -> str:
                     path = runtime_fixture_path(target, relative)
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                     return relative
 
-                def pr_gate_fixture(target: Path, *, number: int = 1, merge_state_status: str | None = None, host_review_state: str | None = None) -> str:
+                def pr_gate_fixture(
+                    target: Path,
+                    *,
+                    number: int = 1,
+                    merge_state_status: str | None = None,
+                    host_review_state: str | None = None,
+                    work_item_locator: str = "work_item:209",
+                ) -> str:
                     head_ref_name = "feature/pr-gate"
                     head_ref_oid = current_head(target)
+                    metadata_envelope = {
+                        "schema_version": "loom-repo-pr-metadata/v1",
+                        "metadata_contract_id": "loom-governance-intensity",
+                        "surface": "merge_ready",
+                        "fields": {
+                            "work_item_locator": work_item_locator,
+                            "governance_intensity": "standard",
+                            "change_class": "fixture",
+                            "suite_path": "minimal",
+                            "suite_not_applicable": None,
+                            "review_requirement": "current_head_review_required",
+                            "fact_chain_required": True,
+                            "pr_gate_required": True,
+                            "release_judgment": "no_release",
+                            "closeout_required": True,
+                            "upgrade_triggers": [],
+                        },
+                        "source": {"rendered_hash": "loom-check-installed-runtime-fixture"},
+                        "parser_version": "loom-pr-metadata-parser/v1",
+                    }
+                    body = (
+                        "## Related Work\n\n"
+                        f"- Work Item: {work_item_locator}\n"
+                        "- Issue: #209\n"
+                        f"- Branch: {head_ref_name}\n"
+                        f"- Head SHA: {head_ref_oid}\n\n"
+                        "<!-- loom:repo-pr-metadata\n"
+                        + json.dumps(metadata_envelope, ensure_ascii=False, indent=2)
+                        + "\n-->\n"
+                    )
                     payload = {
                         "number": number,
                         "state": "OPEN",
@@ -11055,7 +11103,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                         "headRefName": head_ref_name,
                         "baseRefName": "main",
                         "headRefOid": head_ref_oid,
-                        "body": f"## Related Work\n\n- Loom Work Item: INIT-0001\n- Branch: {head_ref_name}\n- Head SHA: {head_ref_oid}\n",
+                        "body": body,
                         "url": f"https://github.example/owner/repo/pull/{number}",
                     }
                     if merge_state_status:
@@ -11121,11 +11169,57 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                     governance_lint = pr_gate_payload.get("governance_lint")
                     if not isinstance(governance_lint, dict) or governance_lint.get("result") != "pass":
                         failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must expose passing approval-boundary governance lint for fresh authored review approval"))
+                    pr_metadata_preflight = pr_gate_payload.get("pr_metadata_preflight")
+                    metadata_fields = (
+                        pr_metadata_preflight.get("governance_intensity_carrier", {}).get("envelope", {}).get("fields")
+                        if isinstance(pr_metadata_preflight, dict)
+                        and isinstance(pr_metadata_preflight.get("governance_intensity_carrier"), dict)
+                        and isinstance(pr_metadata_preflight.get("governance_intensity_carrier", {}).get("envelope"), dict)
+                        else None
+                    )
+                    if (
+                        not isinstance(pr_metadata_preflight, dict)
+                        or pr_metadata_preflight.get("result") != "pass"
+                        or not isinstance(metadata_fields, dict)
+                        or metadata_fields.get("work_item_locator") != "work_item:209"
+                    ):
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must consume the typed GitHub Work Item metadata carrier"))
                     retained_pr_gate_fixture = write_json_fixture(
                         positive_target,
                         ".loom/tmp/pr-gate/retained-pr-gate.json",
                         pr_gate_payload,
                     )
+
+                legacy_locator_fixture = pr_gate_fixture(
+                    positive_target,
+                    number=19,
+                    work_item_locator="INIT-0001",
+                )
+                legacy_locator_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "pr-gate",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "19",
+                        "--pr-payload-file",
+                        legacy_locator_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` legacy locator negative failed: {error}"))
+                elif legacy_locator_payload.get("result") != "block":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must fail closed for a legacy local Work Item locator"))
+                else:
+                    legacy_preflight = legacy_locator_payload.get("pr_metadata_preflight")
+                    if not isinstance(legacy_preflight, dict) or legacy_preflight.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` legacy locator negative must expose blocking metadata preflight"))
 
                 protection_fixture = write_json_fixture(
                     positive_target,
@@ -11692,6 +11786,8 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                         expected_runtime_carrier="installed-skills-root",
                     )
 
+                if isinstance(bootstrap_metadata_contract, str):
+                    target_metadata_contract.write_text(bootstrap_metadata_contract, encoding="utf-8")
                 merge_ready_payload, error = load_command_json(
                     root,
                     [
@@ -11705,6 +11801,8 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                         "INIT-0001",
                     ],
                 )
+                if isinstance(source_metadata_contract_text, str):
+                    target_metadata_contract.write_text(source_metadata_contract_text, encoding="utf-8")
                 if error:
                     failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow merge-ready` failed: {error}"))
                 elif merge_ready_payload.get("result") != "pass":
