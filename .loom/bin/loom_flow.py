@@ -43,6 +43,7 @@ from fact_chain_support import (
     path_boundary_missing_details,
     resolve_repo_relative_path,
 )
+from authority_contract import authority_verdict, lifecycle_admission_verdict
 from github_host import (
     HOST_API_NEXT_ACTIONS,
     gh_graphql,
@@ -847,6 +848,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Requested lifecycle intent for FR-to-WI admission",
     )
     github_intake.add_argument("--task", help="Minimum Work Item proposal text for admission")
+    github_intake.add_argument("--lifecycle-only", action="store_true", help=argparse.SUPPRESS)
     github_intake.add_argument("--blocked-by", type=int, action="append", default=[], help="Native blocking issue number for the proposed Work Item; may be repeated")
     github_intake.add_argument("--work-item", type=int, help="Existing Work Item number for a partial admission recovery")
     github_intake.add_argument("--apply", action="store_true", help="Apply host-native Work Item reconciliation after an explicit proposal")
@@ -1329,6 +1331,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     flow.add_argument("--pr", type=int, help="GitHub implementation PR number for host status reads")
     flow.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
     flow.add_argument("--project", type=int, help="GitHub Project number for Project drift reads")
+    flow.add_argument("--fr", type=int, help="GitHub FR locator for host-native lifecycle admission")
     flow.add_argument("--branch", help="GitHub branch name for host binding reads")
     flow.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
 
@@ -23588,6 +23591,7 @@ def github_fr_wi_admission_payload(
     blocked_by: list[int],
     work_item_number: int | None,
     apply: bool,
+    lifecycle_only: bool = False,
 ) -> dict[str, Any]:
     """Delegate host-native admission to the focused policy module."""
     from types import SimpleNamespace
@@ -23623,7 +23627,53 @@ def github_fr_wi_admission_payload(
         blocked_by=blocked_by,
         work_item_number=work_item_number,
         apply=apply,
+        lifecycle_only=lifecycle_only,
     )
+
+
+def lifecycle_admission_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    intent: str,
+) -> dict[str, Any]:
+    """Consume native admission before an execution entrypoint, never a carrier."""
+
+    if issue_number is None:
+        return {
+            "schema_version": "loom-host-lifecycle-admission/v1",
+            "result": "pass",
+            "lifecycle_state": "not_applicable",
+            "subject": None,
+            "admission_state": "not_requested",
+            "authority_verdict": authority_verdict(),
+            "primary_remediation": None,
+            "carrier_mutations": False,
+        }
+    admission = github_fr_wi_admission_payload(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        issue_number=issue_number,
+        intent=intent,
+        task=None,
+        blocked_by=[],
+        work_item_number=None,
+        apply=False,
+        lifecycle_only=True,
+    )
+    verdict = admission.get("lifecycle_verdict")
+    if not isinstance(verdict, dict):
+        verdict = lifecycle_admission_verdict(admission)
+    return {**verdict, "admission": admission}
+
+
+def lifecycle_intent_for_operation(operation: str) -> str | None:
+    return {"build": "build", "pre-review": "pr", "closeout": "closeout"}.get(operation)
+
+
 def github_compare_contains_commit(
     root: Path,
     *,
@@ -25372,6 +25422,7 @@ def handle_github_intake(args: argparse.Namespace) -> int:
                 blocked_by=args.blocked_by,
                 work_item_number=args.work_item,
                 apply=args.apply,
+                lifecycle_only=args.lifecycle_only,
             )
         )
     runtime_state = runtime_state_payload(target_root)
@@ -26084,6 +26135,25 @@ def closeout_payload(
 
 def handle_closeout(args: argparse.Namespace) -> int:
     target_root = resolve_target_arg(args.target)
+    lifecycle_admission = lifecycle_admission_payload(
+        target_root=target_root,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        issue_number=args.fr,
+        intent="closeout",
+    )
+    if lifecycle_admission["result"] != "pass":
+        return emit(
+            {
+                "command": "closeout",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "closeout stopped before repository carriers because the host-native lifecycle admission is blocked.",
+                "missing_inputs": lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                "fallback_to": lifecycle_admission.get("primary_remediation"),
+                "lifecycle_admission": lifecycle_admission,
+            }
+        )
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
@@ -26150,6 +26220,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
         )
 
     payload["runtime_state"] = runtime_state
+    payload["lifecycle_admission"] = lifecycle_admission
     if args.operation == "check":
         return emit(payload)
 
@@ -27854,8 +27925,35 @@ def build_execution_payload(context: dict[str, Any], evidence_relative: str | No
 
 def handle_flow(args: argparse.Namespace) -> int:
     target_root = resolve_target_arg(args.target)
+    lifecycle_intent = lifecycle_intent_for_operation(args.operation)
+    lifecycle_admission = (
+        lifecycle_admission_payload(
+            target_root=target_root,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            issue_number=args.fr,
+            intent=lifecycle_intent,
+        )
+        if lifecycle_intent is not None
+        else None
+    )
+    steps: list[dict[str, Any]] = []
+    if lifecycle_admission is not None:
+        if lifecycle_admission["result"] != "pass":
+            return emit(
+                {
+                    "command": "flow",
+                    "operation": args.operation,
+                    "result": "block",
+                    "summary": "flow stopped before repository carriers because the host-native lifecycle admission is blocked.",
+                    "missing_inputs": lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                    "fallback_to": lifecycle_admission.get("primary_remediation"),
+                    "steps": steps,
+                    "lifecycle_admission": lifecycle_admission,
+                }
+            )
     runtime_state = runtime_state_payload(target_root)
-    steps: list[dict[str, Any]] = [
+    steps.append(
         {
             "name": "runtime-state",
             "result": runtime_state["result"],
@@ -27863,7 +27961,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "missing_inputs": runtime_state["missing_inputs"],
             "fallback_to": runtime_state["fallback_to"],
         }
-    ]
+    )
     if runtime_state["result"] != "pass":
         return emit(
             {
@@ -28553,6 +28651,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "fallback_to": fallback_to,
             "steps": steps,
             "runtime_state": runtime_state,
+            **({"lifecycle_admission": lifecycle_admission} if lifecycle_admission is not None else {}),
             "provenance": fact_chain_provenance,
             "recovery_readiness": recovery_readiness,
             "execution_ledger": execution_ledger,

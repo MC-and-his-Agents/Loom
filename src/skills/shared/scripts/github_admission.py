@@ -15,15 +15,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from authority_contract import lifecycle_admission_verdict, typed_locator
+
 
 SCHEMA = "loom-fr-wi-admission/v1"
 MARKER = "loom:fr-wi-admission"
 EXCEPTION_LABELS = {"duplicate", "invalid", "cancelled", "canceled", "superseded", "deferred", "not planned"}
 MARKER_RE = re.compile(r"<!--\s*loom:fr-wi-admission\s+(?P<payload>\{.*?\})\s*-->", re.DOTALL)
-
-
-def typed_locator(object_type: str, number: int) -> str:
-    return f"{object_type}:{number}"
 
 
 def _task(raw: str | None) -> tuple[str | None, list[str]]:
@@ -202,7 +200,8 @@ def _result(
     failed_layer: str | None = None,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    locator = typed_locator(object_type, issue) if object_type in {"fr", "work_item"} else None
+    payload = {
         "command": "github-intake",
         "operation": "admission",
         "schema_version": SCHEMA,
@@ -213,7 +212,7 @@ def _result(
         "apply": apply,
         "mutates": bool(writes),
         "repository": {"owner": owner, "name": repo},
-        "subject": {"type": object_type, "number": issue, "locator": typed_locator(object_type, issue)},
+        "subject": {"type": object_type, "number": issue, "locator": locator},
         "proposal": proposal,
         "missing_inputs": list(dict.fromkeys(missing_inputs or [])),
         "created_locators": list(locators or []),
@@ -223,6 +222,8 @@ def _result(
         "provenance": [{"source_layer": "host_control_mirror", "source_owner": "github", "source_locator": f"issue #{issue}", "freshness": "fresh"}],
         "evidence": evidence or {},
     }
+    payload["lifecycle_verdict"] = lifecycle_admission_verdict(payload)
+    return payload
 
 
 def github_fr_wi_admission_payload(
@@ -237,12 +238,13 @@ def github_fr_wi_admission_payload(
     blocked_by: list[int],
     work_item_number: int | None,
     apply: bool,
+    lifecycle_only: bool = False,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = host.detect_github_repo(target_root)
     owner, repo = owner or detected_owner, repo_name or detected_repo
     object_type = "unknown"
     proposal_payload: dict[str, Any] | None = None
-    task, task_errors = _task(task)
+    requested_task = task
 
     def respond(result: str, state: str, summary: str, **fields: Any) -> dict[str, Any]:
         return _result(
@@ -261,8 +263,6 @@ def github_fr_wi_admission_payload(
 
     if not owner or not repo:
         return respond("block", "host_unreadable", "FR-to-WI admission requires a GitHub repository locator.", missing_inputs=["owner/repo"], failed_layer="host-input")
-    if task_errors or task is None:
-        return respond("block", "invalid_proposal", "FR-to-WI admission requires one bounded Work Item proposal.", missing_inputs=task_errors, failed_layer="admission-input")
     blockers = sorted({number for number in blocked_by if isinstance(number, int) and number > 0})
     if len(blockers) != len(blocked_by) or len(blockers) != len(set(blocked_by)):
         return respond("block", "invalid_proposal", "FR-to-WI admission received an invalid native dependency locator.", missing_inputs=["--blocked-by must contain distinct positive issue numbers"], failed_layer="admission-input")
@@ -280,16 +280,23 @@ def github_fr_wi_admission_payload(
     if exception := _exception(host, fr):
         return respond("pass", "not_planned", "The FR has an explicit non-completion exception and is not treated as product completion.", evidence={"exception": exception, "type_inference": inference})
 
-    plan_key = _plan_key(owner, repo, issue_number, task)
-    proposal_payload = {
-        "schema_version": SCHEMA,
-        "parent": {"type": "fr", "number": issue_number, "locator": typed_locator("fr", issue_number)},
-        "work_items": [{"plan_key": plan_key, "title": f"WI: {task}", "type": "work_item", "labels": [_work_item_label(host, repo_interface)], "blocked_by": [typed_locator("issue", number) for number in blockers]}],
-    }
-    command = ["loom route --target .", f"--issue {issue_number}", f"--task {shlex.quote(task)}", f"--intent {intent}"]
-    command.extend(f"--blocked-by {number}" for number in blockers)
-    command.extend(("--apply", "--json"))
-    resume = " ".join(command)
+    task: str | None = None
+    plan_key: str | None = None
+    resume = f"loom route --target . --issue {issue_number} --task '<bounded Work Item scope>' --intent {intent} --apply --json"
+    if not lifecycle_only:
+        task, task_errors = _task(requested_task or str(fr.get("title") or ""))
+        if task_errors or task is None:
+            return respond("block", "invalid_proposal", "FR-to-WI admission requires one bounded Work Item proposal.", missing_inputs=task_errors, failed_layer="admission-input")
+        plan_key = _plan_key(owner, repo, issue_number, task)
+        proposal_payload = {
+            "schema_version": SCHEMA,
+            "parent": {"type": "fr", "number": issue_number, "locator": typed_locator("fr", issue_number)},
+            "work_items": [{"plan_key": plan_key, "title": f"WI: {task}", "type": "work_item", "labels": [_work_item_label(host, repo_interface)], "blocked_by": [typed_locator("issue", number) for number in blockers]}],
+        }
+        command = ["loom route --target .", f"--issue {issue_number}", f"--task {shlex.quote(task)}", f"--intent {intent}"]
+        command.extend(f"--blocked-by {number}" for number in blockers)
+        command.extend(("--apply", "--json"))
+        resume = " ".join(command)
 
     tree, tree_errors = host.issue_tree_payload(target_root, owner, repo, issue_number)
     if tree_errors or tree is None:
@@ -297,6 +304,36 @@ def github_fr_wi_admission_payload(
     children, children_errors = _subissues(tree)
     if children_errors:
         return respond("block", "host_unreadable", "FR-to-WI admission cannot treat an incomplete native sub-issue tree as empty.", missing_inputs=children_errors, next_action=resume, failed_layer="host-readback")
+    if lifecycle_only:
+        work_items = [
+            child
+            for child in children
+            if host.github_intake_object_type(child, repo_interface=repo_interface)[0] == "work_item"
+        ]
+        if work_items:
+            return respond(
+                "pass",
+                "admitted",
+                "The FR has a native Work Item breakdown that may enter the requested lifecycle intent.",
+                evidence={
+                    "type_inference": inference,
+                    "native_subissue_count": len(children),
+                    "native_work_item_locators": [
+                        typed_locator("work_item", number)
+                        for child in work_items
+                        if isinstance((number := child.get("number")), int) and number > 0
+                    ],
+                },
+            )
+        return respond(
+            "block",
+            "needs_breakdown",
+            "This FR cannot enter execution or completion until a native Work Item is admitted.",
+            missing_inputs=["native Work Item breakdown"],
+            next_action=resume,
+            failed_layer="fr-wi-admission",
+            evidence={"type_inference": inference, "native_subissue_count": len(children)},
+        )
     candidates, candidate_errors = (
         _requested_candidate(host, target_root, owner, repo, work_item_number, plan_key)
         if work_item_number is not None

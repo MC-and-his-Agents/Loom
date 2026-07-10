@@ -1,13 +1,13 @@
-.PHONY: loom-check check py-compile skills-check skills-doc-reference-sync-check skills-generated-tree-drift-check skills-package-metadata-check skills-cache-artifacts-check skills-launcher-smoke-check host-adapter-check pr-binding-workflow-check fr-phase-close-guard-check delivery-gate-check version-surface-check release-surface-check release-surface-doc-contract-check release-surface-workflow-contract-check release-surface-installer-sunset-guard-check release-surface-forbidden-patterns-check release-surface-installed-global-cli-smoke-check cli-contract-check npm-package-check npm-package-manifest-check npm-pack-payload-check loom-check-runtime-regression loom-check-runtime-locking loom-check-runtime-single-flight-locking loom-check-runtime-worktree-local-lock-paths loom-check-runtime-subprocess-env-purity loom-check-runtime-installer-regression-lock-output loom-check-runtime-demo-fixture-cleanliness loom-check-runtime-temp-dir-cleanup loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-generation-check loom-demo-new-project-canonicalization-check loom-demo-new-project-fixture-drift-check loom-demo-new-project-cleanliness-check loom-demo-new-project-sync loom-self-plugin-check daily-execution-cli-fast daily-execution-cli-full
+.PHONY: loom-check check py-compile skills-check skills-doc-reference-sync-check skills-generated-tree-drift-check skills-package-metadata-check skills-cache-artifacts-check skills-launcher-smoke-check host-adapter-check pr-binding-workflow-check fr-phase-close-guard-check delivery-gate-check authority-contract-check light-profile-check version-surface-check release-surface-check release-surface-doc-contract-check release-surface-workflow-contract-check release-surface-installer-sunset-guard-check release-surface-forbidden-patterns-check release-surface-installed-global-cli-smoke-check cli-contract-check npm-package-check npm-package-manifest-check npm-pack-payload-check loom-check-runtime-regression loom-check-runtime-locking loom-check-runtime-single-flight-locking loom-check-runtime-worktree-local-lock-paths loom-check-runtime-subprocess-env-purity loom-check-runtime-installer-regression-lock-output loom-check-runtime-demo-fixture-cleanliness loom-check-runtime-temp-dir-cleanup loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-generation-check loom-demo-new-project-canonicalization-check loom-demo-new-project-fixture-drift-check loom-demo-new-project-cleanliness-check loom-demo-new-project-sync loom-self-plugin-check daily-execution-cli-fast daily-execution-cli-full
 .PHONY: repo-local-cli-fast repo-local-cli-full repo-local-cli-setup-demo-bootstrap repo-local-cli-init-runtime repo-local-cli-fact-chain repo-local-cli-flow-gates repo-local-cli-workspace-locate repo-local-cli-purity-check repo-local-cli-runtime-state-scene-conflict-negative
 
 REPO_LOCAL_CLI_GROUPS := setup-demo-bootstrap init-runtime fact-chain flow-gates workspace-locate purity-check runtime-state-scene-conflict-negative
 
-loom-check: pr-binding-workflow-check fr-phase-close-guard-check loom-self-plugin-check loom-demo-new-project-check loom-check-runtime-regression
+loom-check: pr-binding-workflow-check fr-phase-close-guard-check authority-contract-check loom-self-plugin-check loom-demo-new-project-check loom-check-runtime-regression
 	python3 tools/loom_check.py
 
 py-compile:
-	python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/py_compile_clean.py tools/check_cli_contract.py tools/check_npm_package.py tools/check_release_surface.py tools/check_pr_binding_workflow.py tools/check_fr_phase_close_guard.py tools/check_fr_phase_close_guard_workflow.py tools/check_demo_bootstrap_fixture.py tools/check_loom_check_runtime_regressions.py tools/read_delivery_gate_required_identity.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-spec-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-merge-ready/scripts/*.py skills/loom-build/scripts/*.py skills/loom-story/scripts/*.py
+	python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/light_profile.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/py_compile_clean.py tools/check_cli_contract.py tools/check_authority_contract.py tools/check_light_profile.py tools/check_npm_package.py tools/check_release_surface.py tools/check_pr_binding_workflow.py tools/check_fr_phase_close_guard.py tools/check_fr_phase_close_guard_workflow.py tools/check_demo_bootstrap_fixture.py tools/check_loom_check_runtime_regressions.py tools/read_delivery_gate_required_identity.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-spec-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-merge-ready/scripts/*.py skills/loom-build/scripts/*.py skills/loom-story/scripts/*.py
 
 skills-check:
 	python3 tools/skills_surface.py check
@@ -39,6 +39,12 @@ fr-phase-close-guard-check:
 
 delivery-gate-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/check_delivery_gate.py
+
+authority-contract-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/check_authority_contract.py
+
+light-profile-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/check_light_profile.py
 
 version-surface-check:
 	python3 tools/version_surface_check.py
@@ -104,7 +110,7 @@ daily-execution-cli-fast:
 daily-execution-cli-full:
 	python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .
 
-check: py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check npm-package-check loom-check
+check: py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check light-profile-check npm-package-check loom-check
 
 loom-demo-new-project:
 	python3 tools/check_demo_bootstrap_fixture.py
