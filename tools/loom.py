@@ -4705,6 +4705,16 @@ def runtime_upgrade_version_label(version: str | None) -> str:
     return str(version or "<version>")
 
 
+def runtime_upgrade_github_work_item_locator(args: argparse.Namespace) -> str | None:
+    issue = str(args.issue or "").strip()
+    if re.fullmatch(r"[1-9][0-9]*", issue):
+        return f"work_item:{issue}"
+    item = str(args.item or "").strip()
+    if re.fullmatch(r"work_item:[1-9][0-9]*", item):
+        return item
+    return None
+
+
 def runtime_upgrade_pr_metadata_command(args: argparse.Namespace) -> str | None:
     if not args.item:
         return None
@@ -5007,10 +5017,10 @@ def runtime_upgrade_contract_payload(args: argparse.Namespace, target: Path, *, 
         ),
         "required_sequence": [
             "runtime-upgrade status",
-            "runtime-upgrade prepare --item <maintenance Work Item> --to <version> --apply",
+            "runtime-upgrade prepare --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --apply",
             "pr metadata-render/update/readback with runtime_upgrade trigger",
             "hosted PR gate and semantic review for current head",
-            "runtime-upgrade check --item <maintenance Work Item> --to <version> --head-sha <head>",
+            "runtime-upgrade check --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --head-sha <head>",
             "runtime-upgrade closeout after merge and carrier closeout-sync",
         ],
     }
@@ -5030,9 +5040,9 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
                 operations=["status", "prepare", "pr", "check", "closeout"],
                 first_command="loom runtime-upgrade status --target <repo> --json",
                 next_commands=[
-                    "loom runtime-upgrade prepare --target <repo> --item <maintenance-work-item> --to <version> --apply --json",
-                    "loom runtime-upgrade pr --target <repo> --item <maintenance-work-item> --to <version> --create --json",
-                    "loom runtime-upgrade check --target <repo> --item <maintenance-work-item> --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json",
+                    "loom runtime-upgrade prepare --target <repo> --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --apply --json",
+                    "loom runtime-upgrade pr --target <repo> --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --create --json",
+                    "loom runtime-upgrade check --target <repo> --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json",
                     "loom runtime-upgrade closeout --target <repo> --issue <maintenance-issue> --pr <merged-pr> --sync --create-pr --json",
                 ],
                 mutates=False,
@@ -5108,6 +5118,13 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
         blocking_gaps.append({"id": "missing-work-item", "summary": "Runtime upgrade maintenance requires a real Work Item."})
     elif args.item == "INIT-0001":
         blocking_gaps.append({"id": "reserved-work-item", "summary": "Runtime upgrade must not reuse INIT-0001."})
+    elif operation in {"prepare", "pr", "check"} and not runtime_upgrade_github_work_item_locator(args):
+        blocking_gaps.append(
+            {
+                "id": "missing-github-work-item",
+                "summary": "Runtime upgrade requires --issue <GitHub Work Item> or --item work_item:<issue>; local Work Item ids alone are not host authority.",
+            }
+        )
     if operation in {"prepare", "pr", "check"} and not pins["pin_count"]:
         blocking_gaps.append({"id": "missing-workflow-pin", "summary": "No LOOM_VERSION workflow pin was found."})
 

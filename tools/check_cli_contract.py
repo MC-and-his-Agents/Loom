@@ -6907,6 +6907,8 @@ def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
     pr_payload = json.loads((target / fixture["pr_file"]).read_text(encoding="utf-8"))
     body_file = f".loom/fixtures/{fixture['item']}/body.md"
     (target / body_file).write_text(str(pr_payload.get("body") or ""), encoding="utf-8")
+    if fixture["item"] in str(pr_payload.get("body") or ""):
+        raise AssertionError("typed Work Item fixture must not depend on a legacy local Work Item token in the PR body")
     payload = semantic_pr_gate_fixture_payload(
         target,
         fixture,
@@ -6938,6 +6940,22 @@ def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
         or freeze_suite.get("source_locator") != "pr_metadata.governance_intensity_carrier.fields.suite_not_applicable"
     ):
         raise AssertionError(f"hosted freeze did not consume PR metadata suite not_applicable: {freeze_suite}")
+
+    mismatched_body_file = f".loom/fixtures/{fixture['item']}/body-mismatched-work-item.md"
+    mismatched_body = str(pr_payload.get("body") or "").replace(
+        "Work Item: work_item:1957",
+        "Work Item: work_item:1958",
+        1,
+    )
+    (target / mismatched_body_file).write_text(mismatched_body, encoding="utf-8")
+    mismatched_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=mismatched_body_file,
+        compare_body_file=mismatched_body_file,
+    )
+    if mismatched_payload.get("result") != "block":
+        raise AssertionError("PR metadata suite_not_applicable must fail closed when the typed Work Item readback drifts")
 
 
 def assert_suite_not_applicable_marker_parser_contract(tmp: Path) -> None:
@@ -13423,6 +13441,28 @@ def run_runtime_upgrade_surface() -> None:
         if reserved_item.get("result") != "block" or "reserved-work-item" not in {gap.get("id") for gap in reserved_item.get("blocking_gaps", [])}:
             raise AssertionError("runtime-upgrade prepare must reject INIT-0001 reuse")
 
+        _, missing_issue = run_json(
+            [
+                "runtime-upgrade",
+                "prepare",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "WI-1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--json",
+            ],
+            expect=1,
+        )
+        missing_issue_gaps = {gap.get("id") for gap in missing_issue.get("blocking_gaps", [])}
+        if missing_issue.get("result") != "block" or "missing-github-work-item" not in missing_issue_gaps:
+            raise AssertionError("runtime-upgrade prepare must fail closed without a GitHub Work Item locator")
+
         before = workflow.read_text(encoding="utf-8")
         _, dry_run = run_json(
             [
@@ -13434,6 +13474,8 @@ def run_runtime_upgrade_surface() -> None:
                 "0.24.0",
                 "--item",
                 "WI-1834",
+                "--issue",
+                "1834",
                 "--branch",
                 "work/1834-runtime-upgrade",
                 "--head-sha",
@@ -13449,6 +13491,27 @@ def run_runtime_upgrade_surface() -> None:
         if workflow.read_text(encoding="utf-8") != before:
             raise AssertionError("runtime-upgrade prepare dry-run mutated the workflow")
 
+        _, typed_item_dry_run = run_json(
+            [
+                "runtime-upgrade",
+                "prepare",
+                "--target",
+                str(target),
+                "--to",
+                "0.24.0",
+                "--item",
+                "work_item:1834",
+                "--branch",
+                "work/1834-runtime-upgrade",
+                "--head-sha",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--json",
+            ],
+            expect=0,
+        )
+        if typed_item_dry_run.get("result") != "pass":
+            raise AssertionError("runtime-upgrade prepare must accept a typed Work Item locator without --issue")
+
         _, apply_payload = run_json(
             [
                 "runtime-upgrade",
@@ -13459,6 +13522,8 @@ def run_runtime_upgrade_surface() -> None:
                 "0.24.0",
                 "--item",
                 "WI-1834",
+                "--issue",
+                "1834",
                 "--branch",
                 "work/1834-runtime-upgrade",
                 "--head-sha",
@@ -13493,6 +13558,8 @@ def run_runtime_upgrade_surface() -> None:
                 "0.24.0",
                 "--item",
                 "WI-1834",
+                "--issue",
+                "1834",
                 "--branch",
                 "work/1834-runtime-upgrade",
                 "--head-sha",
@@ -13506,7 +13573,7 @@ def run_runtime_upgrade_surface() -> None:
         if "--create" not in str(pr_plan.get("next_action")):
             raise AssertionError("runtime-upgrade pr dry-run must point to the create/update lane")
 
-        _, blocked_check = run_json(["runtime-upgrade", "check", "--target", str(target), "--to", "0.24.0", "--item", "WI-1834", "--json"], expect=1)
+        _, blocked_check = run_json(["runtime-upgrade", "check", "--target", str(target), "--to", "0.24.0", "--item", "WI-1834", "--issue", "1834", "--json"], expect=1)
         blocked_ids = {gap.get("id") for gap in blocked_check.get("blocking_gaps", [])}
         if blocked_check.get("result") != "block" or not {"missing-pr", "missing-branch", "missing-head_sha"}.issubset(blocked_ids):
             raise AssertionError("runtime-upgrade check must require PR, branch, and head SHA readback")
@@ -13521,6 +13588,8 @@ def run_runtime_upgrade_surface() -> None:
                 "0.24.0",
                 "--item",
                 "WI-1834",
+                "--issue",
+                "1834",
                 "--pr",
                 "1839",
                 "--branch",
@@ -13546,6 +13615,8 @@ def run_runtime_upgrade_surface() -> None:
                 "0.24.0",
                 "--item",
                 "WI-1834",
+                "--issue",
+                "1834",
                 "--pr",
                 "1839",
                 "--branch",
