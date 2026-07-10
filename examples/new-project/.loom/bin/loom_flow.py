@@ -20109,8 +20109,15 @@ def pr_gate_payload(
                 missing_inputs.append("post-merge review consumption is not valid for pr-gate")
         if pr_payload.get("isDraft") is True:
             missing_inputs.append("PR is draft")
-        if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
-            missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
+        if context:
+            metadata_fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+            work_item_locator = metadata_fields.get("work_item_locator")
+            if (
+                pr_metadata_preflight.get("result") != "pass"
+                or not isinstance(work_item_locator, str)
+                or parse_typed_locator(work_item_locator, allowed_types={"work_item"}) is None
+            ):
+                missing_inputs.append("PR metadata preflight does not bind a typed GitHub Work Item locator")
 
     current_head = git_head_sha(target_root)
     if pr_head and current_head and pr_head != current_head:
