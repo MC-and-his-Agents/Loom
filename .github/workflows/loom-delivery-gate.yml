@@ -37,6 +37,9 @@ on:
       primary_cause:
         description: Product acceptance remains outside this delivery gate.
         value: ${{ jobs.loom-delivery-gate.outputs.primary_cause }}
+      failure_envelope:
+        description: JSON failure envelope with exactly one primary cause; product acceptance remains outside this delivery gate.
+        value: ${{ jobs.loom-delivery-gate.outputs.failure_envelope }}
 
 jobs:
   loom-delivery-gate:
@@ -49,6 +52,7 @@ jobs:
       result: ${{ steps.terminal.outputs.result }}
       enforcement: ${{ steps.terminal.outputs.enforcement }}
       primary_cause: ${{ steps.terminal.outputs.primary_cause }}
+      failure_envelope: ${{ steps.terminal.outputs.failure_envelope }}
     steps:
       - name: Read GitHub host facts
         id: host-facts
@@ -241,15 +245,17 @@ jobs:
             }
             const profile = payload?.delivery?.profile || "standard";
             const cause = payload?.primary_cause?.id || "host_facts_unreadable";
+            const failureEnvelope = payload?.failure_envelope || { schema_version: "loom-failure-envelope/v1", primary_cause: payload?.primary_cause || { id: cause }, secondary_causes: [] };
             const enforcement = payload?.enforcement || process.env.DELIVERY_GATE_ENFORCEMENT || "advisory";
             const result = payload?.result || (enforcement === "advisory" ? "advisory" : "blocked");
             core.setOutput("result", result);
             core.setOutput("enforcement", enforcement);
             core.setOutput("primary_cause", cause);
-            core.notice(`loom-delivery-gate enforcement=${enforcement} profile=${profile}; primary cause=${cause}`);
+            core.setOutput("failure_envelope", JSON.stringify(failureEnvelope));
+            core.notice(`loom-delivery-gate enforcement=${enforcement} profile=${profile}; primary cause=${cause}; remediation=${failureEnvelope.primary_cause?.remediation_command || "unavailable"}`);
             await core.summary
               .addHeading("Loom delivery gate")
-              .addRaw(`Enforcement: ${enforcement}\n\nResult: ${result}\n\nProfile: ${profile}\n\nPrimary cause: ${cause}\n\nProduct acceptance: not_evaluated.`)
+              .addRaw(`Enforcement: ${enforcement}\n\nResult: ${result}\n\nProfile: ${profile}\n\nPrimary cause: ${cause}\n\nFailure envelope:\n\n\`\`\`json\n${JSON.stringify(failureEnvelope, null, 2)}\n\`\`\`\n\nProduct acceptance: not_evaluated.`)
               .write();
             if (result === "blocked") {
               core.setFailed(`loom-delivery-gate blocked: ${cause}`);

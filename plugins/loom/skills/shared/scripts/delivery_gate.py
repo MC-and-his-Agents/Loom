@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from failure_envelope import envelope, primary_cause
+
 
 SCHEMA = "loom-delivery-gate/v1"
 HOST_FACTS_SCHEMA = "loom-delivery-gate-host-facts/v1"
@@ -21,85 +23,124 @@ LIGHT_PATHS = {"README.md", "README.zh-CN.md"}
 DEFAULT_VALIDATION_COMMAND = "make delivery-gate-check"
 CAUSES = {
     "host_facts_unreadable": {
-        "domain": "host_facts",
+        "failure_domain": "host_service",
         "code": "unreadable",
         "locator": "host_facts:unreadable",
         "summary": "GitHub host facts are unreadable or incomplete.",
+        "owner": "github",
+        "retryable": True,
+        "remediation_command": "rerun loom-delivery-gate after GitHub host fact readback succeeds",
     },
     "profile_unsupported": {
-        "domain": "delivery_profile",
+        "failure_domain": "governance_metadata",
         "code": "unsupported",
         "locator": "delivery_profile:unsupported",
         "summary": "The requested delivery profile is unsupported.",
+        "owner": "repository",
+        "retryable": False,
+        "remediation_command": "set host_facts.profile to light, standard, or reinforced",
     },
     "invalid_change_set": {
-        "domain": "change_set",
+        "failure_domain": "governance_metadata",
         "code": "invalid",
         "locator": "change_set:invalid",
         "summary": "Changed paths are not a normalized repository-relative change set.",
+        "owner": "github",
+        "retryable": True,
+        "remediation_command": "rerun loom-delivery-gate with normalized GitHub changed paths",
     },
     "validation_command_missing": {
-        "domain": "native_validation",
+        "failure_domain": "toolchain",
         "code": "command_missing",
         "locator": "native_validation:command_missing",
         "summary": "The selected native validation command is unavailable.",
+        "owner": "repository",
+        "retryable": False,
+        "remediation_command": "declare an installed native validation command for this delivery profile",
     },
     "native_validation_failed": {
-        "domain": "native_validation",
+        "failure_domain": "toolchain",
         "code": "failed",
         "locator": "native_validation:failed",
         "summary": "The selected native validation command failed.",
+        "owner": "repository",
+        "retryable": True,
+        "remediation_command": "fix the reported native validation failure, then rerun loom-delivery-gate",
     },
     "enforcement_unsupported": {
-        "domain": "delivery_gate",
+        "failure_domain": "governance_metadata",
         "code": "enforcement_unsupported",
         "locator": "delivery_gate:enforcement_unsupported",
         "summary": "The requested delivery-gate enforcement mode is unsupported.",
+        "owner": "repository",
+        "retryable": False,
+        "remediation_command": "set delivery-gate enforcement to advisory or enforce",
     },
     "passed": {
-        "domain": "delivery",
+        "failure_domain": "governance_metadata",
         "code": "passed",
         "locator": "delivery:passed",
         "summary": "Host facts and selected native validation passed.",
+        "owner": "loom",
+        "retryable": False,
+        "remediation_command": "none",
     },
 }
 
 IDENTITY_CAUSES = {
     "required_check_identity_unreadable": {
-        "domain": "required_check_identity",
+        "failure_domain": "host_service",
         "code": "unreadable",
         "locator": "required_check_identity:unreadable",
         "summary": "The required-check host readback is malformed or incomplete.",
+        "owner": "github",
+        "retryable": True,
+        "remediation_command": "rerun required-check identity readback after GitHub branch controls are readable",
     },
     "required_check_identity_unknown": {
-        "domain": "required_check_identity",
+        "failure_domain": "governance_metadata",
         "code": "unknown",
         "locator": "required_check_identity:unknown",
         "summary": "GitHub does not show the expected delivery check as required with an app identity.",
+        "owner": "operator",
+        "retryable": False,
+        "remediation_command": "configure the expected delivery check and GitHub App identity in branch protection",
     },
     "required_check_identity_invalid": {
-        "domain": "required_check_identity",
+        "failure_domain": "governance_metadata",
         "code": "invalid",
         "locator": "required_check_identity:invalid",
         "summary": "GitHub requires the expected delivery-check context from a different app identity.",
+        "owner": "operator",
+        "retryable": False,
+        "remediation_command": "replace the required check with loom-delivery-gate from the expected GitHub App",
     },
     "legacy_required_checks_present": {
-        "domain": "required_check_identity",
+        "failure_domain": "governance_metadata",
         "code": "legacy_required_checks_present",
         "locator": "required_check_identity:legacy_required_checks_present",
         "summary": "Configured legacy required checks remain enforced by GitHub branch controls.",
+        "owner": "operator",
+        "retryable": False,
+        "remediation_command": "remove the listed legacy required checks from GitHub branch controls",
     },
     "unexpected_required_checks_present": {
-        "domain": "required_check_identity",
+        "failure_domain": "governance_metadata",
         "code": "unexpected_required_checks_present",
         "locator": "required_check_identity:unexpected_required_checks_present",
         "summary": "Undeclared required checks remain enforced by GitHub branch controls.",
+        "owner": "operator",
+        "retryable": False,
+        "remediation_command": "declare or remove the unexpected required checks in GitHub branch controls",
     },
     "passed": {
-        "domain": "required_check_identity",
+        "failure_domain": "governance_metadata",
         "code": "passed",
         "locator": "required_check_identity:passed",
         "summary": "GitHub requires the expected delivery-check context from the expected app identity.",
+        "owner": "loom",
+        "retryable": False,
+        "remediation_command": "none",
     },
 }
 
@@ -139,12 +180,12 @@ def _enforcement(value: object) -> tuple[str, list[str]]:
     return "invalid", ["enforcement must be advisory or enforce"]
 
 
-def _cause(cause_id: str) -> dict[str, str]:
-    return {"id": cause_id, **CAUSES[cause_id]}
+def _cause(cause_id: str) -> dict[str, Any]:
+    return primary_cause(cause_id=cause_id, **CAUSES[cause_id])
 
 
-def _identity_cause(cause_id: str) -> dict[str, str]:
-    return {"id": cause_id, **IDENTITY_CAUSES[cause_id]}
+def _identity_cause(cause_id: str) -> dict[str, Any]:
+    return primary_cause(cause_id=cause_id, **IDENTITY_CAUSES[cause_id])
 
 
 def _result(enforcement: str, cause_id: str) -> str:
@@ -189,12 +230,14 @@ def evaluate_host_facts(host_facts: object, enforcement: object = "advisory") ->
     else:
         cause_id = "passed"
 
+    primary = _cause(cause_id)
     return {
         "schema_version": SCHEMA,
         "result": _result(enforcement_mode, cause_id),
         "enforcement": enforcement_mode,
         "summary": "Delivery facts were evaluated without inferring product acceptance.",
-        "primary_cause": _cause(cause_id),
+        "primary_cause": primary,
+        "failure_envelope": envelope(primary),
         "product_acceptance": {"verdict": "not_evaluated"},
         "host_facts": {
             "status": "valid" if not host_errors else "unreadable",
@@ -236,6 +279,7 @@ def finalize_delivery_gate(host_facts: object, validation_result: object, enforc
         else:
             cause_id = "validation_command_missing"
         payload["primary_cause"] = _cause(cause_id)
+    payload["failure_envelope"] = envelope(payload["primary_cause"])
     payload["result"] = _result(payload["enforcement"], payload["primary_cause"]["id"])
     return payload
 
@@ -414,10 +458,12 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
     else:
         cause_id = "required_check_identity_invalid"
 
+    primary = _identity_cause(cause_id)
     return {
         "schema_version": REQUIRED_CHECK_IDENTITY_READINESS_SCHEMA,
         "result": "ready" if cause_id == "passed" else "blocked",
-        "primary_cause": _identity_cause(cause_id),
+        "primary_cause": primary,
+        "failure_envelope": envelope(primary),
         "identity": {
             "source": value.get("source"),
             "repository": repository,

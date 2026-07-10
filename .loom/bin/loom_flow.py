@@ -43,7 +43,8 @@ from fact_chain_support import (
     path_boundary_missing_details,
     resolve_repo_relative_path,
 )
-from authority_contract import authority_verdict, lifecycle_admission_verdict
+from authority_contract import authority_verdict, lifecycle_admission_verdict, parse_typed_locator, typed_locator
+from failure_envelope import envelope as failure_envelope, primary_cause as failure_primary_cause
 from github_host import (
     HOST_API_NEXT_ACTIONS,
     gh_graphql,
@@ -322,6 +323,37 @@ GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS = (
     "scope_proof",
     "review_requirement",
 )
+GOVERNANCE_METADATA_FIELD_ALLOWLIST = {
+    "work_item_locator",
+    "governance_intensity",
+    "governance_mode",
+    "governance_assurance",
+    "advisory_risk_label",
+    "host_enforcement_required",
+    "change_class",
+    "suite_path",
+    "suite_not_applicable",
+    "review_requirement",
+    "fact_chain_required",
+    "pr_gate_required",
+    "release_judgment",
+    "closeout_required",
+    "upgrade_triggers",
+    "anchor_issue",
+    "covered_issues",
+    "excluded_scope",
+}
+GOVERNANCE_METADATA_HOST_OWNED_FIELDS = {
+    "branch",
+    "head_sha",
+    "merge_commit",
+    "status_checks",
+    "check_runs",
+    "headRefName",
+    "headRefOid",
+    "mergeCommit",
+    "statusCheckRollup",
+}
 PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES = {
     "parser_version": list(PR_METADATA_SUPPORTED_PARSER_VERSIONS),
     "fields.governance_intensity": sorted(GOVERNANCE_INTENSITY_VALUES),
@@ -16607,10 +16639,10 @@ def pr_metadata_diagnostic_classifier(
         return "parse_error"
     if {"metadata_contract_id", "surface"} & fields:
         return "surface_drift"
-    if "fields.head_sha" in fields or "head" in reason.lower():
-        return "head_sha_drift"
-    if "fields.branch" in fields or "branch" in reason.lower():
-        return "branch_drift"
+    if {f"fields.{name}" for name in GOVERNANCE_METADATA_HOST_OWNED_FIELDS} & fields:
+        return "host_owned_fact_authored"
+    if "fields.work_item_locator" in fields or "work item" in reason.lower():
+        return "work_item_locator_invalid"
     if any(field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES for field in fields):
         return "enum_violation"
     if "metadata_block" in fields or "pr.body" in fields:
@@ -16629,10 +16661,10 @@ def pr_metadata_diagnostic_next_action(
     if classifier == "surface_drift":
         surface = expected_surface or "the requested surface"
         return f"rerender the PR metadata machine block for surface `{surface}` and replace the stale carrier before rerunning preflight."
-    if classifier == "head_sha_drift":
-        return "remove stale authored `Head SHA` from the PR metadata carrier; PR head is read from host readback during gate consumption."
-    if classifier == "branch_drift":
-        return "refresh `Branch` in both the PR body bindings and machine block from the current `work/...` branch, or rerun with `--branch <work/...>`, then rerun preflight."
+    if classifier == "host_owned_fact_authored":
+        return "remove authored branch, head, merge, and check fields from the PR metadata block; GitHub host readback owns them."
+    if classifier == "work_item_locator_invalid":
+        return "set the PR `Work Item` and machine field to one `work_item:<GitHub issue>` locator, then rerun preflight."
     if classifier == "enum_violation":
         invalid_fields = sorted(field for field in fields if field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES)
         field_list = ", ".join(invalid_fields) if invalid_fields else "the governance enum fields"
@@ -16667,6 +16699,22 @@ def pr_metadata_diagnostic(
         missing_fields=normalized_missing_fields,
         parse_error=parse_error,
     )
+    next_action = pr_metadata_diagnostic_next_action(
+        classifier=classifier,
+        fallback_to=fallback_to,
+        expected_surface=expected_surface,
+        missing_fields=normalized_missing_fields,
+    )
+    primary = failure_primary_cause(
+        cause_id=f"pr_metadata_{classifier}",
+        failure_domain="governance_metadata",
+        code=classifier,
+        locator=source_locator or "pr_metadata:body",
+        summary=reason,
+        owner="repository",
+        retryable=False,
+        remediation_command=next_action,
+    )
     return {
         "classifier": classifier,
         "metadata_contract_id": contract_id,
@@ -16682,12 +16730,8 @@ def pr_metadata_diagnostic(
         "expected_format": pr_metadata_expected_format(marker),
         "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
         "fallback_to": fallback_to,
-        "next_action": pr_metadata_diagnostic_next_action(
-            classifier=classifier,
-            fallback_to=fallback_to,
-            expected_surface=expected_surface,
-            missing_fields=normalized_missing_fields,
-        ),
+        "next_action": next_action,
+        "failure_envelope": failure_envelope(primary),
         "reason": reason,
     }
 
@@ -16720,10 +16764,24 @@ def path_safe_work_item_id(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value))
 
 
+def work_item_locator_for_metadata(item_id: str | None, issue_number: int | None) -> str | None:
+    """Use a typed GitHub Work Item locator; local item ids are never host authority."""
+
+    parsed = parse_typed_locator(item_id, allowed_types={"work_item"})
+    if parsed is not None:
+        return str(parsed["locator"])
+    if isinstance(issue_number, int) and issue_number > 0:
+        return typed_locator("work_item", issue_number)
+    return None
+
+
 def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> list[str]:
     missing_fields: list[str] = []
-    work_item = governance_metadata_string_field(fields, "loom_work_item", missing_fields)
-    branch = governance_metadata_string_field(fields, "branch", missing_fields)
+    missing_fields.extend(
+        f"fields.{name}"
+        for name in sorted(set(fields) - GOVERNANCE_METADATA_FIELD_ALLOWLIST)
+    )
+    work_item_locator = governance_metadata_string_field(fields, "work_item_locator", missing_fields)
     governance_intensity = governance_metadata_string_field(fields, "governance_intensity", missing_fields)
     change_class = governance_metadata_string_field(fields, "change_class", missing_fields)
     suite_path = governance_metadata_string_field(fields, "suite_path", missing_fields)
@@ -16733,10 +16791,8 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     governance_metadata_bool_field(fields, "pr_gate_required", missing_fields)
     governance_metadata_bool_field(fields, "closeout_required", missing_fields)
 
-    if work_item and not path_safe_work_item_id(work_item):
-        missing_fields.append("fields.loom_work_item")
-    if branch and not branch.startswith("work/"):
-        missing_fields.append("fields.branch")
+    if work_item_locator and parse_typed_locator(work_item_locator, allowed_types={"work_item"}) is None:
+        missing_fields.append("fields.work_item_locator")
     if governance_intensity and governance_intensity not in GOVERNANCE_INTENSITY_VALUES:
         missing_fields.append("fields.governance_intensity")
     if change_class and change_class not in GOVERNANCE_CHANGE_CLASS_VALUES:
@@ -17048,15 +17104,12 @@ def pr_metadata_contract_preflight(
             binding_missing: list[str] = []
             if contract_id == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID:
                 normalized_fields = normalized.get("fields") if isinstance(normalized.get("fields"), dict) else {}
-                body_item = pr_work_item_from_body(body)
-                body_branch = pr_body_field_value(body, "Branch")
+                body_locator = pr_body_field_value(body, "Work Item")
                 expected_bindings = {
-                    "loom_work_item": expected_item or body_item,
-                    "branch": expected_branch or body_branch,
+                    "work_item_locator": work_item_locator_for_metadata(expected_item, None) or body_locator,
                 }
                 body_bindings = {
-                    "loom_work_item": body_item,
-                    "branch": body_branch,
+                    "work_item_locator": body_locator,
                 }
                 for field_name, expected_value in expected_bindings.items():
                     carrier_value = normalized_fields.get(field_name)
@@ -17071,7 +17124,7 @@ def pr_metadata_contract_preflight(
                         pr_metadata_diagnostic(
                             contract_id=contract_id,
                             marker=marker,
-                            reason="governance metadata carrier binding does not match PR body or PR head inputs",
+                            reason="governance metadata carrier binding does not match the typed PR Work Item locator",
                             source_locator=authority_locator,
                             source_range_or_hash=source_range_or_hash,
                             expected_schema=expected_schema,
@@ -17317,9 +17370,9 @@ def render_governance_intensity_metadata_body(
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
     effective_surface = pr_metadata_effective_contract_surface(field, requested_surface)
+    work_item_locator = work_item_locator_for_metadata(item_id, issue_number)
     fields = {
-        "loom_work_item": item_id,
-        "branch": branch_name,
+        "work_item_locator": work_item_locator,
         "governance_intensity": governance_intensity,
         "governance_mode": "host-enforced",
         "governance_assurance": "strong",
@@ -17350,17 +17403,17 @@ def render_governance_intensity_metadata_body(
         "parser_version": PR_METADATA_PARSER_VERSION,
     }
     rendered_block = "<!-- " + marker + "\n" + json.dumps(envelope, indent=2, ensure_ascii=False) + "\n-->\n"
-    updated = pr_metadata_replace_or_insert_binding_line(base_body, label="Loom Work Item", value=item_id)
+    assert work_item_locator is not None
+    updated = pr_metadata_replace_or_insert_binding_line(base_body, label="Work Item", value=work_item_locator)
     issue_reference = pr_metadata_issue_reference(issue_number)
     if issue_reference:
-        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Issue", value=issue_reference, insert_after="Loom Work Item")
+        updated = pr_metadata_replace_or_insert_binding_line(updated, label="Issue", value=issue_reference, insert_after="Work Item")
     if covered_issues:
         covered_text = ", ".join(f"#{number}" for number in covered_issues)
         updated = pr_metadata_replace_or_insert_binding_line(updated, label="Covered Issues", value=covered_text, insert_after="Issue")
     if excluded_scope:
         excluded_text = "; ".join(excluded_scope)
         updated = pr_metadata_replace_or_insert_binding_line(updated, label="Excluded Scope", value=excluded_text, insert_after="Covered Issues")
-    updated = pr_metadata_replace_or_insert_binding_line(updated, label="Branch", value=branch_name, insert_after="Loom Work Item")
     updated = pr_metadata_replace_machine_block(updated, marker=marker, rendered_block=rendered_block)
     return updated, envelope, []
 
@@ -17392,27 +17445,12 @@ def pr_metadata_render_payload(
 ) -> dict[str, Any]:
     base_body, base_errors = load_optional_text_fixture(target_root, base_body_file, label="PR metadata render base body")
     output_path, output_errors = resolve_artifact_write_path(target_root, output_file, label="PR metadata render output")
-    current_head = head_sha or git_head_sha(target_root)
-    current_branch = branch_name or git_branch(target_root)
     effective_item = item_id
-    if not effective_item:
-        init_result = target_root / default_init_result_fallback(target_root, DEFAULT_INIT_RESULT)
-        if init_result.exists():
-            try:
-                payload = load_json_file(init_result)
-                fact_chain = payload.get("fact_chain") if isinstance(payload, dict) else None
-                entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
-                current_item = entry_points.get("current_item_id") if isinstance(entry_points, dict) else None
-                if isinstance(current_item, str) and current_item not in {"", "no_active_item"}:
-                    effective_item = current_item
-            except (OSError, ValueError, json.JSONDecodeError):
-                pass
+    work_item_locator = work_item_locator_for_metadata(effective_item, issue_number)
 
     missing_inputs = list(base_errors) + list(output_errors)
-    if not effective_item:
-        missing_inputs.append("pass --item <path-safe-work-item-id> or provide a readable current Loom Work Item carrier")
-    if not current_branch:
-        missing_inputs.append("branch is unavailable; pass --branch <work/...>")
+    if work_item_locator is None:
+        missing_inputs.append("pass --item work_item:<issue> or --issue <GitHub Work Item>; local current-item carriers are not accepted")
 
     suite_not_applicable: dict[str, str] | None = None
     if suite_path == "not_applicable":
@@ -17452,9 +17490,9 @@ def pr_metadata_render_payload(
         base_body=base_body,
         field=contract,
         requested_surface=surface,
-        item_id=effective_item or "",
-        branch_name=current_branch or "",
-        head_sha=current_head,
+        item_id=work_item_locator or "",
+        branch_name=branch_name or "",
+        head_sha=head_sha,
         governance_intensity=governance_intensity,
         change_class=change_class,
         suite_path=suite_path,
@@ -17486,8 +17524,7 @@ def pr_metadata_render_payload(
         target_root=target_root,
         surface=surface,
         body_file=relative_output,
-        expected_item=effective_item,
-        expected_branch=current_branch,
+        expected_item=work_item_locator,
         governance_surface=governance_surface,
         issue_number=issue_number,
     )
@@ -17510,11 +17547,8 @@ def pr_metadata_render_payload(
             "body_file": relative_output,
             "body_sha256": hashlib.sha256(rendered_body.encode("utf-8")).hexdigest(),
             "base_body_file": base_body_file,
-            "legacy_bindings": {
-                "loom_work_item": effective_item,
-                "branch": current_branch,
-            },
-            "host_readback": {"observed_head_sha": current_head},
+            "intent_metadata": {"work_item_locator": work_item_locator},
+            "host_readback_authority": ["headRefOid", "headRefName", "mergeCommit", "statusCheckRollup"],
         },
         "metadata_contract_id": envelope.get("metadata_contract_id"),
         "effective_carrier_surface": envelope.get("surface"),
@@ -17646,10 +17680,8 @@ def pr_metadata_readback_payload(
         "pr": effective_pr,
         "body_file": effective_compare_file or effective_body_file,
         "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest() if isinstance(body, str) else None,
-        "legacy_bindings": {
-            "loom_work_item": pr_body_binding_value(body, label="Loom Work Item", metadata_field="loom_work_item") if isinstance(body, str) else None,
-            "branch": pr_body_binding_value(body, label="Branch", metadata_field="branch") if isinstance(body, str) else None,
-            "head_sha": pr_body_binding_value(body, label="Head SHA", metadata_field="head_sha") if isinstance(body, str) else None,
+        "intent_metadata": {
+            "work_item_locator": pr_body_binding_value(body, label="Work Item", metadata_field="work_item_locator") if isinstance(body, str) else None,
         },
         "machine_surface": pr_body_machine_surface(body) if isinstance(body, str) else None,
         "governance_fields": pr_body_governance_metadata_fields(body) if isinstance(body, str) else {},
@@ -20701,13 +20733,6 @@ def pr_gate_payload(
             missing_inputs.append("PR is draft")
         if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
             missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
-        body_branch = pr_body_binding_value(pr_payload.get("body"), label="Branch", metadata_field="branch")
-        payload_branch = pr_payload.get("headRefName")
-        expected_branch = payload_branch if isinstance(payload_branch, str) and payload_branch else branch_name
-        if not body_branch:
-            missing_inputs.append("PR body Branch is missing from PR machine carrier")
-        elif isinstance(expected_branch, str) and expected_branch and body_branch != expected_branch:
-            missing_inputs.append("PR body Branch does not match PR payload headRefName")
 
     current_head = git_head_sha(target_root)
     if pr_head and current_head and pr_head != current_head:

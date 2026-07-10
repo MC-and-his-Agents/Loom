@@ -484,6 +484,7 @@ RUNTIME_COPY_ROOTS = (
 )
 RUNTIME_COPY_FILES = (
     "authority_contract.py",
+    "failure_envelope.py",
     "github_admission.py",
     "github_host.py",
     "loom_init.py",

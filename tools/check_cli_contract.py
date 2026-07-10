@@ -582,9 +582,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
 
     loom_flow = load_loom_flow_module()
     metadata_fields = {
-        "loom_work_item": fixture["item"],
-        "branch": fixture["branch"],
-        "head_sha": fixture["head_sha"],
+        "work_item_locator": "work_item:1288",
         "governance_intensity": "standard",
         "change_class": "contract",
         "suite_path": "minimal",
@@ -596,12 +594,18 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
         "upgrade_triggers": [],
     }
     opaque_missing = loom_flow.validate_governance_intensity_metadata_fields(metadata_fields)
-    if "fields.loom_work_item" in opaque_missing:
-        raise AssertionError("PR metadata rejected a path-safe opaque Work Item id")
-    unsafe_fields = {**metadata_fields, "loom_work_item": "../escape"}
+    if "fields.work_item_locator" in opaque_missing:
+        raise AssertionError("PR metadata rejected a typed Work Item locator")
+    unsafe_fields = {**metadata_fields, "work_item_locator": "../escape"}
     unsafe_missing = loom_flow.validate_governance_intensity_metadata_fields(unsafe_fields)
-    if "fields.loom_work_item" not in unsafe_missing:
-        raise AssertionError("PR metadata accepted a path-unsafe Work Item id")
+    if "fields.work_item_locator" not in unsafe_missing:
+        raise AssertionError("PR metadata accepted a non-typed Work Item locator")
+    for host_owned_field in ("headRefName", "headRefOid", "mergeCommit", "statusCheckRollup"):
+        hosted_missing = loom_flow.validate_governance_intensity_metadata_fields(
+            {**metadata_fields, host_owned_field: "authored-host-fact"}
+        )
+        if f"fields.{host_owned_field}" not in hosted_missing:
+            raise AssertionError(f"PR metadata accepted authored GitHub host field `{host_owned_field}`")
     calls: list[list[str]] = []
     original_gh_json = loom_flow.gh_json
     original_source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
@@ -8157,8 +8161,8 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
         "- Risks:\n"
         "- Follow-ups:\n\n"
         "## Related Work\n\n"
-        "- Issue:\n"
-        "- Loom Work Item:\n\n"
+        "- Work Item: work_item:<GitHub issue number>\n"
+        "- Issue:\n\n"
         "## PR Metadata Machine Carrier\n",
         encoding="utf-8",
     )
@@ -8195,8 +8199,7 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                 "marker": "loom:repo-pr-metadata",
                                 "surface": "merge_ready",
                                 "repo_specific_field_set": [
-                                    "loom_work_item",
-                                    "branch",
+                                    "work_item_locator",
                                     "governance_intensity",
                                     "change_class",
                                     "suite_path",
@@ -8210,8 +8213,7 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
                                 ],
                                 "enforcement": "blocking",
                                 "required_fields": [
-                                    "loom_work_item",
-                                    "branch",
+                                    "work_item_locator",
                                     "governance_intensity",
                                     "change_class",
                                     "suite_path",
@@ -8283,8 +8285,7 @@ def governance_metadata_body(
     surface: str = "merge_ready",
 ) -> str:
     fields: dict[str, Any] = {
-        "loom_work_item": item,
-        "branch": branch,
+        "work_item_locator": f"work_item:{item.rsplit('-', 1)[-1]}",
         "governance_intensity": "standard",
         "change_class": "contract",
         "suite_path": "minimal",
@@ -8311,10 +8312,9 @@ def governance_metadata_body(
         "parser_version": "loom-pr-metadata-parser/v1",
     }
     legacy_binding = (
-        f"Loom Work Item: {item}\n"
-        f"Branch: {branch}\n\n"
+        f"Work Item: work_item:{item.rsplit('-', 1)[-1]}\n\n"
         if include_legacy_bindings
-        else f"Loom Work Item: {item}\n\n"
+        else ""
     )
     return legacy_binding + "<!-- loom:repo-pr-metadata\n" + f"{json.dumps(envelope, indent=2)}\n" + "-->\n"
 
@@ -8533,12 +8533,12 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     if not rendered.exists():
         raise AssertionError("render did not write the global runtime PR body artifact")
     rendered_body = rendered.read_text(encoding="utf-8")
-    if "- Issue: #1541" not in rendered_body or "- Loom Work Item: WI-1541" not in rendered_body:
+    if "- Issue: #1541" not in rendered_body or "- Work Item: work_item:1541" not in rendered_body:
         raise AssertionError("render did not normalize human PR binding line spacing")
     if readback_payload.get("result") != "pass":
         raise AssertionError(f"readback payload failed: {readback_payload.get('missing_inputs')}")
     governance_fields = readback_payload.get("governance_fields")
-    if not isinstance(governance_fields, dict) or governance_fields.get("branch") != "work/1541-render" or "head_sha" in governance_fields:
+    if not isinstance(governance_fields, dict) or governance_fields.get("work_item_locator") != "work_item:1541" or {"branch", "head_sha"} & set(governance_fields):
         raise AssertionError("readback did not expose parsed governance fields")
     if (
         update_dry_run_payload.get("result") != "pass"
@@ -9018,10 +9018,11 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     )
     if (
         not isinstance(branch_conflict_diagnostic, dict)
-        or branch_conflict_diagnostic.get("classifier") != "branch_drift"
-        or "--branch" not in str(branch_conflict_diagnostic.get("next_action"))
+        or branch_conflict_diagnostic.get("classifier") != "host_owned_fact_authored"
+        or "GitHub host readback owns them" not in str(branch_conflict_diagnostic.get("next_action"))
+        or branch_conflict_diagnostic.get("failure_envelope", {}).get("primary_cause", {}).get("failure_domain") != "governance_metadata"
     ):
-        raise AssertionError("branch drift diagnostics must expose a targeted next_action")
+        raise AssertionError("host-owned metadata diagnostics must expose one targeted failure envelope")
 
     surface_mismatch = target / "surface-mismatch.md"
     surface_mismatch.write_text(governance_metadata_body(surface="closeout"), encoding="utf-8")
@@ -9285,11 +9286,10 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
             "docs/methodology/harness/pr-intent-profile.md",
             "--json",
         ],
-        expect=1,
+        expect=0,
     )
-    stale_missing = "\n".join(str(entry) for entry in stale_check.get("missing_inputs", []))
-    if stale_check.get("result") != "block" or "branch" not in stale_missing.lower():
-        raise AssertionError("docs-pr check did not fail closed on stale branch binding")
+    if stale_check.get("result") != "pass":
+        raise AssertionError("docs-pr check must ignore an authored branch because GitHub host readback owns branch truth")
 
     (target / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
     (target / ".github" / "workflows" / "loom-check.yml").write_text("env:\n  LOOM_VERSION: 0.23.0\n", encoding="utf-8")
