@@ -14551,15 +14551,19 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
 
 
 def uses_global_cli_metadata_only(target_root: Path) -> bool:
+    state_path = target_root / ".loom/installed-state.json"
+    if state_path.is_symlink() or not state_path.is_file():
+        return False
     try:
-        installed_state = load_json_file(target_root / ".loom/installed-state.json")
+        installed_state = load_json_file(state_path)
     except (OSError, ValueError, json.JSONDecodeError):
         return False
     if not isinstance(installed_state, dict):
         return False
     repo_payload = installed_state.get("repo_payload")
     return (
-        installed_state.get("runtime_provider") == "global-cli"
+        installed_state.get("schema_version") == "loom-installed-state/v2"
+        and installed_state.get("runtime_provider") == "global-cli"
         and isinstance(repo_payload, dict)
         and repo_payload.get("mode") == "metadata-only"
     )
