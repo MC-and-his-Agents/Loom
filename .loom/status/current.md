@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1235
-- Goal: Add a safe repair plan and apply flow for host-complete Work Items whose versioned carriers still look active.
-- Scope: Issue #1235 only: update `tools/loom.py`, `tools/check_cli_contract.py`, `src/skills/shared/scripts/loom_flow.py`, `skills/shared/scripts/loom_flow.py`, generated `skills/*/.loom-runtime/shared/scripts/loom_flow.py` copies, demo bootstrap stable runtime fixture files under `examples/new-project/.loom/`, WI-1235 `.loom` carriers/specs/shadow hashes, and `loom repair plan/apply` carrier closeout support for host-complete active carriers. Require explicit issue ownership, keep host state read-only, update focused CLI contract coverage, and synchronize generated skills runtime/demo copies. Excludes #1236 fixture inventory, #1237 docs outline, #1296 release/no-release closeout, Round 10, Round 11, Deferred roadmap, release/tag/npm actions, issue/project mutation by the repair command, and unrelated refactors.
-- Execution Path: issue #1235 -> branch `work/1235-safe-repair-sync` -> repair/sync implementation -> local contract validation -> PR metadata/readback -> merge-ready gate.
+- Item ID: WI-2012
+- Goal: 修复 global-CLI metadata-only carrier refresh 对不存在 bootstrap manifest 的错误依赖。
+- Scope: Issue #2012；主控线程 ownership 仅覆盖 carrier refresh 共享实现、对应 source check、生成副本和 WI-2012 carriers。保留 repo-local runtime manifest fail-closed，不修改 WebEnvoy 产品仓。
+- Execution Path: issue #2012 -> branch work/2012-metadata-only-carrier-refresh -> targeted regression -> source validation -> PR gate -> merge
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1235.md
-- Review Entry: .loom/reviews/WI-1235.json
-- Validation Entry: `python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py`; `python3 tools/check_cli_contract.py --surface governance-closeout`; `python3 tools/check_cli_contract.py --surface aggregate`; `python3 tools/loom.py suite validate --target . --item WI-1235 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1235 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1235 --json`; `python3 tools/loom.py fact-chain --target . --json`; PR metadata and hosted checks readback before merge.
-- Closing Condition: PR for #1235 is pushed with safe carrier repair plan/apply behavior, explicit issue ownership fail-closed semantics, no host mutation actions, focused regression evidence, synced skills runtime copies, current WI-1235 carrier/review/shadow evidence, passing checks/gate, merge commit readback, and issue #1235 CLOSED/COMPLETED.
-- Current Checkpoint: merge
-- Current Stop: PR #1504 body/head metadata readback, spec review, implementation review, and local review flow are complete for head c8398648d727063ebe06caf7d143dca7a618ff80; hosted checks, pr-gate, controlled merge, merge commit readback, and issue closeout readback remain pending.
-- Next Step: Wait for hosted required checks on PR #1504, run pr-gate and controlled-merge checks, merge after gates pass, then read back PR, issue, main, and Loom carrier closeout before starting #1236/#1237.
+- Recovery Entry: .loom/progress/WI-2012.md
+- Review Entry: .loom/reviews/WI-2012.json
+- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture; git diff --check
+- Closing Condition: PR for #2012 merges with current-head review and hosted gates; Harbor #244 no longer fails carrier refresh because bootstrap manifest is intentionally absent.
+- Current Checkpoint: build
+- Current Stop: Implementation and current-head local validation completed.
+- Next Step: Commit and push WI-2012, create the issue-bound PR, then run current-head review and hosted gates.
 - Blockers: None
-- Latest Validation Summary: 2026-06-16T06:55Z local validation on branch `work/1235-safe-repair-sync`: `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py` passed; `python3 tools/loom.py suite validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite evidence validate --target . --item WI-1235 --json`, `python3 tools/loom.py suite carrier validate --target . --item WI-1235 --json`, `python3 tools/loom.py fact-chain --target . --json`, and `python3 tools/loom.py build --target . --item WI-1235 --build-evidence .loom/progress/WI-1235-build-evidence.json --json` passed after adding `.loom/specs/WI-1235/implementation-contract.md` and aligning PR metadata expectations to reinforced/runtime/full; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface governance-closeout` passed in 74.66s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 344.63s; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only` passed; `make loom-demo-new-project-sync` refreshed the demo stable fixture after hosted `demo-bootstrap` drift, and `make loom-demo-new-project-check` must pass before the next push; no host mutation command was executed by repair fixtures.
-- Recovery Boundary: WI-1235/#1235 safe repair/sync flow only. Do not implement #1236 fixture inventory, #1237 docs outline, #1296 release/no-release closeout, parent #1228 closeout, Round 10/11, Deferred roadmap, release/tag/npm actions, GitHub issue/project mutation from repair commands, or unrelated refactors in this PR.
-- Current Lane: round-9-wi-7-safe-repair-sync
+- Latest Validation Summary: 2026-07-10 current worktree: py_compile passed; generated-tree-drift passed; suite evidence validate passed; suite carrier validate passed; fact-chain passed; git diff --check passed; source-self-fixture passed with failures=0 including malformed installed-state coverage; Harbor HARBOR-241 reproduction no longer reports invalid bootstrap manifest and leaves current-head review as the genuine blocker.
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-2012.md`.
+- Current Lane: WI-2012 metadata-only carrier refresh correction
 
 ## Runtime Evidence
 
-- Run Entry: Current Codex thread for Round 9 milestone idle closeout sync, formal worktree `/Users/mc/dev/Loom-worktrees/1235-safe-repair-sync`, branch `work/1235-safe-repair-sync`.
-- Logs Entry: Local command evidence recorded in .loom/progress/WI-1235.md and .loom/specs/WI-1235/evidence-map.md; aggregate CLI contract passed in the formal worktree.
-- Diagnostics Entry: Read-only review identified issue-selector bypass, mixed-action pass semantics, preflight write ordering, CLI metadata, and drift test gaps; code and tests were updated before aggregate validation passed.
-- Verification Entry: Current local verification evidence includes git diff check, py_compile, suite validate/evidence/carrier validate, fact-chain, build flow with integrated build evidence, governance-closeout contract, aggregate CLI contract, skills surface check, and contract-only source loom_check. PR metadata, hosted checks, merge-ready gate, merge commit readback, and issue closeout readback remain pending.
-- Lane Entry: round-9-wi-7-safe-repair-sync
+- Run Entry: Main controller task `019f3a6c-9bb5-7a80-8095-13751f46cead`, formal worktree `.`, branch `work/2012-metadata-only-carrier-refresh`, issue #2012.
+- Logs Entry: Local validation evidence is summarized in `.loom/progress/WI-2012.md` and mapped in `.loom/specs/WI-2012/evidence-map.md`.
+- Diagnostics Entry: Harbor HARBOR-241 carrier refresh reproduced the metadata-only manifest failure before the change; the current source no longer reports that failure and preserves current-head review blocking.
+- Verification Entry: Current local verification includes Python compile, generated-tree parity, suite evidence/carrier validation, fact-chain, diff check, the full source-self fixture with failures=0, and malformed installed-state coverage. PR metadata, hosted checks, merge-ready, merge, release/install, and Harbor post-install readback remain pending.
+- Lane Entry: WI-2012 metadata-only carrier refresh correction
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1235.md
-- Dynamic Truth: .loom/progress/WI-1235.md
+- Static Truth: .loom/work-items/WI-2012.md
+- Dynamic Truth: .loom/progress/WI-2012.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

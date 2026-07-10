@@ -1,0 +1,5 @@
+# Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/2012 | Issue OPEN / PR pending / branch work/2012-metadata-only-carrier-refresh / head pending | in_progress | primary | .loom/work-items/WI-2012.md | .loom/specs/WI-2012/implementation-contract.md | .loom/specs/WI-2012/spec.md#acceptance | .loom/specs/WI-2012/plan.md | .loom/specs/WI-2012/evidence-map.md | main controller task 019f3a6c-9bb5-7a80-8095-13751f46cead; branch work/2012-metadata-only-carrier-refresh; issue #2012; parent #1981; Harbor PR #244 reproduction | Recheck issue state, PR/head binding, validation summary, current-head review, hosted checks, merge commit, release/install evidence, and Harbor HARBOR-241 refresh before closeout; carrier state is not completed until controlled merge and closeout evidence are consumed. |

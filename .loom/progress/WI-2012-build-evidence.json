@@ -1,0 +1,31 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [],
+  "integration_evidence": [
+    {
+      "id": "WI-2012-metadata-only-carrier-refresh",
+      "status": "integrated",
+      "summary": "The main controller integrated the metadata-only installed-state guard, malformed-input protection, source regression assertions, generated runtime copies, and WI-2012 carriers without changing repo-local manifest validation.",
+      "locators": [
+        "src/skills/shared/scripts/loom_flow.py",
+        "src/skills/shared/scripts/loom_check.py",
+        "skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_check.py",
+        ".loom/work-items/WI-2012.md",
+        ".loom/progress/WI-2012.md",
+        ".loom/specs/WI-2012/evidence-map.md",
+        ".loom/specs/WI-2012/task-carrier.md"
+      ]
+    },
+    {
+      "id": "WI-2012-current-head-local-validation",
+      "status": "integrated",
+      "summary": "Current worktree validation passed Python compile, generated-tree parity, suite evidence/carrier validation, fact-chain, diff check, and the full source-self fixture with failures=0; Harbor HARBOR-241 no longer reports the invalid missing manifest.",
+      "locators": [
+        ".loom/progress/WI-2012.md",
+        ".loom/specs/WI-2012/evidence-map.md",
+        ".loom/status/current.md"
+      ]
+    }
+  ]
+}
