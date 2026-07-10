@@ -7,7 +7,7 @@ loom-check: pr-binding-workflow-check fr-phase-close-guard-check loom-self-plugi
 	python3 tools/loom_check.py
 
 py-compile:
-	python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/py_compile_clean.py tools/check_cli_contract.py tools/check_npm_package.py tools/check_release_surface.py tools/check_pr_binding_workflow.py tools/check_fr_phase_close_guard.py tools/check_fr_phase_close_guard_workflow.py tools/check_demo_bootstrap_fixture.py tools/check_loom_check_runtime_regressions.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-spec-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-retire/scripts/*.py skills/loom-merge-ready/scripts/*.py skills/loom-build/scripts/*.py skills/loom-story/scripts/*.py
+	python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/py_compile_clean.py tools/check_cli_contract.py tools/check_npm_package.py tools/check_release_surface.py tools/check_pr_binding_workflow.py tools/check_fr_phase_close_guard.py tools/check_fr_phase_close_guard_workflow.py tools/check_demo_bootstrap_fixture.py tools/check_loom_check_runtime_regressions.py tools/read_delivery_gate_required_identity.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-spec-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-merge-ready/scripts/*.py skills/loom-build/scripts/*.py skills/loom-story/scripts/*.py
 
 skills-check:
 	python3 tools/skills_surface.py check
@@ -19,7 +19,7 @@ skills-generated-tree-drift-check:
 	python3 tools/skills_surface.py check --surface generated-tree-drift
 
 skills-package-metadata-check:
-	python3 tools/skills_surface.py check --surface package-metadata
+	python3 tools/skills_surface.py check --surface plugin-payload-metadata
 
 skills-cache-artifacts-check:
 	python3 tools/skills_surface.py check --surface cache-artifacts
