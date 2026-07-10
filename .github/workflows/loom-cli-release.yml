@@ -183,6 +183,14 @@ jobs:
           fi
 
           if [ "$TAG_MATCHES" != true ] && [ "$TAG_EXISTS" = true ]; then
+            if [ "$PUBLISH_REQUESTED" != "true" ]; then
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "create_release=false" >> "$GITHUB_OUTPUT"
+              echo "npm_publish=false" >> "$GITHUB_OUTPUT"
+              echo "reason=release_pending" >> "$GITHUB_OUTPUT"
+              echo "Loom CLI ${TAG} is already published on an earlier commit; keep this source change pending until a new, unoccupied VERSION is merged" >&2
+              exit 0
+            fi
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             echo "create_release=false" >> "$GITHUB_OUTPUT"
             echo "npm_publish=false" >> "$GITHUB_OUTPUT"

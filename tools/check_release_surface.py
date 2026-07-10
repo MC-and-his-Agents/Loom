@@ -386,7 +386,8 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
         (
             "For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release",
             "when the `NPM_TOKEN` secret is missing for an npm publish",
-            "must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit",
+            "A later CLI source merge with an already published version returns `release_pending` and never republishes that version.",
+            "an explicit `workflow_dispatch` publish request names a `VERSION` tag that points at another commit",
         ),
         errors,
         surface_label=surface_label,
@@ -401,6 +402,7 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
             "push",
             "AUTO_PUBLISH_ALLOWED",
             "cli_publish_behavior_changed",
+            "reason=release_pending",
             "version-already-published-on-different-commit",
             "PACKAGE_TAG_PREFIX: 'v'",
             "NPM_PACKAGE_NAME: '@mc-and-his-agents/loom'",
@@ -431,6 +433,23 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
         return
     judgment = workflow[judgment_start:publisher_start]
     publisher = workflow[publisher_start:]
+    pending_index = judgment.find('reason=release_pending')
+    explicit_publish_index = judgment.find('if [ "$PUBLISH_REQUESTED" != "true" ]')
+    collision_index = judgment.find('reason=version-already-published-on-different-commit')
+    if min(pending_index, explicit_publish_index, collision_index) < 0 or not (
+        explicit_publish_index < pending_index < collision_index
+    ):
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-release-pending-admission",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary=(
+                "normal main pushes with an earlier published VERSION must return release_pending, "
+                "while explicit publish requests remain fail-closed"
+            ),
+        )
     for needle in ("contents: read", "persist-credentials: false"):
         if needle not in judgment:
             add_error(
