@@ -1,0 +1,238 @@
+name: loom-delivery-gate
+
+on:
+  pull_request:
+  merge_group:
+  workflow_call:
+    inputs:
+      host_facts:
+        description: Host-native facts matching loom-delivery-gate-host-facts/v1.
+        required: true
+        type: string
+      profile:
+        description: Optional delivery profile override (light, standard, or reinforced).
+        required: false
+        type: string
+        default: ''
+      validation_command:
+        description: Native validation command run with read-only permissions and no injected secrets.
+        required: false
+        type: string
+        default: make delivery-gate-check
+      loom_ref:
+        description: Required 40-character Loom commit SHA used as the canonical evaluator source.
+        required: true
+        type: string
+    outputs:
+      result:
+        description: Always advisory for the first delivery-gate rollout.
+        value: ${{ jobs.loom-delivery-gate.outputs.result }}
+      primary_cause:
+        description: Product acceptance remains outside this delivery gate.
+        value: ${{ jobs.loom-delivery-gate.outputs.primary_cause }}
+
+jobs:
+  loom-delivery-gate:
+    name: loom-delivery-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.terminal.outputs.result }}
+      primary_cause: ${{ steps.terminal.outputs.primary_cause }}
+    steps:
+      - name: Read GitHub host facts
+        id: host-facts
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
+          CHANGED_PATHS_PATH: ${{ runner.temp }}/loom-delivery-changed-paths.txt
+          WORKFLOW_CALL_HOST_FACTS: ${{ inputs.host_facts }}
+          WORKFLOW_CALL_PROFILE: ${{ inputs.profile }}
+          WORKFLOW_CALL_VALIDATION_COMMAND: ${{ inputs.validation_command }}
+          WORKFLOW_CALL_LOOM_REF: ${{ inputs.loom_ref }}
+          REUSABLE_MODE: ${{ inputs.loom_ref != '' }}
+        with:
+          script: |
+            const fs = require("fs");
+            const event = context.eventName;
+            const reusable = process.env.REUSABLE_MODE === "true";
+            const repository = { owner: context.repo.owner, name: context.repo.repo };
+            const apiRepository = { owner: context.repo.owner, repo: context.repo.repo };
+            const defaultValidationCommand = "make delivery-gate-check";
+            const facts = {
+              schema_version: "loom-delivery-gate-host-facts/v1",
+              event,
+              repository,
+              changed_paths: [],
+            };
+            try {
+              if (reusable) {
+                if (!/^[0-9a-f]{40}$/i.test(process.env.WORKFLOW_CALL_LOOM_REF || "")) {
+                  throw new Error("reusable loom_ref must be a 40-character commit SHA");
+                }
+                const supplied = JSON.parse(process.env.WORKFLOW_CALL_HOST_FACTS || "");
+                if (!supplied || typeof supplied !== "object" || Array.isArray(supplied)) {
+                  throw new Error("reusable host_facts must be a JSON object");
+                }
+                Object.assign(facts, supplied);
+                if (process.env.WORKFLOW_CALL_PROFILE) {
+                  facts.profile = process.env.WORKFLOW_CALL_PROFILE;
+                }
+              } else if (event === "pull_request") {
+                const pull = context.payload.pull_request;
+                const files = await github.paginate(github.rest.pulls.listFiles, {
+                  ...apiRepository,
+                  pull_number: context.payload.number,
+                  per_page: 100,
+                });
+                facts.change = { base_sha: pull.base.sha, head_sha: pull.head.sha, number: context.payload.number };
+                facts.changed_paths = files.map((file) => file.filename);
+              } else if (event === "merge_group") {
+                const group = context.payload.merge_group;
+                const comparison = await github.rest.repos.compareCommits({
+                  ...apiRepository,
+                  base: group.base_sha,
+                  head: group.head_sha,
+                  per_page: 100,
+                });
+                facts.change = { base_sha: group.base_sha, head_sha: group.head_sha, head_ref: group.head_ref };
+                facts.changed_paths = (comparison.data.files || []).map((file) => file.filename);
+              }
+            } catch (error) {
+              facts.host_read_error = String(error.message || error);
+              core.warning(facts.host_read_error);
+            }
+            facts.validation_command = reusable
+              ? (process.env.WORKFLOW_CALL_VALIDATION_COMMAND || defaultValidationCommand)
+              : defaultValidationCommand;
+            const changedPaths = Array.isArray(facts.changed_paths) ? [...new Set(facts.changed_paths)].sort() : [];
+            fs.writeFileSync(process.env.HOST_FACTS_PATH, `${JSON.stringify(facts)}\n`, "utf8");
+            fs.writeFileSync(process.env.CHANGED_PATHS_PATH, changedPaths.length ? `${changedPaths.join("\n")}\n` : "", "utf8");
+
+      - name: Checkout canonical Loom source for reusable callers
+        if: ${{ always() && inputs.loom_ref != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: MC-and-his-Agents/Loom
+          ref: ${{ inputs.loom_ref }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout caller candidate for reusable validation
+        if: ${{ always() && inputs.loom_ref != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          path: candidate
+          persist-credentials: false
+
+      - name: Checkout Loom candidate for direct validation
+        if: ${{ always() && inputs.loom_ref == '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Evaluate advisory delivery facts
+        id: evaluate
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
+          DELIVERY_GATE_PLAN_PATH: ${{ runner.temp }}/loom-delivery-gate-plan.json
+          LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
+        run: |
+          set -u
+          python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" --host-facts-file "$HOST_FACTS_PATH" --output "$DELIVERY_GATE_PLAN_PATH"
+          COMMAND="$(python3 - "$DELIVERY_GATE_PLAN_PATH" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              print(json.load(stream)["native_validation"]["command"])
+          PY
+          )"
+          {
+            echo "validation_command<<EOF"
+            printf '%s\n' "$COMMAND"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run selected native validation with read-only token
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          VALIDATION_COMMAND: ${{ steps.evaluate.outputs.validation_command }}
+          VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-delivery-native-validation.json
+          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
+          LOOM_DELIVERY_GATE_CHANGED_PATHS_FILE: ${{ runner.temp }}/loom-delivery-changed-paths.txt
+          LOOM_DELIVERY_GATE_HOST_FACTS_FILE: ${{ runner.temp }}/loom-delivery-host-facts.json
+          LOOM_DELIVERY_GATE_DECISION_FILE: ${{ runner.temp }}/loom-delivery-gate-plan.json
+        run: |
+          set -u
+          (
+            cd "$CANDIDATE_PATH"
+            if [ -z "${VALIDATION_COMMAND//[[:space:]]/}" ]; then
+              STATUS=command_missing
+            elif bash -o pipefail -c "$VALIDATION_COMMAND"; then
+              STATUS=passed
+            else
+              EXIT_CODE=$?
+              STATUS=$([ "$EXIT_CODE" -eq 127 ] && echo command_missing || echo failed)
+            fi
+            printf '{"status":"%s"}\n' "$STATUS" > "$VALIDATION_RESULT_PATH"
+            echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          )
+
+      - name: Finalize advisory delivery result
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
+          VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-delivery-native-validation.json
+          DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
+          LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
+        run: |
+          set -u
+          python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" \
+            --host-facts-file "$HOST_FACTS_PATH" \
+            --validation-result-file "$VALIDATION_RESULT_PATH" \
+            --output "$DELIVERY_GATE_PATH"
+
+      - name: Publish terminal advisory result
+        id: terminal
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
+        with:
+          script: |
+            const fs = require("fs");
+            let payload = null;
+            try {
+              payload = JSON.parse(fs.readFileSync(process.env.DELIVERY_GATE_PATH, "utf8"));
+            } catch (error) {
+              core.warning(`advisory evaluator output unavailable: ${String(error.message || error)}`);
+            }
+            const profile = payload?.delivery?.profile || "standard";
+            const cause = payload?.primary_cause?.id || "host_facts_unreadable";
+            core.setOutput("result", "advisory");
+            core.setOutput("primary_cause", cause);
+            core.notice(`loom-delivery-gate advisory profile=${profile}; primary cause=${cause}`);
+            await core.summary
+              .addHeading("Loom delivery gate (advisory)")
+              .addRaw(`Profile: ${profile}\n\nPrimary cause: ${cause}\n\nProduct acceptance: not_evaluated.`)
+              .write();

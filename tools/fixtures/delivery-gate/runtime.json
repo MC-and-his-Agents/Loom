@@ -1,0 +1,12 @@
+{
+  "schema_version": "loom-delivery-gate-host-facts/v1",
+  "event": "merge_group",
+  "repository": {
+    "owner": "MC-and-his-Agents",
+    "name": "Loom"
+  },
+  "profile": "standard",
+  "changed_paths": [
+    "src/skills/shared/scripts/delivery_gate.py"
+  ]
+}

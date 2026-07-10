@@ -1,0 +1,12 @@
+{
+  "schema_version": "loom-delivery-gate-host-facts/v1",
+  "event": "pull_request",
+  "repository": {
+    "owner": "MC-and-his-Agents",
+    "name": "Loom"
+  },
+  "changed_paths": [
+    "docs/adoption/light-governance.md",
+    "README.md"
+  ]
+}
