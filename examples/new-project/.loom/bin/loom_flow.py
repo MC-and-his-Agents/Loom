@@ -13551,14 +13551,31 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
             write_json_file(path, payload)
 
 
+def uses_global_cli_metadata_only(target_root: Path) -> bool:
+    try:
+        installed_state = load_json_file(target_root / ".loom/installed-state.json")
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(installed_state, dict):
+        return False
+    repo_payload = installed_state.get("repo_payload")
+    return (
+        installed_state.get("runtime_provider") == "global-cli"
+        and isinstance(repo_payload, dict)
+        and repo_payload.get("mode") == "metadata-only"
+    )
+
+
 def carrier_refresh_payload(target_root: Path, output_relative: str, expected_item: str | None, *, dry_run: bool) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     context, context_errors = load_context(target_root, output_relative, expected_item)
     missing_inputs: list[str] = [f"fact-chain: {message}" for message in context_errors]
 
-    manifest_path, manifest_path_errors = resolve_repo_relative_path(target_root, ".loom/bootstrap/manifest.json", label="bootstrap manifest")
+    manifest_path: Path | None = None
+    if not uses_global_cli_metadata_only(target_root):
+        manifest_path, manifest_path_errors = resolve_repo_relative_path(target_root, ".loom/bootstrap/manifest.json", label="bootstrap manifest")
+        missing_inputs.extend(manifest_path_errors)
     init_path, init_path_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
-    missing_inputs.extend(manifest_path_errors)
     missing_inputs.extend(init_path_errors)
     manifest_payload: dict[str, Any] = {}
     init_payload: dict[str, Any] = {}
