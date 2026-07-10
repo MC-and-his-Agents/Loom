@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1962
-- Goal: 支持按验证边界合并的 batch implementation PR 与 host-only batch closeout。
-- Scope: PR metadata 支持 anchor issue、covered issues、excluded scope；新增 loom closeout batch 以 host-only comment/close 逐项收口；补 targeted contract surface 并同步 runtime/plugin/demo hashes。排除 #1965 taxonomy mapping、#1964 slim migration、#1966 release。
-- Execution Path: issue #1962 -> branch work/1962-batch-implementation-closeout -> implementation PR -> host-only batch closeout comments/closes covered issues after merge
+- Item ID: WI-2012
+- Goal: 修复 global-CLI metadata-only carrier refresh 对不存在 bootstrap manifest 的错误依赖。
+- Scope: Issue #2012；主控线程 ownership 仅覆盖 carrier refresh 共享实现、对应 source/check_cli_contract 回归、生成副本和 WI-2012 carriers。保留 repo-local runtime manifest fail-closed，不修改 WebEnvoy 产品仓。
+- Execution Path: issue #2012 -> branch work/2012-metadata-only-carrier-refresh -> targeted regression -> source validation -> PR gate -> merge
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1962.md
-- Review Entry: .loom/reviews/WI-1962.json
-- Validation Entry: py_compile; git diff --check; check_cli_contract batch-implementation-closeout/pr-metadata/closeout-wrapper/aggregate; runtime-copy-parity; plugin-payload-hash; demo fixture drift
-- Closing Condition: PR merged; #1962 closeout evidence is written host-only; batch closeout command can close covered issues without repo closeout PR or carrier mutation.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1962 closed out from merged PR #1972 at 9a1a9b0715e306e7c7afffe3ab3fdfce1514ec28; v0.28.0 release readback should no longer be blocked by this stale repo-local current pointer.
-- Next Step: None.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-07-04T16:32Z at f6ba96b1522684deb02f90aa2e817a38dab5abbe: python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py plugins/loom/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py plugins/loom/skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py tools/check_cli_contract.py passed; git diff --check passed; python3 tools/check_cli_contract.py --surface batch-implementation-closeout passed; python3 tools/check_npm_package.py --surface runtime-copy-parity passed; python3 tools/check_npm_package.py --surface plugin-payload-hash passed with hash 8125bba23e3ae11fc48fbb528c07abba68cd81f4ec51918d08b5c9aa788904b7; python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift passed; python3 tools/loom_check.py --source-surface merge-gate passed failures=0 elapsed=219.26s; python3 tools/loom_check.py --source-surface installed-runtime passed failures=0 elapsed=86.89s; python3 tools/loom_check.py --source-surface bootstrap-regression passed failures=0; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run passed refresh_needed=[].
-- Recovery Boundary: WI-1962 owns batch implementation/closeout support and the minimal gate classifier fixes required for that PR. Excludes #1965 taxonomy mapping, #1964 existing host slim migration, #1966 release, and any per-host WebEnvoy label hardcoding.
-- Current Lane: legacy-current-pointer-closeout
+- Recovery Entry: .loom/progress/WI-2012.md
+- Review Entry: .loom/reviews/WI-2012.json
+- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture; git diff --check
+- Closing Condition: PR for #2012 merges with current-head review and hosted gates; Harbor #244 no longer fails carrier refresh because bootstrap manifest is intentionally absent.
+- Current Checkpoint: merge
+- Current Stop: Rebased onto origin/main; source and generated runtime validation passed. Current-head reviews must be refreshed before host merge.
+- Next Step: Record WI-2012 spec and implementation reviews for the current head, then refresh PR metadata and run merge-ready.
+- Blockers: None
+- Latest Validation Summary: 2026-07-11 b0da48c9671361e04af9da95f2dfb887f8f472ad: git diff --check passed; py_compile passed; skills generated-tree check passed; make loom-demo-new-project-check passed; tools/check_npm_package.py passed; tools/check_cli_contract.py passed all 23 surfaces in 460.26s; tools/loom_check.py --profile source --source-surface source-self-fixture passed; Harbor HARBOR-241 source carrier-refresh reproduction passed without requiring bootstrap manifest.
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-2012.md`.
+- Current Lane: WI-2012 metadata-only carrier refresh correction
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1962.md
-- Dynamic Truth: .loom/progress/WI-1962.md
+- Static Truth: .loom/work-items/WI-2012.md
+- Dynamic Truth: .loom/progress/WI-2012.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
