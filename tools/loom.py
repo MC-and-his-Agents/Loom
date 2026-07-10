@@ -154,6 +154,13 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Show task-oriented guidance plus the frozen CLI command matrix.",
     },
     {
+        "command": "acceptance validate",
+        "domain": "acceptance",
+        "status": "implemented",
+        "json": True,
+        "summary": "Validate product acceptance evidence against the declared user-story and safety boundary requirements.",
+    },
+    {
         "command": "installed-state show",
         "domain": "installation",
         "status": "implemented",

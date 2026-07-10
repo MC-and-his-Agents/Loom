@@ -16641,6 +16641,8 @@ def pr_metadata_preflight_payload(
     body_branch = pr_body_field_value(body, "Branch") if isinstance(body, str) else None
     pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha
     pr_branch = pr_payload.get("headRefName") if isinstance(pr_payload, dict) else branch_name
+    if body_branch and isinstance(pr_branch, str) and pr_branch and body_branch != pr_branch:
+        missing_inputs.append("PR body Branch does not match PR payload headRefName")
     contract_results = [
         pr_metadata_contract_preflight(
             field=field,
@@ -18031,8 +18033,10 @@ def closeout_freeze_terminal_subject_binding(
             missing_inputs.append("implementation PR merge commit is missing")
         if pr_payload.get("baseRefName") != target_branch:
             missing_inputs.append(f"implementation PR baseRefName `{pr_payload.get('baseRefName')}` does not match target branch `{target_branch}`")
-        if not pr_body_mentions_item(pr_body, item_id):
-            missing_inputs.append(f"implementation PR body does not mention Loom Work Item `{item_id}`")
+        body_work_item_locator = pr_body_field_value(pr_body, "Work Item")
+        typed_body_work_item = parse_typed_locator(body_work_item_locator, allowed_types={"work_item"})
+        if not pr_body_mentions_item(pr_body, item_id) and typed_body_work_item is None:
+            missing_inputs.append("implementation PR body does not bind a typed GitHub Work Item locator")
         body_item = pr_work_item_from_body(pr_body)
         if body_item and body_item != item_id:
             missing_inputs.append(f"implementation PR body Work Item `{body_item}` does not match `{item_id}`")

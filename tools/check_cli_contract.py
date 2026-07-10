@@ -5428,7 +5428,23 @@ def assert_cache_absent_gate_contract(tmp: Path) -> None:
         if pr_gate_payload.get("result") != "pass":
             raise AssertionError("pr gate must not depend on repo-local .loom/runtime or .loom/tmp")
 
-        _, merge_ready_payload = run_json(["merge-ready", "--target", str(target), "--item", fixture["item"], "--json"], expect=0)
+        _, merge_ready_payload = run_json(
+            [
+                "merge-ready",
+                "--target",
+                str(target),
+                "--item",
+                fixture["item"],
+                "--pr",
+                "1288",
+                "--branch",
+                fixture["branch"],
+                "--pr-payload-file",
+                fixture["pr_file"],
+                "--json",
+            ],
+            expect=0,
+        )
         if merge_ready_payload.get("result") != "pass":
             raise AssertionError("merge-ready must not depend on repo-local .loom/runtime or .loom/tmp")
 
@@ -6311,6 +6327,13 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
     }
 
 
+def typed_work_item_locator(item: str) -> str:
+    match = re.search(r"(\d+)$", item)
+    if match is None:
+        raise AssertionError(f"fixture Work Item must end with a GitHub issue number: {item}")
+    return f"work_item:{int(match.group(1))}"
+
+
 def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287") -> dict[str, str]:
     branch = "work/1287-1288-review-head-binding"
     validation_summary = "git diff --check; targeted pr-gate semantic review disposition fixtures passed."
@@ -6331,6 +6354,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
         encoding="utf-8",
     )
     (target / ".gitignore").write_text(".loom/fixtures/\n.loom/tmp/\n", encoding="utf-8")
+    write_governance_metadata_contract_fixture(target)
     work_item = target / ".loom" / "work-items" / f"{item}.md"
     work_item.write_text(
         f"# {item}\n\n"
@@ -6537,7 +6561,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
         "number": 1288,
         "state": "OPEN",
         "title": "semantic review disposition fixture",
-        "body": f"Loom Work Item: {item}\nBranch: {branch}\n",
+        "body": governance_metadata_body(item=item, branch=branch, head_sha=head_sha),
         "url": "https://github.com/owner/repo/pull/1288",
         "isDraft": False,
         "headRefName": branch,
@@ -6547,6 +6571,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
     pr_file.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
     return {
         "item": item,
+        "work_item_locator": typed_work_item_locator(item),
         "branch": branch,
         "review_path": f".loom/reviews/{item}.json",
         "pr_file": f".loom/fixtures/{item}/pr.json",
@@ -6568,7 +6593,11 @@ def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str 
     head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
     payload["state"] = state
     payload["headRefOid"] = head_sha
-    payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\n"
+    payload["body"] = governance_metadata_body(
+        item=fixture["item"],
+        branch=fixture["branch"],
+        head_sha=head_sha,
+    )
     if extra:
         payload.update(extra)
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -6709,6 +6738,26 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("hosted freeze admission must expose carrier refresh and shadow freshness classifications")
     if not any(step.get("name") == "hosted-freeze-admission" for step in pass_payload.get("steps", []) if isinstance(step, dict)):
         raise AssertionError("pr-gate steps must include hosted-freeze-admission before merge checkpoint consumption")
+
+    typed_work_item = int(fixture["work_item_locator"].split(":", 1)[1])
+    mismatch_body_file = f".loom/fixtures/{fixture['item']}/hosted-pr-body-work-item-mismatch.md"
+    (target / mismatch_body_file).write_text(
+        governance_metadata_body(
+            item=fixture["item"],
+            branch=fixture["branch"],
+            head_sha=fixture["head_sha"],
+            fields_override={"work_item_locator": f"work_item:{typed_work_item + 1}"},
+        ),
+        encoding="utf-8",
+    )
+    mismatch_payload = semantic_pr_gate_fixture_payload(
+        target,
+        fixture,
+        body_file=mismatch_body_file,
+        compare_body_file=mismatch_body_file,
+    )
+    if mismatch_payload.get("result") != "block":
+        raise AssertionError("typed Work Item metadata mismatch must fail closed in the reusable semantic PR-gate fixture")
 
     body_drift_payload = semantic_pr_gate_fixture_payload(
         target,
@@ -7884,7 +7933,7 @@ def assert_pr_gate_blocks(
 ) -> dict[str, Any]:
     payload = semantic_pr_gate_fixture_payload(target, fixture)
     if payload.get("result") != "block":
-        raise AssertionError(f"{label} did not fail closed")
+        raise AssertionError(f"{label} did not fail closed: {payload.get('missing_inputs')}")
     if expected_missing and not any(expected_missing in str(message) for message in payload.get("missing_inputs", [])):
         raise AssertionError(f"{label} did not expose expected missing input: {expected_missing}")
     if expect_lite_gate_block:
@@ -8304,7 +8353,7 @@ def governance_metadata_body(
     surface: str = "merge_ready",
 ) -> str:
     fields: dict[str, Any] = {
-        "work_item_locator": f"work_item:{item.rsplit('-', 1)[-1]}",
+        "work_item_locator": typed_work_item_locator(item),
         "governance_intensity": "standard",
         "change_class": "contract",
         "suite_path": "minimal",
@@ -8331,7 +8380,7 @@ def governance_metadata_body(
         "parser_version": "loom-pr-metadata-parser/v1",
     }
     legacy_binding = (
-        f"Work Item: work_item:{item.rsplit('-', 1)[-1]}\n\n"
+        f"Work Item: {typed_work_item_locator(item)}\n\n"
         if include_legacy_bindings
         else ""
     )
@@ -10030,6 +10079,10 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             },
         },
     )
+    pr_path = target / fixture["pr_file"]
+    pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    pr_payload["body"] = f"{str(pr_payload['body']).rstrip()}\n\nBranch: {fixture['branch']}\n"
+    pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
     assert_pr_gate_blocks(
         target,
         fixture,
@@ -10471,8 +10524,9 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     disposition = pass_payload.get("review_approval", {}).get("semantic_review_disposition", {})
     if disposition.get("status") != "passed" or disposition.get("consumable") is not True:
         raise AssertionError("pr-gate did not consume passed semantic_review_disposition")
-    if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
-        raise AssertionError("pr-gate did not preserve single Work Item id parsing")
+    metadata_fields = pass_payload.get("pr_metadata_preflight", {}).get("governance_intensity_carrier", {}).get("envelope", {}).get("fields", {})
+    if not isinstance(metadata_fields, dict) or metadata_fields.get("work_item_locator") != fixture["work_item_locator"]:
+        raise AssertionError("pr-gate did not consume the single typed Work Item metadata locator")
     with isolated_loom_workstation(tmp / "workstation"):
         assert_gate_freeze_review_binding_fixture(tmp)
         assert_hosted_freeze_admission_pr_gate_fixture(tmp)
@@ -14121,6 +14175,9 @@ def run_aggregate_cli_contract() -> None:
     missing = sorted(REQUIRED_COMMANDS - commands)
     if missing:
         raise AssertionError(f"help matrix missing commands: {missing}")
+    acceptance_validate = matrix["acceptance validate"]
+    if acceptance_validate.get("status") != "implemented" or acceptance_validate.get("domain") != "acceptance" or acceptance_validate.get("json") is not True:
+        raise AssertionError("acceptance validate must be an implemented JSON acceptance command in the help catalog")
     for command in ("detect", "doctor", "repair plan", "repair apply"):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #888")
@@ -14250,13 +14307,14 @@ def run_aggregate_cli_contract() -> None:
             fields = envelope.get("fields") if isinstance(envelope, dict) else None
             if not isinstance(fields, dict):
                 continue
-            expected_bindings = {
-                "loom_work_item": subject.get("item_id"),
-                "branch": subject.get("branch"),
-            }
-            for field_name, expected_value in expected_bindings.items():
-                if isinstance(expected_value, str) and expected_value and fields.get(field_name) != expected_value:
-                    raise AssertionError("gate freeze must not pass stale PR metadata that is not bound to the snapshot subject")
+            item_id = subject.get("item_id")
+            if (
+                isinstance(item_id, str)
+                and item_id
+                and fields.get("work_item_locator") != typed_work_item_locator(item_id)
+                and freeze_payload.get("result") == "pass"
+            ):
+                raise AssertionError("gate freeze must not pass stale PR metadata that is not bound to the snapshot subject")
 
     runtime_pr_dir = REPO_ROOT / ".loom" / "runtime" / "pr"
     runtime_pr_dir.mkdir(parents=True, exist_ok=True)
@@ -14319,7 +14377,14 @@ def run_aggregate_cli_contract() -> None:
             raise AssertionError("benign full-body PR body drift must not create blocking readiness inputs")
 
         carrier_drift_body.write_text(
-            governance_metadata_body(item=freeze_item, branch="work/cli-contract-fixture-drift", head_sha=head_sha),
+            governance_metadata_body(
+                item=freeze_item,
+                branch=branch,
+                head_sha=head_sha,
+                fields_override={
+                    "work_item_locator": f"work_item:{int(typed_work_item_locator(freeze_item).split(':', 1)[1]) + 1}"
+                },
+            ),
             encoding="utf-8",
         )
         _, carrier_drift_payload = run_json(
@@ -14437,7 +14502,7 @@ def run_aggregate_cli_contract() -> None:
     closeout_body = Path(".loom/runtime/check-cli-contract/closeout-body.md")
     closeout_body.parent.mkdir(parents=True, exist_ok=True)
     try:
-        _, render_payload = run_json(
+        _, legacy_item_payload = run_json(
             [
                 "pr",
                 "metadata-render",
@@ -14445,6 +14510,30 @@ def run_aggregate_cli_contract() -> None:
                 "closeout",
                 "--item",
                 "WI-1541",
+                "--branch",
+                "work/1541-pr-metadata-update-v2",
+                "--head-sha",
+                "1" * 40,
+                "--output-file",
+                str(closeout_body),
+                "--json",
+            ],
+            expect=1,
+        )
+        if legacy_item_payload.get("result") != "block" or not any(
+            "pass --item work_item:<issue> or --issue <GitHub Work Item>" in str(message)
+            for message in legacy_item_payload.get("key_gaps", [])
+        ):
+            raise AssertionError("pr metadata-render must reject a legacy local Work Item locator")
+
+        _, render_payload = run_json(
+            [
+                "pr",
+                "metadata-render",
+                "--surface",
+                "closeout",
+                "--item",
+                "work_item:1541",
                 "--branch",
                 "work/1541-pr-metadata-update-v2",
                 "--head-sha",
