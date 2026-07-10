@@ -57,8 +57,16 @@ jobs:
   release-judgment:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
+      contents: read
+    outputs:
+      publish_allowed: ${{ steps.state.outputs.publish_allowed }}
+      should_publish: ${{ steps.state.outputs.should_publish }}
+      create_release: ${{ steps.state.outputs.create_release }}
+      npm_publish: ${{ steps.state.outputs.npm_publish }}
+      tag: ${{ steps.state.outputs.tag }}
+      release_title: ${{ steps.state.outputs.release_title }}
+      npm_package: ${{ steps.state.outputs.npm_package }}
+      npm_version: ${{ steps.state.outputs.npm_version }}
     env:
       PACKAGE_TAG_PREFIX: 'v'
       NPM_PACKAGE_NAME: '@mc-and-his-agents/loom'
@@ -69,6 +77,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -213,26 +222,53 @@ jobs:
             echo "reason=npm-version-missing" >> "$GITHUB_OUTPUT"
           fi
 
+  release-publisher:
+    needs: release-judgment
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch' && inputs.publish == true) &&
+      needs.release-judgment.outputs.publish_allowed == 'true' &&
+      needs.release-judgment.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Create git tag
-        if: steps.state.outputs.publish_allowed == 'true' && steps.state.outputs.should_publish == 'true'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if git rev-parse -q --verify "refs/tags/${{ steps.state.outputs.tag }}" >/dev/null; then
-            echo "tag ${{ steps.state.outputs.tag }} already exists on this commit"
+          if git rev-parse -q --verify "refs/tags/${{ needs.release-judgment.outputs.tag }}" >/dev/null; then
+            echo "tag ${{ needs.release-judgment.outputs.tag }} already exists on this commit"
           else
-            git tag -a "${{ steps.state.outputs.tag }}" -m "Release ${{ steps.state.outputs.tag }}"
-            git push origin "${{ steps.state.outputs.tag }}"
+            git tag -a "${{ needs.release-judgment.outputs.tag }}" -m "Release ${{ needs.release-judgment.outputs.tag }}"
+            git push origin "${{ needs.release-judgment.outputs.tag }}"
           fi
 
       - name: Publish npm package
-        if: steps.state.outputs.publish_allowed == 'true' && steps.state.outputs.npm_publish == 'true'
+        if: needs.release-judgment.outputs.npm_publish == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NPM_TOKEN secret is required to publish ${{ steps.state.outputs.npm_package }}@${{ steps.state.outputs.npm_version }}" >&2
+            echo "NPM_TOKEN secret is required to publish ${{ needs.release-judgment.outputs.npm_package }}@${{ needs.release-judgment.outputs.npm_version }}" >&2
             exit 1
           fi
           python3 tools/stamp_plugin_payload_metadata.py --source-git-sha "${{ github.sha }}" --write --json
@@ -242,7 +278,7 @@ jobs:
           npm publish --access public --provenance
 
       - name: Create GitHub release
-        if: steps.state.outputs.publish_allowed == 'true' && steps.state.outputs.create_release == 'true'
+        if: needs.release-judgment.outputs.create_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.state.outputs.tag }}" --title "${{ steps.state.outputs.release_title }}" --generate-notes
+        run: gh release create "${{ needs.release-judgment.outputs.tag }}" --title "${{ needs.release-judgment.outputs.release_title }}" --generate-notes
