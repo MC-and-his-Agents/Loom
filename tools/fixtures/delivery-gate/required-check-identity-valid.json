@@ -1,0 +1,7 @@
+{
+  "required_status_checks": {
+    "checks": [
+      {"context": "loom-delivery-gate / loom-delivery-gate", "app_id": 15368}
+    ]
+  }
+}
