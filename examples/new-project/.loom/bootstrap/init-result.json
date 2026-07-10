@@ -197,6 +197,11 @@
         "owner": "loom-runtime"
       },
       {
+        "path": ".loom/bin/product_acceptance.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
         "path": ".loom/bin/execution_attempts.py",
         "kind": "loom-tool-support",
         "owner": "loom-runtime"
@@ -455,6 +460,12 @@
       "sha256": "0838f25a3973c0c7378c9346fb85f2009f4774299b224ff532a6e2441c420003"
     },
     {
+      "path": ".loom/bin/product_acceptance.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/product_acceptance.py",
+      "sha256": "56dae5792b68423b26eff59844052a9cef1441d17ebb6eec8599d4897de8187e"
+    },
+    {
       "path": ".loom/bin/execution_attempts.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/execution_attempts.py",
@@ -464,7 +475,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "1d08e31e21340a0d4b098034acd83188ac2acdea85c9abdd9af9f17a92a166e9"
+      "sha256": "e686efd4b2b4fd38894aacccad3afee6f451b432d384e33d287124f9e760adde"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -512,7 +523,7 @@
       "path": ".loom/bin/runtime_state.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/runtime_state.py",
-      "sha256": "4952cc62ecedd8d78b319fa34ae820ef50585ce91e0fbfb8fc98c0d62bdb800d"
+      "sha256": "842a4d61f7f8082b36096a0d72c926d080be82dd8ff62f653b62ca2ba835d719"
     },
     {
       "path": ".loom/bin/loom_check.py",
@@ -611,6 +622,7 @@
         ".gitignore",
         ".loom/bootstrap/manifest.json",
         ".loom/bin/failure_envelope.py",
+        ".loom/bin/product_acceptance.py",
         ".loom/bin/execution_attempts.py",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
@@ -2205,6 +2217,12 @@
       "requires_intent": null
     },
     {
+      "path": ".loom/bin/product_acceptance.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
       "path": ".loom/bin/execution_attempts.py",
       "kind": "loom-tool-support",
       "owner": "loom-runtime",
@@ -2459,6 +2477,11 @@
       "owner": "loom-runtime"
     },
     {
+      "path": ".loom/bin/product_acceptance.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
       "path": ".loom/bin/execution_attempts.py",
       "kind": "loom-tool-support",
       "owner": "loom-runtime"
@@ -2663,6 +2686,7 @@
             ".loom/bootstrap/manifest.json",
             ".loom/bin/authority_contract.py",
             ".loom/bin/failure_envelope.py",
+            ".loom/bin/product_acceptance.py",
             ".loom/bin/execution_attempts.py",
             ".loom/bin/loom_init.py",
             ".loom/bin/fact_chain_support.py",
@@ -2759,6 +2783,7 @@
       ".loom/bootstrap/manifest.json",
       ".loom/bin/authority_contract.py",
       ".loom/bin/failure_envelope.py",
+      ".loom/bin/product_acceptance.py",
       ".loom/bin/execution_attempts.py",
       ".loom/bin/loom_init.py",
       ".loom/bin/fact_chain_support.py",
@@ -2915,6 +2940,7 @@
           ".loom/bootstrap/manifest.json",
           ".loom/bin/authority_contract.py",
           ".loom/bin/failure_envelope.py",
+          ".loom/bin/product_acceptance.py",
           ".loom/bin/execution_attempts.py",
           ".loom/bin/loom_init.py",
           ".loom/bin/fact_chain_support.py",

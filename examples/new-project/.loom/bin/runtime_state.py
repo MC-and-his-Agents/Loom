@@ -33,6 +33,7 @@ SUPPORTED_ENTRY_FAMILIES = {"loom-init", "loom-flow"}
 EXPECTED_SHARED_RUNTIME_SCRIPTS = (
     "authority_contract.py",
     "failure_envelope.py",
+    "product_acceptance.py",
     "runtime_paths.py",
     "runtime_state.py",
     "loom_init.py",
@@ -49,6 +50,7 @@ EXPECTED_SHARED_RUNTIME_SCRIPTS = (
 EXPECTED_BOOTSTRAP_RUNTIME_SOURCES = {
     ".loom/bin/authority_contract.py": "skills/shared/scripts/authority_contract.py",
     ".loom/bin/failure_envelope.py": "skills/shared/scripts/failure_envelope.py",
+    ".loom/bin/product_acceptance.py": "skills/shared/scripts/product_acceptance.py",
     ".loom/bin/loom_init.py": "skills/shared/scripts/loom_init.py",
     ".loom/bin/fact_chain_support.py": "skills/shared/scripts/fact_chain_support.py",
     ".loom/bin/governance_surface.py": "skills/shared/scripts/governance_surface.py",
