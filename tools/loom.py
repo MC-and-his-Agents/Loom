@@ -2573,6 +2573,40 @@ def flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str]) 
     return parse_json_or_block(command, completed, failed_layer="loom-flow", fallback_to=fallback_to)
 
 
+def host_lifecycle_admission_payload(
+    *,
+    target: Path,
+    issue: int | None,
+    owner: str | None,
+    repo_name: str | None,
+    intent: str,
+) -> dict[str, Any]:
+    """Use the shared host admission evaluator before a lifecycle entrypoint."""
+
+    if issue is None:
+        return {"result": "pass", "lifecycle_state": "not_applicable", "primary_remediation": None, "carrier_mutations": False}
+    flow_args = ["github-intake", "admission", "--target", str(target), "--issue", str(issue), "--intent", intent, "--lifecycle-only"]
+    if owner:
+        flow_args.extend(["--owner", owner])
+    if repo_name:
+        flow_args.extend(["--repo", repo_name])
+    payload = flow_payload(
+        "host-lifecycle-admission",
+        flow_args,
+        fallback_to=["loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json"],
+    )
+    verdict = payload.get("lifecycle_verdict")
+    if isinstance(verdict, dict):
+        return {**verdict, "admission": payload}
+    return {
+        "result": "block",
+        "lifecycle_state": "host_unreadable",
+        "primary_remediation": "loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json",
+        "carrier_mutations": False,
+        "admission": payload,
+    }
+
+
 def emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
     forwarded_args, full_output = split_agent_output_args(flow_args)
     target = target_root_from_explicit_arg(forwarded_args)
@@ -8318,6 +8352,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
     parser.add_argument("--target", default=".")
     parser.add_argument("--item")
     parser.add_argument("--issue", type=int)
+    parser.add_argument("--fr", type=int)
     parser.add_argument("--milestone")
     parser.add_argument("--version")
     parser.add_argument("--package")
@@ -8327,6 +8362,33 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     target = resolve_target(args.target)
+    lifecycle_admission = host_lifecycle_admission_payload(
+        target=target,
+        issue=args.fr,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        intent="ship",
+    )
+    if lifecycle_admission["result"] != "pass":
+        return emit(
+            agent_safe_payload(
+                output(
+                    f"ship {mode}",
+                    "block",
+                    schema_version="loom-ship-status/v1",
+                    summary="ship preflight stopped before carrier diagnostics because the host-native lifecycle admission is blocked.",
+                    mutates=False,
+                    target=str(target),
+                    issue={"number": args.issue},
+                    fr={"number": args.fr},
+                    missing_inputs=lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                    fallback_to=[lifecycle_admission.get("primary_remediation")],
+                    lifecycle_admission=lifecycle_admission,
+                ),
+                target_root=target,
+                full_output=args.full_output,
+            )
+        )
     repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else None
     host = ship_host_issue_status(target, repo=repo_slug, issue=args.issue, milestone=args.milestone)
     release = ship_release_presence(target, repo=repo_slug, version=args.version, package_name=args.package)
@@ -8350,6 +8412,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
         target=str(target),
         item={"id": args.item},
         issue={"number": args.issue},
+        fr={"number": args.fr},
         milestone={"number": args.milestone},
         adoption_mode=adoption_mode,
         diagnostic={"blocked": result == "block", "blockers": blockers, "fixed": fixed, "next_action": next_action},
@@ -8360,6 +8423,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
         checkout=checkout,
         carrier=carrier,
         workstation_current=workstation_current,
+        lifecycle_admission=lifecycle_admission,
         next_action=next_action,
     )
     return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
@@ -8386,7 +8450,7 @@ def handle_ship(argv: list[str]) -> int:
     parser.add_argument("--final-closeout-pr", type=int)
     parser.add_argument("--project")
     parser.add_argument("--phase")
-    parser.add_argument("--fr")
+    parser.add_argument("--fr", type=int)
     parser.add_argument("--owner")
     parser.add_argument("--repo", dest="repo_name")
     parser.add_argument("--comment")
@@ -8406,9 +8470,40 @@ def handle_ship(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     command = "ship"
     target = resolve_target(args.target)
+    lifecycle_admission = host_lifecycle_admission_payload(
+        target=target,
+        issue=args.fr,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        intent="ship",
+    )
+    if lifecycle_admission["result"] != "pass":
+        return emit(
+            agent_safe_payload(
+                output(
+                    command,
+                    "block",
+                    schema_version="loom-ship/v1",
+                    summary="ship stopped before repository carriers because the host-native lifecycle admission is blocked.",
+                    mutates=False,
+                    dry_run=not args.apply,
+                    apply=args.apply,
+                    target=str(target),
+                    item={"id": args.item},
+                    issue={"number": args.issue},
+                    pr={"number": args.pr},
+                    lifecycle_admission=lifecycle_admission,
+                    missing_inputs=lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                    fallback_to=[lifecycle_admission.get("primary_remediation")],
+                    next_action=lifecycle_admission.get("primary_remediation"),
+                ),
+                target_root=target,
+                full_output=args.full_output,
+            )
+        )
 
     common = ["--target", str(target)]
-    steps: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = [ship_step("host-lifecycle-admission", lifecycle_admission)]
     binding_inference = ship_binding_inference_payload(args, target)
     effective_bindings = binding_inference.get("bindings") if isinstance(binding_inference.get("bindings"), dict) else {}
     effective_branch = effective_bindings.get("branch") if isinstance(effective_bindings.get("branch"), str) else None
@@ -12073,6 +12168,7 @@ def handle_scenario(command: str, argv: list[str]) -> int:
             ("--owner", args.owner),
             ("--repo", args.repo_name),
             ("--issue", args.issue),
+            ("--fr", args.fr),
             ("--pr", args.pr),
             ("--pr-payload-file", args.pr_payload_file),
             ("--project", args.project),

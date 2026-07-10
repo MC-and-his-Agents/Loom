@@ -483,6 +483,7 @@ RUNTIME_COPY_ROOTS = (
     ".loom/bin",
 )
 RUNTIME_COPY_FILES = (
+    "authority_contract.py",
     "github_admission.py",
     "github_host.py",
     "loom_init.py",
