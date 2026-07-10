@@ -14,6 +14,7 @@
     "shared/scripts/loom_init.py",
     "shared/scripts/fact_chain_support.py",
     "shared/scripts/governance_surface.py",
+    "shared/scripts/github_host.py",
     "shared/scripts/loom_flow.py",
     "shared/scripts/loom_status.py",
     "shared/scripts/loom_check.py",

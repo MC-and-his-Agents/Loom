@@ -484,6 +484,7 @@ RUNTIME_COPY_ROOTS = (
 )
 RUNTIME_COPY_FILES = (
     "github_admission.py",
+    "github_host.py",
     "loom_init.py",
     "fact_chain_support.py",
     "governance_surface.py",
