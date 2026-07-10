@@ -90,6 +90,16 @@ GitHub profile 至少应能表达：
 - Project view、checklist、`tasks.md` 或外部 tracker 只能补充组织视图或 task carrier，不能替代 parent/sub-issue 与 `blocked-by/blocks`。
 - 若 GitHub 原生关系暂时无法表达，issue comment 必须记录缺口、等价 locator 和重新同步条件。
 
+### 按需 FR → Work Item admission
+
+FR 在规划态可以没有 Work Item；只有它要进入 branch、build、PR、ship 或 completed/closeout 语义时，才必须先取得 `admitted` Work Item。
+
+- `loom route --target <repo> --issue <fr> --task <scope> --json` 只读地给出最小 proposal；只有显式 `--apply` 才会创建或补齐原生 GitHub child 与声明的 `--blocked-by` 关系。
+- apply 是可重入 reconciliation，不宣称 GitHub 多次 API 写入是原子事务。中途失败返回 `partial_apply`、已创建的 typed locator 与包含 `--work-item` 的恢复动作；恢复必须复用该 Work Item，不能按标题猜测或重复创建。
+- admission 只消费 GitHub issue type、native parent/sub-issue、native dependency 与 host readback；不得写入 `.loom` current、progress、shadow、review ledger、手写 head 或 closeout carrier。
+- 未拆分 FR 的执行意图返回 `needs_breakdown`；`duplicate`、`invalid`、`cancelled`、`superseded`、`deferred` 与 `not planned` 只能表示非完成例外，不能伪装为 completed。
+- PR binding 与 FR/Phase close guard 是后续消费者：implementation PR 的 primary issue 必须是 `work_item`，而不是 FR 或 Phase。
+
 GitHub task carrier 边界：
 
 - GitHub issue / sub-issue 可以作为 execution breakdown unit 的 `github_issue` carrier，但只有被明确 author 为 `Work Item` 的 issue 才能进入正式执行。

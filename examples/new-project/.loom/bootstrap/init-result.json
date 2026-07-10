@@ -202,6 +202,11 @@
         "owner": "loom-runtime"
       },
       {
+        "path": ".loom/bin/github_admission.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
         "path": ".loom/bin/loom_flow.py",
         "kind": "loom-tool",
         "owner": "loom-runtime"
@@ -421,7 +426,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "c89103ad663833e5ca5299996bbfec73e6009e2c8afd4d2a3c634ed0ca3c89ca"
+      "sha256": "781fd54acbf8a26f9254b6a7a1cfb63933f2a57626116cf3008436da041dfb35"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -436,10 +441,16 @@
       "sha256": "af21c0ed9c0a5906c9e8791f3a8390dd08207ea494f125dc15b58936979f1340"
     },
     {
+      "path": ".loom/bin/github_admission.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/github_admission.py",
+      "sha256": "6ea94ddc6bd7408427c97b4322eb53f646f29f0d2dc3d702edc65bfcd36533ed"
+    },
+    {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "85eb5c793c02425b793fe162f0cfdcd9a2b3e18df864f4f758c6961c8b151aa4"
+      "sha256": "ab1cf54c27bb958b7bbf03012d5bd39c103091130aa237b471f7c8fe25a22f86"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -457,13 +468,13 @@
       "path": ".loom/bin/runtime_state.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/runtime_state.py",
-      "sha256": "0f4e82dd388d6cfe7510a3cc28350e93283a8dc0ad2e40e77ff1469ce5678045"
+      "sha256": "4403fe883b2a8296d4099521d6f508a35943f9f89d56f69ca88cdc7aacf2973e"
     },
     {
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "6790d7d2ed479bbcccbf02e33336de24aa208a8025b4a548d408b71535792363"
+      "sha256": "1fe4302e243054d6b1416cc139faa201bf5d796953b77f75adaab447030e5320"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -2164,6 +2175,12 @@
       "requires_intent": null
     },
     {
+      "path": ".loom/bin/github_admission.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "owner": "loom-runtime",
@@ -2387,6 +2404,11 @@
       "owner": "loom-runtime"
     },
     {
+      "path": ".loom/bin/github_admission.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "owner": "loom-runtime"
@@ -2562,6 +2584,7 @@
             ".loom/bin/loom_init.py",
             ".loom/bin/fact_chain_support.py",
             ".loom/bin/governance_surface.py",
+            ".loom/bin/github_admission.py",
             ".loom/bin/loom_flow.py",
             ".loom/bin/loom_status.py",
             ".loom/bin/runtime_paths.py",
@@ -2653,6 +2676,7 @@
       ".loom/bin/loom_init.py",
       ".loom/bin/fact_chain_support.py",
       ".loom/bin/governance_surface.py",
+      ".loom/bin/github_admission.py",
       ".loom/bin/loom_flow.py",
       ".loom/bin/loom_status.py",
       ".loom/bin/runtime_paths.py",
@@ -2804,6 +2828,7 @@
           ".loom/bin/loom_init.py",
           ".loom/bin/fact_chain_support.py",
           ".loom/bin/governance_surface.py",
+          ".loom/bin/github_admission.py",
           ".loom/bin/loom_flow.py",
           ".loom/bin/loom_status.py",
           ".loom/bin/runtime_paths.py",
