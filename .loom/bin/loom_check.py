@@ -16934,6 +16934,32 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         if payload.get("status") != "block" or not any("must stay inside" in error for error in errors):
             failures.append(Failure("adversarial-adoption", "registry executable and manifest paths must not escape the runtime root"))
 
+        metadata_only_target = base / "metadata-only-installed-state"
+        (metadata_only_target / ".loom").mkdir(parents=True)
+        write_json(
+            metadata_only_target / ".loom/installed-state.json",
+            {
+                "schema_version": "loom-installed-state/v2",
+                "runtime_provider": "global-cli",
+                "repo_payload": {"mode": "metadata-only"},
+            },
+        )
+        if not loom_flow_module.uses_global_cli_metadata_only(metadata_only_target):
+            failures.append(Failure("adversarial-adoption", "global-CLI metadata-only installed state must not require a repo bootstrap manifest"))
+        write_json(
+            metadata_only_target / ".loom/installed-state.json",
+            {
+                "schema_version": "loom-installed-state/v2",
+                "runtime_provider": "repo-local-wrapper",
+                "repo_payload": {"mode": "repo-local-runtime"},
+            },
+        )
+        if loom_flow_module.uses_global_cli_metadata_only(metadata_only_target):
+            failures.append(Failure("adversarial-adoption", "repo-local runtime installed state must keep bootstrap manifest validation"))
+        write_json(metadata_only_target / ".loom/installed-state.json", [])
+        if loom_flow_module.uses_global_cli_metadata_only(metadata_only_target):
+            failures.append(Failure("adversarial-adoption", "non-object installed state must not bypass bootstrap manifest validation"))
+
         fact_chain_escape = base / "fact-chain-error-anchor"
         (fact_chain_escape / ".loom/bootstrap").mkdir(parents=True)
         write_json(

@@ -485,7 +485,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "ad0f71ba440609e3a7b5444abf29e3044c198e99545ead1ea7fd1f9c32382cfa"
+      "sha256": "816b77e246230e6646ca6628afb84b964b06dd9d74e1a15ea69a1e36770be4a0"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -733,22 +733,12 @@
       "default_branch": "main",
       "branch_protection": "enabled",
       "required_checks": [
-        "demo-bootstrap",
-        "loom-check",
-        "loom-pr-merge-gate",
-        "node-installer-pr",
-        "py-compile",
-        "repo-local-cli",
-        "root-self-governance"
+        "loom-delivery-gate",
+        "py-compile"
       ],
       "branch_protection_required_checks": [
         "py-compile",
-        "demo-bootstrap",
-        "repo-local-cli",
-        "loom-check",
-        "loom-pr-merge-gate",
-        "node-installer-pr",
-        "root-self-governance"
+        "loom-delivery-gate"
       ],
       "pr_reviews": "not_required",
       "rulesets": {
@@ -770,13 +760,13 @@
           "loom-check"
         ],
         "check_ran": true,
-        "required_checks_configured": true,
-        "host_enforcement_status": "verified",
+        "required_checks_configured": false,
+        "host_enforcement_status": "unverified",
         "recommended_action": "install the workflow and configure its stable check names as host-required checks"
       },
       "host_enforcement": {
         "branch_protection_or_ruleset": true,
-        "required_checks": true,
+        "required_checks": false,
         "workflow_exists": true,
         "check_ran": true,
         "verification_status": "verified"
@@ -829,15 +819,15 @@
       },
       "host_governance_capability": {
         "schema_version": "loom-host-governance-capability-diagnosis/v1",
-        "status": "host_enforced",
-        "reason": "host_enforced",
-        "setup_guidance": "keep branch protection or rulesets requiring Loom stable checks enabled",
+        "status": "unconfigured",
+        "reason": "missing_host_enforcement",
+        "setup_guidance": "enable branch protection or an active ruleset and require Loom stable checks",
         "signals": {
           "repository": "MC-and-his-Agents/Loom",
           "default_branch": "main",
           "branch_protection": "enabled",
           "rulesets_enforced": false,
-          "required_checks": true,
+          "required_checks": false,
           "pr_reviews": "not_required"
         }
       }
