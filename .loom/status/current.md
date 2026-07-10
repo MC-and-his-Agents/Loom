@@ -12,10 +12,10 @@
 - Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture; git diff --check
 - Closing Condition: PR for #2012 merges with current-head review and hosted gates; Harbor #244 no longer fails carrier refresh because bootstrap manifest is intentionally absent.
 - Current Checkpoint: merge
-- Current Stop: Rebased onto origin/main; source and generated runtime validation passed. Current-head reviews must be refreshed before host merge.
-- Next Step: Record WI-2012 spec and implementation reviews for the current head, then refresh PR metadata and run merge-ready.
+- Current Stop: Local merge-ready and PR gate pass; the corrected native Work Item binding is awaiting a fresh hosted merge-gate run.
+- Next Step: Consume the fresh hosted merge gate, run controlled merge, then release the fixed global CLI before returning to Harbor #244.
 - Blockers: None
-- Latest Validation Summary: 2026-07-11 b0da48c9671361e04af9da95f2dfb887f8f472ad: git diff --check passed; py_compile passed; skills generated-tree check passed; make loom-demo-new-project-check passed; tools/check_npm_package.py passed; tools/check_cli_contract.py passed all 23 surfaces in 460.26s; tools/loom_check.py --profile source --source-surface source-self-fixture passed; Harbor HARBOR-241 source carrier-refresh reproduction passed without requiring bootstrap manifest.
+- Latest Validation Summary: 2026-07-11 ae0d2f40034b69d9b8601164165083fa70980860: `git diff --check origin/main...HEAD`, generated-tree drift, package/runtime-copy parity, demo bootstrap, source self-fixture, root self-adoption, merge-ready and local PR gate passed; unsupported-schema and symlink installed-state regressions now fail closed. Hosted merge gate must consume the corrected `Work Item: work_item:2012` PR binding.
 - Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-2012.md`.
 - Current Lane: WI-2012 metadata-only carrier refresh correction
 
