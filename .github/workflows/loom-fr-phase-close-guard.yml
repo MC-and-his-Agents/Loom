@@ -1,0 +1,228 @@
+name: loom-fr-phase-close-guard
+
+# `issues` workflows are resolved from the default branch. The only checkout
+# below explicitly reads that trusted branch, never issue, branch, or PR code.
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: loom-fr-phase-close-guard-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  loom-fr-phase-close-guard:
+    name: loom-fr-phase-close-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read FR or Phase host facts
+        id: snapshot
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const subjectNumber = context.payload.issue?.number;
+            const eventLabels = context.payload.issue?.labels || [];
+            const typeLabels = new Set(eventLabels.map((label) => String(label?.name || label || "").trim().toLowerCase()));
+            if (!Number.isInteger(subjectNumber) || (!["fr", "phase"].some((label) => typeLabels.has(label)))) {
+              core.notice("closed issue is not an FR or Phase; close guard is not applicable");
+              core.setOutput("applicable", "false");
+              return;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueQuery = `
+              query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  defaultBranchRef { name }
+                  issue(number:$number) {
+                    number state stateReason body
+                    labels(first:100) { pageInfo { hasNextPage } nodes { name } }
+                    subIssues(first:100) { pageInfo { hasNextPage } nodes { number } }
+                    blockedBy(first:100) { pageInfo { hasNextPage } nodes { number state } }
+                    closedByPullRequestsReferences(first:100) {
+                      pageInfo { hasNextPage }
+                      nodes {
+                        number merged baseRefName headRefOid mergeCommit { oid } reviewDecision
+                        commits(last:1) {
+                          nodes {
+                            commit {
+                              oid
+                              statusCheckRollup {
+                                state
+                                contexts(first:100) {
+                                  pageInfo { hasNextPage }
+                                  nodes {
+                                    __typename
+                                    ... on CheckRun { name status conclusion }
+                                    ... on StatusContext { context state }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+            const pageComplete = (connection) => Boolean(connection && Array.isArray(connection.nodes) && connection.pageInfo && connection.pageInfo.hasNextPage === false);
+            const fetchIssue = async (number) => {
+              const data = await github.graphql(issueQuery, { owner, repo, number });
+              const repository = data?.repository;
+              const issue = repository?.issue;
+              if (!issue || !repository?.defaultBranchRef?.name) throw new Error(`GitHub read for issue:${number} is incomplete`);
+              const connections = [issue.labels, issue.subIssues, issue.blockedBy, issue.closedByPullRequestsReferences];
+              const comments = number === subjectNumber
+                ? await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 })
+                : [];
+              return {
+                default_branch: repository.defaultBranchRef.name,
+                issue: {
+                  number: issue.number,
+                  state: issue.state,
+                  state_reason: issue.stateReason,
+                  body: issue.body || "",
+                  labels: issue.labels?.nodes?.map((entry) => entry.name).filter(Boolean) || [],
+                  children: issue.subIssues?.nodes?.map((entry) => entry.number).filter(Number.isInteger) || [],
+                  blocked_by: issue.blockedBy?.nodes?.map((entry) => ({ number: entry.number, state: entry.state })) || [],
+                  merged_prs: issue.closedByPullRequestsReferences?.nodes?.map((entry) => {
+                    const commit = entry.commits?.nodes?.[0]?.commit;
+                    const rollup = commit?.statusCheckRollup;
+                    const contexts = rollup?.contexts;
+                    return {
+                      number: entry.number,
+                      merged: entry.merged,
+                      base_ref: entry.baseRefName,
+                      head_sha: entry.headRefOid,
+                      merge_commit: entry.mergeCommit?.oid,
+                      review_decision: entry.reviewDecision,
+                      check_rollup: {
+                        state: rollup?.state,
+                        contexts_complete: pageComplete(contexts),
+                        contexts: contexts?.nodes?.map((context) => ({
+                          type: context.__typename,
+                          name: context.name || context.context,
+                          status: context.status,
+                          conclusion: context.conclusion,
+                          state: context.state,
+                        })) || [],
+                      },
+                      commit_sha: commit?.oid,
+                    };
+                  }) || [],
+                  comment_bodies: comments.map((comment) => comment.body).filter((body) => typeof body === "string"),
+                  read_complete: connections.every(pageComplete),
+                  comments_complete: number === subjectNumber,
+                },
+              };
+            };
+            const snapshot = { subject: subjectNumber, default_branch: null, host_readable: true, issues: [] };
+            const byNumber = new Map();
+            try {
+              const queue = [subjectNumber];
+              while (queue.length) {
+                const number = queue.shift();
+                if (!Number.isInteger(number) || byNumber.has(number) || byNumber.size >= 100) {
+                  if (!Number.isInteger(number) || byNumber.size >= 100) snapshot.host_readable = false;
+                  continue;
+                }
+                const fetched = await fetchIssue(number);
+                snapshot.default_branch ||= fetched.default_branch;
+                if (snapshot.default_branch !== fetched.default_branch) snapshot.host_readable = false;
+                byNumber.set(number, fetched.issue);
+                queue.push(...fetched.issue.children);
+              }
+              snapshot.issues = [...byNumber.values()];
+            } catch (error) {
+              snapshot.host_readable = false;
+              core.warning(`closure guard host read failed: ${error.message}`);
+            }
+            const path = `${process.env.RUNNER_TEMP}/loom-fr-phase-close-guard-${subjectNumber}.json`;
+            fs.writeFileSync(path, JSON.stringify(snapshot));
+            core.setOutput("applicable", "true");
+            core.setOutput("subject", String(subjectNumber));
+            core.setOutput("snapshot", path);
+
+      - name: Checkout trusted default branch evaluator
+        if: steps.snapshot.outputs.applicable == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Evaluate closure facts
+        if: steps.snapshot.outputs.applicable == 'true'
+        env:
+          SNAPSHOT_PATH: ${{ steps.snapshot.outputs.snapshot }}
+          RESULT_PATH: ${{ runner.temp }}/loom-fr-phase-close-guard-result.json
+        run: python3 src/skills/shared/scripts/github_closure_guard.py --snapshot "$SNAPSHOT_PATH" --output "$RESULT_PATH"
+
+      - name: Reopen only evaluator-blocked closure
+        if: steps.snapshot.outputs.applicable == 'true'
+        uses: actions/github-script@v7
+        env:
+          GUARD_RESULT_PATH: ${{ runner.temp }}/loom-fr-phase-close-guard-result.json
+          SNAPSHOT_PATH: ${{ steps.snapshot.outputs.snapshot }}
+          SUBJECT_NUMBER: ${{ steps.snapshot.outputs.subject }}
+        with:
+          script: |
+            const fs = require("fs");
+            const subjectNumber = Number(process.env.SUBJECT_NUMBER);
+            let verdict;
+            let snapshot;
+            try {
+              verdict = JSON.parse(fs.readFileSync(process.env.GUARD_RESULT_PATH, "utf8"));
+              snapshot = JSON.parse(fs.readFileSync(process.env.SNAPSHOT_PATH, "utf8"));
+            } catch (error) {
+              core.setFailed(`cannot read closure evaluator snapshot or output: ${error.message}`);
+              return;
+            }
+            if (verdict?.verdict !== "reopen_required") {
+              core.notice(`closure guard allows ${verdict?.verdict || "unknown"}`);
+              return;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const remediationMarker = `<!-- loom:fr-phase-close-guard issue:${subjectNumber} -->`;
+            const subject = Array.isArray(snapshot?.issues)
+              ? snapshot.issues.find((issue) => issue?.number === subjectNumber)
+              : null;
+            const snapshotComments = subject?.comment_bodies;
+            const hasSnapshotMarker = subject?.comments_complete === true && Array.isArray(snapshotComments)
+              && snapshotComments.some((body) => String(body).includes(remediationMarker));
+            await github.rest.issues.update({ owner, repo, issue_number: subjectNumber, state: "open" });
+            const { data: reopened } = await github.rest.issues.get({ owner, repo, issue_number: subjectNumber });
+            if (reopened.state !== "open") {
+              core.setFailed(`closure guard reopened issue:${subjectNumber} but host readback is ${reopened.state}`);
+              return;
+            }
+            if (hasSnapshotMarker) return;
+            let comments;
+            try {
+              comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: subjectNumber, per_page: 100 });
+            } catch (error) {
+              core.setFailed(`issue:${subjectNumber} reopened but remediation deduplication could not be completed: ${error.message}`);
+              return;
+            }
+            if (comments.some((comment) => String(comment.body || "").includes(remediationMarker))) return;
+            const details = Array.isArray(verdict.reasons)
+              ? verdict.reasons.map((entry) => `- \`${entry.code}\`: ${entry.message}`).join("\n")
+              : "- \`host_unreadable\`: the closure evaluator returned no structured reasons";
+            const { data: created } = await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: subjectNumber,
+              body: `${remediationMarker}\n\nLoom 已重新打开该 FR/Phase：它不能以 completed 关闭。\n\n${details}\n\n处理后再次关闭；不要通过补 current、carrier、shadow 或手写 head 字段绕过。`,
+            });
+            const { data: comment } = await github.rest.issues.getComment({ owner, repo, comment_id: created.id });
+            if (!String(comment.body || "").includes(remediationMarker)) {
+              core.setFailed(`issue:${subjectNumber} remediation comment readback is missing its stable marker`);
+            }

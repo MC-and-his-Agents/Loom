@@ -100,6 +100,14 @@ FR 在规划态可以没有 Work Item；只有它要进入 branch、build、PR�
 - 未拆分 FR 的执行意图返回 `needs_breakdown`；`duplicate`、`invalid`、`cancelled`、`superseded`、`deferred` 与 `not planned` 只能表示非完成例外，不能伪装为 completed。
 - PR binding 与 FR/Phase close guard 是后续消费者：implementation PR 的 primary issue 必须是 `work_item`，而不是 FR 或 Phase。
 
+### FR/Phase host-native close guard
+
+`issues.closed` guard 只读取 GitHub default-branch 所定义的 workflow 与宿主 API；它只 checkout default branch 的 evaluator，不 checkout 或执行 issue、branch 或 PR 内容，也不读取或修补 `.loom` carrier。
+
+- 只有 `completed` 的 FR/Phase 才需证明完整 `Phase -> FR -> Work Item` native tree、已关闭 native blockers，以及每个 Work Item 的 default-branch merged PR、GitHub `reviewDecision: APPROVED` 与完整成功的 `statusCheckRollup`。issue comment 只能补充说明，不能单独成为 completed 证据。
+- `not planned`、`duplicate`、`invalid`、`cancelled`、`superseded` 是非完成关闭；不会被当作 completed。`deferred` 还必须有非空 `Activation Policy` 与 `Successor: phase|fr|work_item:<number>`，否则自动 reopen。
+- 分页、权限或任何 host read 不完整也自动 reopen。每个 issue 的 guard 串行执行；先用 snapshot 中完整读取的 comment marker 去重，再 reopen/readback，必要时再次完整分页读取 comments 后写入一条带稳定 marker 的 remediation。若去重读取失败，workflow 明确失败而不静默跳过 remediation。
+
 GitHub task carrier 边界：
 
 - GitHub issue / sub-issue 可以作为 execution breakdown unit 的 `github_issue` carrier，但只有被明确 author 为 `Work Item` 的 issue 才能进入正式执行。
