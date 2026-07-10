@@ -11259,11 +11259,25 @@ raise SystemExit(1)
 def install_bootstrapped_runtime(target: Path) -> None:
     runtime_target = target / ".loom" / "bin"
     manifest_target = target / ".loom" / "bootstrap" / "manifest.json"
+    source_manifest = REPO_ROOT / ".loom" / "bootstrap" / "manifest.json"
     if runtime_target.exists():
         shutil.rmtree(runtime_target)
     shutil.copytree(REPO_ROOT / ".loom" / "bin", runtime_target)
+    manifest_payload = json.loads(source_manifest.read_text(encoding="utf-8"))
+    host_artifact = next(
+        (
+            artifact
+            for artifact in manifest_payload.get("artifacts", [])
+            if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/github_host.py"
+        ),
+        None,
+    )
+    if not isinstance(host_artifact, dict) or host_artifact.get("sha256") != hashlib.sha256(
+        (runtime_target / "github_host.py").read_bytes()
+    ).hexdigest():
+        raise AssertionError("fresh bootstrap manifest must bind the generated github_host runtime artifact")
     manifest_target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / ".loom" / "bootstrap" / "manifest.json", manifest_target)
+    shutil.copy2(source_manifest, manifest_target)
 
 
 def write_idle_fact_chain_target(target: Path) -> None:
@@ -13978,8 +13992,9 @@ def run_fr_wi_admission_surface() -> None:
             payload = {"data": {"viewer": {"login": "fixture"}}} if "graphql" in args else {"number": 1}
             return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
 
-        original_run_process = module.run_process
-        module.run_process = fake_run_process
+        host_module = sys.modules[module.gh_rest_write_json.__module__]
+        original_run_process = host_module.run_process
+        host_module.run_process = fake_run_process
         try:
             hostile = "@/etc/passwd $(not-a-command)\n\"quoted\""
             payload, errors = module.gh_rest_write_json(target, method="POST", path="repos/owner/repo/issues", request_payload={"title": hostile})
@@ -13987,7 +14002,7 @@ def run_fr_wi_admission_surface() -> None:
             graphql_payload, graphql_errors = module.gh_graphql_json(target, "query($title:String!){ viewer { login } }", {"title": hostile})
             graphql_input = captured.get("input")
         finally:
-            module.run_process = original_run_process
+            host_module.run_process = original_run_process
         if errors or graphql_errors or payload != {"number": 1} or graphql_payload is None or "-F" in captured.get("args", []) or hostile in captured.get("args", []):
             raise AssertionError("admission host writes must keep hostile issue text in JSON stdin, never gh -F arguments")
         request_body = json.loads(str(rest_input))
