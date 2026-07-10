@@ -24,7 +24,7 @@ on:
         required: true
         type: string
       enforcement:
-        description: Required delivery-gate mode: advisory records the result; enforce fails a non-passing terminal check.
+        description: "Required delivery-gate mode: advisory records the result; enforce fails a non-passing terminal check."
         required: true
         type: string
     outputs:

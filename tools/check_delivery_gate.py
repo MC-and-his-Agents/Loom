@@ -321,7 +321,7 @@ def check_workflow() -> None:
         "default: make delivery-gate-check",
         "loom_ref:",
         "enforcement:",
-        "Required delivery-gate mode",
+        'description: "Required delivery-gate mode: advisory records the result; enforce fails a non-passing terminal check."',
         "required: true",
         "^[0-9a-f]{40}$",
         "loom-delivery-gate:",
