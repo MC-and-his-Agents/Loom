@@ -37,6 +37,7 @@ CHECK_RUNTIME_SOURCE = "skills/shared/scripts/loom_check.py"
 STORY_CARRIERS_RUNTIME_SOURCE = "skills/shared/scripts/loom_story_carriers.py"
 FACT_CHAIN_RUNTIME_SOURCE = "skills/shared/scripts/fact_chain_support.py"
 GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
+ADMISSION_RUNTIME_SOURCE = "skills/shared/scripts/github_admission.py"
 TOOL_VERSION = "1.3.0"
 CONTRACT_VERSION = "1.3.0"
 WORK_ITEM_ID = "INIT-0001"
@@ -143,6 +144,7 @@ RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
     ".loom/bin/fact_chain_support.py": FACT_CHAIN_RUNTIME_SOURCE,
     ".loom/bin/governance_surface.py": GOVERNANCE_RUNTIME_SOURCE,
+    ".loom/bin/github_admission.py": ADMISSION_RUNTIME_SOURCE,
     ".loom/bin/loom_flow.py": FLOW_RUNTIME_SOURCE,
     ".loom/bin/loom_status.py": STATUS_RUNTIME_SOURCE,
     ".loom/bin/runtime_paths.py": "skills/shared/scripts/runtime_paths.py",
@@ -1604,6 +1606,7 @@ def profile_common_artifacts(global_cli_metadata_only: bool = False) -> list[dic
             runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/github_admission.py", "loom-tool-support", ADMISSION_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/loom_flow.py", "loom-tool", FLOW_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/loom_status.py", "loom-tool", STATUS_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/runtime_paths.py", "loom-tool-support", "skills/shared/scripts/runtime_paths.py"),
@@ -1681,6 +1684,7 @@ def attach_only_artifact_paths(target_root: Path, install_pr_template: bool, glo
                 ".loom/bin/loom_init.py",
                 ".loom/bin/fact_chain_support.py",
                 ".loom/bin/governance_surface.py",
+                ".loom/bin/github_admission.py",
                 ".loom/bin/loom_flow.py",
                 ".loom/bin/runtime_paths.py",
                 ".loom/bin/runtime_state.py",
@@ -1721,7 +1725,11 @@ def initial_work_items(
                 "owner_for_checkpoint_lite": "repository owner or current attach operator",
             }
         ]
-    artifacts = artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile, global_cli_metadata_only))
+    artifacts = [
+        path
+        for path in artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile, global_cli_metadata_only))
+        if path != ".loom/bin/github_admission.py"
+    ]
     if profile == "light-governance":
         return [
             {
@@ -2951,6 +2959,7 @@ def runtime_artifact(path: str, kind: str, source: str) -> dict[str, str]:
         ".loom/bin/loom_init.py": Path(__file__),
         ".loom/bin/fact_chain_support.py": Path(__file__).with_name("fact_chain_support.py"),
         ".loom/bin/governance_surface.py": Path(__file__).with_name("governance_surface.py"),
+        ".loom/bin/github_admission.py": Path(__file__).with_name("github_admission.py"),
         ".loom/bin/loom_flow.py": Path(__file__).with_name("loom_flow.py"),
         ".loom/bin/loom_status.py": Path(__file__).with_name("loom_status.py"),
         ".loom/bin/runtime_paths.py": Path(__file__).with_name("runtime_paths.py"),
@@ -3078,6 +3087,7 @@ def scaffold_target(
             (Path(__file__), target_root / ".loom/bin/loom_init.py"),
             (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),
             (Path(__file__).with_name("governance_surface.py"), target_root / ".loom/bin/governance_surface.py"),
+            (Path(__file__).with_name("github_admission.py"), target_root / ".loom/bin/github_admission.py"),
             (Path(__file__).with_name("loom_flow.py"), target_root / ".loom/bin/loom_flow.py"),
             (Path(__file__).with_name("loom_status.py"), target_root / ".loom/bin/loom_status.py"),
             (Path(__file__).with_name("runtime_paths.py"), target_root / ".loom/bin/runtime_paths.py"),

@@ -11824,6 +11824,48 @@ def handle_adopt(argv: list[str]) -> int:
 
 
 def handle_route(argv: list[str]) -> int:
+    if "--issue" in argv or any(arg.startswith("--issue=") for arg in argv):
+        parser = argparse.ArgumentParser(prog="loom route")
+        parser.add_argument("--target", required=True, help="Target repository root")
+        parser.add_argument("--issue", type=int, required=True, help="GitHub FR or Work Item issue number")
+        parser.add_argument("--task", required=True, help="Bounded Work Item proposal text")
+        parser.add_argument(
+            "--intent",
+            choices=("planning", "branch", "build", "pr", "ship", "closeout", "completed"),
+            default="planning",
+            help="Lifecycle intent that requires admission",
+        )
+        parser.add_argument("--blocked-by", type=int, action="append", default=[], help="Native blocking issue number; may be repeated")
+        parser.add_argument("--work-item", type=int, help="Existing Work Item number for a partial admission recovery")
+        parser.add_argument("--apply", action="store_true", help="Apply host-native Work Item reconciliation")
+        parser.add_argument("--json", action="store_true")
+        parser.add_argument("--full-output", action="store_true")
+        args = parser.parse_args(argv)
+        flow_args = [
+            "github-intake",
+            "admission",
+            "--target",
+            args.target,
+            "--issue",
+            str(args.issue),
+            "--task",
+            args.task,
+            "--intent",
+            args.intent,
+        ]
+        for blocker in args.blocked_by:
+            flow_args.extend(["--blocked-by", str(blocker)])
+        if args.work_item is not None:
+            flow_args.extend(["--work-item", str(args.work_item)])
+        if args.apply:
+            flow_args.append("--apply")
+        if args.full_output:
+            flow_args.append("--full-output")
+        return emit_flow(
+            "route",
+            flow_args,
+            fallback_to=["loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json"],
+        )
     return emit_delegated("route", "loom_init.py", ["route", *strip_json_flag(argv)], failed_layer="loom-route", fallback_to=["loom route --target <repo> --task <task> --json", "loom init verify --target <repo> --json"])
 
 

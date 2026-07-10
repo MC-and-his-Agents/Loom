@@ -13807,6 +13807,220 @@ def run_host_planning_taxonomy_surface() -> None:
     print("host-planning-taxonomy surface checks passed")
 
 
+def run_fr_wi_admission_surface() -> None:
+    module = load_loom_flow_module()
+    with tempfile.TemporaryDirectory(prefix="loom-fr-wi-admission-") as raw_tmp:
+        target = Path(raw_tmp)
+        sentinel = target / "sentinel.txt"
+        sentinel.write_text("must stay untouched\n", encoding="utf-8")
+        before_tree = snapshot_tree(target)
+        state: dict[str, Any] = {
+            "created": False,
+            "linked": False,
+            "dependency": False,
+            "create_calls": 0,
+            "attach_fails": False,
+            "tree_paginated": False,
+            "not_planned": False,
+        }
+        plan_key: str | None = None
+
+        def child_body() -> str:
+            assert plan_key is not None
+            return (
+                "## Loom admission\n\n"
+                '<!-- loom:fr-wi-admission {"fr":"fr:100","plan_key":"'
+                + plan_key
+                + '","schema_version":"loom-fr-wi-admission/v1"} -->\n'
+            )
+
+        def fake_issue(_root: Path, _owner: str, _repo: str, number: int) -> tuple[dict[str, Any] | None, list[str]]:
+            if number == 100:
+                return {
+                    "id": "I_FR_100",
+                    "number": 100,
+                    "state": "CLOSED" if state["not_planned"] else "OPEN",
+                    "stateReason": "not_planned" if state["not_planned"] else None,
+                    "title": "FR: Host-native admission",
+                    "body": "",
+                    "url": "https://github.com/example/repo/issues/100",
+                    "labels": ["fr"],
+                }, []
+            if number == 200 and state["created"]:
+                return {
+                    "id": "I_WI_200",
+                    "number": 200,
+                    "state": "OPEN",
+                    "title": "WI: Narrow child",
+                    "body": child_body(),
+                    "url": "https://github.com/example/repo/issues/200",
+                    "labels": ["work-item"],
+                }, []
+            return None, ["not found"]
+
+        def fake_tree(_root: Path, _owner: str, _repo: str, number: int) -> tuple[dict[str, Any] | None, list[str]]:
+            if number == 100:
+                children = []
+                if state["linked"]:
+                    children.append({"id": "I_WI_200", "number": 200, "title": "WI: Narrow child", "body": child_body(), "state": "OPEN", "url": "https://github.com/example/repo/issues/200", "labels": {"nodes": [{"name": "work-item"}]}})
+                return {"id": "I_FR_100", "number": 100, "parent": None, "subIssues": {"pageInfo": {"hasNextPage": state["tree_paginated"]}, "nodes": children}}, []
+            if number == 200 and state["created"]:
+                return {"id": "I_WI_200", "number": 200, "parent": {"id": "I_FR_100", "number": 100} if state["linked"] else None, "subIssues": {"pageInfo": {"hasNextPage": False}, "nodes": []}}, []
+            return None, ["not found"]
+
+        def fake_graphql(_root: Path, query: str, _variables: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+            if "search(query" in query:
+                return {"search": {"pageInfo": {"hasNextPage": False}, "nodes": []}}, []
+            if "parent: issue" in query:
+                return {"repository": {"parent": {"id": "I_FR_100"}, "child": {"id": "I_WI_200"}}}, []
+            if "addSubIssue" in query:
+                if state["attach_fails"]:
+                    return None, ["simulated parent write failure"]
+                state["linked"] = True
+                return {"addSubIssue": {"clientMutationId": "fixture"}}, []
+            return None, ["unexpected GraphQL query"]
+
+        def fake_create(_root: Path, *, method: str, path: str, request_payload: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+            if method != "POST" or path != "repos/owner/repo/issues":
+                return None, ["wrong create target"]
+            if request_payload.get("labels") != ["work-item"] or "@/etc/passwd" in str(request_payload):
+                return None, ["wrong create payload"]
+            state["created"] = True
+            state["create_calls"] += 1
+            return {"node_id": "I_WI_200", "id": 200, "number": 200, "state": "open", "title": request_payload.get("title"), "body": request_payload.get("body"), "html_url": "https://github.com/example/repo/issues/200", "labels": [{"name": "work-item"}]}, []
+
+        def fake_dependencies(_root: Path, _owner: str, _repo: str, number: int) -> dict[str, Any]:
+            edges = []
+            if number == 200 and state["dependency"]:
+                edges.append({"direction": "blocked_by", "source_issue": 200, "blocking_issue": 99})
+            return {"availability": "present", "complete": True, "native_edges": edges}
+
+        def fake_set_dependency(_root: Path, _owner: str, _repo: str, issue: int, blocker: int, mutation: str) -> list[str]:
+            if (issue, blocker, mutation) != (200, 99, "addBlockedBy"):
+                return ["wrong dependency mutation"]
+            state["dependency"] = True
+            return []
+
+        original_issue = module.github_issue_payload
+        original_tree = module.issue_tree_payload
+        original_graphql = module.gh_graphql_json
+        original_create = module.gh_rest_write_json
+        original_dependencies = module.github_issue_dependencies_payload
+        original_set_dependency = module.set_native_dependency
+        original_surface = module.build_governance_surface
+        module.github_issue_payload = fake_issue
+        module.issue_tree_payload = fake_tree
+        module.gh_graphql_json = fake_graphql
+        module.gh_rest_write_json = fake_create
+        module.github_issue_dependencies_payload = fake_dependencies
+        module.set_native_dependency = fake_set_dependency
+        module.build_governance_surface = lambda _root: {"repo_interface": None}
+        try:
+            planning = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            plan_key = planning.get("proposal", {}).get("work_items", [{}])[0].get("plan_key")
+            if planning.get("result") != "pass" or planning.get("admission_state") != "planning" or state["create_calls"]:
+                raise AssertionError(f"planning FR without a WI must stay read-only: {planning}")
+            state["tree_paginated"] = True
+            paginated = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            state["tree_paginated"] = False
+            if paginated.get("result") != "block" or paginated.get("admission_state") != "host_unreadable":
+                raise AssertionError(f"admission must not interpret an incomplete native child page as empty: {paginated}")
+            state["not_planned"] = True
+            deferred = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="completed", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            state["not_planned"] = False
+            if deferred.get("result") != "pass" or deferred.get("admission_state") != "not_planned":
+                raise AssertionError(f"not-planned FR must not be counted as completed or forced through a WI: {deferred}")
+            executing = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
+            )
+            if executing.get("result") != "block" or executing.get("admission_state") != "needs_breakdown" or executing.get("next_action", "").count("--apply") != 1:
+                raise AssertionError(f"execution without a WI must fail closed with one breakdown action: {executing}")
+
+            applied = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[99], work_item_number=None, apply=True
+            )
+            writes = [entry.get("action") for entry in applied.get("host_writes", []) if isinstance(entry, dict)]
+            if applied.get("result") != "pass" or applied.get("admission_state") != "admitted" or writes != ["create_issue", "add_sub_issue", "add_blocked_by"]:
+                raise AssertionError(f"apply must create, attach, add dependency, and read back the native tree: {applied}")
+
+            state.update({"created": False, "linked": False, "dependency": False, "create_calls": 0, "attach_fails": True})
+            partial = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=None, apply=True
+            )
+            if partial.get("result") != "partial_apply" or partial.get("created_locators") != ["work_item:200"] or "--work-item 200" not in str(partial.get("next_action")):
+                raise AssertionError(f"partial admission must expose the created locator and a recoverable action: {partial}")
+            state["attach_fails"] = False
+            recovered = module.github_fr_wi_admission_payload(
+                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=200, apply=True
+            )
+            if recovered.get("result") != "pass" or state["create_calls"] != 1:
+                raise AssertionError(f"partial admission recovery must reuse the existing Work Item without duplication: {recovered}")
+        finally:
+            module.github_issue_payload = original_issue
+            module.issue_tree_payload = original_tree
+            module.gh_graphql_json = original_graphql
+            module.gh_rest_write_json = original_create
+            module.github_issue_dependencies_payload = original_dependencies
+            module.set_native_dependency = original_set_dependency
+            module.build_governance_surface = original_surface
+
+        captured: dict[str, Any] = {}
+
+        def fake_run_process(args: list[str], _cwd: Path, *, timeout_seconds: float | None = None, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["input"] = input_text
+            payload = {"data": {"viewer": {"login": "fixture"}}} if "graphql" in args else {"number": 1}
+            return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+        original_run_process = module.run_process
+        module.run_process = fake_run_process
+        try:
+            hostile = "@/etc/passwd $(not-a-command)\n\"quoted\""
+            payload, errors = module.gh_rest_write_json(target, method="POST", path="repos/owner/repo/issues", request_payload={"title": hostile})
+            rest_input = captured.get("input")
+            graphql_payload, graphql_errors = module.gh_graphql_json(target, "query($title:String!){ viewer { login } }", {"title": hostile})
+            graphql_input = captured.get("input")
+        finally:
+            module.run_process = original_run_process
+        if errors or graphql_errors or payload != {"number": 1} or graphql_payload is None or "-F" in captured.get("args", []) or hostile in captured.get("args", []):
+            raise AssertionError("admission host writes must keep hostile issue text in JSON stdin, never gh -F arguments")
+        request_body = json.loads(str(rest_input))
+        if request_body.get("title") != hostile:
+            raise AssertionError("admission JSON stdin lost hostile title fidelity")
+        graphql_request = json.loads(str(graphql_input))
+        if graphql_request.get("variables", {}).get("title") != hostile:
+            raise AssertionError("admission GraphQL JSON stdin lost hostile title fidelity")
+        if snapshot_tree(target) != before_tree:
+            raise AssertionError("FR-to-WI admission must not write repo-local carriers or other files")
+
+    spec = importlib.util.spec_from_file_location("loom_route_admission_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for route admission contract")
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    forwarded: dict[str, Any] = {}
+
+    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
+        forwarded.update({"command": command, "flow_args": flow_args, "fallback_to": fallback_to})
+        return 0
+
+    original_emit_flow = cli.emit_flow
+    cli.emit_flow = fake_emit_flow
+    try:
+        status = cli.handle_route(["--target", ".", "--issue", "100", "--task", "Narrow child", "--intent", "build", "--blocked-by", "99", "--apply", "--json"])
+    finally:
+        cli.emit_flow = original_emit_flow
+    if status != 0 or forwarded.get("command") != "route" or forwarded.get("flow_args", [])[:2] != ["github-intake", "admission"]:
+        raise AssertionError(f"loom route --issue did not delegate to the shared admission evaluator: {forwarded}")
+    print("fr-wi-admission surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
@@ -15994,6 +16208,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="host-planning-taxonomy",
             fixture_group="host-planning-taxonomy",
             run=run_host_planning_taxonomy_surface,
+        ),
+        SurfaceCheck(
+            name="fr-wi-admission",
+            fixture_group="fr-wi-admission",
+            run=run_fr_wi_admission_surface,
         ),
         SurfaceCheck(
             name="aggregate",

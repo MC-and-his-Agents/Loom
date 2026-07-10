@@ -805,7 +805,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
 
     github_intake = subparsers.add_parser("github-intake", help="Read GitHub issue or Project entrypoints without writing host state")
-    github_intake.add_argument("operation", choices=("issue",))
+    github_intake.add_argument("operation", choices=("issue", "admission"))
     github_intake.add_argument("--target", required=True, help="Target repository root")
     github_intake.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     github_intake.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
@@ -816,6 +816,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     github_intake.add_argument("--pr", type=int, help="Known implementation PR number")
     github_intake.add_argument("--branch", help="Known implementation branch name")
     github_intake.add_argument("--head-sha", help="Known implementation head SHA")
+    github_intake.add_argument(
+        "--intent",
+        choices=("planning", "branch", "build", "pr", "ship", "closeout", "completed"),
+        default="planning",
+        help="Requested lifecycle intent for FR-to-WI admission",
+    )
+    github_intake.add_argument("--task", help="Minimum Work Item proposal text for admission")
+    github_intake.add_argument("--blocked-by", type=int, action="append", default=[], help="Native blocking issue number for the proposed Work Item; may be repeated")
+    github_intake.add_argument("--work-item", type=int, help="Existing Work Item number for a partial admission recovery")
+    github_intake.add_argument("--apply", action="store_true", help="Apply host-native Work Item reconciliation after an explicit proposal")
 
     goal = subparsers.add_parser("goal", help="Derive or validate Loom /goal execution contracts")
     goal.add_argument("operation", choices=("derive", "validate"))
@@ -4735,7 +4745,13 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | N
         return None
 
 
-def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = None) -> subprocess.CompletedProcess[str]:
+def run_process(
+    args: list[str],
+    cwd: Path,
+    *,
+    timeout_seconds: float | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     for key in LOOM_RUNTIME_ENV_KEYS:
         env.pop(key, None)
@@ -4748,6 +4764,7 @@ def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = N
         text=True,
         env=env,
         timeout=timeout_seconds,
+        input=input_text,
     )
 
 
@@ -6365,6 +6382,55 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
     return payload, []
 
 
+def gh_json_input(root: Path, args: list[str], request_payload: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+    """Send a JSON request on stdin without exposing untrusted strings to gh -F."""
+    command_label = f"gh {' '.join(args)}"
+    try:
+        result = run_process(
+            ["gh", *args],
+            root,
+            timeout_seconds=20,
+            input_text=json.dumps(request_payload, ensure_ascii=False),
+        )
+    except FileNotFoundError:
+        return None, [host_api_diagnostic_message(command_label, ["gh command is unavailable in PATH"])]
+    except subprocess.TimeoutExpired:
+        return None, [host_api_diagnostic_message(command_label, [f"{command_label} timed out after 20s"])]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
+        return None, [host_api_diagnostic_message(command_label, [detail])]
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return None, [f"invalid JSON from {command_label}: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, [f"{command_label} did not return a JSON object"]
+    return payload, []
+
+
+def gh_graphql_json(root: Path, query: str, variables: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+    """Run a GraphQL request through JSON stdin for inputs that may be user-authored."""
+    payload, errors = gh_json_input(
+        root,
+        ["api", "graphql", "--input", "-"],
+        {"query": query, "variables": variables},
+    )
+    if errors or payload is None:
+        return None, errors
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None, ["gh api graphql --input - is missing `data`"]
+    return data, []
+
+
+def gh_rest_write_json(root: Path, *, method: str, path: str, request_payload: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+    return gh_json_input(
+        root,
+        ["api", "--method", method, path, "--input", "-"],
+        request_payload,
+    )
+
+
 def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
     payload, errors = gh_json(root, ["api", path])
     if payload is not None or not errors:
@@ -6493,6 +6559,7 @@ def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
         "body": payload.get("body"),
         "url": payload.get("html_url"),
         "closedAt": payload.get("closed_at"),
+        "stateReason": payload.get("state_reason"),
         "labels": [
             str(label.get("name"))
             for label in labels
@@ -6579,7 +6646,7 @@ def github_native_dependency_capability(root: Path, owner: str, repo_name: str, 
       }
     }
     """
-    payload, errors = gh_graphql(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
+    payload, errors = gh_graphql_json(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
     if errors or payload is None:
         text = " ".join(errors).lower()
         if any(token in text for token in ("could not resolve to an issue", "field 'blockedby'", "field 'blocking'", "undefinedfield")):
@@ -6641,16 +6708,18 @@ def github_issue_dependencies_graphql(root: Path, owner: str, repo_name: str, is
         issue(number: $issue) {
           id
           blockedBy(first: 100) {
+            pageInfo { hasNextPage }
             nodes { id number state title url }
           }
           blocking(first: 100) {
+            pageInfo { hasNextPage }
             nodes { id number state title url }
           }
         }
       }
     }
     """
-    payload, errors = gh_graphql(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
+    payload, errors = gh_graphql_json(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
     if errors or payload is None:
         return None, errors
     issue = payload.get("repository", {}).get("issue") if isinstance(payload.get("repository"), dict) else None
@@ -6658,21 +6727,25 @@ def github_issue_dependencies_graphql(root: Path, owner: str, repo_name: str, is
         return None, [f"GitHub issue #{issue_number} dependency query returned no issue"]
     checks: list[dict[str, Any]] = []
     all_edges: list[dict[str, Any]] = []
+    incomplete = False
     for direction, field in (("blocked_by", "blockedBy"), ("blocking", "blocking")):
         connection = issue.get(field) if isinstance(issue.get(field), dict) else {}
         nodes = connection.get("nodes") if isinstance(connection.get("nodes"), list) else []
         source_locator = f"graphql:repository.issue.{field}"
+        page_info = connection.get("pageInfo") if isinstance(connection.get("pageInfo"), dict) else None
+        pagination_errors = [f"{field} exceeds the supported read page"] if isinstance(page_info, dict) and page_info.get("hasNextPage") is True else []
+        incomplete = incomplete or bool(pagination_errors)
         checks.append(
             {
                 "direction": direction,
                 "endpoint": source_locator,
-                "status": "present",
-                "errors": [],
+                "status": "unreadable" if pagination_errors else "present",
+                "errors": pagination_errors,
                 "provenance": {
                     "source_layer": "host_control_mirror",
                     "source_owner": "github",
                     "source_locator": source_locator,
-                    "freshness": "fresh",
+                    "freshness": "unreadable" if pagination_errors else "fresh",
                 },
             }
         )
@@ -6696,7 +6769,7 @@ def github_issue_dependencies_graphql(root: Path, owner: str, repo_name: str, is
                     "provenance": checks[-1]["provenance"],
                 }
             )
-    return {"availability": "present", "checks": checks, "native_edges": all_edges}, []
+    return {"availability": "unreadable" if incomplete else "present", "complete": not incomplete, "checks": checks, "native_edges": all_edges}, []
 
 
 def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> dict[str, Any]:
@@ -23973,7 +24046,7 @@ query($owner:String!, $name:String!, $issue:Int!, $blockingIssue:Int!) {
   }
 }
 """
-    data, errors = gh_graphql(
+    data, errors = gh_graphql_json(
         root,
         query,
         {"owner": owner, "name": repo_name, "issue": issue_number, "blockingIssue": blocking_issue_number},
@@ -23995,7 +24068,7 @@ mutation($issueId:ID!, $blockingIssueId:ID!, $clientMutationId:String!) {{
 }}
 """
     client_mutation_id = f"loom-reconciliation-{mutation}-{issue_number}-{blocking_issue_number}"
-    _, mutation_errors = gh_graphql(
+    _, mutation_errors = gh_graphql_json(
         root,
         mutation_query,
         {"issueId": issue_id, "blockingIssueId": blocking_issue_id, "clientMutationId": client_mutation_id},
@@ -24020,30 +24093,38 @@ query($owner:String!, $name:String!, $number:Int!) {
         title
         state
         url
-        subIssues(first:50) {
+        subIssues(first:100) {
+          totalCount
+          pageInfo { hasNextPage }
           nodes {
             id
             number
             title
+            body
             state
             url
+            labels(first:20) { nodes { name } }
           }
         }
       }
-      subIssues(first:50) {
+      subIssues(first:100) {
+        totalCount
+        pageInfo { hasNextPage }
         nodes {
           id
           number
           title
+          body
           state
           url
+          labels(first:20) { nodes { name } }
         }
       }
     }
   }
 }
 """
-    data, errors = gh_graphql(root, query, {"owner": owner, "name": repo_name, "number": issue_number})
+    data, errors = gh_graphql_json(root, query, {"owner": owner, "name": repo_name, "number": issue_number})
     if errors or data is None:
         return None, errors
     repository = data.get("repository")
@@ -24056,6 +24137,53 @@ query($owner:String!, $name:String!, $number:Int!) {
     return issue, []
 
 
+def github_fr_wi_admission_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int,
+    intent: str,
+    task: str | None,
+    blocked_by: list[int],
+    work_item_number: int | None,
+    apply: bool,
+) -> dict[str, Any]:
+    """Delegate host-native admission to the focused policy module."""
+    from types import SimpleNamespace
+
+    module_dir = str(Path(__file__).resolve().parent)
+    if module_dir not in sys.path:
+        sys.path.insert(0, module_dir)
+    from github_admission import github_fr_wi_admission_payload as evaluate_admission
+
+    host = SimpleNamespace(
+        detect_github_repo=detect_github_repo,
+        github_issue_payload=github_issue_payload,
+        build_governance_surface=build_governance_surface,
+        github_intake_object_type=github_intake_object_type,
+        normalize_taxonomy_match_text=normalize_taxonomy_match_text,
+        normalized_issue_labels=normalized_issue_labels,
+        github_intake_taxonomy_mapping=github_intake_taxonomy_mapping,
+        issue_tree_payload=issue_tree_payload,
+        gh_graphql_json=gh_graphql_json,
+        gh_rest_write_json=gh_rest_write_json,
+        normalize_rest_issue=normalize_rest_issue,
+        github_issue_dependencies_payload=github_issue_dependencies_payload,
+        set_native_dependency=set_native_dependency,
+    )
+    return evaluate_admission(
+        host=host,
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        issue_number=issue_number,
+        intent=intent,
+        task=task,
+        blocked_by=blocked_by,
+        work_item_number=work_item_number,
+        apply=apply,
+    )
 def github_compare_contains_commit(
     root: Path,
     *,
@@ -25555,6 +25683,8 @@ def normalized_issue_labels(issue_payload: dict[str, Any] | None) -> set[str]:
     if not isinstance(issue_payload, dict):
         return set()
     raw_labels = issue_payload.get("labels")
+    if isinstance(raw_labels, dict):
+        raw_labels = raw_labels.get("nodes")
     if not isinstance(raw_labels, list):
         return set()
     labels: set[str] = set()
@@ -25790,6 +25920,20 @@ def github_intake_payload(
 
 def handle_github_intake(args: argparse.Namespace) -> int:
     target_root = resolve_target_arg(args.target)
+    if args.operation == "admission":
+        return emit(
+            github_fr_wi_admission_payload(
+                target_root=target_root,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                issue_number=args.issue,
+                intent=args.intent,
+                task=args.task,
+                blocked_by=args.blocked_by,
+                work_item_number=args.work_item,
+                apply=args.apply,
+            )
+        )
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         return emit(
