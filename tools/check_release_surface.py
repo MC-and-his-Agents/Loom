@@ -392,7 +392,7 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
         surface_label=surface_label,
         evidence_locator=locator,
     )
-    require_needles(
+    workflow = require_needles(
         CLI_RELEASE,
         (
             "name: loom-cli-release",
@@ -417,6 +417,61 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
         surface_label=surface_label,
         evidence_locator=locator,
     )
+    judgment_start = workflow.find("  release-judgment:\n")
+    publisher_start = workflow.find("  release-publisher:\n")
+    if judgment_start < 0 or publisher_start < 0 or publisher_start <= judgment_start:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-missing-permission-split",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary="release workflow must separate release-judgment from release-publisher",
+        )
+        return
+    judgment = workflow[judgment_start:publisher_start]
+    publisher = workflow[publisher_start:]
+    for needle in ("contents: read", "persist-credentials: false"):
+        if needle not in judgment:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-judgment-permission",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary=f"release-judgment must contain `{needle}`",
+            )
+    for needle in ("contents: write", "id-token: write", "secrets.NPM_TOKEN", "npm publish", "git tag -a", "gh release create"):
+        if needle in judgment:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-judgment-privilege-leak",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary=f"release-judgment must not contain `{needle}`",
+            )
+    for needle in (
+        "needs: release-judgment",
+        "github.event_name == 'push'",
+        "github.event_name == 'workflow_dispatch'",
+        "needs.release-judgment.outputs.publish_allowed == 'true'",
+        "contents: write",
+        "id-token: write",
+        "secrets.NPM_TOKEN",
+        "npm publish",
+        "git tag -a",
+        "gh release create",
+    ):
+        if needle not in publisher:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-publisher-contract",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary=f"release-publisher must contain `{needle}`",
+            )
 
 
 def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
