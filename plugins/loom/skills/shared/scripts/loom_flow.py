@@ -13986,8 +13986,15 @@ def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any
 
 
 def uses_global_cli_metadata_only(target_root: Path) -> bool:
-    state_path = target_root / ".loom/installed-state.json"
-    if state_path.is_symlink() or not state_path.is_file():
+    raw_state_path = target_root / ".loom/installed-state.json"
+    if raw_state_path.is_symlink() or not raw_state_path.is_file():
+        return False
+    state_path, state_path_errors = resolve_repo_relative_path(
+        target_root,
+        ".loom/installed-state.json",
+        label="installed state",
+    )
+    if state_path is None or state_path_errors:
         return False
     try:
         installed_state = load_json_file(state_path)

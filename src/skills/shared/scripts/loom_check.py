@@ -16974,6 +16974,20 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         state_path.symlink_to(metadata_only_target / "outside-installed-state.json")
         if loom_flow_module.uses_global_cli_metadata_only(metadata_only_target):
             failures.append(Failure("adversarial-adoption", "symlinked installed state must not bypass bootstrap manifest validation"))
+        shutil.rmtree(metadata_only_target / ".loom")
+        external_loom = base / "metadata-only-external-loom"
+        external_loom.mkdir()
+        write_json(
+            external_loom / "installed-state.json",
+            {
+                "schema_version": "loom-installed-state/v2",
+                "runtime_provider": "global-cli",
+                "repo_payload": {"mode": "metadata-only"},
+            },
+        )
+        (metadata_only_target / ".loom").symlink_to(external_loom, target_is_directory=True)
+        if loom_flow_module.uses_global_cli_metadata_only(metadata_only_target):
+            failures.append(Failure("adversarial-adoption", "installed state through an external .loom symlink must not bypass bootstrap manifest validation"))
 
         fact_chain_escape = base / "fact-chain-error-anchor"
         (fact_chain_escape / ".loom/bootstrap").mkdir(parents=True)
