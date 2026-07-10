@@ -12,8 +12,8 @@
 - Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture; git diff --check
 - Closing Condition: PR for #2012 merges with current-head review and hosted gates; Harbor #244 no longer fails carrier refresh because bootstrap manifest is intentionally absent.
 - Current Checkpoint: build
-- Current Stop: Implementation and current-head local validation completed.
-- Next Step: Commit and push WI-2012, create the issue-bound PR, then run current-head review and hosted gates.
+- Current Stop: PR #2015 created from the validated implementation; PR metadata preflight and GitHub body readback passed.
+- Next Step: Push the PR carrier sync, bind PR metadata to the final head, then run current-head review and hosted gates.
 - Blockers: None
 - Latest Validation Summary: 2026-07-10 current worktree: py_compile passed; generated-tree-drift passed; suite evidence validate passed; suite carrier validate passed; fact-chain passed; git diff --check passed; source-self-fixture passed with failures=0 including malformed installed-state coverage; Harbor HARBOR-241 reproduction no longer reports invalid bootstrap manifest and leaves current-head review as the genuine blocker.
 - Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-2012.md`.
