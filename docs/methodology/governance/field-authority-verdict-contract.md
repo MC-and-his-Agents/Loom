@@ -25,6 +25,17 @@ Loom accepts `type:number`, never a bare number. Supported types are `issue`,
 `phase`, `fr`, `work_item`, `pr`, and `project`. An implementation primary
 binding remains `work_item:<number>`.
 
+## PR intent and failure output
+
+An implementation PR carries one typed `Work Item: work_item:<number>` plus
+the policy intent that GitHub cannot supply (governance intensity, change
+class, suite path, review/release policy). Branch, head SHA, checks, merge
+commit, and merge state are GitHub host readback facts and are rejected when
+authored in the metadata block. Gate failures use
+`loom-failure-envelope/v1`: exactly one primary cause names its failure
+domain, owner, retryability, causal predecessors, and one remediation command.
+This envelope still never evaluates product acceptance.
+
 ## Lifecycle admission
 
 `loom route --issue <FR>` remains the planning/proposal entrypoint and only

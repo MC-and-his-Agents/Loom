@@ -21,7 +21,7 @@
     "fields": [
       {
         "id": "loom-governance-intensity",
-        "summary": "Loom governance intensity PR metadata carrier binding Work Item, branch, suite path, review, release judgment, PR gate, and closeout requiredness.",
+        "summary": "Loom governance intent PR metadata carrier binding a typed Work Item locator, suite path, review, release judgment, PR gate, and closeout requiredness; GitHub owns branch, head, checks, and merge facts.",
         "applicability_locator": "docs/methodology/harness/tiered-gate-consumption-contract.md",
         "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
         "enforcement": "blocking",
@@ -32,8 +32,7 @@
           "marker": "loom:repo-pr-metadata",
           "surface": "merge_ready",
           "repo_specific_field_set": [
-            "loom_work_item",
-            "branch",
+            "work_item_locator",
             "governance_intensity",
             "change_class",
             "suite_path",
@@ -49,8 +48,7 @@
           "applicability_locator": "docs/methodology/harness/tiered-gate-consumption-contract.md",
           "enforcement": "blocking",
           "required_fields": [
-            "loom_work_item",
-            "branch",
+            "work_item_locator",
             "governance_intensity",
             "change_class",
             "suite_path",

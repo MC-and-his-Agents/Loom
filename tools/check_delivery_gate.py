@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tools" / "fixtures" / "delivery-gate"
 WORKFLOW = ROOT / ".github" / "workflows" / "loom-delivery-gate.yml"
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_gate.py"
+SOURCE_DIR = SOURCE.parent
 IDENTITY_READER = ROOT / "tools" / "read_delivery_gate_required_identity.py"
 GENERATED_COPIES = (
     ROOT / "skills" / "shared" / "scripts" / "delivery_gate.py",
@@ -23,6 +24,8 @@ GENERATED_COPIES = (
 
 
 def load_evaluator() -> Any:
+    if str(SOURCE_DIR) not in sys.path:
+        sys.path.insert(0, str(SOURCE_DIR))
     spec = importlib.util.spec_from_file_location("delivery_gate", SOURCE)
     if spec is None or spec.loader is None:
         raise AssertionError("delivery evaluator is not importable")
@@ -38,8 +41,27 @@ def assert_primary_cause(
     result: str = "advisory",
 ) -> None:
     cause = payload.get("primary_cause")
-    if not isinstance(cause, dict) or set(cause) != {"id", "domain", "code", "locator", "summary"} or cause.get("id") != expected:
+    expected_fields = {
+        "id",
+        "failure_domain",
+        "code",
+        "locator",
+        "summary",
+        "owner",
+        "retryable",
+        "consequence_of",
+        "remediation_command",
+    }
+    if not isinstance(cause, dict) or set(cause) != expected_fields or cause.get("id") != expected:
         raise AssertionError(f"expected primary cause {expected}, got {cause}")
+    envelope = payload.get("failure_envelope")
+    if (
+        not isinstance(envelope, dict)
+        or envelope.get("schema_version") != "loom-failure-envelope/v1"
+        or envelope.get("primary_cause") != cause
+        or envelope.get("secondary_causes") != []
+    ):
+        raise AssertionError(f"delivery gate did not expose one actionable failure envelope: {envelope}")
     if payload.get("product_acceptance", {}).get("verdict") != "not_evaluated":
         raise AssertionError("delivery gate must not infer product acceptance")
     if payload.get("result") != result or payload.get("enforcement") != enforcement:
@@ -357,6 +379,9 @@ def check_workflow() -> None:
         "CHANGED_PATHS_PATH",
         "fs.writeFileSync(process.env.CHANGED_PATHS_PATH",
         "Product acceptance: not_evaluated.",
+        "failure_envelope:",
+        "core.setOutput(\"failure_envelope\", JSON.stringify(failureEnvelope))",
+        "remediation=${failureEnvelope.primary_cause?.remediation_command || \"unavailable\"}",
         "Publish terminal delivery result",
         'payload?.result || (enforcement === "advisory" ? "advisory" : "blocked")',
         "core.setFailed(`loom-delivery-gate blocked: ${cause}`)",

@@ -116,9 +116,12 @@ class GovernanceMergeProfileTest(unittest.TestCase):
             suite_path="minimal",
             review_requirement="current_head_review_required",
             release_judgment="no_release",
+            fact_chain_required=True,
             upgrade_triggers=[],
             suite_not_applicable=None,
             issue_number=1805,
+            covered_issues=[],
+            excluded_scope=[],
         )
 
         self.assertEqual(missing, [])

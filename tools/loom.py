@@ -7322,6 +7322,7 @@ def pr_intent_consistency_validation(
     profile_id: str,
     profile: dict[str, Any],
     item: str,
+    issue: str | None,
     branch: str | None,
     head_sha: str | None,
     metadata_payload: dict[str, Any] | None,
@@ -7330,14 +7331,12 @@ def pr_intent_consistency_validation(
     fields = pr_intent_governance_fields(metadata_payload)
     missing: list[str] = []
     expected = {
-        "loom_work_item": item,
+        "work_item_locator": f"work_item:{issue}" if isinstance(issue, str) and issue.isdigit() else item,
         "change_class": profile["change_class"],
         "suite_path": profile["suite_path"],
         "review_requirement": profile["review_requirement"],
         "release_judgment": profile["release_judgment"],
     }
-    if branch:
-        expected["branch"] = branch
     for key, value in expected.items():
         if fields.get(key) != value:
             missing.append(f"metadata.{key}")
@@ -7362,9 +7361,9 @@ def pr_intent_consistency_validation(
         "suite_result": suite_result,
         "missing_inputs": missing,
         "summary": (
-            "Metadata, suite path, branch binding, and profile intent agree."
+            "Metadata, suite path, typed Work Item binding, and profile intent agree."
             if not missing
-            else "Metadata, suite path, branch binding, or profile intent drifted across carriers."
+            else "Metadata, suite path, typed Work Item binding, or profile intent drifted across carriers."
         ),
     }
 
@@ -7680,6 +7679,7 @@ def pr_intent_check_payload(
         profile_id=profile_id,
         profile=profile,
         item=item or "",
+        issue=issue,
         branch=current_branch,
         head_sha=current_head,
         metadata_payload=metadata_validation,
