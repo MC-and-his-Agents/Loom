@@ -13,8 +13,19 @@ from typing import Any
 
 SCHEMA = "loom-field-authority-verdict/v1"
 LIFECYCLE_SCHEMA = "loom-host-lifecycle-admission/v1"
-LOCATOR_RE = re.compile(r"^(?P<type>[a-z_][a-z0-9_]*):(?P<number>[1-9][0-9]*)$")
+LOCATOR_RE = re.compile(
+    r"^(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)/"
+    r"(?P<repo>[A-Za-z0-9_.-]+)/"
+    r"(?P<type>[a-z_][a-z0-9_]*)/"
+    r"(?P<id>[1-9][0-9]*)$"
+)
+LEGACY_LOCATOR_RE = re.compile(r"^(?P<type>[a-z_][a-z0-9_]*):(?P<id>[1-9][0-9]*)$")
 LOCATOR_TYPES = frozenset({"issue", "phase", "fr", "work_item", "pr", "project"})
+LEGACY_LOCATOR_COMPATIBILITY = {
+    "accepted_for_reads_through": "v0.30.x",
+    "removed_in": "v0.31.0",
+    "rendered": False,
+}
 DELIVERY_STATES = frozenset({"not_evaluated", "implementing", "pr_ready", "merged", "delivery_closed_out"})
 PRODUCT_ACCEPTANCE_STATES = frozenset({"not_evaluated", "not_required", "pending", "passed", "failed", "blocked", "waived"})
 RECONCILIATION_STATES = frozenset({"not_evaluated", "pending", "consistent", "drifted"})
@@ -30,26 +41,51 @@ FIELD_AUTHORITIES = {
 }
 
 
-def typed_locator(object_type: str, number: int) -> str:
-    """Render one validated typed GitHub-style locator."""
+def typed_locator(owner: str, repo: str, object_type: str, object_id: int) -> str:
+    """Render one globally unique GitHub locator as owner/repo/type/id."""
 
-    if object_type not in LOCATOR_TYPES or not isinstance(number, int) or number <= 0:
-        raise ValueError("typed locator requires a supported type and positive integer")
-    return f"{object_type}:{number}"
+    candidate = f"{owner}/{repo}/{object_type}/{object_id}"
+    if (
+        not isinstance(object_id, int)
+        or object_id <= 0
+        or object_type not in LOCATOR_TYPES
+        or LOCATOR_RE.fullmatch(candidate) is None
+    ):
+        raise ValueError("typed locator requires owner/repo, a supported type, and a positive integer id")
+    return candidate
 
 
-def parse_typed_locator(value: object, *, allowed_types: set[str] | frozenset[str] | None = None) -> dict[str, Any] | None:
-    """Parse a typed locator without accepting a bare number or ambiguous kind."""
+def parse_typed_locator(
+    value: object,
+    *,
+    allowed_types: set[str] | frozenset[str] | None = None,
+    allow_legacy: bool = True,
+) -> dict[str, Any] | None:
+    """Parse a canonical locator, with time-bounded legacy read compatibility."""
 
     if not isinstance(value, str):
         return None
     match = LOCATOR_RE.fullmatch(value)
+    legacy = False
+    if match is None and allow_legacy:
+        match = LEGACY_LOCATOR_RE.fullmatch(value)
+        legacy = match is not None
     if match is None:
         return None
     object_type = match.group("type")
     if object_type not in LOCATOR_TYPES or (allowed_types is not None and object_type not in allowed_types):
         return None
-    return {"type": object_type, "number": int(match.group("number")), "locator": value}
+    object_id = int(match.group("id"))
+    return {
+        "owner": None if legacy else match.group("owner"),
+        "repo": None if legacy else match.group("repo"),
+        "type": object_type,
+        "id": object_id,
+        "number": object_id,
+        "locator": value,
+        "legacy": legacy,
+        "compatibility": LEGACY_LOCATOR_COMPATIBILITY if legacy else None,
+    }
 
 
 def authority_verdict(

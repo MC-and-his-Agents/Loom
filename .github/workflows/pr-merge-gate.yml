@@ -25,14 +25,17 @@ jobs:
           script: |
             const body = String(context.payload.pull_request.body || "");
             const primaryMatches = [
-              ...body.matchAll(/^\s*-\s*Work Item:\s*`?(work_item|fr|phase):(\d+)`?\s*$/gim),
+              ...body.matchAll(/^\s*-\s*Work Item:\s*`?([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)\/([A-Za-z0-9_.-]+)\/(work_item|fr|phase)\/([1-9]\d*)`?\s*$/gim),
             ];
             if (primaryMatches.length !== 1) {
-              throw new Error("implementation PR must declare exactly one `Work Item: work_item:<number>` primary binding");
+              throw new Error("implementation PR must declare exactly one `Work Item: owner/repo/work_item/id` primary binding");
             }
-            const [, locatorType, locatorNumber] = primaryMatches[0];
+            const [, locatorOwner, locatorRepo, locatorType, locatorNumber] = primaryMatches[0];
+            if (locatorOwner.toLowerCase() !== context.repo.owner.toLowerCase() || locatorRepo.toLowerCase() !== context.repo.repo.toLowerCase()) {
+              throw new Error(`implementation primary binding targets another repository: ${locatorOwner}/${locatorRepo}`);
+            }
             if (locatorType !== "work_item") {
-              throw new Error(`implementation primary binding must be work_item, not ${locatorType}:${locatorNumber}`);
+              throw new Error(`implementation primary binding must be work_item, not ${locatorType}/${locatorNumber}`);
             }
             const issueNumber = Number(locatorNumber);
             const { data: issue } = await github.rest.issues.get({
@@ -44,7 +47,7 @@ jobs:
               .map((label) => typeof label === "string" ? label : label.name)
               .filter((label) => ["work-item", "fr", "phase"].includes(label));
             if (issue.state !== "open" || typeLabels.length !== 1 || typeLabels[0] !== "work-item") {
-              throw new Error(`work_item:${issueNumber} must resolve to one open GitHub Work Item`);
+              throw new Error(`${context.repo.owner}/${context.repo.repo}/work_item/${issueNumber} must resolve to one open GitHub Work Item`);
             }
             const closingReferences = new Set(
               [...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/gi)]
@@ -53,4 +56,4 @@ jobs:
             if ([...closingReferences].some((number) => number !== issueNumber)) {
               throw new Error("implementation PR closing references must target its primary work_item; FR/Phase references are not allowed");
             }
-            core.notice(`validated work_item:${issueNumber} from GitHub host readback`);
+            core.notice(`validated ${context.repo.owner}/${context.repo.repo}/work_item/${issueNumber} from GitHub host readback`);

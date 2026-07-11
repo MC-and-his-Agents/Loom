@@ -554,9 +554,9 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             "--target",
             str(target),
             "--owner",
-            "HotCP",
+            "owner",
             "--repo",
-            "HotCP",
+            "repo",
             "--work-item",
             fixture["item"],
             "--head-sha",
@@ -583,7 +583,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
 
     loom_flow = load_loom_flow_module()
     metadata_fields = {
-        "work_item_locator": "work_item:1288",
+        "work_item_locator": "owner/repo/work_item/1288",
         "governance_intensity": "standard",
         "change_class": "contract",
         "suite_path": "minimal",
@@ -624,8 +624,8 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             target_root=target,
             output_relative=".loom/bootstrap/init-result.json",
             expected_item=fixture["item"],
-            owner="HotCP",
-            repo_name="HotCP",
+            owner="owner",
+            repo_name="repo",
             pr_number=1288,
             head_sha=fixture["head_sha"],
             merge_method="squash",
@@ -646,7 +646,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             os.environ["LOOM_SOURCE_REPO_ROOT"] = original_source_repo_root
     if payload.get("result") != "pass":
         raise AssertionError(f"controlled merge failed metadata-only inline status readback: {payload.get('missing_inputs')}")
-    if not any("--repo" in call and call[call.index("--repo") + 1] == "HotCP/HotCP" for call in calls):
+    if not any("--repo" in call and call[call.index("--repo") + 1] == "owner/repo" for call in calls):
         raise AssertionError("controlled merge statusCheckRollup readback did not pass --repo owner/repo")
 
 
@@ -6327,11 +6327,11 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
     }
 
 
-def typed_work_item_locator(item: str) -> str:
+def typed_work_item_locator(item: str, owner: str = "owner", repo: str = "repo") -> str:
     match = re.search(r"(\d+)$", item)
     if match is None:
         raise AssertionError(f"fixture Work Item must end with a GitHub issue number: {item}")
-    return f"work_item:{int(match.group(1))}"
+    return f"{owner}/{repo}/work_item/{int(match.group(1))}"
 
 
 def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287") -> dict[str, str]:
@@ -6739,14 +6739,14 @@ def assert_hosted_freeze_admission_pr_gate_fixture(tmp: Path) -> None:
     if not any(step.get("name") == "hosted-freeze-admission" for step in pass_payload.get("steps", []) if isinstance(step, dict)):
         raise AssertionError("pr-gate steps must include hosted-freeze-admission before merge checkpoint consumption")
 
-    typed_work_item = int(fixture["work_item_locator"].split(":", 1)[1])
+    typed_work_item = int(fixture["work_item_locator"].rsplit("/", 1)[1])
     mismatch_body_file = f".loom/fixtures/{fixture['item']}/hosted-pr-body-work-item-mismatch.md"
     (target / mismatch_body_file).write_text(
         governance_metadata_body(
             item=fixture["item"],
             branch=fixture["branch"],
             head_sha=fixture["head_sha"],
-            fields_override={"work_item_locator": f"work_item:{typed_work_item + 1}"},
+            fields_override={"work_item_locator": f"owner/repo/work_item/{typed_work_item + 1}"},
         ),
         encoding="utf-8",
     )
@@ -6992,8 +6992,8 @@ def assert_pr_metadata_suite_not_applicable_pr_gate_fixture(tmp: Path) -> None:
 
     mismatched_body_file = f".loom/fixtures/{fixture['item']}/body-mismatched-work-item.md"
     mismatched_body = str(pr_payload.get("body") or "").replace(
-        "Work Item: work_item:1957",
-        "Work Item: work_item:1958",
+        "Work Item: owner/repo/work_item/1957",
+        "Work Item: owner/repo/work_item/1958",
         1,
     )
     (target / mismatched_body_file).write_text(mismatched_body, encoding="utf-8")
@@ -8229,7 +8229,7 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
         "- Risks:\n"
         "- Follow-ups:\n\n"
         "## Related Work\n\n"
-        "- Work Item: work_item:<GitHub issue number>\n"
+        "- Work Item: <owner>/<repo>/work_item/<GitHub issue number>\n"
         "- Issue:\n\n"
         "## PR Metadata Machine Carrier\n",
         encoding="utf-8",
@@ -8346,6 +8346,8 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
 def governance_metadata_body(
     *,
     item: str = "WI-1321",
+    owner: str = "owner",
+    repo: str = "repo",
     branch: str = "work/1321-governance-intensity-metadata-carrier",
     head_sha: str = "1111111111111111111111111111111111111111",
     include_legacy_bindings: bool = True,
@@ -8353,7 +8355,7 @@ def governance_metadata_body(
     surface: str = "merge_ready",
 ) -> str:
     fields: dict[str, Any] = {
-        "work_item_locator": typed_work_item_locator(item),
+        "work_item_locator": typed_work_item_locator(item, owner, repo),
         "governance_intensity": "standard",
         "change_class": "contract",
         "suite_path": "minimal",
@@ -8377,10 +8379,10 @@ def governance_metadata_body(
         "surface": surface,
         "fields": fields,
         "source": {"rendered_hash": "sha256:fixture"},
-        "parser_version": "loom-pr-metadata-parser/v1",
+        "parser_version": "loom-pr-metadata-parser/v2",
     }
     legacy_binding = (
-        f"Work Item: {typed_work_item_locator(item)}\n\n"
+        f"Work Item: {typed_work_item_locator(item, owner, repo)}\n\n"
         if include_legacy_bindings
         else ""
     )
@@ -8543,7 +8545,7 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
                 "--surface",
                 "closeout",
                 "--item",
-                "WI-1541",
+                "owner/repo/work_item/1541",
                 "--issue",
                 "1541",
                 "--branch",
@@ -8567,7 +8569,7 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
                 "--surface",
                 "closeout",
                 "--item",
-                "WI-1541",
+                "owner/repo/work_item/1541",
                 "--issue",
                 "1541",
                 "--branch",
@@ -8585,7 +8587,7 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
                 "--surface",
                 "closeout",
                 "--item",
-                "WI-1541",
+                "owner/repo/work_item/1541",
                 "--issue",
                 "1541",
                 "--branch",
@@ -8601,12 +8603,12 @@ def assert_governance_metadata_render_readback_fixture(tmp: Path) -> None:
     if not rendered.exists():
         raise AssertionError("render did not write the global runtime PR body artifact")
     rendered_body = rendered.read_text(encoding="utf-8")
-    if "- Issue: #1541" not in rendered_body or "- Work Item: work_item:1541" not in rendered_body:
+    if "- Issue: #1541" not in rendered_body or "- Work Item: owner/repo/work_item/1541" not in rendered_body:
         raise AssertionError("render did not normalize human PR binding line spacing")
     if readback_payload.get("result") != "pass":
         raise AssertionError(f"readback payload failed: {readback_payload.get('missing_inputs')}")
     governance_fields = readback_payload.get("governance_fields")
-    if not isinstance(governance_fields, dict) or governance_fields.get("work_item_locator") != "work_item:1541" or {"branch", "head_sha"} & set(governance_fields):
+    if not isinstance(governance_fields, dict) or governance_fields.get("work_item_locator") != "owner/repo/work_item/1541" or {"branch", "head_sha"} & set(governance_fields):
         raise AssertionError("readback did not expose parsed governance fields")
     if (
         update_dry_run_payload.get("result") != "pass"
@@ -8633,7 +8635,7 @@ def assert_batch_pr_metadata_fixture(tmp: Path) -> None:
                 "--surface",
                 "merge_ready",
                 "--item",
-                "WI-1962",
+                "owner/repo/work_item/1962",
                 "--issue",
                 "1962",
                 "--head-sha",
@@ -9226,6 +9228,7 @@ def assert_pr_intent_profile_fixture(tmp: Path) -> None:
     target.mkdir()
     write_governance_metadata_contract_fixture(target)
     subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "remote", "add", "origin", "https://github.com/owner/repo.git"], cwd=target, check=True)
     subprocess.run(["git", "checkout", "-b", "work/1806-pr-intent"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["git", "config", "user.name", "Fixture"], cwd=target, check=True)
     subprocess.run(["git", "config", "user.email", "fixture@example.com"], cwd=target, check=True)
@@ -10083,12 +10086,12 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
     pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
     pr_payload["body"] = f"{str(pr_payload['body']).rstrip()}\n\nBranch: {fixture['branch']}\n"
     pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
-    assert_pr_gate_blocks(
-        target,
-        fixture,
-        "PR body branch mismatch",
-        expected_missing="PR body Branch does not match PR payload headRefName",
-    )
+    body_branch_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if body_branch_payload.get("result") != "pass":
+        raise AssertionError(
+            "non-authoritative PR body Branch overrode GitHub headRefName readback: "
+            f"{body_branch_payload.get('missing_inputs')}"
+        )
 
 
 def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
@@ -10835,8 +10838,8 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: wrong-branch\n"
     pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
     wrong_body_branch = semantic_pr_gate_fixture_payload(target, fixture)
-    if wrong_body_branch.get("result") != "block" or "head_binding_drift" not in wrong_body_branch.get("failure_taxonomy", []):
-        raise AssertionError("mismatched PR body Branch machine carrier did not fail closed")
+    if "head_binding_drift" in wrong_body_branch.get("failure_taxonomy", []):
+        raise AssertionError("non-authoritative PR body Branch overrode GitHub headRefName readback")
 
     (target / "implementation-drift.txt").write_text("unreviewed drift\n", encoding="utf-8")
     commit_fixture_file(target, "implementation-drift.txt", "fixture implementation drift after review")
@@ -13454,6 +13457,8 @@ def run_runtime_upgrade_surface() -> None:
         target = Path(raw_tmp)
         old_workstation_root = os.environ.get("LOOM_WORKSTATION_ROOT")
         os.environ["LOOM_WORKSTATION_ROOT"] = str(target / "workstation")
+        subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["git", "remote", "add", "origin", "https://github.com/owner/repo.git"], cwd=target, check=True)
         write_governance_metadata_contract_fixture(target)
         workflow = target / ".github" / "workflows" / "loom-check.yml"
         workflow.parent.mkdir(parents=True)
@@ -14094,7 +14099,7 @@ def run_fr_wi_admission_surface() -> None:
             partial = module.github_fr_wi_admission_payload(
                 target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=None, apply=True
             )
-            if partial.get("result") != "partial_apply" or partial.get("created_locators") != ["work_item:200"] or "--work-item 200" not in str(partial.get("next_action")):
+            if partial.get("result") != "partial_apply" or partial.get("created_locators") != ["owner/repo/work_item/200"] or "--work-item 200" not in str(partial.get("next_action")):
                 raise AssertionError(f"partial admission must expose the created locator and a recoverable action: {partial}")
             state["attach_fails"] = False
             recovered = module.github_fr_wi_admission_payload(
@@ -14311,7 +14316,7 @@ def run_aggregate_cli_contract() -> None:
             if (
                 isinstance(item_id, str)
                 and item_id
-                and fields.get("work_item_locator") != typed_work_item_locator(item_id)
+                and fields.get("work_item_locator") != typed_work_item_locator(item_id, "MC-and-his-Agents", "Loom")
                 and freeze_payload.get("result") == "pass"
             ):
                 raise AssertionError("gate freeze must not pass stale PR metadata that is not bound to the snapshot subject")
@@ -14326,7 +14331,13 @@ def run_aggregate_cli_contract() -> None:
     try:
         freeze_item = active_work_item_id()
         branch = "work/cli-contract-fixture"
-        body = governance_metadata_body(item=freeze_item, branch=branch, head_sha=head_sha)
+        body = governance_metadata_body(
+            item=freeze_item,
+            owner="MC-and-his-Agents",
+            repo="Loom",
+            branch=branch,
+            head_sha=head_sha,
+        )
         rendered_pr_body.write_text(body, encoding="utf-8")
         readback_pr_body.write_text(body, encoding="utf-8")
         _, body_pin_payload = run_json(
@@ -14379,10 +14390,12 @@ def run_aggregate_cli_contract() -> None:
         carrier_drift_body.write_text(
             governance_metadata_body(
                 item=freeze_item,
+                owner="MC-and-his-Agents",
+                repo="Loom",
                 branch=branch,
                 head_sha=head_sha,
                 fields_override={
-                    "work_item_locator": f"work_item:{int(typed_work_item_locator(freeze_item).split(':', 1)[1]) + 1}"
+                    "work_item_locator": f"MC-and-his-Agents/Loom/work_item/{int(typed_work_item_locator(freeze_item).rsplit('/', 1)[1]) + 1}"
                 },
             ),
             encoding="utf-8",
@@ -14521,7 +14534,7 @@ def run_aggregate_cli_contract() -> None:
             expect=1,
         )
         if legacy_item_payload.get("result") != "block" or not any(
-            "pass --item work_item:<issue> or --issue <GitHub Work Item>" in str(message)
+            "pass --item owner/repo/work_item/id or --issue <GitHub Work Item>" in str(message)
             for message in legacy_item_payload.get("key_gaps", [])
         ):
             raise AssertionError("pr metadata-render must reject a legacy local Work Item locator")

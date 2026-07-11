@@ -55,9 +55,16 @@ def check_authority_contract() -> None:
     invalid = authority.authority_verdict(delivery_state="green")
     if invalid["result"] != "block" or invalid["primary_remediation"] != "supply valid independent authority verdict values":
         raise AssertionError("invalid verdict values must have one remediation")
-    if authority.parse_typed_locator("work_item:42") != {"type": "work_item", "number": 42, "locator": "work_item:42"}:
-        raise AssertionError("typed Work Item locator did not parse")
-    if any(authority.parse_typed_locator(value) is not None for value in ("42", "fr:0", "acceptance:42", "unknown:42", "FR:42")):
+    locator = authority.typed_locator("owner", "repo", "work_item", 42)
+    parsed = authority.parse_typed_locator(locator, allow_legacy=False)
+    if not parsed or (parsed["owner"], parsed["repo"], parsed["type"], parsed["id"], parsed["legacy"]) != ("owner", "repo", "work_item", 42, False):
+        raise AssertionError("canonical Work Item locator did not parse")
+    legacy = authority.parse_typed_locator("work_item:42")
+    if not legacy or legacy["legacy"] is not True or legacy["compatibility"]["removed_in"] != "v0.31.0":
+        raise AssertionError("legacy typed locator compatibility is not explicit")
+    if authority.parse_typed_locator("work_item:42", allow_legacy=False) is not None:
+        raise AssertionError("authoritative consumers must be able to reject legacy locators")
+    if any(authority.parse_typed_locator(value) is not None for value in ("42", "fr:0", "acceptance:42", "unknown:42", "FR:42", "owner/repo/fr/0")):
         raise AssertionError("ambiguous or invalid typed locator was accepted")
     planning = authority.lifecycle_admission_verdict({"result": "pass", "admission_state": "planning", "subject": {"type": "fr", "locator": "fr:100"}})
     work_item = authority.lifecycle_admission_verdict({"result": "pass", "admission_state": "admitted", "subject": {"type": "work_item", "locator": "work_item:101"}})
@@ -149,7 +156,7 @@ def check_shared_admission_verdict() -> None:
             raise AssertionError("route planning verdict was not attached to native admission")
         if executing.get("lifecycle_verdict", {}).get("lifecycle_state") != "needs_breakdown":
             raise AssertionError("executing FR did not use the shared native admission verdict")
-        if lifecycle.get("admission_state") != "admitted" or lifecycle.get("evidence", {}).get("native_work_item_locators") != ["work_item:102"]:
+        if lifecycle.get("admission_state") != "admitted" or lifecycle.get("evidence", {}).get("native_work_item_locators") != ["owner/repo/work_item/102"]:
             raise AssertionError("lifecycle admission did not accept an existing native Work Item child")
         if work_item.get("lifecycle_verdict", {}).get("lifecycle_state") != "not_applicable":
             raise AssertionError("existing Work Item did not avoid an additional lifecycle gate")
@@ -215,7 +222,7 @@ def check_entrypoints() -> None:
 
 def check_document() -> None:
     text = DOCUMENT.read_text(encoding="utf-8")
-    for needle in ("delivery_state", "product_acceptance", "reconciliation_state", "Typed locators", "never changes `product_acceptance`", "loom route --issue <FR>", "--fr <FR>"):
+    for needle in ("delivery_state", "product_acceptance", "reconciliation_state", "Typed locators", "owner/repo/type/id", "v0.31.0", "never changes `product_acceptance`", "loom route --issue <FR>", "--fr <FR>"):
         if needle not in text:
             raise AssertionError(f"authority contract document missing {needle}")
 

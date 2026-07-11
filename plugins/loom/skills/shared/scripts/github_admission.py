@@ -38,8 +38,8 @@ def _plan_key(owner: str, repo: str, fr: int, task: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
 
 
-def _marker(fr: int, plan_key: str) -> str:
-    payload = {"schema_version": SCHEMA, "fr": typed_locator("fr", fr), "plan_key": plan_key}
+def _marker(owner: str, repo: str, fr: int, plan_key: str) -> str:
+    payload = {"schema_version": SCHEMA, "fr": typed_locator(owner, repo, "fr", fr), "plan_key": plan_key}
     return f"<!-- {MARKER} {json.dumps(payload, ensure_ascii=False, sort_keys=True)} -->"
 
 
@@ -140,7 +140,7 @@ def _requested_candidate(host: Any, root: Path, owner: str, repo: str, number: i
 
 
 def _create(host: Any, root: Path, owner: str, repo: str, fr: int, task: str, plan_key: str, label: str) -> tuple[dict[str, Any] | None, list[str]]:
-    body = "\n".join(("## Loom admission", "", f"Source FR: `{typed_locator('fr', fr)}`", "", f"Scope: {task}", "", _marker(fr, plan_key), ""))
+    body = "\n".join(("## Loom admission", "", f"Source FR: `{typed_locator(owner, repo, 'fr', fr)}`", "", f"Scope: {task}", "", _marker(owner, repo, fr, plan_key), ""))
     path = f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}/issues"
     payload, errors = host.gh_rest_write_json(root, method="POST", path=path, request_payload={"title": f"WI: {task}", "body": body, "labels": [label]})
     if errors or payload is None:
@@ -200,7 +200,7 @@ def _result(
     failed_layer: str | None = None,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    locator = typed_locator(object_type, issue) if object_type in {"fr", "work_item"} else None
+    locator = typed_locator(owner, repo, object_type, issue) if object_type in {"fr", "work_item"} else None
     payload = {
         "command": "github-intake",
         "operation": "admission",
@@ -290,8 +290,8 @@ def github_fr_wi_admission_payload(
         plan_key = _plan_key(owner, repo, issue_number, task)
         proposal_payload = {
             "schema_version": SCHEMA,
-            "parent": {"type": "fr", "number": issue_number, "locator": typed_locator("fr", issue_number)},
-            "work_items": [{"plan_key": plan_key, "title": f"WI: {task}", "type": "work_item", "labels": [_work_item_label(host, repo_interface)], "blocked_by": [typed_locator("issue", number) for number in blockers]}],
+            "parent": {"type": "fr", "number": issue_number, "locator": typed_locator(owner, repo, "fr", issue_number)},
+            "work_items": [{"plan_key": plan_key, "title": f"WI: {task}", "type": "work_item", "labels": [_work_item_label(host, repo_interface)], "blocked_by": [typed_locator(owner, repo, "issue", number) for number in blockers]}],
         }
         command = ["loom route --target .", f"--issue {issue_number}", f"--task {shlex.quote(task)}", f"--intent {intent}"]
         command.extend(f"--blocked-by {number}" for number in blockers)
@@ -319,7 +319,7 @@ def github_fr_wi_admission_payload(
                     "type_inference": inference,
                     "native_subissue_count": len(children),
                     "native_work_item_locators": [
-                        typed_locator("work_item", number)
+                        typed_locator(owner, repo, "work_item", number)
                         for child in work_items
                         if isinstance((number := child.get("number")), int) and number > 0
                     ],
@@ -360,7 +360,7 @@ def github_fr_wi_admission_payload(
     candidate_number = candidate.get("number") if isinstance(candidate, dict) else None
     if not isinstance(candidate_number, int):
         return respond("partial_apply" if created else "block", "partial_apply" if created else "host_unreadable", "FR-to-WI admission could not determine the Work Item candidate number.", locators=[], next_action=resume, failed_layer="host-readback")
-    locator = typed_locator("work_item", candidate_number)
+    locator = typed_locator(owner, repo, "work_item", candidate_number)
     if created:
         writes.append({"action": "create_issue", "locator": locator})
     candidate_type, _ = host.github_intake_object_type(candidate, repo_interface=repo_interface)
@@ -380,7 +380,7 @@ def github_fr_wi_admission_payload(
         parent_errors = _attach(host, target_root, owner, repo, issue_number, candidate_number)
         if parent_errors:
             return respond("partial_apply", "partial_apply", "FR-to-WI admission created or found a Work Item but could not attach its native parent relation.", locators=[locator], writes=writes, missing_inputs=[f"attach native parent: {message}" for message in parent_errors], next_action=recovery, failed_layer="host-write")
-        writes.append({"action": "add_sub_issue", "parent": typed_locator("fr", issue_number), "locator": locator})
+        writes.append({"action": "add_sub_issue", "parent": typed_locator(owner, repo, "fr", issue_number), "locator": locator})
 
     if blockers:
         dependencies = host.github_issue_dependencies_payload(target_root, owner, repo, candidate_number)
@@ -394,7 +394,7 @@ def github_fr_wi_admission_payload(
             dependency_errors = host.set_native_dependency(target_root, owner, repo, candidate_number, blocker, "addBlockedBy")
             if dependency_errors:
                 return respond("partial_apply", "partial_apply", "FR-to-WI admission could not finish the requested native dependency relation.", locators=[locator], writes=writes, missing_inputs=[f"add blocked-by #{blocker}: {message}" for message in dependency_errors], next_action=recovery, failed_layer="host-write")
-            writes.append({"action": "add_blocked_by", "locator": locator, "blocking_issue": typed_locator("issue", blocker)})
+            writes.append({"action": "add_blocked_by", "locator": locator, "blocking_issue": typed_locator(owner, repo, "issue", blocker)})
 
     if writes:
         readback = github_fr_wi_admission_payload(host=host, target_root=target_root, owner=owner, repo_name=repo, issue_number=issue_number, intent=intent, task=task, blocked_by=blockers, work_item_number=candidate_number, apply=False)

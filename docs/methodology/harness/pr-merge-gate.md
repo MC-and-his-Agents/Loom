@@ -35,17 +35,22 @@ The gate must be able to read:
 The PR body should expose the Work Item explicitly:
 
 ```text
-Loom Work Item: WI-123
+Work Item: owner/repo/work_item/123
 ```
 
-If the PR body and CLI argument disagree about the Work Item, the gate fails closed.
+The locator repository and id must match GitHub readback. Legacy `type:number`
+values are not accepted as PR binding truth. If the PR body and CLI argument
+disagree about the Work Item, the gate fails closed.
 
 When machine carrier, explicit CLI input, and host readback already agree on the
-same Work Item / issue / PR / branch / head binding, missing human-readable PR
+same Work Item / issue / PR binding, missing human-readable PR
 fields such as `Issue: #123` are repairable metadata drift. The gate may block
 until the repair is applied when that backlink is required by the current
 surface, but it must classify the problem as repairable missing display
 metadata, not as a semantic Work Item conflict.
+
+Branch, head, check, and merge facts are never repaired into the PR body; they
+are consumed from GitHub host readback.
 
 ## 3. Approval Truth
 

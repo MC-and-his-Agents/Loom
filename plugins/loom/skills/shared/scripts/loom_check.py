@@ -10967,7 +10967,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                     number: int = 1,
                     merge_state_status: str | None = None,
                     host_review_state: str | None = None,
-                    work_item_locator: str = "work_item:209",
+                    work_item_locator: str = "owner/repo/work_item/209",
                 ) -> str:
                     head_ref_name = "feature/pr-gate"
                     head_ref_oid = current_head(target)
@@ -10989,14 +10989,12 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                             "upgrade_triggers": [],
                         },
                         "source": {"rendered_hash": "loom-check-installed-runtime-fixture"},
-                        "parser_version": "loom-pr-metadata-parser/v1",
+                        "parser_version": "loom-pr-metadata-parser/v2",
                     }
                     body = (
                         "## Related Work\n\n"
                         f"- Work Item: {work_item_locator}\n"
-                        "- Issue: #209\n"
-                        f"- Branch: {head_ref_name}\n"
-                        f"- Head SHA: {head_ref_oid}\n\n"
+                        "- Issue: #209\n\n"
                         "<!-- loom:repo-pr-metadata\n"
                         + json.dumps(metadata_envelope, ensure_ascii=False, indent=2)
                         + "\n-->\n"
@@ -11086,7 +11084,7 @@ def check_installed_runtime_fixture(root: Path) -> list[Failure]:
                         not isinstance(pr_metadata_preflight, dict)
                         or pr_metadata_preflight.get("result") != "pass"
                         or not isinstance(metadata_fields, dict)
-                        or metadata_fields.get("work_item_locator") != "work_item:209"
+                        or metadata_fields.get("work_item_locator") != "owner/repo/work_item/209"
                     ):
                         failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must consume the typed GitHub Work Item metadata carrier"))
                     retained_pr_gate_fixture = write_json_fixture(

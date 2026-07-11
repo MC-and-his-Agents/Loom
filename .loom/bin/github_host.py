@@ -13,6 +13,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from authority_contract import typed_locator
+
 
 LOOM_RUNTIME_ENV_KEYS = (
     "LOOM_SOURCE_REPO_ROOT",
@@ -476,7 +478,7 @@ def github_pr_closeout_readback(
     relation_errors = github_work_item_closed_by_pr_readback(root, owner, repo_name, pr_number, work_item, read_graphql=read_graphql)
     if relation_errors:
         return None, relation_errors
-    return {**attestation, "closeout": {"work_item_locator": f"work_item:{work_item}", "merge_commit_sha": merge_sha, "base_contains_merge": True, "merge_semantic_tree": merge_tree, "issue_state": issue.get("state"), "issue_state_reason": issue.get("state_reason"), "work_item_closed_by_pr": pr_number}}, []
+    return {**attestation, "closeout": {"work_item_locator": typed_locator(owner, repo_name, "work_item", work_item), "merge_commit_sha": merge_sha, "base_contains_merge": True, "merge_semantic_tree": merge_tree, "issue_state": issue.get("state"), "issue_state_reason": issue.get("state_reason"), "work_item_closed_by_pr": pr_number}}, []
 
 
 def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:

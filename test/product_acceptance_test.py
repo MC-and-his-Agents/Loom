@@ -21,7 +21,7 @@ PROHIBITED = ["login", "captcha_or_risk_bypass", "submit", "publish", "send", "e
 def live_record() -> dict:
     return {
         "schema_version": product_acceptance.SCHEMA,
-        "story_locator": "issue:225",
+        "story_locator": "MC-and-his-Agents/Loom/issue/225",
         "scenario_id": "READ-001",
         "verdict": "passed",
         "minimum_evidence_class": "live_readonly",

@@ -225,9 +225,9 @@ PR_METADATA_RENDER_SCHEMA = "loom-pr-metadata-render/v1"
 PR_METADATA_READBACK_SCHEMA = "loom-pr-metadata-readback/v1"
 PR_METADATA_UPDATE_SCHEMA = "loom-pr-metadata-update/v1"
 PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
-PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
-PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
-PR_METADATA_RENDERER_ID = "renderer:loom-pr-metadata-render/v1"
+PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v2"
+PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "loom-pr-metadata-parser/v1", "repo-parser/v1")
+PR_METADATA_RENDERER_ID = "renderer:loom-pr-metadata-render/v2"
 GATE_FREEZE_SCHEMA = "loom-gate-freeze/v1"
 CLOSEOUT_FREEZE_SCHEMA = "loom-closeout-freeze/v1"
 CLOSEOUT_SPECIFIC_GATE_SCHEMA = "loom-closeout-specific-gate/v1"
@@ -15843,9 +15843,9 @@ def pr_metadata_expected_format(marker: str) -> str:
         '  "schema_version": "loom-repo-pr-metadata/v1",\n'
         '  "metadata_contract_id": "<repo-specific-id>",\n'
         '  "surface": "review|merge_ready|closeout",\n'
-        '  "fields": {"<repo-field>": "<value>"},\n'
+        '  "fields": {"work_item_locator": "owner/repo/work_item/id", "<repo-field>": "<value>"},\n'
         '  "source": {"rendered_hash": "<sha256-or-repo-renderer-hash>"},\n'
-        '  "parser_version": "loom-pr-metadata-parser/v1"\n'
+        '  "parser_version": "loom-pr-metadata-parser/v2"\n'
         "}\n"
         "-->"
     )
@@ -16067,7 +16067,7 @@ def pr_metadata_diagnostic_next_action(
     if classifier == "host_owned_fact_authored":
         return "remove authored branch, head, merge, and check fields from the PR metadata block; GitHub host readback owns them."
     if classifier == "work_item_locator_invalid":
-        return "set the PR `Work Item` and machine field to one `work_item:<GitHub issue>` locator, then rerun preflight."
+        return "set the PR `Work Item` and machine field to one `owner/repo/work_item/id` locator, then rerun preflight."
     if classifier == "enum_violation":
         invalid_fields = sorted(field for field in fields if field in PR_METADATA_DIAGNOSTIC_ALLOWED_VALUES)
         field_list = ", ".join(invalid_fields) if invalid_fields else "the governance enum fields"
@@ -16167,14 +16167,24 @@ def path_safe_work_item_id(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value))
 
 
-def work_item_locator_for_metadata(item_id: str | None, issue_number: int | None) -> str | None:
-    """Use a typed GitHub Work Item locator; local item ids are never host authority."""
+def work_item_locator_for_metadata(
+    item_id: str | None,
+    issue_number: int | None,
+    owner: str | None = None,
+    repo: str | None = None,
+) -> str | None:
+    """Normalize PR metadata to the canonical repository-qualified Work Item locator."""
 
     parsed = parse_typed_locator(item_id, allowed_types={"work_item"})
     if parsed is not None:
-        return str(parsed["locator"])
-    if isinstance(issue_number, int) and issue_number > 0:
-        return typed_locator("work_item", issue_number)
+        if not parsed["legacy"]:
+            if owner and repo and (str(parsed["owner"]).lower(), str(parsed["repo"]).lower()) != (owner.lower(), repo.lower()):
+                return None
+            return str(parsed["locator"])
+        if owner and repo:
+            return typed_locator(owner, repo, "work_item", int(parsed["id"]))
+    if isinstance(issue_number, int) and issue_number > 0 and owner and repo:
+        return typed_locator(owner, repo, "work_item", issue_number)
     return None
 
 
@@ -16194,7 +16204,7 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     governance_metadata_bool_field(fields, "pr_gate_required", missing_fields)
     governance_metadata_bool_field(fields, "closeout_required", missing_fields)
 
-    if work_item_locator and parse_typed_locator(work_item_locator, allowed_types={"work_item"}) is None:
+    if work_item_locator and parse_typed_locator(work_item_locator, allowed_types={"work_item"}, allow_legacy=False) is None:
         missing_fields.append("fields.work_item_locator")
     if governance_intensity and governance_intensity not in GOVERNANCE_INTENSITY_VALUES:
         missing_fields.append("fields.governance_intensity")
@@ -16377,6 +16387,8 @@ def pr_metadata_contract_preflight(
     expected_item: str | None = None,
     expected_head_sha: str | None = None,
     expected_branch: str | None = None,
+    owner: str | None = None,
+    repo: str | None = None,
 ) -> dict[str, Any]:
     contract_id = str(field.get("id") or "unknown")
     candidate_surfaces = pr_metadata_candidate_contract_surfaces(field, surface)
@@ -16508,12 +16520,23 @@ def pr_metadata_contract_preflight(
             if contract_id == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID:
                 normalized_fields = normalized.get("fields") if isinstance(normalized.get("fields"), dict) else {}
                 body_locator = pr_body_field_value(body, "Work Item")
+                normalized_body_locator = work_item_locator_for_metadata(body_locator, None, owner, repo)
                 expected_bindings = {
-                    "work_item_locator": work_item_locator_for_metadata(expected_item, None) or body_locator,
+                    "work_item_locator": work_item_locator_for_metadata(expected_item, None, owner, repo) or normalized_body_locator,
                 }
                 body_bindings = {
-                    "work_item_locator": body_locator,
+                    "work_item_locator": normalized_body_locator,
                 }
+                carrier_locator = normalized_fields.get("work_item_locator")
+                if work_item_locator_for_metadata(
+                    carrier_locator if isinstance(carrier_locator, str) else None,
+                    None,
+                    owner,
+                    repo,
+                ) != carrier_locator:
+                    binding_missing.append("fields.work_item_locator")
+                if body_locator and normalized_body_locator is None:
+                    binding_missing.append("fields.work_item_locator")
                 for field_name, expected_value in expected_bindings.items():
                     carrier_value = normalized_fields.get(field_name)
                     if isinstance(expected_value, str) and expected_value and carrier_value != expected_value:
@@ -16616,6 +16639,8 @@ def pr_metadata_preflight_payload(
     issue_number: int | None = None,
 ) -> dict[str, Any]:
     governance_surface = governance_surface or build_governance_surface(target_root)
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    locator_owner, locator_repo = owner or detected_owner, repo_name or detected_repo
     fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
     applicable_contracts = applicable_pr_metadata_contracts(fields, surface=surface)
     missing_inputs: list[str] = []
@@ -16637,7 +16662,6 @@ def pr_metadata_preflight_payload(
     inferences: list[dict[str, Any]] = []
     needs_pr_payload_for_body = body_artifact is None and compare_body_artifact is None
     if applicable_contracts and pr_payload is None and not contract_errors and (needs_pr_payload_for_body or pr_payload_file is not None):
-        detected_owner, detected_repo = detect_github_repo(target_root)
         pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
             target_root=target_root,
             owner=owner or detected_owner,
@@ -16662,19 +16686,17 @@ def pr_metadata_preflight_payload(
     if isinstance(body_artifact_result, dict):
         missing_inputs.extend(str(message) for message in body_artifact_result.get("missing_inputs", []))
     body_item = pr_work_item_from_body(body) if isinstance(body, str) else None
-    body_head = pr_body_field_value(body, "Head SHA") if isinstance(body, str) else None
-    body_branch = pr_body_field_value(body, "Branch") if isinstance(body, str) else None
     pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha
     pr_branch = pr_payload.get("headRefName") if isinstance(pr_payload, dict) else branch_name
-    if body_branch and isinstance(pr_branch, str) and pr_branch and body_branch != pr_branch:
-        missing_inputs.append("PR body Branch does not match PR payload headRefName")
     contract_results = [
         pr_metadata_contract_preflight(
             field=field,
             body=body if isinstance(body, str) else None,
             surface=surface,
             expected_item=expected_item or body_item,
-            expected_branch=expected_branch or (pr_branch if isinstance(pr_branch, str) and pr_branch else body_branch),
+            expected_branch=expected_branch or (pr_branch if isinstance(pr_branch, str) and pr_branch else None),
+            owner=locator_owner,
+            repo=locator_repo,
         )
         for field in applicable_contracts
     ]
@@ -16851,11 +16873,12 @@ def pr_metadata_render_payload(
     base_body, base_errors = load_optional_text_fixture(target_root, base_body_file, label="PR metadata render base body")
     output_path, output_errors = resolve_artifact_write_path(target_root, output_file, label="PR metadata render output")
     effective_item = item_id
-    work_item_locator = work_item_locator_for_metadata(effective_item, issue_number)
+    locator_owner, locator_repo = detect_github_repo(target_root)
+    work_item_locator = work_item_locator_for_metadata(effective_item, issue_number, locator_owner, locator_repo)
 
     missing_inputs = list(base_errors) + list(output_errors)
     if work_item_locator is None:
-        missing_inputs.append("pass --item work_item:<issue> or --issue <GitHub Work Item>; local current-item carriers are not accepted")
+        missing_inputs.append("pass --item owner/repo/work_item/id or --issue <GitHub Work Item>; legacy type:number is read-only through v0.30.x and local current-item carriers are not accepted")
 
     suite_not_applicable: dict[str, str] | None = None
     if suite_path == "not_applicable":
@@ -18059,16 +18082,13 @@ def closeout_freeze_terminal_subject_binding(
         if pr_payload.get("baseRefName") != target_branch:
             missing_inputs.append(f"implementation PR baseRefName `{pr_payload.get('baseRefName')}` does not match target branch `{target_branch}`")
         body_work_item_locator = pr_body_field_value(pr_body, "Work Item")
-        typed_body_work_item = parse_typed_locator(body_work_item_locator, allowed_types={"work_item"})
-        if not pr_body_mentions_item(pr_body, item_id) and typed_body_work_item is None:
-            missing_inputs.append("implementation PR body does not bind a typed GitHub Work Item locator")
+        owner, repo = detect_github_repo(context["target_root"])
+        typed_body_work_item = work_item_locator_for_metadata(body_work_item_locator, None, owner, repo)
+        if typed_body_work_item != body_work_item_locator:
+            missing_inputs.append("implementation PR body does not bind the canonical owner/repo/work_item/id locator")
         body_item = pr_work_item_from_body(pr_body)
         if body_item and body_item != item_id:
             missing_inputs.append(f"implementation PR body Work Item `{body_item}` does not match `{item_id}`")
-        body_branch = pr_body_binding_value(pr_body, label="Branch", metadata_field="branch")
-        payload_branch = pr_payload.get("headRefName")
-        if body_branch and isinstance(payload_branch, str) and payload_branch and body_branch != payload_branch:
-            missing_inputs.append("implementation PR body Branch does not match PR headRefName")
     issue_ref = f"#{issue_number}" if issue_number is not None else None
     pr_ref = f"#{pr_number}" if pr_number is not None else None
     linked_by_pr_body = bool(issue_ref and isinstance(pr_body, str) and re.search(rf"(?<![A-Z0-9-]){re.escape(issue_ref)}(?![0-9])", pr_body))
@@ -20144,7 +20164,7 @@ def pr_gate_payload(
             if (
                 pr_metadata_preflight.get("result") != "pass"
                 or not isinstance(work_item_locator, str)
-                or parse_typed_locator(work_item_locator, allowed_types={"work_item"}) is None
+                or parse_typed_locator(work_item_locator, allowed_types={"work_item"}, allow_legacy=False) is None
             ):
                 missing_inputs.append("PR metadata preflight does not bind a typed GitHub Work Item locator")
 
