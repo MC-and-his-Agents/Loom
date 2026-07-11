@@ -174,7 +174,7 @@
       "path": ".loom/bin/github_host.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/github_host.py",
-      "sha256": "902b5dc2651eef3e519844c2dea558fbc9101f674a5a8c67e828785c63c7a290"
+      "sha256": "94594ccbba49fd213d62371d74ed8d99b1babc6e97b00bf5d6398afed77e1821"
     },
     {
       "path": ".loom/bin/loom_flow.py",

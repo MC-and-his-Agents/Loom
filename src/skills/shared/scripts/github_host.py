@@ -31,6 +31,7 @@ HOST_API_NEXT_ACTIONS = {
     ),
 }
 SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+HOST_ATTESTATION_WORKFLOW_PATH = ".github/workflows/host-attestation-evidence.yml"
 
 
 def run_process(
@@ -376,17 +377,15 @@ def github_pr_attestation_readback(
         return None, run_errors or ["GitHub Actions workflow run read returned no object"]
     pull_requests = run.get("pull_requests")
     run_pr_numbers = {row.get("number") for row in pull_requests if isinstance(row, dict)} if isinstance(pull_requests, list) else set()
-    expected_path = f"@refs/heads/{base_ref}"
     if (
         run.get("head_sha") != head_sha
-        or run.get("event") != "pull_request"
+        or run.get("event") != "pull_request_target"
         or str(run.get("status") or "").lower() != "completed"
         or str(run.get("conclusion") or "").lower() != "success"
-        or pr_number not in run_pr_numbers
-        or not isinstance(run.get("path"), str)
-        or not str(run.get("path")).endswith(expected_path)
+        or run.get("path") != HOST_ATTESTATION_WORKFLOW_PATH
+        or (run_pr_numbers and pr_number not in run_pr_numbers)
     ):
-        return None, ["GitHub Actions workflow run is not a completed successful base-branch pull_request run for this PR head"]
+        return None, ["GitHub Actions workflow run is not the completed successful host-attestation pull_request_target run for this PR head"]
     return {
         "source": "github",
         "read_complete": True,

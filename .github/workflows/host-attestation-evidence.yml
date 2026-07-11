@@ -1,0 +1,34 @@
+name: loom-host-attestation-evidence
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+jobs:
+  host-attestation-evidence:
+    name: host-attestation-evidence
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Write host-generated evidence locator
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          printf '{"schema_version":"loom-host-attestation-evidence/v1","pr_number":%s,"head_sha":"%s","base_ref":"%s"}\n' "$PR_NUMBER" "$HEAD_SHA" "$BASE_REF" > "$RUNNER_TEMP/host-attestation.json"
+      - name: Upload host attestation evidence
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: loom-host-attestation-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/host-attestation.json
+          if-no-files-found: error
+          retention-days: 14
