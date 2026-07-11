@@ -269,7 +269,7 @@ jobs:
               remediation_command: "rerun loom-delivery-gate after the execution environment is available",
             };
             const cause = payload?.primary_cause?.id || fallbackCause.id;
-            const failureEnvelope = payload?.failure_envelope || { schema_version: "loom-failure-envelope/v1", primary_cause: payload?.primary_cause || fallbackCause, consequences: [] };
+            const failureEnvelope = payload?.failure_envelope || { schema_version: "loom-failure-envelope/v1", primary_cause: payload?.primary_cause || fallbackCause, consequences: [], suppressed_diagnostics: [], secondary_causes: [] };
             const enforcement = payload?.enforcement || process.env.DELIVERY_GATE_ENFORCEMENT || "advisory";
             const result = payload?.result || (enforcement === "advisory" ? "advisory" : "blocked");
             core.setOutput("result", result);

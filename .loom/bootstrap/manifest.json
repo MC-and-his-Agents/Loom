@@ -126,7 +126,7 @@
       "path": ".loom/bin/failure_envelope.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/failure_envelope.py",
-      "sha256": "0838f25a3973c0c7378c9346fb85f2009f4774299b224ff532a6e2441c420003"
+      "sha256": "adf4c3a3f2e811f6adfb165cbf14ef3b56de7f58863693727f13ac6bf51199c3"
     },
     {
       "path": ".loom/bin/product_acceptance.py",

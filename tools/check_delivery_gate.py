@@ -65,6 +65,8 @@ def assert_primary_cause(
         or envelope.get("schema_version") != "loom-failure-envelope/v1"
         or envelope.get("primary_cause") != cause
         or not isinstance(envelope.get("consequences"), list)
+        or not isinstance(envelope.get("suppressed_diagnostics"), list)
+        or envelope.get("secondary_causes") != [*envelope["consequences"], *envelope["suppressed_diagnostics"]]
     ):
         raise AssertionError(f"delivery gate did not expose one actionable failure envelope: {envelope}")
     if payload.get("product_acceptance", {}).get("verdict") != "not_evaluated":
@@ -111,9 +113,11 @@ def check_evaluator() -> None:
     combined = evaluator.finalize_delivery_gate(priority_cases[0][0], {"status": "failed"})
     if combined["native_validation"]["status"] != "failed":
         raise AssertionError("higher-priority host failure must not erase the native validation result")
-    consequences = combined["failure_envelope"]["consequences"]
-    if len(consequences) != 1 or consequences[0].get("id") != "native_validation_failed" or consequences[0].get("consequence_of") != ["host_facts_unreadable"]:
-        raise AssertionError("lower-priority validation diagnostics must be consequences of the selected primary cause")
+    suppressed = combined["failure_envelope"]["suppressed_diagnostics"]
+    if len(suppressed) != 1 or suppressed[0].get("id") != "native_validation_failed" or suppressed[0].get("consequence_of") != []:
+        raise AssertionError("independent validation failures must be suppressed diagnostics, not invented consequences")
+    if combined["failure_envelope"]["consequences"] != [] or combined["failure_envelope"]["secondary_causes"] != suppressed:
+        raise AssertionError("v1 secondary_causes must remain a deprecated compatibility alias")
 
     domain_cases = (
         ("permission_error", "permission_denied", "permission"),

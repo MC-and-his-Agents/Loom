@@ -2164,6 +2164,8 @@ def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
     failure_envelope = public_cli_failure_envelope(payload)
     if failure_envelope is not None:
         payload["failure_envelope"] = failure_envelope
+        if "primary_cause" in payload:
+            payload["primary_cause"] = failure_envelope["primary_cause"]
     if stream is None:
         stream = sys.stdout
     stream.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")

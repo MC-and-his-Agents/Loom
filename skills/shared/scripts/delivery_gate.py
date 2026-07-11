@@ -486,7 +486,7 @@ def finalize_delivery_gate(
     additional: list[dict[str, Any]] = []
     if payload["primary_cause"]["id"] != "passed" and status in {"command_missing", "failed"}:
         additional.append(_cause("validation_command_missing" if status == "command_missing" else "native_validation_failed"))
-    payload["failure_envelope"] = envelope(payload["primary_cause"], consequences=additional)
+    payload["failure_envelope"] = envelope(payload["primary_cause"], suppressed_diagnostics=additional)
     payload["result"] = _result(payload["enforcement"], payload["primary_cause"]["id"])
     return payload
 
