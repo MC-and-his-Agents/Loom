@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +136,80 @@ def check_evaluator() -> None:
     ):
         raise AssertionError("caller fixture must prove a pull_request caller selects pinned Loom and candidate paths")
     assert_primary_cause(evaluator.finalize_delivery_gate(caller["host_facts"], {"status": "passed"}, "enforce"), "passed", "enforce", "passed")
+
+
+def materialize_light_candidate(root: Path, forbidden: bool) -> Path:
+    candidate = root / ("forbidden" if forbidden else "clean")
+    candidate.mkdir()
+    subprocess.run(["git", "init"], cwd=candidate, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=candidate, check=True)
+    subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=candidate, check=True)
+    state = candidate / ".loom" / "installed-state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-installed-state/v2",
+                "repo_payload": {"mode": "metadata-only", "adoption_mode": "light-governance"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if forbidden:
+        carrier = candidate / ".loom" / "status" / "current.md"
+        carrier.parent.mkdir(parents=True)
+        carrier.write_text("forbidden\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=candidate, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=candidate, check=True, capture_output=True)
+    return candidate
+
+
+def check_light_profile_host_integration() -> None:
+    evaluator = load_evaluator()
+    facts = {**json.loads((FIXTURES / "docs.json").read_text(encoding="utf-8")), "profile": "light"}
+    missing_candidate = evaluator.finalize_delivery_gate(facts, {"status": "passed"}, "enforce")
+    assert_primary_cause(missing_candidate, "light_profile_tree_unreadable", "enforce", "blocked")
+    with tempfile.TemporaryDirectory(prefix="loom-delivery-light-") as raw_tmp:
+        root = Path(raw_tmp)
+        forbidden = materialize_light_candidate(root, True)
+        clean = materialize_light_candidate(root, False)
+        blocked = evaluator.finalize_delivery_gate(facts, {"status": "passed"}, "enforce", forbidden)
+        assert_primary_cause(blocked, "light_profile_forbidden_carrier", "enforce", "blocked")
+        if blocked.get("light_invariant", {}).get("status") != "blocked":
+            raise AssertionError("explicit light delivery profile must consume the forbidden candidate tree")
+        passed = evaluator.finalize_delivery_gate(facts, {"status": "passed"}, "enforce", clean)
+        assert_primary_cause(passed, "passed", "enforce", "passed")
+        for profile in ("standard", "reinforced"):
+            bypassed = evaluator.finalize_delivery_gate({**facts, "profile": profile}, {"status": "passed"}, "enforce", forbidden)
+            assert_primary_cause(bypassed, "passed", "enforce", "passed")
+            if bypassed.get("light_invariant", {}).get("status") != "not_evaluated":
+                raise AssertionError(f"{profile} delivery profile must not consume the light invariant")
+
+        host_facts = root / "host-facts.json"
+        validation = root / "validation.json"
+        host_facts.write_text(json.dumps(facts) + "\n", encoding="utf-8")
+        validation.write_text('{"status":"passed"}\n', encoding="utf-8")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SOURCE),
+                "--host-facts-file",
+                str(host_facts),
+                "--validation-result-file",
+                str(validation),
+                "--candidate-path",
+                str(forbidden),
+                "--enforcement",
+                "enforce",
+            ],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        payload = json.loads(completed.stdout)
+        if completed.returncode != 0 or payload.get("result") != "blocked" or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier":
+            raise AssertionError(f"host-level light-profile negative integration drifted: {payload}")
 
 
 def check_generated_copies() -> None:
@@ -366,12 +442,13 @@ def check_workflow() -> None:
         "if: ${{ always() && inputs.loom_ref == '' }}",
         "LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}",
         "CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}",
-        "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'advisory' }}",
+        "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}",
         "LOOM_SOURCE_PATH",
         "CANDIDATE_PATH",
         "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py",
         "bash -o pipefail -c \"$VALIDATION_COMMAND\"",
         "--validation-result-file",
+        "--candidate-path \"$CANDIDATE_PATH\"",
         "--enforcement \"$DELIVERY_GATE_ENFORCEMENT\"",
         "LOOM_DELIVERY_GATE_CHANGED_PATHS_FILE",
         "LOOM_DELIVERY_GATE_HOST_FACTS_FILE",
@@ -427,6 +504,7 @@ def check_workflow() -> None:
 
 def main() -> int:
     check_evaluator()
+    check_light_profile_host_integration()
     check_generated_copies()
     check_required_check_identity()
     check_identity_reader_boundary()

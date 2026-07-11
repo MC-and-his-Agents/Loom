@@ -156,7 +156,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Evaluate advisory delivery facts
+      - name: Evaluate delivery facts
         id: evaluate
         if: ${{ always() }}
         continue-on-error: true
@@ -165,10 +165,11 @@ jobs:
           HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
           DELIVERY_GATE_PLAN_PATH: ${{ runner.temp }}/loom-delivery-gate-plan.json
           LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
-          DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'advisory' }}
+          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
+          DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
         run: |
           set -u
-          python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" --host-facts-file "$HOST_FACTS_PATH" --enforcement "$DELIVERY_GATE_ENFORCEMENT" --output "$DELIVERY_GATE_PLAN_PATH"
+          python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" --host-facts-file "$HOST_FACTS_PATH" --candidate-path "$CANDIDATE_PATH" --enforcement "$DELIVERY_GATE_ENFORCEMENT" --output "$DELIVERY_GATE_PLAN_PATH"
           COMMAND="$(python3 - "$DELIVERY_GATE_PLAN_PATH" <<'PY'
           import json
           import sys
@@ -218,12 +219,14 @@ jobs:
           VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-delivery-native-validation.json
           DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
           LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
-          DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'advisory' }}
+          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
+          DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
         run: |
           set -u
           python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" \
             --host-facts-file "$HOST_FACTS_PATH" \
             --validation-result-file "$VALIDATION_RESULT_PATH" \
+            --candidate-path "$CANDIDATE_PATH" \
             --enforcement "$DELIVERY_GATE_ENFORCEMENT" \
             --output "$DELIVERY_GATE_PATH"
 
@@ -233,7 +236,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
-          DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'advisory' }}
+          DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
         with:
           script: |
             const fs = require("fs");

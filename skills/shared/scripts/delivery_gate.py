@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from failure_envelope import envelope, primary_cause
+from light_profile import plan_payload as evaluate_light_profile
 
 
 SCHEMA = "loom-delivery-gate/v1"
@@ -66,6 +67,33 @@ CAUSES = {
         "owner": "repository",
         "retryable": True,
         "remediation_command": "fix the reported native validation failure, then rerun loom-delivery-gate",
+    },
+    "light_profile_forbidden_carrier": {
+        "failure_domain": "governance_metadata",
+        "code": "forbidden_carrier",
+        "locator": "candidate_tree:forbidden_carrier",
+        "summary": "The candidate tree contains carriers forbidden by the declared light profile.",
+        "owner": "repository",
+        "retryable": False,
+        "remediation_command": "remove forbidden light-profile carriers from the candidate tree",
+    },
+    "light_profile_state_unreadable": {
+        "failure_domain": "governance_metadata",
+        "code": "unreadable",
+        "locator": "candidate_tree:installed_state",
+        "summary": "The candidate tree does not expose readable light-profile installed state.",
+        "owner": "repository",
+        "retryable": False,
+        "remediation_command": "restore valid metadata-only light-profile installed state",
+    },
+    "light_profile_tree_unreadable": {
+        "failure_domain": "toolchain",
+        "code": "unreadable",
+        "locator": "candidate_tree:unreadable",
+        "summary": "The declared light-profile candidate tree could not be evaluated.",
+        "owner": "github",
+        "retryable": True,
+        "remediation_command": "rerun loom-delivery-gate after the candidate checkout is readable",
     },
     "enforcement_unsupported": {
         "failure_domain": "governance_metadata",
@@ -194,7 +222,34 @@ def _result(enforcement: str, cause_id: str) -> str:
     return "passed" if enforcement == "enforce" and cause_id == "passed" else "blocked"
 
 
-def evaluate_host_facts(host_facts: object, enforcement: object = "advisory") -> dict[str, Any]:
+def _light_invariant(profile: str, profile_source: str, candidate_path: Path | None) -> tuple[dict[str, Any], str]:
+    if profile != "light" or profile_source != "host_facts":
+        return {"status": "not_evaluated", "applicable": False, "source": "delivery_profile"}, "passed"
+    if candidate_path is None:
+        return {"status": "blocked", "applicable": True, "source": "candidate_tree", "violations": []}, "light_profile_tree_unreadable"
+    try:
+        evaluated = evaluate_light_profile(candidate_path)
+    except (OSError, ValueError):
+        return {"status": "blocked", "applicable": True, "source": "candidate_tree", "violations": []}, "light_profile_tree_unreadable"
+    cause_id = evaluated.get("primary_cause", {}).get("id")
+    if evaluated.get("result") == "pass":
+        return {"status": "passed", "applicable": bool(evaluated.get("applicable")), "source": "candidate_tree", "violations": []}, "passed"
+    if cause_id not in {"light_profile_forbidden_carrier", "light_profile_state_unreadable", "light_profile_tree_unreadable"}:
+        cause_id = "light_profile_tree_unreadable"
+    violations = evaluated.get("violations")
+    return {
+        "status": "blocked",
+        "applicable": True,
+        "source": "candidate_tree",
+        "violations": violations if isinstance(violations, list) else [],
+    }, cause_id
+
+
+def evaluate_host_facts(
+    host_facts: object,
+    enforcement: object = "advisory",
+    candidate_path: Path | None = None,
+) -> dict[str, Any]:
     """Evaluate host facts before the selected native validation runs."""
 
     host_errors: list[str] = []
@@ -217,6 +272,7 @@ def evaluate_host_facts(host_facts: object, enforcement: object = "advisory") ->
     profile, profile_source = _profile(facts, paths)
     validation_command, validation_command_errors = _validation_command(facts)
     enforcement_mode, enforcement_errors = _enforcement(enforcement)
+    light_invariant = {"status": "not_evaluated", "applicable": False, "source": "delivery_profile"}
     if host_errors:
         cause_id = "host_facts_unreadable"
     elif enforcement_errors:
@@ -228,7 +284,7 @@ def evaluate_host_facts(host_facts: object, enforcement: object = "advisory") ->
     elif validation_command_errors:
         cause_id = "validation_command_missing"
     else:
-        cause_id = "passed"
+        light_invariant, cause_id = _light_invariant(profile, profile_source, candidate_path)
 
     primary = _cause(cause_id)
     return {
@@ -258,14 +314,20 @@ def evaluate_host_facts(host_facts: object, enforcement: object = "advisory") ->
             "status": "pending",
             "security_boundary": "untrusted_execution_read_token_only",
         },
+        "light_invariant": light_invariant,
         "enforcement_errors": enforcement_errors,
     }
 
 
-def finalize_delivery_gate(host_facts: object, validation_result: object, enforcement: object = "advisory") -> dict[str, Any]:
+def finalize_delivery_gate(
+    host_facts: object,
+    validation_result: object,
+    enforcement: object = "advisory",
+    candidate_path: Path | None = None,
+) -> dict[str, Any]:
     """Apply the fixed delivery-cause priority after native validation."""
 
-    payload = evaluate_host_facts(host_facts, enforcement)
+    payload = evaluate_host_facts(host_facts, enforcement, candidate_path)
     result = validation_result if isinstance(validation_result, dict) else {}
     status = result.get("status")
     payload["native_validation"]["status"] = status if isinstance(status, str) else "command_missing"
@@ -491,14 +553,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host-facts-file", type=Path, required=True)
     parser.add_argument("--validation-result-file", type=Path)
+    parser.add_argument("--candidate-path", type=Path)
     parser.add_argument("--enforcement", default="advisory")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     host_facts = _read_host_facts(args.host_facts_file)
     payload = (
-        finalize_delivery_gate(host_facts, _read_host_facts(args.validation_result_file), args.enforcement)
+        finalize_delivery_gate(host_facts, _read_host_facts(args.validation_result_file), args.enforcement, args.candidate_path)
         if args.validation_result_file
-        else evaluate_host_facts(host_facts, args.enforcement)
+        else evaluate_host_facts(host_facts, args.enforcement, args.candidate_path)
     )
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     if args.output:
