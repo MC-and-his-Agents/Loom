@@ -1,0 +1,12 @@
+{
+  "schema_version": "loom-delivery-gate-host-facts/v1",
+  "event": "workflow_call",
+  "repository": {
+    "owner": "Example",
+    "name": "GovernedRepo"
+  },
+  "profile": "light",
+  "changed_paths": [
+    "src/runtime.py"
+  ]
+}

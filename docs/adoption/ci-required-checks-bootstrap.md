@@ -47,7 +47,9 @@ Loom 不把 workflow 文件存在解释为宿主强制门禁。强制能力仍�
 
 ## Delivery Gate Enforcement 与身份 readback
 
-`loom-delivery-gate` 的 direct Loom PR 固定以 `advisory` 运行：它总会写出一个 primary cause，但不会因为该 cause 失败。reusable caller 必须显式声明 `enforcement: advisory|enforce`；`enforce` 只会在 primary cause 不是 `passed` 时让同名 terminal check 失败。无论模式为何，`product_acceptance: not_evaluated` 都不构成 delivery failure。
+`loom-delivery-gate` 的 direct `pull_request` 与 `merge_group` 固定以 `enforce` 运行；primary cause 不是 `passed` 时，同名 terminal check 必须失败。gate 从 candidate tree 的 `loom-installed-state/v2` 读取 repository adoption profile；既有 execution-control 仓库可由 `loom-repo-interface/v2` companion 兼容识别。light adoption 无需在 direct-event facts 中手工声明 `profile`，其 forbidden carrier invariant 仍会被强制消费。candidate profile 不可读、installed-state 被删除，或 caller profile 低于 candidate state 时均 fail closed。
+
+reusable caller 必须显式声明 `enforcement: advisory|enforce`。caller 的 `profile` 只能显式提升本次验证强度，不能降级 candidate repository profile，也不能覆盖 candidate adoption authority。无论模式为何，`product_acceptance: not_evaluated` 都不构成 delivery failure。
 
 caller 的 `enforcement` input 可以随 PR workflow 改写，因而它只能选择本次执行模式，不能证明下游仓库已经把该检查设为 required。迁移保护面时必须采用增量顺序：先在现有保护面中追加 `loom-delivery-gate`，再执行只读 host readback，最后才移除旧 required checks。不能提交 registry、caller YAML、PR body 或 workflow 文件作为这种证明。
 

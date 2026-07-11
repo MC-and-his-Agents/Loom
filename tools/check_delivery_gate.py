@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +136,114 @@ def check_evaluator() -> None:
     ):
         raise AssertionError("caller fixture must prove a pull_request caller selects pinned Loom and candidate paths")
     assert_primary_cause(evaluator.finalize_delivery_gate(caller["host_facts"], {"status": "passed"}, "enforce"), "passed", "enforce", "passed")
+
+
+def materialize_candidate(
+    root: Path,
+    adoption_mode: str | None,
+    forbidden: bool,
+    *,
+    companion: bool = False,
+    host_truth_locators: object = None,
+) -> Path:
+    authority = "companion" if companion else "installed-state"
+    candidate = root / f"{authority}-{adoption_mode or 'legacy'}-{'forbidden' if forbidden else 'clean'}"
+    candidate.mkdir()
+    subprocess.run(["git", "init"], cwd=candidate, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=candidate, check=True)
+    subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=candidate, check=True)
+    if companion:
+        state = candidate / ".loom" / "companion" / "repo-interface.json"
+        payload = {"schema_version": "loom-repo-interface/v2"}
+        if host_truth_locators is not None:
+            payload["host_truth_locators"] = host_truth_locators
+    else:
+        if adoption_mode is None:
+            raise AssertionError("installed-state fixture requires adoption_mode")
+        state = candidate / ".loom" / "installed-state.json"
+        payload = {
+            "schema_version": "loom-installed-state/v2",
+            "repo_payload": {"mode": "metadata-only", "adoption_mode": adoption_mode},
+        }
+    state.parent.mkdir(parents=True)
+    state.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    if forbidden:
+        carrier = candidate / ".loom" / "status" / "current.md"
+        carrier.parent.mkdir(parents=True)
+        carrier.write_text("forbidden\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=candidate, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=candidate, check=True, capture_output=True)
+    return candidate
+
+
+def check_light_profile_host_integration() -> None:
+    evaluator = load_evaluator()
+    facts = {**json.loads((FIXTURES / "docs.json").read_text(encoding="utf-8")), "profile": "light"}
+    missing_candidate = evaluator.finalize_delivery_gate(facts, {"status": "passed"}, "enforce")
+    assert_primary_cause(missing_candidate, "light_profile_tree_unreadable", "enforce", "blocked")
+    with tempfile.TemporaryDirectory(prefix="loom-delivery-light-") as raw_tmp:
+        root = Path(raw_tmp)
+        direct_facts = json.loads((FIXTURES / "direct-light.json").read_text(encoding="utf-8"))
+        if "profile" in direct_facts or direct_facts.get("event") != "pull_request":
+            raise AssertionError("direct-event fixture must not inject a caller profile")
+        forbidden = materialize_candidate(root, "light-governance", True)
+        clean = materialize_candidate(root, "light-governance", False)
+        blocked = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", forbidden)
+        assert_primary_cause(blocked, "light_profile_forbidden_carrier", "enforce", "blocked")
+        delivery = blocked.get("delivery", {})
+        if blocked.get("light_invariant", {}).get("status") != "blocked" or delivery.get("profile") != "light" or delivery.get("profile_source") != "candidate_state":
+            raise AssertionError("direct light event must derive profile authority and consume the candidate tree")
+        if delivery.get("candidate_profile", {}).get("authority") != ".loom/installed-state.json":
+            raise AssertionError("light adoption must come from explicit installed-state authority")
+        passed = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", clean)
+        assert_primary_cause(passed, "passed", "enforce", "passed")
+        for profile in ("standard", "reinforced"):
+            elevated = evaluator.finalize_delivery_gate({**direct_facts, "profile": profile}, {"status": "passed"}, "enforce", forbidden)
+            assert_primary_cause(elevated, "light_profile_forbidden_carrier", "enforce", "blocked")
+
+        mismatch_facts = json.loads((FIXTURES / "profile-mismatch.json").read_text(encoding="utf-8"))
+        for adoption_mode in ("execution-control", "strong-governance"):
+            candidate = materialize_candidate(root, adoption_mode, True)
+            mismatch = evaluator.finalize_delivery_gate(mismatch_facts, {"status": "passed"}, "enforce", candidate)
+            assert_primary_cause(mismatch, "profile_state_mismatch", "enforce", "blocked")
+
+        for fixture_id, host_truth in ((None, ["issue:1"]), ("execution-control", {"work_item": "github:issue"})):
+            execution_companion = materialize_candidate(root, fixture_id, True, companion=True, host_truth_locators=host_truth)
+            execution_result = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", execution_companion)
+            assert_primary_cause(execution_result, "passed", "enforce", "passed")
+            if execution_result.get("light_invariant", {}).get("status") != "not_evaluated" or execution_result.get("delivery", {}).get("candidate_profile", {}).get("adoption_mode") != "execution-control":
+                raise AssertionError("execution-control host truth locators must not imply light adoption")
+
+        deleted_state = materialize_candidate(root, "attach-only", False)
+        (deleted_state / ".loom" / "installed-state.json").unlink()
+        deleted_facts = {**direct_facts, "changed_paths": [".loom/installed-state.json"]}
+        deleted = evaluator.finalize_delivery_gate(deleted_facts, {"status": "passed"}, "enforce", deleted_state)
+        assert_primary_cause(deleted, "candidate_profile_unreadable", "enforce", "blocked")
+
+        host_facts = root / "host-facts.json"
+        validation = root / "validation.json"
+        host_facts.write_text(json.dumps(direct_facts) + "\n", encoding="utf-8")
+        validation.write_text('{"status":"passed"}\n', encoding="utf-8")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SOURCE),
+                "--host-facts-file",
+                str(host_facts),
+                "--validation-result-file",
+                str(validation),
+                "--candidate-path",
+                str(forbidden),
+                "--enforcement",
+                "enforce",
+            ],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        payload = json.loads(completed.stdout)
+        if completed.returncode != 0 or payload.get("result") != "blocked" or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier":
+            raise AssertionError(f"host-level light-profile negative integration drifted: {payload}")
 
 
 def check_generated_copies() -> None:
@@ -366,12 +476,13 @@ def check_workflow() -> None:
         "if: ${{ always() && inputs.loom_ref == '' }}",
         "LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}",
         "CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}",
-        "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'advisory' }}",
+        "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}",
         "LOOM_SOURCE_PATH",
         "CANDIDATE_PATH",
         "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py",
         "bash -o pipefail -c \"$VALIDATION_COMMAND\"",
         "--validation-result-file",
+        "--candidate-path \"$CANDIDATE_PATH\"",
         "--enforcement \"$DELIVERY_GATE_ENFORCEMENT\"",
         "LOOM_DELIVERY_GATE_CHANGED_PATHS_FILE",
         "LOOM_DELIVERY_GATE_HOST_FACTS_FILE",
@@ -427,6 +538,7 @@ def check_workflow() -> None:
 
 def main() -> int:
     check_evaluator()
+    check_light_profile_host_integration()
     check_generated_copies()
     check_required_check_identity()
     check_identity_reader_boundary()
