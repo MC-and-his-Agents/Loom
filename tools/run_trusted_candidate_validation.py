@@ -81,15 +81,26 @@ def candidate_symlinks(candidate_root: Path, policy: str) -> list[Path]:
     if policy == "reject":
         return sorted(symlinks)
     protected = ("Makefile", "tools", ".github/actions")
-    return sorted(
-        path
-        for path in symlinks
-        if any(
-            path.relative_to(candidate_root).as_posix() == prefix
-            or path.relative_to(candidate_root).as_posix().startswith(prefix + "/")
-            for prefix in protected
-        )
-    )
+    candidate_resolved = candidate_root.resolve()
+    unsafe: list[Path] = []
+    for path in symlinks:
+        relative = path.relative_to(candidate_root).as_posix()
+        if any(relative == prefix or relative.startswith(prefix + "/") for prefix in protected):
+            unsafe.append(path)
+            continue
+        if not path.is_symlink():
+            unsafe.append(path)
+            continue
+        raw_target = os.readlink(path)
+        if os.path.isabs(raw_target):
+            unsafe.append(path)
+            continue
+        try:
+            resolved = path.resolve(strict=True)
+            resolved.relative_to(candidate_resolved)
+        except (FileNotFoundError, RuntimeError, ValueError):
+            unsafe.append(path)
+    return sorted(unsafe)
 
 
 def trusted_overlay(trusted_root: Path, candidate_root: Path, output_root: Path, symlink_policy: str) -> None:

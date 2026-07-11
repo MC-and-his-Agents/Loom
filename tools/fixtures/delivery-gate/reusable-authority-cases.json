@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-delivery-gate-reusable-authority-cases/v1",
+  "observed": {
+    "event": "pull_request",
+    "repository": {"owner": "base-owner", "name": "base-repo"},
+    "change": {
+      "base_sha": "1111111111111111111111111111111111111111",
+      "head_sha": "2222222222222222222222222222222222222222",
+      "base_repository": "base-owner/base-repo",
+      "head_repository": "fork-owner/base-repo",
+      "number": 42
+    },
+    "changed_paths": ["src/main.py"]
+  },
+  "cases": [
+    {
+      "name": "missing-change-derived-from-api",
+      "supplied": {"profile": "light"},
+      "expected": "consistent"
+    },
+    {
+      "name": "forged-base-equals-head",
+      "supplied": {
+        "change": {
+          "base_sha": "2222222222222222222222222222222222222222",
+          "head_sha": "2222222222222222222222222222222222222222"
+        }
+      },
+      "expected": "conflict"
+    },
+    {
+      "name": "mismatched-head",
+      "supplied": {
+        "change": {"head_sha": "3333333333333333333333333333333333333333"}
+      },
+      "expected": "conflict"
+    },
+    {
+      "name": "fork-head-repository-binding",
+      "supplied": {
+        "repository": {"owner": "base-owner", "name": "base-repo"},
+        "change": {
+          "base_repository": "base-owner/base-repo",
+          "head_repository": "fork-owner/base-repo",
+          "head_sha": "2222222222222222222222222222222222222222"
+        }
+      },
+      "expected": "consistent"
+    }
+  ]
+}

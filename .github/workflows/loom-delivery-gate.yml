@@ -55,6 +55,8 @@ jobs:
       validation_targets: ${{ steps.evaluate.outputs.validation_targets }}
       base_sha: ${{ steps.evaluate.outputs.base_sha }}
       head_sha: ${{ steps.evaluate.outputs.head_sha }}
+      base_repository: ${{ steps.host-facts.outputs.base_repository }}
+      head_repository: ${{ steps.host-facts.outputs.head_repository }}
     steps:
       - name: Read GitHub host facts
         id: host-facts
@@ -74,6 +76,7 @@ jobs:
             const fs = require("fs");
             const event = context.eventName;
             const reusable = process.env.REUSABLE_MODE === "true";
+            let suppliedAuthority = null;
             const repository = { owner: context.repo.owner, name: context.repo.repo };
             const apiRepository = { owner: context.repo.owner, repo: context.repo.repo };
             const facts = {
@@ -91,29 +94,111 @@ jobs:
                 if (!supplied || typeof supplied !== "object" || Array.isArray(supplied)) {
                   throw new Error("reusable host_facts must be a JSON object");
                 }
-                Object.assign(facts, supplied);
+                const authorityKeys = new Set(["schema_version", "event", "repository", "change", "changed_paths"]);
+                suppliedAuthority = supplied;
+                for (const [key, value] of Object.entries(supplied)) {
+                  if (!authorityKeys.has(key)) facts[key] = value;
+                }
                 if (process.env.WORKFLOW_CALL_PROFILE) {
                   facts.profile = process.env.WORKFLOW_CALL_PROFILE;
                 }
-              } else if (event === "pull_request") {
-                const pull = context.payload.pull_request;
+              }
+              if (event === "pull_request") {
+                const eventPull = context.payload.pull_request;
+                if (!eventPull || !Number.isInteger(context.payload.number)) {
+                  throw new Error("pull_request event is missing its native locator");
+                }
+                const readback = await github.rest.pulls.get({
+                  ...apiRepository,
+                  pull_number: context.payload.number,
+                });
+                const pull = readback.data;
+                const baseRepository = pull.base?.repo?.full_name;
+                const headRepository = pull.head?.repo?.full_name;
+                const baseSha = pull.base?.sha;
+                const headSha = pull.head?.sha;
+                if (
+                  !/^[0-9a-f]{40}$/i.test(baseSha || "") ||
+                  !/^[0-9a-f]{40}$/i.test(headSha || "") ||
+                  baseRepository !== `${repository.owner}/${repository.name}` ||
+                  !/^[^/]+\/[^/]+$/.test(headRepository || "") ||
+                  eventPull.base?.sha !== baseSha ||
+                  eventPull.head?.sha !== headSha
+                ) {
+                  throw new Error("pull_request event and API authority do not bind the same repository/base/head");
+                }
                 const files = await github.paginate(github.rest.pulls.listFiles, {
                   ...apiRepository,
                   pull_number: context.payload.number,
                   per_page: 100,
                 });
-                facts.change = { base_sha: pull.base.sha, head_sha: pull.head.sha, number: context.payload.number };
+                facts.repository = { owner: pull.base.repo.owner.login, name: pull.base.repo.name };
+                facts.change = {
+                  base_sha: baseSha,
+                  head_sha: headSha,
+                  base_repository: baseRepository,
+                  head_repository: headRepository,
+                  number: context.payload.number,
+                };
                 facts.changed_paths = files.map((file) => file.filename);
               } else if (event === "merge_group") {
                 const group = context.payload.merge_group;
+                if (
+                  !group ||
+                  !/^[0-9a-f]{40}$/i.test(group.base_sha || "") ||
+                  !/^[0-9a-f]{40}$/i.test(group.head_sha || "")
+                ) {
+                  throw new Error("merge_group event is missing authoritative base/head SHAs");
+                }
                 const comparison = await github.rest.repos.compareCommits({
                   ...apiRepository,
                   base: group.base_sha,
                   head: group.head_sha,
                   per_page: 100,
                 });
-                facts.change = { base_sha: group.base_sha, head_sha: group.head_sha, head_ref: group.head_ref };
+                if (comparison.data.base_commit?.sha !== group.base_sha) {
+                  throw new Error("merge_group comparison does not bind the event base SHA");
+                }
+                facts.change = {
+                  base_sha: group.base_sha,
+                  head_sha: group.head_sha,
+                  base_repository: `${repository.owner}/${repository.name}`,
+                  head_repository: `${repository.owner}/${repository.name}`,
+                  head_ref: group.head_ref,
+                };
                 facts.changed_paths = (comparison.data.files || []).map((file) => file.filename);
+              } else {
+                throw new Error("delivery gate requires a pull_request or merge_group event authority");
+              }
+              if (reusable && suppliedAuthority) {
+                const declaredRepository = suppliedAuthority.repository;
+                if (
+                  declaredRepository &&
+                  (declaredRepository.owner !== facts.repository.owner || declaredRepository.name !== facts.repository.name)
+                ) {
+                  throw new Error("caller host_facts repository conflicts with GitHub host readback");
+                }
+                const declaredChange = suppliedAuthority.change;
+                if (declaredChange && typeof declaredChange === "object") {
+                  for (const key of ["base_sha", "head_sha", "base_repository", "head_repository", "number"]) {
+                    if (key in declaredChange && declaredChange[key] !== facts.change[key]) {
+                      throw new Error(`caller host_facts change.${key} conflicts with GitHub host readback`);
+                    }
+                  }
+                }
+                if (suppliedAuthority.event && suppliedAuthority.event !== event) {
+                  throw new Error("caller host_facts event conflicts with GitHub host readback");
+                }
+                if ("changed_paths" in suppliedAuthority) {
+                  if (!Array.isArray(suppliedAuthority.changed_paths)) {
+                    throw new Error("caller host_facts changed_paths conflicts with GitHub host readback");
+                  }
+                  const declaredPaths = [...new Set(suppliedAuthority.changed_paths)].sort();
+                  const observedPaths = [...new Set(facts.changed_paths)].sort();
+                  if (JSON.stringify(declaredPaths) !== JSON.stringify(observedPaths)) {
+                    throw new Error("caller host_facts changed_paths conflicts with GitHub host readback");
+                  }
+                }
               }
             } catch (error) {
               const message = String(error.message || error);
@@ -130,6 +215,11 @@ jobs:
               facts.validation_command = process.env.WORKFLOW_CALL_VALIDATION_COMMAND || "";
             }
             const changedPaths = Array.isArray(facts.changed_paths) ? [...new Set(facts.changed_paths)].sort() : [];
+            const change = facts.change && typeof facts.change === "object" ? facts.change : {};
+            core.setOutput("base_repository", change.base_repository || "");
+            core.setOutput("head_repository", change.head_repository || "");
+            core.setOutput("base_sha", change.base_sha || "");
+            core.setOutput("head_sha", change.head_sha || "");
             fs.writeFileSync(process.env.HOST_FACTS_PATH, `${JSON.stringify(facts)}\n`, "utf8");
             fs.writeFileSync(process.env.CHANGED_PATHS_PATH, changedPaths.length ? `${changedPaths.join("\n")}\n` : "", "utf8");
 
@@ -149,8 +239,8 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          repository: ${{ steps.host-facts.outputs.base_repository }}
+          ref: ${{ steps.host-facts.outputs.base_sha }}
           fetch-depth: 1
           path: loom
           persist-credentials: false
@@ -160,8 +250,8 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          repository: ${{ steps.host-facts.outputs.head_repository }}
+          ref: ${{ steps.host-facts.outputs.head_sha }}
           fetch-depth: 1
           path: candidate
           persist-credentials: false
@@ -221,7 +311,7 @@ jobs:
         if: ${{ inputs.loom_ref != '' }}
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
+          repository: ${{ needs.plan.outputs.base_repository }}
           ref: ${{ needs.plan.outputs.base_sha }}
           fetch-depth: 1
           path: harness
@@ -231,8 +321,8 @@ jobs:
         if: ${{ inputs.loom_ref == '' }}
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          repository: ${{ needs.plan.outputs.base_repository }}
+          ref: ${{ needs.plan.outputs.base_sha }}
           fetch-depth: 1
           path: loom
           persist-credentials: false
@@ -240,8 +330,8 @@ jobs:
       - name: Checkout untrusted candidate validation tree
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ needs.plan.outputs.head_sha || github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          repository: ${{ needs.plan.outputs.head_repository }}
+          ref: ${{ needs.plan.outputs.head_sha }}
           fetch-depth: 1
           path: candidate
           persist-credentials: false
@@ -292,8 +382,8 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          repository: ${{ needs.plan.outputs.base_repository }}
+          ref: ${{ needs.plan.outputs.base_sha }}
           fetch-depth: 1
           path: loom
           persist-credentials: false
@@ -302,8 +392,8 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          repository: ${{ needs.plan.outputs.head_repository }}
+          ref: ${{ needs.plan.outputs.head_sha }}
           fetch-depth: 1
           path: candidate
           persist-credentials: false

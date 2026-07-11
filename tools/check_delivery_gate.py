@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,7 @@ FIXTURES = ROOT / "tools" / "fixtures" / "delivery-gate"
 WORKFLOW = ROOT / ".github" / "workflows" / "loom-delivery-gate.yml"
 CHECK_WORKFLOW = ROOT / ".github" / "workflows" / "loom-check.yml"
 WORKFLOW_MATRIX = FIXTURES / "workflow-event-matrix.json"
+REUSABLE_AUTHORITY_CASES = FIXTURES / "reusable-authority-cases.json"
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_gate.py"
 SOURCE_DIR = SOURCE.parent
 IDENTITY_READER = ROOT / "tools" / "read_delivery_gate_required_identity.py"
@@ -612,10 +614,19 @@ def check_workflow() -> None:
         "pull_number: context.payload.number",
         "repository: MC-and-his-Agents/Loom",
         "ref: ${{ inputs.loom_ref }}",
-        "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}",
-        "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}",
+        "github.rest.pulls.get",
+        "pull.head?.repo?.full_name",
+        'core.setOutput("base_repository"',
+        'core.setOutput("head_repository"',
+        "repository: ${{ steps.host-facts.outputs.base_repository }}",
+        "repository: ${{ steps.host-facts.outputs.head_repository }}",
+        "repository: ${{ needs.plan.outputs.base_repository }}",
+        "repository: ${{ needs.plan.outputs.head_repository }}",
+        "ref: ${{ steps.host-facts.outputs.base_sha }}",
+        "ref: ${{ steps.host-facts.outputs.head_sha }}",
+        "ref: ${{ needs.plan.outputs.base_sha }}",
+        "ref: ${{ needs.plan.outputs.head_sha }}",
         "path: loom",
-        "repository: ${{ github.repository }}",
         "path: candidate",
         "REUSABLE_MODE: ${{ inputs.loom_ref != '' }}",
         "WORKFLOW_CALL_ENFORCEMENT",
@@ -677,6 +688,8 @@ def check_workflow() -> None:
         "loom_flow.py",
         "current.md",
         ".loom/",
+        "Object.assign(facts, supplied)",
+        "|| github.sha",
     )
     missing = [needle for needle in required if needle not in text]
     present = [needle for needle in forbidden if needle in text]
@@ -691,15 +704,11 @@ def check_workflow() -> None:
     plan_job = text.split("  plan:\n", 1)[1].split("  native-validation:\n", 1)[0]
     native_job = text.split("  native-validation:\n", 1)[1].split("  loom-delivery-gate:\n", 1)[0]
     final_job = text.split("  loom-delivery-gate:\n", 1)[1]
-    for name, block in (("plan", plan_job), ("finalizer", final_job)):
-        if "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" not in block or "path: loom" not in block:
-            raise AssertionError(f"{name} must use the trusted base SHA for direct evaluation")
-        if "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in block or "path: candidate" not in block:
-            raise AssertionError(f"{name} must isolate the candidate tree")
-    if "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" not in native_job:
-        raise AssertionError("direct native validation must use the trusted base SHA")
-    if "ref: ${{ needs.plan.outputs.head_sha || github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in native_job:
-        raise AssertionError("native validation must bind the candidate to the planned head SHA")
+    if "ref: ${{ steps.host-facts.outputs.base_sha }}" not in plan_job or "ref: ${{ steps.host-facts.outputs.head_sha }}" not in plan_job:
+        raise AssertionError("planning checkouts must consume only GitHub host-readback SHAs")
+    for name, block in (("native-validation", native_job), ("finalizer", final_job)):
+        if "ref: ${{ needs.plan.outputs.base_sha }}" not in block or "ref: ${{ needs.plan.outputs.head_sha }}" not in block:
+            raise AssertionError(f"{name} must consume the planned authoritative base/head SHAs")
     if (
         "needs: plan" not in native_job
         or "RUNNER_ROOT: ${{ github.workspace }}/loom" not in native_job
@@ -728,6 +737,26 @@ def check_workflow() -> None:
     if missing or present:
         details = [*(f"missing `{item}`" for item in missing), *(f"forbidden `{item}`" for item in present)]
         raise AssertionError("delivery gate workflow contract failed: " + "; ".join(details))
+    script_tail = text.split("          script: |\n", 1)[1]
+    script_lines: list[str] = []
+    for line in script_tail.splitlines():
+        if line and not line.startswith("            "):
+            break
+        script_lines.append(line[12:] if line else "")
+    compiled = subprocess.run(
+        [
+            "node",
+            "-e",
+            "const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor; new AsyncFunction('github','context','core',process.argv[1]);",
+            "\n".join(script_lines),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if compiled.returncode != 0:
+        raise AssertionError(f"GitHub host-readback script is not valid async JavaScript: {compiled.stderr}")
 
 
 def check_composite_action_contract() -> None:
@@ -877,7 +906,8 @@ def check_trusted_candidate_harness() -> None:
         shutil.copytree(candidate, reusable)
         asset = reusable / "assets"
         asset.mkdir()
-        (asset / "current").symlink_to(root / "outside")
+        (asset / "versioned").mkdir()
+        (asset / "current").symlink_to("versioned", target_is_directory=True)
         reusable_result = subprocess.run(
             [
                 sys.executable,
@@ -897,6 +927,38 @@ def check_trusted_candidate_harness() -> None:
         )
         if reusable_result.returncode == 0 or "Error 7" not in reusable_result.stderr:
             raise AssertionError("reusable caller legal non-harness symlink was incorrectly rejected")
+
+        unsafe_targets = {
+            "absolute": str(root / "outside"),
+            "outside": "../../outside",
+            "harness": os.path.relpath(trusted, asset),
+            "broken": "missing-target",
+        }
+        for name, target in unsafe_targets.items():
+            unsafe_candidate = root / f"candidate-reusable-{name}"
+            shutil.copytree(candidate, unsafe_candidate)
+            unsafe_asset = unsafe_candidate / "assets"
+            unsafe_asset.mkdir()
+            (unsafe_asset / "current").symlink_to(target, target_is_directory=True)
+            unsafe_link_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TRUSTED_RUNNER),
+                    "--trusted-root",
+                    str(trusted),
+                    "--candidate-root",
+                    str(unsafe_candidate),
+                    "--targets-json",
+                    '["delivery-gate-check"]',
+                    "--symlink-policy",
+                    "protected",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if unsafe_link_result.returncode != 2 or "candidate tree contains symlinks" not in unsafe_link_result.stderr:
+                raise AssertionError(f"reusable caller unsafe {name} symlink did not fail closed")
 
         reusable_unsafe = root / "candidate-reusable-unsafe"
         shutil.copytree(candidate, reusable_unsafe)
@@ -944,6 +1006,32 @@ def check_trusted_candidate_harness() -> None:
         raise AssertionError("Loom direct candidate still tracks symlinks")
     if (ROOT / ".agents" / "skills").exists():
         raise AssertionError("legacy .agents/skills compatibility links must remain absent")
+
+
+def check_reusable_host_authority_cases() -> None:
+    fixture = json.loads(REUSABLE_AUTHORITY_CASES.read_text(encoding="utf-8"))
+    if fixture.get("schema_version") != "loom-delivery-gate-reusable-authority-cases/v1":
+        raise AssertionError("reusable authority fixture schema drifted")
+    observed = fixture["observed"]
+    for case in fixture["cases"]:
+        supplied = case["supplied"]
+        conflict = False
+        declared_repository = supplied.get("repository")
+        if declared_repository and declared_repository != observed["repository"]:
+            conflict = True
+        declared_change = supplied.get("change")
+        if isinstance(declared_change, dict):
+            conflict = conflict or any(
+                key in declared_change and declared_change[key] != observed["change"].get(key)
+                for key in ("base_sha", "head_sha", "base_repository", "head_repository", "number")
+            )
+        if supplied.get("event") and supplied["event"] != observed["event"]:
+            conflict = True
+        if "changed_paths" in supplied and supplied["changed_paths"] != observed["changed_paths"]:
+            conflict = True
+        verdict = "conflict" if conflict else "consistent"
+        if verdict != case["expected"]:
+            raise AssertionError(f"reusable authority case drifted: {case['name']}: {verdict}")
 
 
 def check_workflow_event_matrix() -> None:
@@ -1008,6 +1096,7 @@ def main() -> int:
     check_workflow()
     check_composite_action_contract()
     check_trusted_candidate_harness()
+    check_reusable_host_authority_cases()
     check_workflow_event_matrix()
     print("delivery gate contract: OK")
     return 0

@@ -63,8 +63,16 @@ Loom 不再给下游仓库默认注入 evaluator 自测命令。caller 的 `prof
 从 base SHA 读取 Makefile、checker 与固定 fixtures，把 head checkout 仅作为被测树；
 direct 被测树出现任何 Git symlink 或 `lstat` symlink 时 fail closed。该零 symlink
 规则只属于 Loom 自身 direct trusted validation，不自动外推到 reusable caller。
-reusable caller 使用其声明的 base/head SHA 建立 caller-owned trusted harness，并只对
+reusable caller 使用 GitHub readback 的 base/head SHA 建立 caller-owned trusted harness，并只对
 Makefile、`tools` 与 `.github/actions` 等受保护验证路径禁止 symlink。
+这里的“声明”不是 caller 自报 authority：reusable workflow 必须从当前
+`pull_request`/`merge_group` 事件和 GitHub API readback 独立派生 base repository、
+fork-aware head repository、base/head SHA 与 changed paths。caller `host_facts` 缺少
+`change` 不影响派生；若其中自报的 repository/change/event/changed paths 与 host
+readback 冲突，则以单一 host-readback failure 失败，且不得 fallback 到
+`github.sha` 或 caller ref。reusable caller 的非 harness symlink 只有在使用相对路径、
+目标存在且 resolve 后仍位于 candidate root 内时才允许；绝对、断链、越界或指向
+runner/harness 的链接全部 fail closed。
 
 为使 direct 不变量可执行，本次删除以下已跟踪 legacy inventory，且不生成替代副本：
 
