@@ -17,7 +17,28 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "light_profile.py"
 FIXTURES = ROOT / "tools" / "fixtures" / "light-profile" / "fixtures.json"
+WORKFLOW_FIXTURES = FIXTURES.parent
 LOOM = ROOT / "tools" / "loom.py"
+CAUSE_FIELDS = {
+    "id", "failure_domain", "code", "locator", "summary", "owner", "retryable",
+    "cause_class", "transient", "details", "consequence_of", "remediation_command",
+}
+
+
+def assert_single_failure_envelope(payload: dict[str, Any]) -> None:
+    cause = payload.get("primary_cause")
+    failure = payload.get("failure_envelope")
+    if not isinstance(cause, dict) or set(cause) != CAUSE_FIELDS:
+        raise AssertionError(f"light-profile result has malformed primary cause: {cause}")
+    if (
+        not isinstance(failure, dict)
+        or failure.get("schema_version") != "loom-failure-envelope/v1"
+        or failure.get("primary_cause") != cause
+        or failure.get("consequences") != []
+        or failure.get("suppressed_diagnostics") != []
+        or failure.get("secondary_causes") != []
+    ):
+        raise AssertionError(f"light-profile result must expose exactly one primary cause: {failure}")
 
 
 def load_module() -> Any:
@@ -67,15 +88,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
         "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
         "specialized_gates": [],
     }
-    workflow = (
-        "name: loom-delivery-gate\n"
-        "on: [pull_request, merge_group]\n"
-        "jobs:\n"
-        "  gate:\n"
-        "    uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@"
-        + "a" * 40
-        + "\n"
-    )
+    workflow = (WORKFLOW_FIXTURES / "workflow-valid.yml").read_text(encoding="utf-8")
 
     def reset(checks: list[dict[str, Any]], write_modes: list[str] | None = None) -> None:
         state.clear()
@@ -87,6 +100,8 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
             invalid_companion=False,
             noop_workflow=False,
             comment_spoof_workflow=False,
+            workflow_fixture=None,
+            workflow_content=None,
             workflow_sha="workflow-blob",
         )
 
@@ -133,6 +148,10 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
                     + "a" * 40
                     + "\n"
                 )
+            elif state["workflow_content"]:
+                value = state["workflow_content"]
+            elif state["workflow_fixture"]:
+                value = (WORKFLOW_FIXTURES / state["workflow_fixture"]).read_text(encoding="utf-8")
             else:
                 value = workflow
             return {"content": base64.b64encode(value.encode()).decode()}, []
@@ -193,6 +212,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
 
         reset([{"context": "legacy-check", "app_id": 1}], ["success", "unchanged_timeout"])
         partial = evaluator.reconcile_payload(target, apply=True, **args)
+        assert_single_failure_envelope(partial)
         if partial.get("result") != "partial_apply" or len(partial.get("host_writes", [])) != 1:
             raise AssertionError(f"partial host success must return partial_apply: {partial}")
         if "--work-item 2040" not in str(partial.get("next_action")):
@@ -200,6 +220,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
 
         reset([{"context": "legacy-check", "app_id": 1}], ["apply_timeout", "success"])
         reconciled = evaluator.reconcile_payload(target, apply=True, **args)
+        assert_single_failure_envelope(reconciled)
         if reconciled.get("result") != "pass" or reconciled.get("host_mutation_attempts", [])[0].get("outcome") != "applied":
             raise AssertionError(f"timeout followed by applied readback must converge: {reconciled}")
         repeated = evaluator.reconcile_payload(target, apply=True, **args)
@@ -226,6 +247,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
         reset([{"context": "loom-delivery-gate", "app_id": 15368}])
         state["invalid_companion"] = True
         invalid_companion = evaluator.reconcile_payload(target, apply=True, **args)
+        assert_single_failure_envelope(invalid_companion)
         if invalid_companion.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "companion" not in " ".join(invalid_companion.get("missing_inputs", [])):
             raise AssertionError(f"invalid companion must block main-tree reconciliation: {invalid_companion}")
 
@@ -240,6 +262,33 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
         comment_spoof = evaluator.reconcile_payload(target, apply=True, **args)
         if comment_spoof.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "workflow" not in " ".join(comment_spoof.get("missing_inputs", [])):
             raise AssertionError(f"comment-spoof workflow must block main-tree reconciliation: {comment_spoof}")
+
+        reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+        state["workflow_fixture"] = "workflow-missing-validation.yml"
+        missing_validation = evaluator.reconcile_payload(target, apply=True, **args)
+        assert_single_failure_envelope(missing_validation)
+        if missing_validation.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "validation_command" not in " ".join(missing_validation.get("missing_inputs", [])):
+            raise AssertionError(f"caller without native validation must block reconciliation: {missing_validation}")
+
+        reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+        state["workflow_content"] = (WORKFLOW_FIXTURES / "workflow-valid.yml").read_text(encoding="utf-8").replace(
+            "validation_command: make py-compile", "validation_command: make delivery-gate-check"
+        )
+        invalid_validation = evaluator.reconcile_payload(target, apply=True, **args)
+        assert_single_failure_envelope(invalid_validation)
+        if invalid_validation.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "self-test" not in " ".join(invalid_validation.get("missing_inputs", [])):
+            raise AssertionError(f"evaluator-only validation must block reconciliation: {invalid_validation}")
+
+        for old, new, expected in (
+            ("enforcement: enforce", "enforcement: advisory", "enforcement"),
+            ("profile: light", "profile: standard", "profile"),
+        ):
+            reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+            state["workflow_content"] = (WORKFLOW_FIXTURES / "workflow-valid.yml").read_text(encoding="utf-8").replace(old, new)
+            invalid_input = evaluator.reconcile_payload(target, apply=True, **args)
+            assert_single_failure_envelope(invalid_input)
+            if invalid_input.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or expected not in " ".join(invalid_input.get("missing_inputs", [])):
+                raise AssertionError(f"caller with invalid {expected} must block reconciliation: {invalid_input}")
 
         reset([{"context": "loom-delivery-gate", "app_id": 15368}])
         state["workflow_sha"] = "drifted-workflow-blob"
@@ -302,6 +351,7 @@ def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
     target = materialize_case(root, fixture)
     status_before = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target, check=True, text=True, stdout=subprocess.PIPE).stdout
     first = evaluator.plan_payload(target)
+    assert_single_failure_envelope(first)
     second = evaluator.plan_payload(target)
     status_after = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target, check=True, text=True, stdout=subprocess.PIPE).stdout
     if status_before != status_after:
@@ -345,6 +395,7 @@ def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
             stderr=subprocess.PIPE,
         )
         payload = json.loads(completed.stdout or completed.stderr)
+        assert_single_failure_envelope(payload)
         if completed.returncode == 0 or payload.get("command") != "profile light-migration-plan" or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier":
             raise AssertionError(f"CLI route did not preserve light-profile failure semantics: {payload}")
 

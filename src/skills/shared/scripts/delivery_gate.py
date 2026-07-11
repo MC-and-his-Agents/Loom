@@ -28,7 +28,16 @@ ADOPTION_PROFILES = {
 ENFORCEMENTS = {"advisory", "enforce"}
 LIGHT_PATH_PREFIXES = ("docs/",)
 LIGHT_PATHS = {"README.md", "README.zh-CN.md"}
-DEFAULT_VALIDATION_COMMAND = "make delivery-gate-check"
+NATIVE_TARGET_ORDER = (
+    "py-compile",
+    "skills-doc-reference-sync-check",
+    "skills-check",
+    "cli-contract-check",
+    "light-profile-check",
+    "release-surface-check",
+    "npm-package-check",
+    "delivery-gate-check",
+)
 CAUSES = {
     "host_facts_unreadable": {
         "failure_domain": "host_service",
@@ -294,11 +303,51 @@ def _profile(facts: dict[str, Any], paths: list[str], candidate_profile: str | N
     return "standard", "default"
 
 
-def _validation_command(facts: dict[str, Any]) -> tuple[str, list[str]]:
-    value = facts.get("validation_command", DEFAULT_VALIDATION_COMMAND)
-    if not isinstance(value, str) or not value.strip():
-        return "", ["validation_command must be a non-empty string"]
-    return value.strip(), []
+def _automatic_validation_targets(paths: list[str], profile: str) -> list[str]:
+    targets: set[str] = set()
+    docs_only = bool(paths) and all(
+        path in LIGHT_PATHS or path.startswith(LIGHT_PATH_PREFIXES) for path in paths
+    )
+    if docs_only:
+        targets.add("skills-doc-reference-sync-check")
+    if not docs_only or any(path.endswith(".py") for path in paths):
+        targets.add("py-compile")
+    if any(path.startswith(("src/skills/", "skills/", "plugins/loom/skills/")) for path in paths):
+        targets.add("skills-check")
+    if any(
+        path.endswith("/light_profile.py")
+        or path == "tools/check_light_profile.py"
+        or path.startswith("tools/fixtures/light-profile/")
+        for path in paths
+    ):
+        targets.add("light-profile-check")
+    if any(path in {"VERSION", "package.json", "package-lock.json"} or path.startswith("bin/") for path in paths):
+        targets.update(("release-surface-check", "npm-package-check"))
+    if any(
+        path in {"Makefile", ".github/workflows/loom-check.yml", ".github/workflows/loom-delivery-gate.yml"}
+        or path.endswith("/delivery_gate.py")
+        or path == "tools/check_delivery_gate.py"
+        or path.startswith("tools/fixtures/delivery-gate/")
+        for path in paths
+    ):
+        targets.update(("py-compile", "delivery-gate-check"))
+    if profile == "reinforced":
+        targets.update(("py-compile", "skills-check", "cli-contract-check"))
+    if not targets:
+        targets.add("py-compile")
+    return [target for target in NATIVE_TARGET_ORDER if target in targets]
+
+
+def _validation_command(
+    facts: dict[str, Any], paths: list[str], profile: str
+) -> tuple[str, list[str], list[str], str]:
+    if "validation_command" in facts:
+        value = facts.get("validation_command")
+        if not isinstance(value, str) or not value.strip():
+            return "", [], ["validation_command must be a non-empty string"], "host_facts"
+        return value.strip(), [], [], "host_facts"
+    targets = _automatic_validation_targets(paths, profile)
+    return f"make {' '.join(targets)}", targets, [], "changed_paths_profile"
 
 
 def _enforcement(value: object) -> tuple[str, list[str]]:
@@ -389,7 +438,9 @@ def evaluate_host_facts(
     if isinstance(requested_profile, str) and requested_profile in PROFILES and candidate_profile in PROFILES and PROFILE_ORDER[requested_profile] < PROFILE_ORDER[candidate_profile]:
         profile_errors.append("requested profile cannot downgrade candidate repository state")
     profile, profile_source = _profile(facts, paths, candidate_profile)
-    validation_command, validation_command_errors = _validation_command(facts)
+    validation_command, validation_targets, validation_command_errors, validation_source = _validation_command(
+        facts, paths, profile
+    )
     enforcement_mode, enforcement_errors = _enforcement(enforcement)
     light_invariant = {"status": "not_evaluated", "applicable": False, "source": "delivery_profile"}
     if typed_host_cause is not None:
@@ -452,6 +503,8 @@ def evaluate_host_facts(
         },
         "native_validation": {
             "command": validation_command,
+            "targets": validation_targets,
+            "selection_source": validation_source,
             "command_errors": validation_command_errors,
             "status": "pending",
             "security_boundary": "untrusted_execution_read_token_only",

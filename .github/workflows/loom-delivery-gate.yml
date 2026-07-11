@@ -16,9 +16,8 @@ on:
         default: ''
       validation_command:
         description: Native validation command run with read-only permissions and no injected secrets.
-        required: false
+        required: true
         type: string
-        default: make delivery-gate-check
       loom_ref:
         description: Required 40-character Loom commit SHA used as the canonical evaluator source.
         required: true
@@ -53,6 +52,9 @@ jobs:
       enforcement: ${{ steps.terminal.outputs.enforcement }}
       primary_cause: ${{ steps.terminal.outputs.primary_cause }}
       failure_envelope: ${{ steps.terminal.outputs.failure_envelope }}
+    concurrency:
+      group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
       - name: Read GitHub host facts
         id: host-facts
@@ -74,7 +76,6 @@ jobs:
             const reusable = process.env.REUSABLE_MODE === "true";
             const repository = { owner: context.repo.owner, name: context.repo.repo };
             const apiRepository = { owner: context.repo.owner, repo: context.repo.repo };
-            const defaultValidationCommand = "make delivery-gate-check";
             const facts = {
               schema_version: "loom-delivery-gate-host-facts/v1",
               event,
@@ -125,9 +126,9 @@ jobs:
               }
               core.warning(message);
             }
-            facts.validation_command = reusable
-              ? (process.env.WORKFLOW_CALL_VALIDATION_COMMAND || defaultValidationCommand)
-              : defaultValidationCommand;
+            if (reusable) {
+              facts.validation_command = process.env.WORKFLOW_CALL_VALIDATION_COMMAND || "";
+            }
             const changedPaths = Array.isArray(facts.changed_paths) ? [...new Set(facts.changed_paths)].sort() : [];
             fs.writeFileSync(process.env.HOST_FACTS_PATH, `${JSON.stringify(facts)}\n`, "utf8");
             fs.writeFileSync(process.env.CHANGED_PATHS_PATH, changedPaths.length ? `${changedPaths.join("\n")}\n` : "", "utf8");

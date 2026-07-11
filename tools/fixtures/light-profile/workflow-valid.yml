@@ -1,0 +1,9 @@
+name: loom-delivery-gate
+on: [pull_request, merge_group]
+jobs:
+  gate:
+    uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    with:
+      validation_command: make py-compile
+      enforcement: enforce
+      profile: light

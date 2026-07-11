@@ -1,0 +1,12 @@
+{
+  "schema_version": "loom-delivery-gate-workflow-matrix/v1",
+  "loom-check": {
+    "pull_request": ["py-compile"],
+    "merge_group": ["py-compile"],
+    "push_main": ["py-compile", "demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"]
+  },
+  "loom-delivery-gate": {
+    "pull_request": "enforce",
+    "merge_group": "enforce"
+  }
+}

@@ -194,6 +194,22 @@ loom profile light-migration-reconcile \
   --legacy-context OLD_CHECK --json
 ```
 
+Gate-enabler PR 中的 caller 必须使用 SHA-pinned reusable workflow，并显式提供目标仓
+native validation；以下结构才可被 reconciliation 消费：
+
+```yaml
+jobs:
+  gate:
+    uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@LOOM_40_CHAR_SHA
+    with:
+      validation_command: make py-compile
+      enforcement: enforce
+      profile: light
+```
+
+`validation_command` 必须由目标仓提供，不能省略、使用动态空值或只执行
+`make delivery-gate-check` evaluator 自测。
+
 第二条命令默认只做 host readback 与计划；显式 `--apply` 才会先把新 delivery gate
 加入 branch protection、readback 其 check/app identity，再移除声明的 legacy checks。
 每次 GitHub API 写入尝试后都重新读取宿主状态，包括 transport timeout 或错误；

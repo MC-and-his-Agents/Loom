@@ -1,0 +1,8 @@
+name: loom-delivery-gate
+on: [pull_request, merge_group]
+jobs:
+  gate:
+    uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    with:
+      enforcement: enforce
+      profile: light

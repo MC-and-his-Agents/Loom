@@ -21,6 +21,7 @@ from github_host import (
     gh_rest_authenticated_paginated_field,
     gh_rest_write_json,
 )
+from failure_envelope import envelope, primary_cause
 
 
 sys.dont_write_bytecode = True
@@ -52,6 +53,44 @@ DECLARATION_LOCATORS = (".loom/bootstrap/init-result.json", ".loom/bootstrap/man
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 DELIVERY_WORKFLOW = ".github/workflows/loom-delivery-gate.yml"
 COMPANION = ".loom/companion/repo-interface.json"
+CAUSE_CONTRACTS = {
+    "not_applicable": ("governance_metadata", "not_applicable", "loom", False, "none"),
+    "passed": ("governance_metadata", "passed", "loom", False, "none"),
+    "light_profile_tree_unreadable": ("git_history", "unreadable", "repository", True, "restore readable Git tree state, then rerun the migration plan"),
+    "light_profile_forbidden_carrier": ("carrier", "forbidden_carrier", "repository", False, "remove the reported forbidden carriers in the profile migration PR"),
+    "light_profile_state_unreadable": ("carrier", "unreadable", "repository", False, "restore valid metadata-only light-profile installed state"),
+    "invalid_input": ("governance_metadata", "invalid", "repository", False, "correct the reported reconciliation inputs, then rerun"),
+    "gate_enabler_unverified": ("host_service", "unverified", "github", True, "restore the gate-enabler PR and check readback, then rerun"),
+    "host_readback_unavailable": ("host_service", "unavailable", "github", True, "rerun after GitHub host readback is available"),
+    "required_set_unreadable": ("host_service", "unreadable", "github", True, "restore readable branch protection, then rerun"),
+    "required_check_app_conflict": ("governance_metadata", "conflict", "operator", False, "remove the conflicting required-check app binding"),
+    "unexpected_required_checks": ("governance_metadata", "unexpected", "operator", False, "declare each required check as retained or legacy"),
+    "ruleset_migration_required": ("governance_metadata", "migration_required", "operator", False, "update the owning GitHub ruleset, then rerun"),
+    "profile_migration_pr_unreadable": ("host_service", "unreadable", "github", True, "restore profile-migration PR readback, then rerun"),
+    "profile_migration_pr_invalid": ("governance_metadata", "invalid", "repository", False, "retarget the profile-migration PR to the declared branch"),
+    "planned": ("governance_metadata", "planned", "loom", False, "run the emitted reconciliation command with --apply when ready"),
+    "partial_apply": ("host_service", "partial_apply", "operator", True, "rerun the emitted reconciliation command to converge host state"),
+    "host_write_unchanged": ("host_service", "unchanged", "operator", True, "restore host write authority, then rerun reconciliation"),
+    "required_set_not_ready": ("governance_metadata", "not_ready", "operator", True, "converge the required check set, then rerun"),
+    "profile_migration_pending": ("governance_metadata", "pending", "repository", True, "merge the profile-migration PR, then rerun"),
+    "main_tree_unreconciled": ("carrier", "unreconciled", "repository", True, "fix the reported main-tree contract, then rerun"),
+    "reconciled": ("governance_metadata", "reconciled", "loom", False, "none"),
+}
+
+
+def _primary(cause_id: str, summary: str, *, details: dict[str, Any] | None = None) -> dict[str, Any]:
+    domain, code, owner, retryable, remediation = CAUSE_CONTRACTS[cause_id]
+    return primary_cause(
+        cause_id=cause_id,
+        failure_domain=domain,
+        code=code,
+        locator=f"light_profile:{cause_id}",
+        summary=summary,
+        owner=owner,
+        retryable=retryable,
+        details=details,
+        remediation_command=remediation,
+    )
 
 
 def resolve_target(raw_target: str) -> Path:
@@ -251,6 +290,7 @@ def plan_payload(target: Path) -> dict[str, Any]:
     if state_error is None and profile in LIGHT_PROFILES and repo_payload.get("mode") != "metadata-only":
         state_error = f"{profile} installed-state must use metadata-only repository payload"
     if state_error is None and profile not in LIGHT_PROFILES:
+        cause = _primary("not_applicable", "target does not declare a light-profile adoption")
         return {
             "schema_version": SCHEMA,
             "command": "profile light-migration-plan",
@@ -261,16 +301,14 @@ def plan_payload(target: Path) -> dict[str, Any]:
             "carrier_repair_actions": [],
             "applicable": False,
             "installed_state": {"locator": locator, "adoption_mode": profile},
-            "primary_cause": {
-                "id": "not_applicable",
-                "domain": "light_profile",
-                "summary": "target does not declare a light-profile adoption",
-            },
+            "primary_cause": cause,
+            "failure_envelope": envelope(cause),
             "migration": {"status": "not_applicable", "actions": []},
         }
 
     paths, git_error = observed_paths(target)
     if git_error:
+        cause = _primary("light_profile_tree_unreadable", git_error)
         return {
             "schema_version": SCHEMA,
             "command": "profile light-migration-plan",
@@ -284,11 +322,8 @@ def plan_payload(target: Path) -> dict[str, Any]:
             "legacy_gate_blocker": True,
             "violations": [],
             "migration": {"status": "blocked_tree_read", "reentrant": True, "actions": []},
-            "primary_cause": {
-                "id": "light_profile_tree_unreadable",
-                "domain": "git_tree",
-                "summary": git_error,
-            },
+            "primary_cause": cause,
+            "failure_envelope": envelope(cause),
             "failed_layer": "light-profile-tree",
             "fail_closed_reason": git_error,
         }
@@ -298,6 +333,14 @@ def plan_payload(target: Path) -> dict[str, Any]:
     migration = migration_actions(violations, state_error, profile)
     passed = not violations and state_error is None
     primary_id = "passed" if passed else "light_profile_forbidden_carrier" if violations else "light_profile_state_unreadable"
+    summary = (
+        "observed tree satisfies the light-profile carrier invariant"
+        if passed
+        else "observed Loom execution carriers conflict with light-profile adoption"
+        if violations
+        else str(state_error)
+    )
+    cause = _primary(primary_id, summary, details={"violation_count": len(violations)})
     return {
         "schema_version": SCHEMA,
         "command": "profile light-migration-plan",
@@ -312,17 +355,8 @@ def plan_payload(target: Path) -> dict[str, Any]:
             "sources": {source: sum(1 for value in paths.values() if value == source) for source in ("tracked", "untracked", "ignored")},
             "file_count": len(paths),
         },
-        "primary_cause": {
-            "id": primary_id,
-            "domain": "light_profile" if primary_id != "light_profile_state_unreadable" else "installed_state",
-            "summary": (
-                "observed tree satisfies the light-profile carrier invariant"
-                if passed
-                else "observed Loom execution carriers conflict with light-profile adoption"
-                if violations
-                else str(state_error)
-            ),
-        },
+        "primary_cause": cause,
+        "failure_envelope": envelope(cause),
         "legacy_gate_blocker": not passed,
         "violations": violations,
         "migration": {
@@ -389,6 +423,7 @@ def _response(
 ) -> dict[str, Any]:
     mutation_attempts = attempts or []
     uncertain = any(item.get("outcome") == "indeterminate" for item in mutation_attempts)
+    primary = _primary(cause, summary, details={"operation": operation, "work_item": work_item})
     payload = {
         "schema_version": RECONCILE_SCHEMA,
         "command": "profile light-migration-reconcile",
@@ -402,7 +437,8 @@ def _response(
         "host_mutations": bool(writes) or uncertain,
         "host_writes": writes,
         "host_mutation_attempts": mutation_attempts,
-        "primary_cause": {"id": cause, "domain": "profile_migration", "summary": summary},
+        "primary_cause": primary,
+        "failure_envelope": envelope(primary),
         "next_action": next_action,
     }
     payload.update(extra)
@@ -610,7 +646,8 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         return [f"delivery workflow is not UTF-8: {exc}"]
     stack: list[tuple[int, str]] = []
     triggers: set[str] = set()
-    pinned_reusable = False
+    pinned_jobs: set[str] = set()
+    job_inputs: dict[str, dict[str, str]] = {}
     for raw_line in text.splitlines():
         if not raw_line.strip() or raw_line.lstrip().startswith("#"):
             continue
@@ -629,20 +666,39 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         elif path == ["on"] and key in {"pull_request", "merge_group"}:
             triggers.add(key)
         if key == "uses" and len(path) == 2 and path[0] == "jobs":
-            pinned_reusable = pinned_reusable or bool(
-                re.fullmatch(
-                    r"\S*/\.github/workflows/loom-delivery-gate\.yml@[0-9a-fA-F]{40}",
-                    value,
-                )
-            )
+            if re.fullmatch(
+                r"\S*/\.github/workflows/loom-delivery-gate\.yml@[0-9a-fA-F]{40}",
+                value,
+            ):
+                pinned_jobs.add(path[1])
+        elif len(path) == 3 and path[0] == "jobs" and path[2] == "with":
+            job_inputs.setdefault(path[1], {})[key] = value.strip("'\"")
         stack.append((indent, key))
 
+    errors: list[str] = []
     missing = sorted({"pull_request", "merge_group"} - triggers)
     if missing:
-        return ["delivery workflow is missing active triggers: " + ", ".join(missing)]
-    if not pinned_reusable:
-        return ["delivery workflow does not use the SHA-pinned reusable gate at job level"]
-    return []
+        errors.append("delivery workflow is missing active triggers: " + ", ".join(missing))
+    if not pinned_jobs:
+        errors.append("delivery workflow does not use the SHA-pinned reusable gate at job level")
+    for job in sorted(pinned_jobs):
+        inputs = job_inputs.get(job, {})
+        validation = inputs.get("validation_command", "").strip()
+        if not validation or validation.startswith("${{") or validation in {":", "true"}:
+            errors.append(f"delivery workflow job {job!r} must declare a concrete native validation_command")
+        else:
+            try:
+                validation_tokens = shlex.split(validation)
+            except ValueError:
+                errors.append(f"delivery workflow job {job!r} validation_command is malformed")
+            else:
+                if validation_tokens == ["make", "delivery-gate-check"]:
+                    errors.append(f"delivery workflow job {job!r} validation_command cannot only self-test the evaluator")
+        if inputs.get("enforcement") != "enforce":
+            errors.append(f"delivery workflow job {job!r} must declare enforcement: enforce")
+        if inputs.get("profile") != "light":
+            errors.append(f"delivery workflow job {job!r} must declare profile: light")
+    return errors
 
 
 def _main_tree_readback(

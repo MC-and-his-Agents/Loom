@@ -16,6 +16,8 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tools" / "fixtures" / "delivery-gate"
 WORKFLOW = ROOT / ".github" / "workflows" / "loom-delivery-gate.yml"
+CHECK_WORKFLOW = ROOT / ".github" / "workflows" / "loom-check.yml"
+WORKFLOW_MATRIX = FIXTURES / "workflow-event-matrix.json"
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_gate.py"
 SOURCE_DIR = SOURCE.parent
 IDENTITY_READER = ROOT / "tools" / "read_delivery_gate_required_identity.py"
@@ -79,22 +81,53 @@ def assert_primary_cause(
 
 def check_evaluator() -> None:
     evaluator = load_evaluator()
-    examples = (("docs.json", "light", "changed_paths", "valid"), ("runtime.json", "standard", "host_facts", "valid"))
-    for name, profile, source, host_status in examples:
+    examples = (
+        ("docs.json", "light", "changed_paths", "valid", ["skills-doc-reference-sync-check"]),
+        (
+            "runtime.json",
+            "standard",
+            "host_facts",
+            "valid",
+            ["py-compile", "skills-check", "delivery-gate-check"],
+        ),
+    )
+    for name, profile, source, host_status, targets in examples:
         payload = evaluator.evaluate_host_facts(json.loads((FIXTURES / name).read_text(encoding="utf-8")))
         assert_primary_cause(payload, "passed")
         if payload["delivery"]["profile"] != profile or payload["delivery"]["profile_source"] != source:
             raise AssertionError(f"{name} selected an unexpected profile")
         if payload["host_facts"]["status"] != host_status:
             raise AssertionError(f"{name} unexpectedly rejected valid host facts")
-        if not payload["native_validation"]["command"]:
-            raise AssertionError(f"{name} must select a usable default validation command")
+        native = payload["native_validation"]
+        if native["targets"] != targets or native["command"] != f"make {' '.join(targets)}":
+            raise AssertionError(f"{name} did not select its changed-path native validation: {native}")
+        if native["selection_source"] != "changed_paths_profile" or native["command"] == "make delivery-gate-check":
+            raise AssertionError(f"{name} must select candidate validation, not only evaluator self-tests")
 
     valid = json.loads((FIXTURES / "docs.json").read_text(encoding="utf-8"))
     reusable = evaluator.evaluate_host_facts({**valid, "profile": "reinforced", "validation_command": "python -m pytest -q"})
     assert_primary_cause(reusable, "passed")
-    if reusable["delivery"]["profile"] != "reinforced" or reusable["native_validation"]["command"] != "python -m pytest -q":
+    if (
+        reusable["delivery"]["profile"] != "reinforced"
+        or reusable["native_validation"]["command"] != "python -m pytest -q"
+        or reusable["native_validation"]["targets"] != []
+        or reusable["native_validation"]["selection_source"] != "host_facts"
+    ):
         raise AssertionError("reusable callers must retain their declared profile and validation command")
+    reinforced = evaluator.evaluate_host_facts({**valid, "profile": "reinforced"})
+    if reinforced["native_validation"]["targets"] != [
+        "py-compile",
+        "skills-doc-reference-sync-check",
+        "skills-check",
+        "cli-contract-check",
+    ]:
+        raise AssertionError("reinforced profile must add its native contract surfaces")
+    release = evaluator.evaluate_host_facts({**valid, "changed_paths": ["VERSION", "package.json"]})
+    if release["native_validation"]["targets"] != ["py-compile", "release-surface-check", "npm-package-check"]:
+        raise AssertionError("release paths must select release and package validation")
+    light_profile = evaluator.evaluate_host_facts({**valid, "changed_paths": ["tools/check_light_profile.py"]})
+    if light_profile["native_validation"]["targets"] != ["py-compile", "light-profile-check"]:
+        raise AssertionError("light-profile paths must select their semantic contract check")
     priority_cases = (
         (
             {**valid, "host_read_error": "GitHub unavailable", "profile": "unsupported", "changed_paths": ["../carrier"], "validation_command": ""},
@@ -464,6 +497,7 @@ def check_identity_reader_boundary() -> None:
 
 def check_workflow() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
+    validation_command_block = text.split("      validation_command:\n", 1)[1].split("      loom_ref:\n", 1)[0] if "      validation_command:\n" in text else ""
     loom_ref_block = text.split("      loom_ref:\n", 1)[1].split("    outputs:", 1)[0] if "      loom_ref:\n" in text else ""
     enforcement_block = text.split("      enforcement:\n", 1)[1].split("    outputs:", 1)[0] if "      enforcement:\n" in text else ""
     required = (
@@ -473,7 +507,6 @@ def check_workflow() -> None:
         "workflow_call:",
         "profile:",
         "validation_command:",
-        "default: make delivery-gate-check",
         "loom_ref:",
         "enforcement:",
         'description: "Required delivery-gate mode: advisory records the result; enforce fails a non-passing terminal check."',
@@ -524,6 +557,8 @@ def check_workflow() -> None:
         'payload?.result || (enforcement === "advisory" ? "advisory" : "blocked")',
         "core.setFailed(`loom-delivery-gate blocked: ${cause}`)",
         "continue-on-error: true",
+        "group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}",
+        "cancel-in-progress: true",
     )
     forbidden = (
         "pull_request_target",
@@ -553,6 +588,8 @@ def check_workflow() -> None:
         raise AssertionError("workflow must keep separate canonical Loom, caller candidate, and direct Loom checkout paths")
     if "required: true" not in loom_ref_block or "default:" in loom_ref_block:
         raise AssertionError("reusable callers must supply one non-default pinned Loom SHA")
+    if "required: true" not in validation_command_block or "default:" in validation_command_block:
+        raise AssertionError("reusable callers must supply their repository-native validation command")
     if "required: true" not in enforcement_block or "default:" in enforcement_block:
         raise AssertionError("reusable callers must explicitly choose advisory or enforce")
     terminal = text.split("      - name: Publish terminal delivery result\n", 1)[-1].split("        uses: actions/github-script@v7", 1)[0]
@@ -563,6 +600,53 @@ def check_workflow() -> None:
         raise AssertionError("delivery gate workflow contract failed: " + "; ".join(details))
 
 
+def check_workflow_event_matrix() -> None:
+    matrix = json.loads(WORKFLOW_MATRIX.read_text(encoding="utf-8"))
+    expected = {
+        "schema_version": "loom-delivery-gate-workflow-matrix/v1",
+        "loom-check": {
+            "pull_request": ["py-compile"],
+            "merge_group": ["py-compile"],
+            "push_main": ["py-compile", "demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"],
+        },
+        "loom-delivery-gate": {"pull_request": "enforce", "merge_group": "enforce"},
+    }
+    if matrix != expected:
+        raise AssertionError(f"workflow event matrix fixture drifted: {matrix}")
+
+    text = CHECK_WORKFLOW.read_text(encoding="utf-8")
+    required = (
+        "  push:\n    branches:\n      - main\n",
+        "  pull_request:\n",
+        "  merge_group:\n",
+        "group: loom-check-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}",
+        "cancel-in-progress: true",
+    )
+    missing = [needle for needle in required if needle not in text]
+    if missing:
+        raise AssertionError("loom-check event contract missing: " + ", ".join(missing))
+    job_names = ["demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"]
+    for name in job_names:
+        start = text.index(f"  {name}:\n")
+        following = [text.find(f"  {other}:\n", start + 1) for other in ["py-compile", *job_names]]
+        stops = [position for position in following if position > start]
+        block = text[start : min(stops) if stops else len(text)]
+        if "if: ${{ github.event_name == 'push' }}" not in block:
+            raise AssertionError(f"{name} must remain a main-push aggregate job")
+    py_start = text.index("  py-compile:\n")
+    py_end = min(text.index(f"  {name}:\n") for name in job_names)
+    if "github.event_name == 'push'" in text[py_start:py_end]:
+        raise AssertionError("py-compile must remain available to pull_request and merge_group required checks")
+
+    delivery = WORKFLOW.read_text(encoding="utf-8")
+    if "\n  push:\n" in delivery or "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}" not in delivery:
+        raise AssertionError("delivery gate must enforce direct PR/merge-group events without a duplicate push run")
+    for workflow in (ROOT / ".github" / "workflows").glob("*.yml"):
+        workflow_text = workflow.read_text(encoding="utf-8")
+        if "\n  push:\n" in workflow_text and "\n    branches:\n      - main\n" not in workflow_text:
+            raise AssertionError(f"{workflow.name} must not run feature-branch push validation")
+
+
 def main() -> int:
     check_evaluator()
     check_light_profile_host_integration()
@@ -570,6 +654,7 @@ def main() -> int:
     check_required_check_identity()
     check_identity_reader_boundary()
     check_workflow()
+    check_workflow_event_matrix()
     print("delivery gate contract: OK")
     return 0
 
