@@ -138,16 +138,28 @@ def check_evaluator() -> None:
     assert_primary_cause(evaluator.finalize_delivery_gate(caller["host_facts"], {"status": "passed"}, "enforce"), "passed", "enforce", "passed")
 
 
-def materialize_candidate(root: Path, adoption_mode: str | None, forbidden: bool) -> Path:
-    candidate = root / f"{adoption_mode or 'companion-standard'}-{'forbidden' if forbidden else 'clean'}"
+def materialize_candidate(
+    root: Path,
+    adoption_mode: str | None,
+    forbidden: bool,
+    *,
+    companion: bool = False,
+    host_truth_locators: object = None,
+) -> Path:
+    authority = "companion" if companion else "installed-state"
+    candidate = root / f"{authority}-{adoption_mode or 'legacy'}-{'forbidden' if forbidden else 'clean'}"
     candidate.mkdir()
     subprocess.run(["git", "init"], cwd=candidate, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=candidate, check=True)
     subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=candidate, check=True)
-    if adoption_mode is None:
+    if companion:
         state = candidate / ".loom" / "companion" / "repo-interface.json"
         payload = {"schema_version": "loom-repo-interface/v2"}
+        if host_truth_locators is not None:
+            payload["host_truth_locators"] = host_truth_locators
     else:
+        if adoption_mode is None:
+            raise AssertionError("installed-state fixture requires adoption_mode")
         state = candidate / ".loom" / "installed-state.json"
         payload = {
             "schema_version": "loom-installed-state/v2",
@@ -181,6 +193,8 @@ def check_light_profile_host_integration() -> None:
         delivery = blocked.get("delivery", {})
         if blocked.get("light_invariant", {}).get("status") != "blocked" or delivery.get("profile") != "light" or delivery.get("profile_source") != "candidate_state":
             raise AssertionError("direct light event must derive profile authority and consume the candidate tree")
+        if delivery.get("candidate_profile", {}).get("authority") != ".loom/installed-state.json":
+            raise AssertionError("light adoption must come from explicit installed-state authority")
         passed = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", clean)
         assert_primary_cause(passed, "passed", "enforce", "passed")
         for profile in ("standard", "reinforced"):
@@ -193,11 +207,12 @@ def check_light_profile_host_integration() -> None:
             mismatch = evaluator.finalize_delivery_gate(mismatch_facts, {"status": "passed"}, "enforce", candidate)
             assert_primary_cause(mismatch, "profile_state_mismatch", "enforce", "blocked")
 
-        companion = materialize_candidate(root, None, True)
-        companion_result = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", companion)
-        assert_primary_cause(companion_result, "passed", "enforce", "passed")
-        if companion_result.get("delivery", {}).get("candidate_profile", {}).get("authority") != ".loom/companion/repo-interface.json":
-            raise AssertionError("legacy execution-control candidate must authenticate its companion profile")
+        for fixture_id, host_truth in ((None, ["issue:1"]), ("execution-control", {"work_item": "github:issue"})):
+            execution_companion = materialize_candidate(root, fixture_id, True, companion=True, host_truth_locators=host_truth)
+            execution_result = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", execution_companion)
+            assert_primary_cause(execution_result, "passed", "enforce", "passed")
+            if execution_result.get("light_invariant", {}).get("status") != "not_evaluated" or execution_result.get("delivery", {}).get("candidate_profile", {}).get("adoption_mode") != "execution-control":
+                raise AssertionError("execution-control host truth locators must not imply light adoption")
 
         deleted_state = materialize_candidate(root, "attach-only", False)
         (deleted_state / ".loom" / "installed-state.json").unlink()

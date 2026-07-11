@@ -245,7 +245,7 @@ def _candidate_profile(candidate_path: Path | None, paths: list[str]) -> tuple[s
         if companion is None or companion.get("schema_version") != "loom-repo-interface/v2":
             profile.update({"status": "unreadable", "authority": companion_locator})
             return None, profile, ["repo companion profile authority is unreadable"]
-        adoption_mode = "attach-only" if isinstance(companion.get("host_truth_locators"), list) and companion["host_truth_locators"] else "execution-control"
+        adoption_mode = "execution-control"
         resolved = ADOPTION_PROFILES[adoption_mode]
         profile.update({"status": "valid", "profile": resolved, "adoption_mode": adoption_mode, "authority": companion_locator})
         return resolved, profile, []
