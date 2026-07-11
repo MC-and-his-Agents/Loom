@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "src/skills/shared/scripts"
+WORKFLOW = ROOT / ".github" / "workflows" / "host-attestation-evidence.yml"
 sys.path.insert(0, str(SCRIPTS))
 
 import github_host
@@ -17,6 +18,11 @@ spec = importlib.util.spec_from_file_location("host_attestation", SCRIPTS / "hos
 module = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
 spec.loader.exec_module(module)
+
+cli_spec = importlib.util.spec_from_file_location("loom_cli", ROOT / "tools" / "loom.py")
+cli = importlib.util.module_from_spec(cli_spec)
+assert cli_spec and cli_spec.loader
+cli_spec.loader.exec_module(cli)
 
 HEAD, MERGE = "a" * 40, "b" * 40
 
@@ -33,7 +39,7 @@ def facts(*, merged: bool = False, issue_completed: bool = True, compare_status:
         "repos/o/r/git/trees/tree-head?recursive=1": {"truncated": truncated, "tree": [{"path": "src/a.py", "sha": "c" * 40, "mode": "100644", "type": "blob"}]},
         "repos/o/r": {"default_branch": "main"},
         "repos/o/r/actions/artifacts/7": {"id": 7, "digest": "sha256:" + "d" * 64, "expired": False, "name": "review", "workflow_run": {"id": 9}},
-        "repos/o/r/actions/runs/9": {"id": 9, "event": "pull_request", "status": "completed", "conclusion": "success", "head_sha": run_head, "workflow_id": 3, "path": ".github/workflows/loom.yml@refs/heads/main", "pull_requests": [{"number": 1}]},
+        "repos/o/r/actions/runs/9": {"id": 9, "event": "pull_request_target", "status": "completed", "conclusion": "success", "head_sha": run_head, "workflow_id": 3, "path": ".github/workflows/host-attestation-evidence.yml", "pull_requests": [{"number": 1}]},
     }
     if merged:
         trees.update({
@@ -117,5 +123,47 @@ with tempfile.TemporaryDirectory() as directory:
         pass
     else:
         raise AssertionError("locally asserted digest must be rejected")
+
+forwarded: list[str] = []
+original_attestation_main = cli.host_attestation_main
+cli.host_attestation_main = lambda argv: forwarded.extend(argv) or 17
+try:
+    status = cli.main(
+        [
+            "loom",
+            "attestation",
+            "closeout",
+            "--repo",
+            "o/r",
+            "--pr",
+            "1",
+            "--work-item",
+            "2025",
+            "--artifact-input",
+            "artifact.json",
+            "--json",
+        ]
+    )
+finally:
+    cli.host_attestation_main = original_attestation_main
+assert status == 17
+assert forwarded == [
+    "closeout",
+    "--repo",
+    "o/r",
+    "--pr",
+    "1",
+    "--work-item",
+    "2025",
+    "--artifact-input",
+    "artifact.json",
+    "--json",
+]
+
+workflow = WORKFLOW.read_text(encoding="utf-8")
+for required in ("pull_request_target:", "host-attestation-evidence", "actions/upload-artifact@v4", "contents: read", "retention-days: 14"):
+    assert required in workflow, f"host-attestation workflow is missing {required}"
+for forbidden in ("actions/checkout", "github.event.pull_request.title", "github.event.pull_request.body", "secrets."):
+    assert forbidden not in workflow, f"host-attestation workflow must not consume {forbidden}"
 
 print("host attestation checks passed")

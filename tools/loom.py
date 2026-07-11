@@ -65,6 +65,7 @@ for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
     if shared_scripts_root.is_dir() and str(shared_scripts_root) not in sys.path:
         sys.path.insert(0, str(shared_scripts_root))
 from runtime_paths import global_runtime_path, is_global_runtime_locator
+from host_attestation import main as host_attestation_main
 from product_acceptance import main as product_acceptance_main
 
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
@@ -15172,6 +15173,9 @@ def main(argv: list[str]) -> int:
     if command == "acceptance" or command.startswith("acceptance "):
         acceptance_args = command.split()[1:] + forwarded if command.startswith("acceptance ") else forwarded
         return product_acceptance_main(acceptance_args)
+    if command == "attestation" or command.startswith("attestation "):
+        attestation_args = command.split()[1:] + forwarded if command.startswith("attestation ") else forwarded
+        return host_attestation_main(attestation_args)
     if command == "init":
         return handle_init(forwarded)
     if command == "adopt" or command.startswith("adopt "):
