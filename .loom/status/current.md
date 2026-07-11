@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-2012
-- Goal: 分发 global-CLI metadata-only carrier refresh 修复，使下游 hosted gate 实际消费已合入的语义。
-- Scope: Issue #2012；保留已合入的 carrier refresh 修复，仅更新 root CLI patch release 版本、package/plugin payload release metadata 和该事项 carrier；ownership constraints are limited to `VERSION`, `package.json`, `plugins/loom/.codex-plugin/plugin.json`, `.loom/work-items/WI-2012.md`, `.loom/progress/WI-2012.md`, `.loom/status/current.md`, `.loom/specs/WI-2012/**`, and scheduler-owned review/closeout artifacts. 不修改 WebEnvoy 四仓、修复语义或 hosted gate 规则。
-- Execution Path: issue #2012 -> branch work/2012-cli-release-0.28.1 -> release validation -> npm/tag/release readback
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-2012.md
-- Review Entry: .loom/reviews/WI-2012.json
-- Validation Entry: python3 tools/version_surface_check.py; python3 tools/check_release_surface.py --surface aggregate-release-surface; python3 tools/check_npm_package.py --surface aggregate; npm pack --dry-run --json --ignore-scripts; GitHub/npm release readback.
-- Closing Condition: A new patch release publishes the merged metadata-only carrier refresh repair; the matching GitHub tag, GitHub Release, npm package and downstream Harbor #246 hosted gate all read back consistently.
-- Current Checkpoint: build
-- Current Stop: Patch release prepared; PR, current-head review, hosted gate, merge, and published-distribution readback remain pending.
-- Next Step: Create the WI-2012 release PR for v0.28.1, then verify the merged tag, GitHub Release, npm package, and Harbor PR #246 hosted gate.
+- Item ID: WI-2062
+- Goal: 修复 hosted PR gate 将明确非阻塞的状态说明误判为 execution blocker 的回归。
+- Scope: Canonical blocker classification, focused CLI contract regression, generated distribution, and WI-2062 carriers only.
+- Execution Path: issue #2062 -> work/2062-hosted-pr-gate-nonblocking-blockers -> ready PR
+- Workspace Entry: /Volumes/2T/dev/MC-and-his-Agents/Loom.worktrees/2062-hosted-pr-gate-nonblocking-blockers
+- Recovery Entry: .loom/progress/WI-2062.md
+- Review Entry: .loom/reviews/WI-2062.json
+- Validation Entry: targeted CLI contract regression; py-compile; generated surface drift; source Loom checks; git diff checks
+- Closing Condition: Ready PR fixes Core #273 and App #281 blocker-text shapes while real blockers remain fail closed.
+- Current Checkpoint: pre-review
+- Current Stop: Canonical source, generated runtime surfaces, and focused regression are implemented and validated.
+- Next Step: Commit the reviewed product head, author current-head semantic review, then push a ready PR and consume hosted checks.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-07-11T01:45Z on `work/2012-cli-release-0.28.1`: `python3 tools/skills_surface.py check`, `python3 tools/loom_check.py --profile source --source-surface contract-only`, `python3 tools/check_release_surface.py`, `python3 tools/version_surface_check.py`, `python3 tools/check_npm_package.py --surface aggregate`, WI-2012 metadata-only carrier refresh regression, installed-global-cli smoke, `npm pack --dry-run --json --ignore-scripts`, suite, carrier, evidence, and build validation, and `git diff --check` passed for v0.28.1. Source repair #2028 is already merged; this branch only distributes it.
-- Recovery Boundary: WI-2012 patch release only. Do not change metadata-only carrier refresh behavior, WebEnvoy product code, hosted gate logic, browser runtime behavior, or any external product action.
-- Current Lane: WI-2012 metadata-only carrier refresh patch release
+- Latest Validation Summary: 2026-07-12 focused regression, governance-closeout CLI contract surface, py-compile, generated-surface check, source contract-only Loom checks, and git diff checks passed.
+- Recovery Boundary: WI-2062 Loom source/test/generated/carrier changes only; no WebEnvoy product changes or gate bypass.
+- Current Lane: WI-2062 hosted PR gate blocker classification repair
 
 ## Runtime Evidence
 
-- Run Entry: not_applicable
-- Logs Entry: not_applicable
-- Diagnostics Entry: not_applicable
-- Verification Entry: not_applicable
-- Lane Entry: not_applicable
+- Run Entry: Core #273 and App #281 hosted gate readback
+- Logs Entry: GitHub Actions run 29161015814 and 29160941651
+- Diagnostics Entry: src/skills/shared/scripts/loom_flow.py checkpoint_payload
+- Verification Entry: .loom/specs/WI-2062/evidence-map.md
+- Lane Entry: .loom/specs/WI-2062/plan.md
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-2012.md
-- Dynamic Truth: .loom/progress/WI-2012.md
+- Static Truth: .loom/work-items/WI-2062.md
+- Dynamic Truth: .loom/progress/WI-2062.md
 - Locator Truth: .loom/bootstrap/init-result.json
-- Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
+- Fact Chain CLI: loom fact-chain --target . --item WI-2062 --json

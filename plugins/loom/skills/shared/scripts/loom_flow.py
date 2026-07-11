@@ -12440,6 +12440,17 @@ def workspace_profile_from_context(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def blocker_text_is_clear(value: str) -> bool:
+    normalized = " ".join(value.strip().lower().split())
+    if normalized in {"none", "none.", "none recorded", "none recorded."}:
+        return True
+    if re.fullmatch(r"none\. [^.]+ does not (?:alter|block) [^.]+\.?", normalized):
+        return True
+    if ", but " in normalized:
+        return False
+    return re.fullmatch(r"[^.;]+ does not block [^.;]+\.?", normalized) is not None
+
+
 def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_override: dict[str, Any] | None = None) -> dict[str, Any]:
     purity = purity_report_from_context(context)
     missing_inputs: list[str] = []
@@ -12506,9 +12517,9 @@ def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_ove
         result = "fallback"
         fallback_to = context["current_checkpoint"]
 
-    blocker_text = context["blockers"].strip().lower()
-    if blocker_text not in {"none", "none recorded", "none recorded."}:
+    if not blocker_text_is_clear(context["blockers"]):
         result = "block" if result == "pass" else result
+        missing_inputs.append(f"blockers: {context['blockers'].strip()}")
 
     pr_template: dict[str, Any] | None = None
     review_record: dict[str, Any] | None = None

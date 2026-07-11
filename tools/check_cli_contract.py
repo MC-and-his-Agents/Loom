@@ -3459,6 +3459,27 @@ def load_loom_flow_module() -> Any:
     return module
 
 
+def assert_nonblocking_checkpoint_text_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    clear_shapes = (
+        "None. Loom host issue binding reports stale dependency signals for already-merged PR numbers #240/#251; this is classified as a tool/host metadata surface issue and does not alter product scope.",
+        "Core #270 is a detail-only follow-up and does not block this job-search slice.",
+        "None recorded.",
+    )
+    for blockers in clear_shapes:
+        if not loom_flow.blocker_text_is_clear(blockers):
+            raise AssertionError(f"explicit non-blocking checkpoint text was rejected: {blockers}")
+
+    blocking_shapes = (
+        "Core #270 blocks this implementation slice.",
+        "Core #270 does not block documentation, but production validation is blocked.",
+        "Waiting for security review.",
+    )
+    for blockers in blocking_shapes:
+        if loom_flow.blocker_text_is_clear(blockers):
+            raise AssertionError(f"blocking or ambiguous checkpoint text was accepted: {blockers}")
+
+
 def load_governance_surface_module() -> Any:
     module_path = REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "governance_surface.py"
     spec = importlib.util.spec_from_file_location("governance_surface_contract", module_path)
@@ -13082,6 +13103,7 @@ def run_governance_closeout_contract() -> None:
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
         assert_repair_apply_carrier_closeout_contract(tmp)
+        assert_nonblocking_checkpoint_text_contract()
         assert_closeout_queue_status_contract(tmp)
         assert_hotcp_stale_active_closeout_regression_fixture(tmp)
         assert_idle_read_surface_contract(tmp)
