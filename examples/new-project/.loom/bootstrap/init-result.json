@@ -510,7 +510,7 @@
       "path": ".loom/bin/github_host.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/github_host.py",
-      "sha256": "e850e3652e8d19abd415acaa5ea6bf13fa1b89cc91addce45e98043bbf6abd22"
+      "sha256": "4289e64b589042e87484be70ab91a5831bab7e93b5cf5378116dc232f7210e27"
     },
     {
       "path": ".loom/bin/loom_flow.py",

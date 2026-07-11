@@ -92,6 +92,19 @@
       }
     },
     {
+      "id": "old-branch-reintroduction",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/status/current.md": "reintroduced from an old branch\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 1
+      }
+    },
+    {
       "id": "untracked-and-ignored",
       "adoption_mode": "light-governance",
       "tracked_files": {

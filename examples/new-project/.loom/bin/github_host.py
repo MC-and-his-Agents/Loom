@@ -262,6 +262,33 @@ def gh_rest_authenticated_list(root: Path, path: str) -> tuple[list[dict[str, An
     return rows, []
 
 
+def gh_rest_authenticated_paginated_field(
+    root: Path, path: str, field: str
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Read and flatten one list field from every authenticated REST page."""
+    if not host_api_env_token_present() and not host_api_gh_logged_in(root):
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", ["no GitHub CLI login or process-local GH_TOKEN/GITHUB_TOKEN is available"])]
+    try:
+        result = run_process(["gh", "api", "--paginate", "--slurp", path], root, timeout_seconds=30)
+    except FileNotFoundError:
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", ["gh command is unavailable in PATH"])]
+    except subprocess.TimeoutExpired:
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", ["request timed out after 30s"])]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", [detail])]
+    try:
+        pages = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return [], [f"invalid JSON from authenticated gh api {path}: {exc.msg}"]
+    if not isinstance(pages, list) or not all(isinstance(page, dict) and isinstance(page.get(field), list) for page in pages):
+        return [], [f"authenticated gh api {path} did not return paginated `{field}` lists"]
+    rows: list[dict[str, Any]] = []
+    for page in pages:
+        rows.extend(row for row in page[field] if isinstance(row, dict))
+    return rows, []
+
+
 def github_semantic_tree_digest(tree: list[Any]) -> tuple[str | None, list[str]]:
     """Return a stable digest of Git blobs; reject an incomplete host tree."""
     rows: list[tuple[str, str, str]] = []

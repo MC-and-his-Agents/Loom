@@ -119,6 +119,34 @@ GitHub host 下的 strong governance 默认要求：
 - 只要求 `Work Item -> review -> merge-ready`
 - 允许缺 formal spec 路径与强 closeout control plane
 
+Light profile 从旧控制面迁移时使用两段式入口：
+
+```bash
+loom profile light-migration-plan --target . --json
+loom profile light-migration-reconcile \
+  --target . --repository OWNER/REPO --branch main --work-item ISSUE \
+  --gate-pr PR --migration-pr PR --context CHECK --app-id APP_ID \
+  --legacy-context OLD_CHECK --json
+```
+
+第二条命令默认只做 host readback 与计划；显式 `--apply` 才会先把新 delivery gate
+加入 branch protection、readback 其 check/app identity，再移除声明的 legacy checks。
+每次 GitHub API 写入尝试后都重新读取宿主状态，包括 transport timeout 或错误；
+结果按 `applied / unchanged / indeterminate` 分类。多次写入不宣称原子，
+`indeterminate` 或部分成功固定返回 `partial_apply`、不可为空的 mutation evidence
+和包含同一 `--work-item` 的唯一恢复命令。相同 check context 必须只绑定预期
+GitHub App；同 context 的冲突 app identity 在任何写入前阻断。
+若 legacy check 由 ruleset 拥有，命令会在任何写入前阻断并要求先更新该 ruleset，
+不会用 branch-only 变更伪造收敛。
+
+迁移 PR 合并后，reconciliation 从 GitHub main tree 读取并验证 metadata-only
+installed-state、`loom-repo-interface/v2` companion 内容、delivery workflow
+执行合同，以及 workflow blob 与已验证 gate-enabler merge commit 的绑定；只存在
+路径、空 companion 或 no-op workflow 都不能证明完成。gate-enabler check-runs
+必须完整分页读取，不能以首页缺少目标 check 判断失败。
+同一 required delivery gate 继续检查每个候选 tree，因此旧分支重新引入
+`.loom/status/**` 等 carrier 时仍会被拒绝；这不依赖下游仓库迁移作为 Loom 完成条件。
+
 ### Standard
 
 - 引入 `FR`、formal spec、`spec review`

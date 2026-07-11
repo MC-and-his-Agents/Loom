@@ -327,6 +327,13 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Read the light-profile carrier invariant and emit a non-mutating profile-migration plan.",
     },
+    {
+        "command": "profile light-migration-reconcile",
+        "domain": "profile",
+        "status": "implemented",
+        "json": True,
+        "summary": "Reconcile light-profile GitHub required checks and verify the migrated main tree through host readback.",
+    },
     {"command": "governance-profile status", "domain": "profile", "status": "implemented", "json": True},
     {"command": "governance-profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
     {"command": "governance-profile upgrade", "domain": "profile", "status": "implemented", "json": True},
@@ -12063,8 +12070,16 @@ def handle_profile(argv: list[str]) -> int:
             failed_layer="light-profile",
             fallback_to=["loom profile light-migration-plan --target <repo> --json"],
         )
+    if operation == "light-migration-reconcile":
+        return emit_delegated(
+            "profile light-migration-reconcile",
+            "light_profile.py",
+            ["reconcile", *strip_json_flag(argv[1:])],
+            failed_layer="light-profile-migration",
+            fallback_to=["loom profile light-migration-reconcile --target <repo> --repository <owner/repo> --branch <branch> --work-item <issue> --gate-pr <pr> --migration-pr <pr> --context <check> --app-id <id> --json"],
+        )
     if operation not in {"status", "upgrade-plan", "upgrade"}:
-        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported profile operation: {operation}", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json", "loom profile light-migration-plan --target <repo> --json"]))
+        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported profile operation: {operation}", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json", "loom profile light-migration-plan --target <repo> --json", "loom profile light-migration-reconcile --target <repo> --repository <owner/repo> --branch <branch> --work-item <issue> --gate-pr <pr> --migration-pr <pr> --context <check> --app-id <id> --json"]))
     return emit_flow(f"profile {operation}", ["governance-profile", operation, *strip_json_flag(argv[1:])], fallback_to=["loom profile status --target <repo> --json", "docs/adoption/github-profile-upgrade.md"])
 
 
