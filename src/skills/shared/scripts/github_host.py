@@ -237,6 +237,34 @@ def gh_rest_authenticated_json(root: Path, path: str) -> tuple[dict[str, Any] | 
     return None, [host_api_diagnostic_message(f"authenticated gh api {path}", errors)]
 
 
+def gh_rest_authenticated_bytes(root: Path, path: str) -> tuple[bytes | None, list[str]]:
+    """Read one authenticated binary REST response without a public fallback."""
+    if not host_api_env_token_present() and not host_api_gh_logged_in(root):
+        return None, [host_api_diagnostic_message(f"authenticated gh api {path}", ["no GitHub CLI login or process-local GH_TOKEN/GITHUB_TOKEN is available"])]
+    env = os.environ.copy()
+    for key in LOOM_RUNTIME_ENV_KEYS:
+        env.pop(key, None)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    try:
+        result = subprocess.run(
+            ["gh", "api", path],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=False,
+            env=env,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return None, [host_api_diagnostic_message(f"authenticated gh api {path}", ["gh command is unavailable in PATH"])]
+    except subprocess.TimeoutExpired:
+        return None, [host_api_diagnostic_message(f"authenticated gh api {path}", ["request timed out after 30s"])]
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip() or "gh api failed"
+        return None, [host_api_diagnostic_message(f"authenticated gh api {path}", [detail])]
+    return result.stdout, []
+
+
 def gh_rest_authenticated_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]]:
     """Read every REST list page through authenticated ``gh`` or fail closed."""
     if not host_api_env_token_present() and not host_api_gh_logged_in(root):

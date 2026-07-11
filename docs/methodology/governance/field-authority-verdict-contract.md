@@ -52,6 +52,50 @@ remediation, not another top-level failure. The delivery gate still never
 evaluates product acceptance, while the public acceptance adapter uses the
 independent `product_acceptance` failure domain.
 
+## Product acceptance resolver
+
+`loom acceptance validate --input <record.json> --json` is a local structural
+check. A repository-authored JSON file cannot produce a trusted `passed`
+verdict. Trusted consumption uses:
+
+```text
+loom acceptance resolve \
+  --story <owner/repo/issue/id> \
+  --artifact-id <github-actions-artifact-id> \
+  --json
+```
+
+The resolver accepts only a canonical story locator and an artifact ID from
+the caller. It reads the issue, artifact metadata and digest, workflow run,
+active workflow identity, triggering actor, collaborator permission, artifact
+archive, and every declared component commit from authenticated GitHub host
+facts. The artifact must be active, named `loom-product-acceptance`, contain
+only `acceptance.json`, bind its `run_id`, artifact locator, verifier, and
+acceptance-repository component SHA to those host facts, and remain within its
+declared freshness and operation boundary. Unreadable or mismatched facts fail
+closed with one `product_acceptance` failure envelope.
+
+The only trusted producer is a successful `workflow_dispatch` run of
+`.github/workflows/loom-product-acceptance.yml` on the repository default
+branch, triggered by a current write/maintain/admin collaborator. `observed_at`
+must fall between the host run start and artifact creation time, and artifact
+creation must remain consistent with run completion. A record is limited to 20
+evidence rows, 20 components per row, and 50 unique `(repository, commit)`
+bindings; duplicate bindings produce one host commit readback.
+
+Evidence strength is ordered as `static < contract_test < fixture <
+process_runtime < live_readonly < live_write_precheck <
+external_visible_write`. A stronger class satisfies a lower minimum; a
+`fixture` or `contract_test` never satisfies `live_readonly`. The resolver
+requires class-specific observed actions (`launch`, `read`, provider precheck,
+or external-visible write as applicable). Auxiliary weaker evidence remains
+valid when at least one row satisfies the declared minimum; every row must
+still pass host binding, freshness, component, and operation-boundary checks.
+The resolver
+returns an independently owned trusted verdict for lifecycle consumers, but
+sets `owns_lifecycle_closure: false`: it never closes an FR, Phase, story, or
+Work Item and never performs runtime actions.
+
 ## Lifecycle admission
 
 `loom route --issue <FR>` remains the planning/proposal entrypoint and only
@@ -102,5 +146,5 @@ objects.
   `needs_breakdown`; an explicit non-completion exception is left for that
   closure guard to classify.
 
-This contract does not implement a product acceptance adapter, create a
-review ledger, or authorize WebEnvoy runtime actions.
+This contract does not create a review ledger, own lifecycle closure, or
+authorize WebEnvoy runtime actions.
