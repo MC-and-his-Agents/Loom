@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-2062.json
 - Validation Entry: targeted CLI contract regression; py-compile; generated surface drift; source Loom checks; git diff checks
 - Closing Condition: Ready PR fixes Core #273 and App #281 blocker-text shapes while real blockers remain fail closed.
-- Current Checkpoint: pre_review
+- Current Checkpoint: build
 - Current Stop: Canonical source, generated runtime surfaces, and focused regression are implemented and validated.
 - Next Step: Commit the reviewed product head, author current-head semantic review, then push a ready PR and consume hosted checks.
 - Blockers: None recorded.
