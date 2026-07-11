@@ -2609,6 +2609,7 @@ def host_lifecycle_admission_payload(
     *,
     target: Path,
     issue: int | None,
+    fr: int | None = None,
     owner: str | None,
     repo_name: str | None,
     intent: str,
@@ -2617,23 +2618,29 @@ def host_lifecycle_admission_payload(
 ) -> dict[str, Any]:
     """Use the shared host admission evaluator before a lifecycle entrypoint."""
 
-    repo_slug = f"{owner}/{repo_name}" if owner and repo_name else infer_github_repo(target)
-    if not repo_slug or "/" not in repo_slug:
+    target_repo_slug = infer_github_repo(target)
+    target_owner, target_repo = target_repo_slug.split("/", 1) if target_repo_slug and "/" in target_repo_slug else (None, None)
+    effective_owner = owner or target_owner
+    effective_repo = repo_name or target_repo
+    if not target_owner or not target_repo or not effective_owner or not effective_repo:
         return {
             "result": "block",
             "lifecycle_state": "missing_subject",
-            "primary_remediation": "restore a readable GitHub owner/repo binding before entering execution",
+            "primary_remediation": "restore a readable target origin GitHub owner/repo binding before entering execution",
             "carrier_mutations": False,
-            "missing_inputs": ["GitHub owner/repo"],
+            "missing_inputs": ["target origin GitHub owner/repo"],
         }
-    effective_owner, effective_repo = repo_slug.split("/", 1)
     subject_readback = github_lifecycle_subject_readback(
         target,
         effective_owner,
         effective_repo,
         issue_number=issue,
+        fr_number=fr,
         pr_number=pr,
-        branch_name=branch or (git_branch_for_target(target) if pr is None else None),
+        branch_name=branch or (git_branch_for_target(target) if issue is None and fr is None and pr is None else None),
+        intent=intent,
+        target_owner=target_owner,
+        target_repo=target_repo,
     )
     issue = subject_readback.get("issue_number") if isinstance(subject_readback.get("issue_number"), int) else None
     if subject_readback.get("result") != "pass" or issue is None:
@@ -8457,7 +8464,8 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
     target = resolve_target(args.target)
     lifecycle_admission = host_lifecycle_admission_payload(
         target=target,
-        issue=args.fr if args.fr is not None else args.issue,
+        issue=args.issue,
+        fr=args.fr,
         owner=args.owner,
         repo_name=args.repo_name,
         intent="ship",
@@ -8567,7 +8575,8 @@ def handle_ship(argv: list[str]) -> int:
     target = resolve_target(args.target)
     lifecycle_admission = host_lifecycle_admission_payload(
         target=target,
-        issue=args.fr if args.fr is not None else args.issue,
+        issue=args.issue,
+        fr=args.fr,
         owner=args.owner,
         repo_name=args.repo_name,
         intent="ship",

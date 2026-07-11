@@ -15172,7 +15172,8 @@ def host_binding_validate_payload(
     target_root: Path,
     owner: str | None,
     repo_name: str | None,
-    issue_number: int | None,
+    issue_number: int | str | None,
+    fr_number: int | str | None = None,
     pr_number: int | None,
     branch_name: str | None,
     head_sha: str | None,
@@ -23148,6 +23149,7 @@ def lifecycle_admission_payload(
     owner: str | None,
     repo_name: str | None,
     issue_number: int | None,
+    fr_number: int | None = None,
     pr_number: int | None = None,
     branch_name: str | None = None,
     intent: str,
@@ -23157,7 +23159,7 @@ def lifecycle_admission_payload(
     detected_owner, detected_repo = detect_github_repo(target_root)
     effective_owner = owner or detected_owner
     effective_repo = repo_name or detected_repo
-    if not effective_owner or not effective_repo:
+    if not detected_owner or not detected_repo or not effective_owner or not effective_repo:
         return {
             "schema_version": "loom-host-lifecycle-admission/v1",
             "result": "block",
@@ -23165,17 +23167,21 @@ def lifecycle_admission_payload(
             "subject": None,
             "admission_state": "host_subject_required",
             "authority_verdict": authority_verdict(),
-            "primary_remediation": "restore a readable GitHub owner/repo binding before entering execution",
+            "primary_remediation": "restore a readable target origin GitHub owner/repo binding before entering execution",
             "carrier_mutations": False,
-            "missing_inputs": ["GitHub owner/repo"],
+            "missing_inputs": ["target origin GitHub owner/repo"],
         }
     subject_readback = github_lifecycle_subject_readback(
         target_root,
         effective_owner,
         effective_repo,
         issue_number=issue_number,
+        fr_number=fr_number,
         pr_number=pr_number,
-        branch_name=branch_name or (git_branch(target_root) if pr_number is None else None),
+        branch_name=branch_name or (git_branch(target_root) if issue_number is None and fr_number is None and pr_number is None else None),
+        intent=intent,
+        target_owner=detected_owner,
+        target_repo=detected_repo,
     )
     issue_number = subject_readback.get("issue_number") if isinstance(subject_readback.get("issue_number"), int) else None
     if subject_readback.get("result") != "pass" or issue_number is None:
@@ -25678,7 +25684,8 @@ def handle_closeout(args: argparse.Namespace) -> int:
         target_root=target_root,
         owner=args.owner,
         repo_name=args.repo_name,
-        issue_number=args.fr if args.fr is not None else args.issue,
+        issue_number=args.issue,
+        fr_number=args.fr,
         pr_number=args.pr,
         branch_name=args.branch,
         intent="closeout",
@@ -27472,7 +27479,8 @@ def handle_flow(args: argparse.Namespace) -> int:
             target_root=target_root,
             owner=args.owner,
             repo_name=args.repo_name,
-            issue_number=args.fr if args.fr is not None else args.issue,
+            issue_number=args.issue,
+            fr_number=args.fr,
             pr_number=args.pr,
             branch_name=args.branch,
             intent=lifecycle_intent,

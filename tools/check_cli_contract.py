@@ -928,6 +928,7 @@ def assert_ship_dry_run_wrapper_contract() -> None:
     original_flow_payload = module.flow_payload
     original_emit = module.emit
     original_changed_paths = module.ship_changed_paths_payload
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
@@ -936,6 +937,10 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         "source": "fixture",
         "changed_paths": ["docs/adoption/legacy-install-migration.md"],
         "missing_inputs": [],
+    }
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
     }
     try:
         status = module.handle_ship([
@@ -985,6 +990,7 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
         module.ship_changed_paths_payload = original_changed_paths
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_infers_pr_bindings_contract() -> None:
@@ -1441,6 +1447,7 @@ def assert_ship_apply_wrapper_contract() -> None:
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
     original_write_workstation_current = module.write_workstation_current
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = passing_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
@@ -1453,6 +1460,10 @@ def assert_ship_apply_wrapper_contract() -> None:
     }
     current_writes: list[dict[str, Any]] = []
     module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
+    }
     try:
         status = module.handle_ship(
             [
@@ -1620,6 +1631,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
         module.write_workstation_current = original_write_workstation_current
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_closeout_policy_admission_contract() -> None:
@@ -1679,6 +1691,7 @@ def assert_ship_closeout_policy_admission_contract() -> None:
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
@@ -1688,6 +1701,10 @@ def assert_ship_closeout_policy_admission_contract() -> None:
         "source": "fixture",
         "changed_paths": ["skills/shared/scripts/loom_flow.py"],
         "missing_inputs": [],
+    }
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
     }
     try:
         status = module.handle_ship(
@@ -1722,6 +1739,7 @@ def assert_ship_closeout_policy_admission_contract() -> None:
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
@@ -2009,6 +2027,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
     original_write_workstation_current = module.write_workstation_current
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
     module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
@@ -2019,6 +2038,10 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         "missing_inputs": [],
     }
     module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
+    }
     try:
         run_host_only_case(
             "light",
@@ -2048,6 +2071,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
         module.write_workstation_current = original_write_workstation_current
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_docs_entry_contract() -> None:

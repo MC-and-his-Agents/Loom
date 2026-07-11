@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from authority_contract import typed_locator
+from authority_contract import parse_typed_locator, typed_locator
 
 
 LOOM_RUNTIME_ENV_KEYS = (
@@ -631,89 +631,126 @@ def github_lifecycle_subject_readback(
     owner: str,
     repo_name: str,
     *,
-    issue_number: int | None = None,
+    issue_number: int | str | None = None,
+    fr_number: int | str | None = None,
     pr_number: int | None = None,
     branch_name: str | None = None,
+    intent: str = "build",
+    target_owner: str | None = None,
+    target_repo: str | None = None,
 ) -> dict[str, Any]:
-    """Resolve one lifecycle subject from GitHub facts, never PR body text."""
+    """Resolve and reconcile every supplied lifecycle authority from GitHub."""
 
-    if issue_number is not None:
-        return {
-            "result": "pass",
-            "issue_number": issue_number,
-            "issue_locator": typed_locator(owner, repo_name, "issue", issue_number),
-            "pr_number": pr_number,
-            "source": "explicit_issue",
-            "errors": [],
-        }
+    errors: list[str] = []
+    if target_owner and target_repo and (owner.lower(), repo_name.lower()) != (target_owner.lower(), target_repo.lower()):
+        errors.append(f"explicit repository `{owner}/{repo_name}` does not match target origin `{target_owner}/{target_repo}`")
 
-    effective_pr = pr_number
-    if effective_pr is None:
-        if not branch_name:
-            return {"result": "block", "issue_number": None, "source": "missing_context", "errors": ["no explicit issue, PR, or branch context is available"]}
-        pulls, errors = gh_rest_list(
+    def explicit_number(value: int | str | None, expected_type: str) -> int | None:
+        if isinstance(value, int) and value > 0:
+            return value
+        parsed = parse_typed_locator(value, allowed_types={expected_type, "issue"}, allow_legacy=False)
+        if parsed is None:
+            if value is not None:
+                errors.append(f"invalid canonical {expected_type} locator")
+            return None
+        if (str(parsed["owner"]).lower(), str(parsed["repo"]).lower()) != (owner.lower(), repo_name.lower()):
+            errors.append(f"foreign canonical locator `{value}` does not belong to `{owner}/{repo_name}`")
+            return None
+        return int(parsed["id"])
+
+    issue = explicit_number(issue_number, "work_item")
+    fr = explicit_number(fr_number, "fr")
+    if issue is not None and fr is not None and issue != fr:
+        errors.append(f"explicit --issue #{issue} and --fr #{fr} disagree")
+    explicit_subject = issue if issue is not None else fr
+
+    execution_intent = intent in {"branch", "build", "pr", "pre-review", "ship", "implementation"}
+    branch_pr: int | None = None
+    if branch_name and pr_number is None:
+        pulls, branch_errors = gh_rest_authenticated_list(
             root,
             f"repos/{quote(owner, safe='')}/{quote(repo_name, safe='')}/pulls?state=all&head={quote(f'{owner}:{branch_name}', safe='')}&per_page=100",
         )
-        if errors:
-            return {"result": "block", "issue_number": None, "source": "branch_pr_readback", "errors": errors}
-        matching = [row for row in pulls if isinstance(row.get("number"), int)]
-        open_matching = [row for row in matching if str(row.get("state") or "").lower() == "open"]
-        candidates = open_matching if open_matching else matching
-        if len(candidates) != 1:
-            return {
-                "result": "block",
-                "issue_number": None,
-                "source": "branch_pr_readback",
-                "errors": [f"branch `{branch_name}` resolves to {len(candidates)} candidate pull requests; exactly one is required"],
-            }
-        effective_pr = int(candidates[0]["number"])
+        errors.extend(branch_errors)
+        candidates = [
+            row for row in pulls
+            if isinstance(row.get("number"), int)
+            and (
+                (execution_intent and str(row.get("state") or "").lower() == "open")
+                or (intent == "closeout" and str(row.get("state") or "").lower() == "closed")
+                or (not execution_intent and intent != "closeout")
+            )
+        ]
+        if not branch_errors and len(candidates) != 1:
+            errors.append(f"branch `{branch_name}` resolves to {len(candidates)} eligible pull requests; exactly one authenticated, paginated result is required")
+        elif candidates:
+            branch_pr = int(candidates[0]["number"])
+    effective_pr = pr_number if pr_number is not None else branch_pr
 
-    query = """
-    query($owner: String!, $repo: String!, $pr: Int!) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $pr) {
-          number
-          headRefName
-          closingIssuesReferences(first: 100) {
-            pageInfo { hasNextPage }
-            nodes { number }
+    pr_subject: int | None = None
+    pull_request: dict[str, Any] | None = None
+    if effective_pr is not None:
+        query = """
+        query($owner: String!, $repo: String!, $pr: Int!) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $pr) {
+              number state headRefName
+              closingIssuesReferences(first: 100) {
+                pageInfo { hasNextPage }
+                nodes { number }
+              }
+            }
           }
         }
-      }
-    }
-    """
-    data, errors = gh_graphql_authenticated_json(root, query, {"owner": owner, "repo": repo_name, "pr": effective_pr})
-    if errors or data is None:
-        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": errors}
-    repository = data.get("repository") if isinstance(data.get("repository"), dict) else {}
-    pull_request = repository.get("pullRequest") if isinstance(repository.get("pullRequest"), dict) else None
-    if pull_request is None:
-        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": [f"pull request #{effective_pr} is unreadable"]}
-    if branch_name and pull_request.get("headRefName") != branch_name:
-        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": [f"pull request #{effective_pr} head does not match branch `{branch_name}`"]}
-    connection = pull_request.get("closingIssuesReferences") if isinstance(pull_request.get("closingIssuesReferences"), dict) else {}
-    page_info = connection.get("pageInfo") if isinstance(connection.get("pageInfo"), dict) else {}
-    if page_info.get("hasNextPage") is not False:
-        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": ["closing issue pagination is unreadable or incomplete"]}
-    issues = [node for node in connection.get("nodes", []) if isinstance(node, dict) and isinstance(node.get("number"), int)]
-    if len(issues) != 1:
+        """
+        data, pr_errors = gh_graphql_authenticated_json(root, query, {"owner": owner, "repo": repo_name, "pr": effective_pr})
+        errors.extend(pr_errors)
+        repository = data.get("repository") if isinstance(data, dict) and isinstance(data.get("repository"), dict) else {}
+        pull_request = repository.get("pullRequest") if isinstance(repository.get("pullRequest"), dict) else None
+        if not pr_errors and pull_request is None:
+            errors.append(f"pull request #{effective_pr} is unreadable")
+        if pull_request is not None:
+            pr_state = str(pull_request.get("state") or "").upper()
+            if execution_intent and pr_state != "OPEN":
+                errors.append(f"execution intent requires an open PR; PR #{effective_pr} is {pr_state or 'UNKNOWN'}")
+            if intent == "closeout" and pr_state not in {"CLOSED", "MERGED"}:
+                errors.append(f"closeout intent requires a merged or closed PR; PR #{effective_pr} is {pr_state or 'UNKNOWN'}")
+            if branch_name and pull_request.get("headRefName") != branch_name:
+                errors.append(f"pull request #{effective_pr} head does not match branch `{branch_name}`")
+            connection = pull_request.get("closingIssuesReferences") if isinstance(pull_request.get("closingIssuesReferences"), dict) else {}
+            page_info = connection.get("pageInfo") if isinstance(connection.get("pageInfo"), dict) else {}
+            if page_info.get("hasNextPage") is not False:
+                errors.append("closing issue pagination is unreadable or incomplete")
+            issues = [node for node in connection.get("nodes", []) if isinstance(node, dict) and isinstance(node.get("number"), int)]
+            if len(issues) != 1:
+                errors.append(f"pull request #{effective_pr} has {len(issues)} native closing issues; exactly one primary Work Item is required")
+            else:
+                pr_subject = int(issues[0]["number"])
+
+    if explicit_subject is not None and pr_subject is not None and explicit_subject != pr_subject:
+        errors.append(f"explicit issue #{explicit_subject} and PR #{effective_pr} closing issue #{pr_subject} disagree")
+    subject = explicit_subject if explicit_subject is not None else pr_subject
+    if subject is None and not errors:
+        errors.append("no explicit issue, PR, or branch context is available")
+    if errors or subject is None:
         return {
             "result": "block",
-            "issue_number": None,
+            "issue_number": subject,
             "pr_number": effective_pr,
-            "source": "pr_closing_issue_readback",
-            "errors": [f"pull request #{effective_pr} has {len(issues)} native closing issues; exactly one primary Work Item is required"],
+            "branch": branch_name,
+            "source": "authority_reconciliation",
+            "errors": list(dict.fromkeys(errors)),
         }
-    subject = int(issues[0]["number"])
+    sources = [name for name, value in (("explicit_issue", explicit_subject), ("pr_closing_issue", pr_subject), ("branch_pr", branch_pr)) if value is not None]
     return {
         "result": "pass",
         "issue_number": subject,
         "issue_locator": typed_locator(owner, repo_name, "issue", subject),
         "pr_number": effective_pr,
-        "pr_locator": typed_locator(owner, repo_name, "pr", effective_pr),
-        "branch": pull_request.get("headRefName"),
-        "source": "pr_closing_issue_readback" if pr_number is not None else "branch_pr_closing_issue_readback",
+        "pr_locator": typed_locator(owner, repo_name, "pr", effective_pr) if effective_pr is not None else None,
+        "pr_state": pull_request.get("state") if pull_request else None,
+        "branch": pull_request.get("headRefName") if pull_request else branch_name,
+        "source": "+".join(sources),
         "errors": [],
     }
 

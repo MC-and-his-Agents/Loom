@@ -132,7 +132,7 @@ def lifecycle_admission_verdict(admission: object) -> dict[str, Any]:
         result, lifecycle_state, remediation = "pass", "not_applicable", None
     elif admission_state == "unsupported_subject":
         result, lifecycle_state, remediation = "block", "unsupported_subject", "bind the execution entrypoint to one typed Work Item"
-    elif admission_result == "pass" and admission_state in {"planning", "admitted"}:
+    elif admission_result == "pass" and admission_state in {"planning", "admitted", "closure_evaluation_required"}:
         result, lifecycle_state, remediation = "pass", str(admission_state), None
     elif admission_state == "not_planned":
         result = "pass" if intent == "planning" else "block"
