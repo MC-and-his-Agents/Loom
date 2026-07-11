@@ -115,8 +115,15 @@ jobs:
                 facts.changed_paths = (comparison.data.files || []).map((file) => file.filename);
               }
             } catch (error) {
-              facts.host_read_error = String(error.message || error);
-              core.warning(facts.host_read_error);
+              const message = String(error.message || error);
+              if ([401, 403].includes(Number(error.status))) {
+                facts.permission_error = message;
+              } else if (event === "merge_group" && [404, 409, 422].includes(Number(error.status))) {
+                facts.git_history_error = message;
+              } else {
+                facts.host_read_error = message;
+              }
+              core.warning(message);
             }
             facts.validation_command = reusable
               ? (process.env.WORKFLOW_CALL_VALIDATION_COMMAND || defaultValidationCommand)
@@ -247,8 +254,22 @@ jobs:
               core.warning(`delivery evaluator output unavailable: ${String(error.message || error)}`);
             }
             const profile = payload?.delivery?.profile || "standard";
-            const cause = payload?.primary_cause?.id || "host_facts_unreadable";
-            const failureEnvelope = payload?.failure_envelope || { schema_version: "loom-failure-envelope/v1", primary_cause: payload?.primary_cause || { id: cause }, secondary_causes: [] };
+            const fallbackCause = {
+              id: "environment_unavailable",
+              failure_domain: "environment",
+              code: "unavailable",
+              locator: "delivery_gate:evaluator_output",
+              summary: "The delivery-gate evaluator did not produce readable output.",
+              owner: "ci",
+              retryable: true,
+              cause_class: "unavailable",
+              transient: true,
+              details: {},
+              consequence_of: [],
+              remediation_command: "rerun loom-delivery-gate after the execution environment is available",
+            };
+            const cause = payload?.primary_cause?.id || fallbackCause.id;
+            const failureEnvelope = payload?.failure_envelope || { schema_version: "loom-failure-envelope/v1", primary_cause: payload?.primary_cause || fallbackCause, consequences: [] };
             const enforcement = payload?.enforcement || process.env.DELIVERY_GATE_ENFORCEMENT || "advisory";
             const result = payload?.result || (enforcement === "advisory" ? "advisory" : "blocked");
             core.setOutput("result", result);

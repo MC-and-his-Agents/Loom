@@ -7,6 +7,7 @@ import json
 import argparse
 import hashlib
 import importlib.util
+import io
 import os
 import re
 import shutil
@@ -14234,6 +14235,51 @@ def run_fr_wi_admission_surface() -> None:
     print("fr-wi-admission surface checks passed")
 
 
+def run_failure_envelope_surface() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_failure_envelope", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for failure envelope contract")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    stream = io.StringIO()
+    status = module.emit(
+        module.output(
+            "gate pr",
+            "block",
+            summary="candidate carrier drifted",
+            failed_layer="carrier-readback",
+            fallback_to=["loom gate pr --json"],
+        ),
+        stream=stream,
+    )
+    payload = json.loads(stream.getvalue())
+    envelope = payload.get("failure_envelope")
+    primary = envelope.get("primary_cause") if isinstance(envelope, dict) else None
+    if status != 1 or not isinstance(primary, dict) or primary.get("failure_domain") != "carrier":
+        raise AssertionError("public CLI failures must expose one classified primary cause")
+    for field in ("cause_class", "transient", "details"):
+        if field not in primary:
+            raise AssertionError(f"public CLI primary cause is missing {field}")
+    if envelope.get("consequences") != []:
+        raise AssertionError("public CLI must not invent additional top-level causes")
+
+    stream = io.StringIO()
+    module.emit(
+        module.output(
+            "acceptance validate",
+            "block",
+            summary="acceptance evidence is insufficient",
+            failed_layer="acceptance-adapter",
+        ),
+        stream=stream,
+    )
+    acceptance = json.loads(stream.getvalue())["failure_envelope"]["primary_cause"]
+    if acceptance.get("failure_domain") != "product_acceptance":
+        raise AssertionError("public acceptance failures must remain distinct from delivery failures")
+
+    print("failure envelope surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
@@ -16469,6 +16515,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="fr-wi-admission",
             fixture_group="fr-wi-admission",
             run=run_fr_wi_admission_surface,
+        ),
+        SurfaceCheck(
+            name="failure-envelope",
+            fixture_group="failure-envelope",
+            run=run_failure_envelope_surface,
         ),
         SurfaceCheck(
             name="aggregate",

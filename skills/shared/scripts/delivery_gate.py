@@ -37,6 +37,7 @@ CAUSES = {
         "summary": "GitHub host facts are unreadable or incomplete.",
         "owner": "github",
         "retryable": True,
+        "transient": True,
         "remediation_command": "rerun loom-delivery-gate after GitHub host fact readback succeeds",
     },
     "profile_unsupported": {
@@ -49,7 +50,7 @@ CAUSES = {
         "remediation_command": "set host_facts.profile to light, standard, or reinforced",
     },
     "candidate_profile_unreadable": {
-        "failure_domain": "governance_metadata",
+        "failure_domain": "carrier",
         "code": "unreadable",
         "locator": "candidate_tree:repository_profile",
         "summary": "The candidate repository profile metadata is unreadable or unsupported.",
@@ -94,7 +95,7 @@ CAUSES = {
         "remediation_command": "fix the reported native validation failure, then rerun loom-delivery-gate",
     },
     "light_profile_forbidden_carrier": {
-        "failure_domain": "governance_metadata",
+        "failure_domain": "carrier",
         "code": "forbidden_carrier",
         "locator": "candidate_tree:forbidden_carrier",
         "summary": "The candidate tree contains carriers forbidden by the declared light profile.",
@@ -103,7 +104,7 @@ CAUSES = {
         "remediation_command": "remove forbidden light-profile carriers from the candidate tree",
     },
     "light_profile_state_unreadable": {
-        "failure_domain": "governance_metadata",
+        "failure_domain": "carrier",
         "code": "unreadable",
         "locator": "candidate_tree:installed_state",
         "summary": "The candidate tree does not expose readable light-profile installed state.",
@@ -112,13 +113,43 @@ CAUSES = {
         "remediation_command": "restore valid metadata-only light-profile installed state",
     },
     "light_profile_tree_unreadable": {
-        "failure_domain": "toolchain",
+        "failure_domain": "environment",
         "code": "unreadable",
         "locator": "candidate_tree:unreadable",
         "summary": "The declared light-profile candidate tree could not be evaluated.",
         "owner": "github",
         "retryable": True,
+        "transient": True,
         "remediation_command": "rerun loom-delivery-gate after the candidate checkout is readable",
+    },
+    "git_history_unreadable": {
+        "failure_domain": "git_history",
+        "code": "unreadable",
+        "locator": "git_history:unreadable",
+        "summary": "The Git history required to resolve the candidate change is unavailable.",
+        "owner": "github",
+        "retryable": True,
+        "transient": True,
+        "remediation_command": "rerun loom-delivery-gate with readable base and head history",
+    },
+    "environment_unavailable": {
+        "failure_domain": "environment",
+        "code": "unavailable",
+        "locator": "environment:unavailable",
+        "summary": "The delivery-gate execution environment is unavailable.",
+        "owner": "ci",
+        "retryable": True,
+        "transient": True,
+        "remediation_command": "rerun loom-delivery-gate after the execution environment is available",
+    },
+    "permission_denied": {
+        "failure_domain": "permission",
+        "code": "denied",
+        "locator": "github:permission",
+        "summary": "GitHub denied a host read required by the delivery gate.",
+        "owner": "operator",
+        "retryable": False,
+        "remediation_command": "grant the workflow the documented read permissions, then rerun loom-delivery-gate",
     },
     "enforcement_unsupported": {
         "failure_domain": "governance_metadata",
@@ -335,6 +366,15 @@ def evaluate_host_facts(
         host_errors.append(f"schema_version must be `{HOST_FACTS_SCHEMA}`")
     if any(isinstance(facts.get(key), str) and facts[key] for key in ("host_read_error", "read_error")):
         host_errors.append("host facts could not be read from GitHub")
+    typed_host_errors = {
+        "permission_error": "permission_denied",
+        "git_history_error": "git_history_unreadable",
+        "environment_error": "environment_unavailable",
+    }
+    typed_host_cause = next(
+        (cause_id for field, cause_id in typed_host_errors.items() if isinstance(facts.get(field), str) and facts[field]),
+        None,
+    )
     event = facts.get("event")
     if event not in SUPPORTED_EVENTS:
         host_errors.append("event must be pull_request, merge_group, or workflow_call")
@@ -352,7 +392,9 @@ def evaluate_host_facts(
     validation_command, validation_command_errors = _validation_command(facts)
     enforcement_mode, enforcement_errors = _enforcement(enforcement)
     light_invariant = {"status": "not_evaluated", "applicable": False, "source": "delivery_profile"}
-    if host_errors:
+    if typed_host_cause is not None:
+        cause_id = typed_host_cause
+    elif host_errors:
         cause_id = "host_facts_unreadable"
     elif enforcement_errors:
         cause_id = "enforcement_unsupported"
@@ -368,6 +410,23 @@ def evaluate_host_facts(
         light_invariant, cause_id = _light_invariant(candidate_profile, profile, profile_source, candidate_path)
 
     primary = _cause(cause_id)
+    typed_host_detail = next(
+        (facts[field] for field in typed_host_errors if isinstance(facts.get(field), str) and facts[field]),
+        None,
+    )
+    primary["details"] = {
+        key: value
+        for key, value in {
+            "host_error": typed_host_detail,
+            "host_errors": list(dict.fromkeys(host_errors)),
+            "profile_errors": profile_errors,
+            "change_set_errors": path_errors,
+            "candidate_profile_errors": candidate_profile_errors,
+            "validation_command_errors": validation_command_errors,
+            "enforcement_errors": enforcement_errors,
+        }.items()
+        if value
+    }
     return {
         "schema_version": SCHEMA,
         "result": _result(enforcement_mode, cause_id),
@@ -424,7 +483,10 @@ def finalize_delivery_gate(
         else:
             cause_id = "validation_command_missing"
         payload["primary_cause"] = _cause(cause_id)
-    payload["failure_envelope"] = envelope(payload["primary_cause"])
+    additional: list[dict[str, Any]] = []
+    if payload["primary_cause"]["id"] != "passed" and status in {"command_missing", "failed"}:
+        additional.append(_cause("validation_command_missing" if status == "command_missing" else "native_validation_failed"))
+    payload["failure_envelope"] = envelope(payload["primary_cause"], consequences=additional)
     payload["result"] = _result(payload["enforcement"], payload["primary_cause"]["id"])
     return payload
 

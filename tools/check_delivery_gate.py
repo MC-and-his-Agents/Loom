@@ -51,6 +51,9 @@ def assert_primary_cause(
         "summary",
         "owner",
         "retryable",
+        "cause_class",
+        "transient",
+        "details",
         "consequence_of",
         "remediation_command",
     }
@@ -61,7 +64,7 @@ def assert_primary_cause(
         not isinstance(envelope, dict)
         or envelope.get("schema_version") != "loom-failure-envelope/v1"
         or envelope.get("primary_cause") != cause
-        or envelope.get("secondary_causes") != []
+        or not isinstance(envelope.get("consequences"), list)
     ):
         raise AssertionError(f"delivery gate did not expose one actionable failure envelope: {envelope}")
     if payload.get("product_acceptance", {}).get("verdict") != "not_evaluated":
@@ -108,6 +111,20 @@ def check_evaluator() -> None:
     combined = evaluator.finalize_delivery_gate(priority_cases[0][0], {"status": "failed"})
     if combined["native_validation"]["status"] != "failed":
         raise AssertionError("higher-priority host failure must not erase the native validation result")
+    consequences = combined["failure_envelope"]["consequences"]
+    if len(consequences) != 1 or consequences[0].get("id") != "native_validation_failed" or consequences[0].get("consequence_of") != ["host_facts_unreadable"]:
+        raise AssertionError("lower-priority validation diagnostics must be consequences of the selected primary cause")
+
+    domain_cases = (
+        ("permission_error", "permission_denied", "permission"),
+        ("git_history_error", "git_history_unreadable", "git_history"),
+        ("environment_error", "environment_unavailable", "environment"),
+    )
+    for field, expected_id, expected_domain in domain_cases:
+        classified = evaluator.evaluate_host_facts({**valid, field: "fixture failure"})
+        assert_primary_cause(classified, expected_id)
+        if classified["primary_cause"]["failure_domain"] != expected_domain:
+            raise AssertionError(f"{field} did not classify as {expected_domain}")
 
     assert_primary_cause(
         evaluator.finalize_delivery_gate(valid, {"status": "failed"}, "enforce"),
@@ -190,6 +207,8 @@ def check_light_profile_host_integration() -> None:
         clean = materialize_candidate(root, "light-governance", False)
         blocked = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", forbidden)
         assert_primary_cause(blocked, "light_profile_forbidden_carrier", "enforce", "blocked")
+        if blocked["primary_cause"]["failure_domain"] != "carrier":
+            raise AssertionError("forbidden light carriers must classify in the carrier failure domain")
         delivery = blocked.get("delivery", {})
         if blocked.get("light_invariant", {}).get("status") != "blocked" or delivery.get("profile") != "light" or delivery.get("profile_source") != "candidate_state":
             raise AssertionError("direct light event must derive profile authority and consume the candidate tree")
@@ -490,6 +509,10 @@ def check_workflow() -> None:
         "CHANGED_PATHS_PATH",
         "fs.writeFileSync(process.env.CHANGED_PATHS_PATH",
         "Product acceptance: not_evaluated.",
+        "facts.permission_error = message",
+        "facts.git_history_error = message",
+        'id: "environment_unavailable"',
+        'failure_domain: "environment"',
         "failure_envelope:",
         "core.setOutput(\"failure_envelope\", JSON.stringify(failureEnvelope))",
         "remediation=${failureEnvelope.primary_cause?.remediation_command || \"unavailable\"}",

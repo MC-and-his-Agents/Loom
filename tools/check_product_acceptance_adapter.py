@@ -41,7 +41,7 @@ def assert_result(result: dict[str, Any], *, outcome: str, verdict: str) -> None
     if result.get("result") != outcome or result.get("product_acceptance", {}).get("verdict") != verdict:
         raise AssertionError(f"expected {outcome}/{verdict}, got {result}")
     envelope = result.get("failure_envelope")
-    if not isinstance(envelope, dict) or set(envelope) != {"schema_version", "primary_cause", "secondary_causes"} or envelope.get("secondary_causes") != []:
+    if not isinstance(envelope, dict) or set(envelope) != {"schema_version", "primary_cause", "consequences"} or envelope.get("consequences") != []:
         raise AssertionError("acceptance adapter must return exactly one primary cause")
     authority = result.get("authority_verdict", {}).get("verdict")
     if not isinstance(authority, dict) or authority.get("delivery_state") != "not_evaluated" or authority.get("reconciliation_state") != "not_evaluated":

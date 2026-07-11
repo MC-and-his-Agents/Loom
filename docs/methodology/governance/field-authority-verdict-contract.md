@@ -41,8 +41,12 @@ class, suite path, review/release policy). Branch, head SHA, checks, merge
 commit, and merge state are read directly from GitHub and are rejected when
 authored in either the metadata block or as PR binding truth. Gate failures use
 `loom-failure-envelope/v1`: exactly one primary cause names its failure
-domain, owner, retryability, causal predecessors, and one remediation command.
-This envelope still never evaluates product acceptance.
+domain, cause class, owner, retryability, transience, details, causal
+predecessors, and one remediation command. Additional diagnostics are listed
+only as `consequences` bound to that primary cause; fallback is remediation,
+not another top-level failure. The delivery gate still never evaluates
+product acceptance, while the public acceptance adapter uses the independent
+`product_acceptance` failure domain.
 
 ## Lifecycle admission
 

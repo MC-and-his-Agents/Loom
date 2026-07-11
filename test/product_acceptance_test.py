@@ -68,7 +68,7 @@ class ProductAcceptanceTest(unittest.TestCase):
         for record in (stale, unsafe):
             result = product_acceptance.evaluate_acceptance(record, now=NOW)
             self.assertEqual(result["result"], "block")
-            self.assertEqual(result["failure_envelope"]["secondary_causes"], [])
+            self.assertEqual(result["failure_envelope"]["consequences"], [])
 
     def test_future_evidence_or_missing_write_boundary_is_blocked(self) -> None:
         future = live_record()
