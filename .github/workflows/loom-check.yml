@@ -51,7 +51,10 @@ jobs:
       - name: "repo-local-cli: flow-gates"
         working-directory: examples/new-project
         run: |
-          python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
+          if python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001; then
+            echo "expected host-subject admission to fail closed"
+            exit 1
+          fi
           python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
       - name: "repo-local-cli: workspace-locate"
         working-directory: examples/new-project

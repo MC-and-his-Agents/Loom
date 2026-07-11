@@ -172,7 +172,7 @@ repo-local-cli-fact-chain:
 	cd examples/new-project && python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
 
 repo-local-cli-flow-gates:
-	cd examples/new-project && python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
+	cd examples/new-project && if python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001; then echo "expected host-subject admission to fail closed"; exit 1; fi
 	cd examples/new-project && python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
 
 repo-local-cli-workspace-locate:
