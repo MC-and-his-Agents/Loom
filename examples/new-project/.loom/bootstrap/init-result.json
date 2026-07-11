@@ -468,13 +468,13 @@
       "path": ".loom/bin/product_acceptance.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/product_acceptance.py",
-      "sha256": "8b5b79171182db84d175b2a9b6ea549d41fea26e3ccf60266d76c6f93a0c1ccb"
+      "sha256": "9f3923d1c7237b4abcdeae0ba13b3a714aeb734c54698904c7b0e76e31ef734e"
     },
     {
       "path": ".loom/bin/host_attestation.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/host_attestation.py",
-      "sha256": "e2ef536715a4f2ef611ac7f546e9e803ac9b5b4b94b36a6a737e5d10a97990b7"
+      "sha256": "4c0c086864c055efb4de242370c8fa59a92e2d5de36143a32dd8003b14e631a9"
     },
     {
       "path": ".loom/bin/execution_attempts.py",
@@ -510,7 +510,7 @@
       "path": ".loom/bin/github_host.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/github_host.py",
-      "sha256": "d2e3e0ba23140b9d892bcc971a180c66b8ed47466f295a1bc87c2e5bfcc24e60"
+      "sha256": "0415c992e52029a410add49dd4bef5483a15d865f88563e81140d985f76efc45"
     },
     {
       "path": ".loom/bin/loom_flow.py",

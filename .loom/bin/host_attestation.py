@@ -26,11 +26,11 @@ def _result(*, owner: str, repo: str, work_item: int, facts: dict[str, Any] | No
     passed = not errors and facts is not None
     cause = primary_cause(
         cause_id="host_closeout_valid" if closeout and passed else "host_attestation_valid" if passed else "host_closeout_invalid" if closeout else "host_attestation_invalid",
-        failure_domain="governance_metadata" if passed or any(error.startswith(("no GitHub APPROVED", "a current-head", "GitHub Actions artifact", "GitHub Actions workflow", "GitHub PR must", "GitHub PR is not", "GitHub base branch", "typed Work Item", "GitHub issue is not typed", "GitHub Work Item is not")) for error in errors) else "host_service",
+        failure_domain="governance_metadata" if passed or any(error.startswith(("no GitHub APPROVED", "a current-head", "GitHub Actions artifact", "GitHub Actions workflow", "GitHub PR must", "GitHub PR is not", "GitHub base branch", "typed Work Item", "GitHub issue is not typed", "GitHub Work Item is not", "single-maintainer", "exactly one explicit")) for error in errors) else "host_service",
         code="accepted" if passed else "readback_invalid",
         locator=work_item_locator,
         summary="GitHub host facts bind the merged PR, review, tree, workflow artifact, and Work Item." if closeout and passed else "GitHub host facts bind the approved review, semantic tree, and workflow artifact." if passed else errors[0] if errors else "GitHub host readback returned no facts",
-        owner="github" if passed else "operator" if any(error.startswith(("no GitHub APPROVED", "a current-head", "GitHub Actions artifact", "GitHub Actions workflow", "GitHub PR must", "GitHub PR is not", "GitHub base branch", "typed Work Item", "GitHub issue is not typed", "GitHub Work Item is not")) for error in errors) else "github",
+        owner="github" if passed else "operator" if any(error.startswith(("no GitHub APPROVED", "a current-head", "GitHub Actions artifact", "GitHub Actions workflow", "GitHub PR must", "GitHub PR is not", "GitHub base branch", "typed Work Item", "GitHub issue is not typed", "GitHub Work Item is not", "single-maintainer", "exactly one explicit")) for error in errors) else "github",
         retryable=not passed,
         remediation_command="loom attestation closeout --repo <owner/name> --pr <number> --work-item <number> --artifact-input <file> --json" if closeout else "loom attestation readback --repo <owner/name> --pr <number> --work-item <number> --artifact-input <file> --json",
     )
@@ -61,17 +61,19 @@ def _artifact_id(path: Path) -> int:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"cannot read artifact input: {exc}") from exc
-    if not isinstance(payload, dict) or set(payload) != {"artifact_id"} or not isinstance(payload.get("artifact_id"), int) or payload["artifact_id"] <= 0:
+    if not isinstance(payload, dict) or set(payload) != {"artifact_id"} or not isinstance(payload.get("artifact_id"), int) or isinstance(payload["artifact_id"], bool) or payload["artifact_id"] <= 0:
         raise ValueError("artifact input must be exactly {'artifact_id': positive integer}; digest, run, PR, review, and carrier facts are host-readback only")
     return payload["artifact_id"]
 
 
-def readback(root: Path, owner: str, repo: str, number: int, work_item: int, artifact_id: int, *, closeout: bool = False) -> dict[str, Any]:
+def readback(root: Path, owner: str, repo: str, number: int, work_item: int, artifact_id: int, *, closeout: bool = False, review_policy: str = "approved") -> dict[str, Any]:
     reader = github_pr_closeout_readback if closeout else github_pr_attestation_readback
     if closeout:
+        if review_policy != "approved":
+            return _result(owner=owner, repo=repo, work_item=work_item, facts=None, errors=["single-maintainer policy is not a delivery closeout shortcut"], closeout=True)
         facts, errors = reader(root, owner, repo, number, work_item, artifact_id)
     else:
-        facts, errors = reader(root, owner, repo, number, artifact_id)
+        facts, errors = reader(root, owner, repo, number, artifact_id, work_item=work_item, review_policy=review_policy)
     return _result(owner=owner, repo=repo, work_item=work_item, facts=facts, errors=errors, closeout=closeout)
 
 
@@ -82,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pr", type=int, required=True)
     parser.add_argument("--work-item", type=int, required=True)
     parser.add_argument("--artifact-input", type=Path, required=True, help="JSON containing only the GitHub Actions artifact_id")
+    parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
@@ -91,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         artifact_id = _artifact_id(args.artifact_input)
     except ValueError as exc:
         parser.error(str(exc))
-    result = readback(Path.cwd(), owner, repo, args.pr, args.work_item, artifact_id, closeout=args.action == "closeout")
+    result = readback(Path.cwd(), owner, repo, args.pr, args.work_item, artifact_id, closeout=args.action == "closeout", review_policy=args.review_policy)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["result"] == "pass" else 1
 

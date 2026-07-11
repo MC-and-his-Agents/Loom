@@ -102,6 +102,10 @@ def main() -> int:
         assert_result(resolve(adapter, fixture(name)), outcome="block", verdict="blocked")
     waived = fixture("waived.json")
     assert_result(adapter.evaluate_acceptance(waived, now=NOW), outcome="pass", verdict="waived")
+    resolved_waiver = resolve(adapter, waived)
+    assert_result(resolved_waiver, outcome="pass", verdict="waived")
+    if resolved_waiver["product_acceptance"]["trusted"] is not True or not resolved_waiver.get("rationale"):
+        raise AssertionError("host-resolved waiver must retain trusted provenance and rationale")
     if "delivery_gate" in SOURCE.read_text(encoding="utf-8"):
         raise AssertionError("product acceptance adapter must not depend on delivery gate")
     source = SOURCE.read_bytes()

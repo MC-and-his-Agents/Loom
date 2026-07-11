@@ -7,6 +7,7 @@ on:
     types: [closed]
 
 permissions:
+  actions: read
   contents: read
   issues: write
   pull-requests: read
@@ -41,7 +42,7 @@ jobs:
                 repository(owner:$owner, name:$repo) {
                   defaultBranchRef { name }
                   issue(number:$number) {
-                    number state stateReason body
+                    number state stateReason body closedAt
                     labels(first:100) { pageInfo { hasNextPage } nodes { name } }
                     subIssues(first:100) { pageInfo { hasNextPage } nodes { number } }
                     blockedBy(first:100) { pageInfo { hasNextPage } nodes { number state } }
@@ -80,15 +81,14 @@ jobs:
               const issue = repository?.issue;
               if (!issue || !repository?.defaultBranchRef?.name) throw new Error(`GitHub read for issue:${number} is incomplete`);
               const connections = [issue.labels, issue.subIssues, issue.blockedBy, issue.closedByPullRequestsReferences];
-              const comments = number === subjectNumber
-                ? await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 })
-                : [];
+              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
               return {
                 default_branch: repository.defaultBranchRef.name,
                 issue: {
                   number: issue.number,
                   state: issue.state,
                   state_reason: issue.stateReason,
+                  closed_at: issue.closedAt,
                   body: issue.body || "",
                   labels: issue.labels?.nodes?.map((entry) => entry.name).filter(Boolean) || [],
                   children: issue.subIssues?.nodes?.map((entry) => entry.number).filter(Number.isInteger) || [],
@@ -119,12 +119,25 @@ jobs:
                     };
                   }) || [],
                   comment_bodies: comments.map((comment) => comment.body).filter((body) => typeof body === "string"),
+                  comments: comments.map((comment) => ({
+                    body: comment.body,
+                    created_at: comment.created_at,
+                    author_association: comment.author_association,
+                    user: { id: comment.user?.id, login: comment.user?.login },
+                  })),
                   read_complete: connections.every(pageComplete),
-                  comments_complete: number === subjectNumber,
+                  comments_complete: true,
                 },
               };
             };
-            const snapshot = { subject: subjectNumber, default_branch: null, host_readable: true, issues: [] };
+            const snapshot = {
+              subject: subjectNumber,
+              repository: `${owner}/${repo}`,
+              event_closed_at: context.payload.issue?.closed_at || null,
+              default_branch: null,
+              host_readable: true,
+              issues: [],
+            };
             const byNumber = new Map();
             try {
               const queue = [subjectNumber];
@@ -161,9 +174,10 @@ jobs:
       - name: Evaluate closure facts
         if: steps.snapshot.outputs.applicable == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           SNAPSHOT_PATH: ${{ steps.snapshot.outputs.snapshot }}
           RESULT_PATH: ${{ runner.temp }}/loom-fr-phase-close-guard-result.json
-        run: python3 src/skills/shared/scripts/github_closure_guard.py --snapshot "$SNAPSHOT_PATH" --output "$RESULT_PATH"
+        run: python3 src/skills/shared/scripts/github_closure_guard.py --snapshot "$SNAPSHOT_PATH" --resolve-host-facts --output "$RESULT_PATH"
 
       - name: Reopen only evaluator-blocked closure
         if: steps.snapshot.outputs.applicable == 'true'
@@ -195,16 +209,21 @@ jobs:
             const subject = Array.isArray(snapshot?.issues)
               ? snapshot.issues.find((issue) => issue?.number === subjectNumber)
               : null;
-            const snapshotComments = subject?.comment_bodies;
-            const hasSnapshotMarker = subject?.comments_complete === true && Array.isArray(snapshotComments)
-              && snapshotComments.some((body) => String(body).includes(remediationMarker));
+            const { data: current } = await github.rest.issues.get({ owner, repo, issue_number: subjectNumber });
+            if (current.state !== "closed" || current.state_reason !== "completed") {
+              core.notice(`issue:${subjectNumber} no longer has the completed closure observed by this guard`);
+              return;
+            }
+            if (!subject?.closed_at || current.closed_at !== subject.closed_at || current.closed_at !== snapshot.event_closed_at) {
+              core.setFailed(`issue:${subjectNumber} changed after the closure snapshot; a fresh issues.closed run must decide it`);
+              return;
+            }
             await github.rest.issues.update({ owner, repo, issue_number: subjectNumber, state: "open" });
             const { data: reopened } = await github.rest.issues.get({ owner, repo, issue_number: subjectNumber });
             if (reopened.state !== "open") {
               core.setFailed(`closure guard reopened issue:${subjectNumber} but host readback is ${reopened.state}`);
               return;
             }
-            if (hasSnapshotMarker) return;
             let comments;
             try {
               comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: subjectNumber, per_page: 100 });
@@ -212,17 +231,23 @@ jobs:
               core.setFailed(`issue:${subjectNumber} reopened but remediation deduplication could not be completed: ${error.message}`);
               return;
             }
-            if (comments.some((comment) => String(comment.body || "").includes(remediationMarker))) return;
             const details = Array.isArray(verdict.reasons)
               ? verdict.reasons.map((entry) => `- \`${entry.code}\`: ${entry.message}`).join("\n")
               : "- \`host_unreadable\`: the closure evaluator returned no structured reasons";
-            const { data: created } = await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: subjectNumber,
-              body: `${remediationMarker}\n\nLoom 已重新打开该 FR/Phase：它不能以 completed 关闭。\n\n${details}\n\n处理后再次关闭；不要通过补 current、carrier、shadow 或手写 head 字段绕过。`,
-            });
-            const { data: comment } = await github.rest.issues.getComment({ owner, repo, comment_id: created.id });
-            if (!String(comment.body || "").includes(remediationMarker)) {
-              core.setFailed(`issue:${subjectNumber} remediation comment readback is missing its stable marker`);
+            const body = `${remediationMarker}\n\nLoom 已重新打开该 FR/Phase：它不能以 completed 关闭。\n\n${details}\n\n处理后再次关闭；不要通过补 current、carrier、shadow 或手写 head 字段绕过。`;
+            const markerComments = comments.filter((comment) => String(comment.body || "").includes(remediationMarker));
+            if (markerComments.length > 1) {
+              core.setFailed(`issue:${subjectNumber} has multiple remediation marker comments`);
+              return;
+            }
+            let written;
+            if (markerComments.length === 1) {
+              if (String(markerComments[0].body || "") === body) return;
+              ({ data: written } = await github.rest.issues.updateComment({ owner, repo, comment_id: markerComments[0].id, body }));
+            } else {
+              ({ data: written } = await github.rest.issues.createComment({ owner, repo, issue_number: subjectNumber, body }));
+            }
+            const { data: comment } = await github.rest.issues.getComment({ owner, repo, comment_id: written.id });
+            if (comment.id !== written.id || String(comment.body || "") !== body) {
+              core.setFailed(`issue:${subjectNumber} remediation comment readback does not exactly match the stable marker body`);
             }

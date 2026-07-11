@@ -30,6 +30,7 @@ HEAD, MERGE = "a" * 40, "b" * 40
 def facts(*, merged: bool = False, issue_completed: bool = True, compare_status: str = "ahead", truncated: bool = False, run_head: str = HEAD):
     pr = {
         "head": {"sha": HEAD}, "base": {"ref": "main"},
+        "user": {"id": 1, "login": "maintainer"},
         "state": "closed" if merged else "open", "draft": False,
         "merged_at": "2026-07-11T00:00:00Z" if merged else None,
         "merge_commit_sha": MERGE if merged else None,
@@ -38,8 +39,9 @@ def facts(*, merged: bool = False, issue_completed: bool = True, compare_status:
         f"repos/o/r/git/commits/{HEAD}": {"tree": {"sha": "tree-head"}},
         "repos/o/r/git/trees/tree-head?recursive=1": {"truncated": truncated, "tree": [{"path": "src/a.py", "sha": "c" * 40, "mode": "100644", "type": "blob"}]},
         "repos/o/r": {"default_branch": "main"},
-        "repos/o/r/actions/artifacts/7": {"id": 7, "digest": "sha256:" + "d" * 64, "expired": False, "name": "review", "workflow_run": {"id": 9}},
-        "repos/o/r/actions/runs/9": {"id": 9, "event": "pull_request_target", "status": "completed", "conclusion": "success", "head_sha": run_head, "workflow_id": 3, "path": ".github/workflows/host-attestation-evidence.yml", "pull_requests": [{"number": 1}]},
+        "repos/o/r/issues/2025": {"number": 2025, "labels": [{"name": "work-item"}]},
+        "repos/o/r/actions/artifacts/7": {"id": 7, "digest": "sha256:" + "d" * 64, "expired": False, "name": "loom-host-attestation-1", "workflow_run": {"id": 9}, "created_at": "2026-07-11T00:01:00Z"},
+        "repos/o/r/actions/runs/9": {"id": 9, "event": "pull_request_target", "status": "completed", "conclusion": "success", "head_sha": run_head, "workflow_id": 3, "path": ".github/workflows/host-attestation-evidence.yml", "pull_requests": [{"number": 1}], "triggering_actor": {"id": 1, "login": "maintainer"}, "run_started_at": "2026-07-11T00:00:00Z", "updated_at": "2026-07-11T00:02:00Z"},
     }
     if merged:
         trees.update({
@@ -64,6 +66,16 @@ def reviews(_root, path):
     return [{"id": 4, "state": "APPROVED", "commit_id": HEAD, "user": {"id": 1}}], []
 
 
+def single_maintainer_reads(_root, path):
+    if path.endswith("/reviews"):
+        return [], []
+    if "/collaborators?" in path:
+        return [{"id": 1, "login": "maintainer", "permissions": {"push": True}}], []
+    if path.endswith("/issues/2025/comments?per_page=100"):
+        return [{"id": 11, "body": f"<!-- loom:host-attestation-artifact pr:1 head:{HEAD} id:7 -->", "created_at": "2026-07-11T00:03:00Z", "author_association": "OWNER", "user": {"id": 1, "login": "maintainer"}}], []
+    return [], [f"unexpected host list path: {path}"]
+
+
 def closing_relation(_root, _query, variables):
     return {"repository": {"issue": {"closedByPullRequestsReferences": {"pageInfo": {"hasNextPage": False}, "nodes": [{"number": 1, "merged": True}]}}}}, []
 
@@ -72,6 +84,61 @@ pr, mapping = facts()
 read_json = reader(pr, mapping)
 attestation, errors = github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, read_json=read_json, read_list=reviews)
 assert not errors and attestation and attestation["artifact"]["digest"].startswith("sha256:")
+
+single, errors = github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, work_item=2025, read_json=read_json, read_list=single_maintainer_reads, review_policy="single_maintainer")
+assert not errors and single and single["review_policy"]["mode"] == "single_maintainer" and single["semantic_tree"]["semantic_digest"].startswith("sha256:")
+assert single["review_policy"]["assertion_verified"] is True
+def missing_assertion_reads(_root, path):
+    if path.endswith("/reviews"):
+        return [], []
+    if "/collaborators?" in path:
+        return [{"id": 1, "login": "maintainer", "permissions": {"push": True}}], []
+    if path.endswith("/issues/2025/comments?per_page=100"):
+        return [], []
+    return [], [f"unexpected host list path: {path}"]
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, work_item=2025, read_json=read_json, read_list=missing_assertion_reads, review_policy="single_maintainer")[1]
+def two_maintainers(_root, path):
+    if path.endswith("/reviews"):
+        return [], []
+    return [
+        {"id": 1, "login": "maintainer", "permissions": {"push": True}},
+        {"id": 2, "login": "other", "permissions": {"push": True}},
+    ], []
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, work_item=2025, read_json=read_json, read_list=two_maintainers, review_policy="single_maintainer")[1]
+def single_changes_requested(_root, path):
+    if path.endswith("/reviews"):
+        return [{"id": 5, "state": "CHANGES_REQUESTED", "commit_id": HEAD, "user": {"id": 2}}], []
+    return [{"id": 1, "login": "maintainer", "permissions": {"push": True}}], []
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, work_item=2025, read_json=read_json, read_list=single_changes_requested, review_policy="single_maintainer")[1]
+pr_mismatch, mapping_mismatch = facts()
+mapping_mismatch["repos/o/r/actions/runs/9"]["triggering_actor"] = {"id": 2, "login": "other"}
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, work_item=2025, read_json=reader(pr_mismatch, mapping_mismatch), read_list=single_maintainer_reads, review_policy="single_maintainer")[1]
+pr_stale, mapping_stale = facts()
+mapping_stale["repos/o/r/actions/artifacts/7"]["created_at"] = "2026-07-11T00:10:00Z"
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, work_item=2025, read_json=reader(pr_stale, mapping_stale), read_list=single_maintainer_reads, review_policy="single_maintainer")[1]
+
+pr_recover, mapping_recover = facts(merged=True)
+mapping_recover["repos/o/r/actions/artifacts/7"]["expired"] = True
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 7, work_item=2025, allow_merged=True, read_json=reader(pr_recover, mapping_recover), read_list=single_maintainer_reads, review_policy="single_maintainer")[1]
+mapping_recover["repos/o/r/actions/artifacts/8"] = {"id": 8, "digest": "sha256:" + "e" * 64, "expired": False, "name": "loom-host-attestation-1", "workflow_run": {"id": 10}, "created_at": "2026-07-20T00:01:00Z"}
+mapping_recover["repos/o/r/actions/runs/10"] = {"id": 10, "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_sha": "f" * 40, "head_branch": "main", "workflow_id": 3, "path": ".github/workflows/host-attestation-evidence.yml", "pull_requests": [], "triggering_actor": {"id": 1, "login": "maintainer"}, "run_started_at": "2026-07-20T00:00:00Z", "updated_at": "2026-07-20T00:02:00Z"}
+def recovery_reads(_root, path):
+    if path.endswith("/reviews"):
+        return [], []
+    if "/collaborators?" in path:
+        return [{"id": 1, "login": "maintainer", "permissions": {"push": True}}], []
+    if path.endswith("/issues/2025/comments?per_page=100"):
+        return [{"id": 12, "body": f"<!-- loom:host-attestation-artifact pr:1 head:{HEAD} id:8 -->", "created_at": "2026-07-20T00:03:00Z", "author_association": "OWNER", "user": {"id": 1, "login": "maintainer"}}], []
+    return [], [f"unexpected host list path: {path}"]
+recovered, errors = github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 8, work_item=2025, allow_merged=True, read_json=reader(pr_recover, mapping_recover), read_list=recovery_reads, review_policy="single_maintainer")
+assert not errors and recovered and recovered["workflow_run"]["binding"] == "workflow_dispatch_reattest"
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 8, allow_merged=True, read_json=reader(pr_recover, mapping_recover), read_list=reviews, review_policy="approved")[1]
+mapping_recover["repos/o/r/actions/runs/10"]["head_branch"] = "work/old-ref"
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 8, work_item=2025, allow_merged=True, read_json=reader(pr_recover, mapping_recover), read_list=recovery_reads, review_policy="single_maintainer")[1]
+mapping_recover["repos/o/r/actions/runs/10"]["head_branch"] = "main"
+mapping_recover["repos/o/r/issues/2025"]["labels"] = [{"name": "fr"}]
+assert github_host.github_pr_attestation_readback(ROOT, "o", "r", 1, 8, work_item=2025, allow_merged=True, read_json=reader(pr_recover, mapping_recover), read_list=recovery_reads, review_policy="single_maintainer")[1]
+mapping_recover["repos/o/r/issues/2025"]["labels"] = [{"name": "work-item"}]
 
 assert github_host._current_approved_review(
     [
@@ -124,6 +191,13 @@ with tempfile.TemporaryDirectory() as directory:
         pass
     else:
         raise AssertionError("locally asserted digest must be rejected")
+    artifact.write_text(json.dumps({"artifact_id": True}), encoding="utf-8")
+    try:
+        module._artifact_id(artifact)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("boolean artifact ids must be rejected")
 
 forwarded: list[str] = []
 original_attestation_main = cli.host_attestation_main
@@ -162,7 +236,7 @@ assert forwarded == [
 ]
 
 workflow = WORKFLOW.read_text(encoding="utf-8")
-for required in ("pull_request_target:", "host-attestation-evidence", "actions/upload-artifact@v4", "contents: read", "retention-days: 14"):
+for required in ("pull_request_target:", "workflow_dispatch:", "Existing PR to re-attest", "github.rest.pulls.get", "host-attestation-evidence", "actions/upload-artifact@v4", "contents: read", "retention-days: 14"):
     assert required in workflow, f"host-attestation workflow is missing {required}"
 for forbidden in ("actions/checkout", "github.event.pull_request.title", "github.event.pull_request.body", "secrets."):
     assert forbidden not in workflow, f"host-attestation workflow must not consume {forbidden}"
