@@ -74,6 +74,15 @@ readback 冲突，则以单一 host-readback failure 失败，且不得 fallback
 目标存在且 resolve 后仍位于 candidate root 内时才允许；绝对、断链、越界或指向
 runner/harness 的链接全部 fail closed。
 
+只有 repository、event binding、fork-aware head repository 与 40 位 base/head SHA
+全部通过 readback 后，workflow 才输出 `authority_ready=true`。该字段不是 caller
+input。API 403/5xx、字段缺失或冲突时，plan/native/final 均执行零 checkout、零
+candidate evaluator，并由 terminal step 输出固定 `host_authority_unavailable` blocked
+envelope。PR changed paths 触及 GitHub 3000-file 上限、merge comparison 触及
+300-file 上限时，完整性不可证明，同样 fail closed；不能把截断集合交给 selector。
+private fork head 若无法由 base token 读取也保持 blocked，这属于已知宿主权限残余，
+不能 fallback 到 base repository 的同名 ref 或当前 event SHA。
+
 为使 direct 不变量可执行，本次删除以下已跟踪 legacy inventory，且不生成替代副本：
 
 - `.agents/skills/loom-adopt`

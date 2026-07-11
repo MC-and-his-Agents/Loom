@@ -21,6 +21,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "loom-delivery-gate.yml"
 CHECK_WORKFLOW = ROOT / ".github" / "workflows" / "loom-check.yml"
 WORKFLOW_MATRIX = FIXTURES / "workflow-event-matrix.json"
 REUSABLE_AUTHORITY_CASES = FIXTURES / "reusable-authority-cases.json"
+HOST_AUTHORITY_FAILURE_CASES = FIXTURES / "host-authority-failure-cases.json"
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_gate.py"
 SOURCE_DIR = SOURCE.parent
 IDENTITY_READER = ROOT / "tools" / "read_delivery_gate_required_identity.py"
@@ -631,8 +632,6 @@ def check_workflow() -> None:
         "REUSABLE_MODE: ${{ inputs.loom_ref != '' }}",
         "WORKFLOW_CALL_ENFORCEMENT",
         "const reusable = process.env.REUSABLE_MODE === \"true\";",
-        "if: ${{ always() && inputs.loom_ref != '' }}",
-        "if: ${{ always() && inputs.loom_ref == '' }}",
         "LOOM_SOURCE_PATH: loom",
         "CANDIDATE_PATH: candidate",
         "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}",
@@ -642,11 +641,14 @@ def check_workflow() -> None:
         'python3 "$RUNNER_ROOT/tools/run_trusted_candidate_validation.py"',
         '["native_validation"]["targets"]',
         "host_facts_base64",
-        "base_sha: ${{ steps.evaluate.outputs.base_sha }}",
-        "head_sha: ${{ steps.evaluate.outputs.head_sha }}",
+        "base_sha: ${{ steps.host-facts.outputs.base_sha }}",
+        "head_sha: ${{ steps.host-facts.outputs.head_sha }}",
+        "authority_ready: ${{ steps.host-facts.outputs.authority_ready }}",
         "needs: plan",
         "needs: [plan, native-validation]",
         "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}",
+        "files.length >= 3000",
+        "comparisonFiles.length >= 300",
         "delivery_gate_sha256",
         "delivery gate result changed after trusted finalization",
         "--validation-result-file",
@@ -657,13 +659,13 @@ def check_workflow() -> None:
         "Product acceptance: not_evaluated.",
         "facts.permission_error = message",
         "facts.git_history_error = message",
-        'id: "environment_unavailable"',
-        'failure_domain: "environment"',
+        'id: "host_authority_unavailable"',
+        'failure_domain: "host_service"',
         "failure_envelope:",
         "core.setOutput(\"failure_envelope\", JSON.stringify(failureEnvelope))",
         "remediation=${failureEnvelope.primary_cause?.remediation_command || \"unavailable\"}",
         "Publish terminal delivery result",
-        'payload?.result || (enforcement === "advisory" ? "advisory" : "blocked")',
+        'const result = payload?.result || "blocked"',
         "core.setFailed(`loom-delivery-gate blocked: ${cause}`)",
         "continue-on-error: true",
         "group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}",
@@ -701,6 +703,15 @@ def check_workflow() -> None:
         raise AssertionError("every checkout must drop credentials before untrusted native validation")
     if len(checkouts) != 10:
         raise AssertionError("plan, isolated native validation, caller base harness, and finalizer need separate checkouts")
+    checkout_steps = text.split("      - name: ")[1:]
+    unguarded = [
+        step.splitlines()[0]
+        for step in checkout_steps
+        if "uses: actions/checkout@v4" in step
+        and "authority_ready == 'true'" not in step.split("uses: actions/checkout@v4", 1)[0]
+    ]
+    if unguarded:
+        raise AssertionError("authority-unready checkout steps remain: " + ", ".join(unguarded))
     plan_job = text.split("  plan:\n", 1)[1].split("  native-validation:\n", 1)[0]
     native_job = text.split("  native-validation:\n", 1)[1].split("  loom-delivery-gate:\n", 1)[0]
     final_job = text.split("  loom-delivery-gate:\n", 1)[1]
@@ -719,6 +730,10 @@ def check_workflow() -> None:
         raise AssertionError("candidate validation must run in a dependent job through the trusted harness")
     if "needs: [plan, native-validation]" not in final_job or "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}" not in final_job:
         raise AssertionError("trusted finalizer must consume the isolated native job result")
+    for step_name in ("Evaluate delivery facts", "Finalize advisory delivery result"):
+        block = text.split(f"      - name: {step_name}\n", 1)[1].split("      - name: ", 1)[0]
+        if "authority_ready == 'true'" not in block:
+            raise AssertionError(f"{step_name} must not execute without complete host authority")
     exposed = [name for name in ("HOST_FACTS_PATH", "LOOM_SOURCE_PATH", "DELIVERY_GATE_PLAN_PATH") if name in native_job]
     if exposed:
         raise AssertionError("candidate validation received trusted evaluator paths: " + ", ".join(exposed))
@@ -1034,6 +1049,23 @@ def check_reusable_host_authority_cases() -> None:
             raise AssertionError(f"reusable authority case drifted: {case['name']}: {verdict}")
 
 
+def check_host_authority_failure_cases() -> None:
+    fixture = json.loads(HOST_AUTHORITY_FAILURE_CASES.read_text(encoding="utf-8"))
+    if fixture.get("schema_version") != "loom-delivery-gate-host-authority-failure-cases/v1":
+        raise AssertionError("host authority failure fixture schema drifted")
+    for case in fixture["cases"]:
+        cap = 3000 if case["event"] == "pull_request" else 300
+        authority_ready = (
+            case["api_status"] == 200
+            and case["authority_fields_complete"]
+            and case["changed_path_count"] < cap
+        )
+        checkout_count = 10 if authority_ready else 0
+        result = "passed_to_evaluator" if authority_ready else "blocked"
+        if result != case["expected"] or (not authority_ready and checkout_count != 0):
+            raise AssertionError(f"host authority failure case drifted: {case['name']}")
+
+
 def check_workflow_event_matrix() -> None:
     matrix = json.loads(WORKFLOW_MATRIX.read_text(encoding="utf-8"))
     expected = {
@@ -1097,6 +1129,7 @@ def main() -> int:
     check_composite_action_contract()
     check_trusted_candidate_harness()
     check_reusable_host_authority_cases()
+    check_host_authority_failure_cases()
     check_workflow_event_matrix()
     print("delivery gate contract: OK")
     return 0
