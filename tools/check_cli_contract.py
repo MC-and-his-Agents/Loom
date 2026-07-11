@@ -370,10 +370,17 @@ def runtime_locator_exists(target_root: Path, locator: str) -> bool:
     return bool(path is not None and path.exists())
 
 
-def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+def run_flow_json(
+    args: list[str],
+    *,
+    cwd: Path = REPO_ROOT,
+    expect: int | None = None,
+    env_overrides: dict[str, str] | None = None,
+) -> tuple[int, dict[str, Any]]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["LOOM_SOURCE_REPO_ROOT"] = str(REPO_ROOT)
+    env.update(env_overrides or {})
     try:
         completed = subprocess.run(
             [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
@@ -892,6 +899,12 @@ def assert_ship_dry_run_wrapper_contract() -> None:
 
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if flow_args[:2] == ["pr-metadata", "preflight"]:
             return {
                 "command": "pr-metadata",
@@ -922,6 +935,7 @@ def assert_ship_dry_run_wrapper_contract() -> None:
     original_flow_payload = module.flow_payload
     original_emit = module.emit
     original_changed_paths = module.ship_changed_paths_payload
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
@@ -930,6 +944,10 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         "source": "fixture",
         "changed_paths": ["docs/adoption/legacy-install-migration.md"],
         "missing_inputs": [],
+    }
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
     }
     try:
         status = module.handle_ship([
@@ -954,6 +972,7 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         if emitted.get("next_action") != "run loom ship --apply after dry-run blockers are clear":
             raise AssertionError("ship dry-run must keep the short next_action for the ordinary apply path")
         expected_prefixes = [
+            ["github-intake", "admission"],
             ["pr-metadata", "preflight"],
             ["pr-gate", "check"],
             ["controlled-merge", "check"],
@@ -978,6 +997,7 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         module.flow_payload = original_flow_payload
         module.emit = original_emit
         module.ship_changed_paths_payload = original_changed_paths
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_infers_pr_bindings_contract() -> None:
@@ -994,6 +1014,12 @@ def assert_ship_infers_pr_bindings_contract() -> None:
 
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if tuple(flow_args[:2]) in {("pr-metadata", "preflight"), ("pr-gate", "check"), ("controlled-merge", "check")}:
             if "--branch" in flow_args and flow_args[flow_args.index("--branch") + 1] != inferred_branch:
                 raise AssertionError("ship did not pass inferred branch to delegated gate")
@@ -1035,6 +1061,7 @@ def assert_ship_infers_pr_bindings_contract() -> None:
     original_git_branch = module.git_branch_for_target
     original_git_head = module.git_head_sha_for_target
     original_changed_paths = module.ship_changed_paths_payload
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = fake_ship_pr_payload
@@ -1046,6 +1073,14 @@ def assert_ship_infers_pr_bindings_contract() -> None:
         "source": "fixture",
         "changed_paths": ["README.md"],
         "missing_inputs": [],
+    }
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **_kwargs: {
+        "result": "pass",
+        "issue_number": 1738,
+        "issue_locator": f"{owner}/{repo}/work_item/1738",
+        "pr_number": 1748,
+        "source": "pr_closing_issue_readback",
+        "errors": [],
     }
     try:
         status = module.handle_ship(["--item", "WI-1738", "--pr", "1748", "--json"])
@@ -1065,6 +1100,7 @@ def assert_ship_infers_pr_bindings_contract() -> None:
         module.git_branch_for_target = original_git_branch
         module.git_head_sha_for_target = original_git_head
         module.ship_changed_paths_payload = original_changed_paths
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_pr_readback_uses_api_contract() -> None:
@@ -1188,11 +1224,17 @@ def assert_ship_status_preflight_contract(tmp: Path) -> None:
     original_infer_repo = module.infer_github_repo
     original_git_branch = module.git_branch_for_target
     original_git_head = module.git_head_sha_for_target
+    original_lifecycle_admission = module.host_lifecycle_admission_payload
     module.run_capture = fake_run_capture
     module.emit = fake_emit
     module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
     module.git_branch_for_target = lambda target: "work/1777-ship-preflight-status"
     module.git_head_sha_for_target = lambda target: "a" * 40
+    module.host_lifecycle_admission_payload = lambda **_kwargs: {
+        "result": "pass",
+        "lifecycle_state": "not_applicable",
+        "carrier_mutations": False,
+    }
     try:
         if module.resolve_command(["ship", "preflight", "--target", str(target)]) != ("ship preflight", ["--target", str(target)]):
             raise AssertionError("ship preflight must resolve as a first-class command")
@@ -1270,6 +1312,7 @@ def assert_ship_status_preflight_contract(tmp: Path) -> None:
         module.infer_github_repo = original_infer_repo
         module.git_branch_for_target = original_git_branch
         module.git_head_sha_for_target = original_git_head
+        module.host_lifecycle_admission_payload = original_lifecycle_admission
 
 
 def assert_ship_validation_profile_selection_contract() -> None:
@@ -1333,6 +1376,12 @@ def assert_ship_apply_wrapper_contract() -> None:
 
     def passing_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if flow_args[:2] == ["pr-metadata", "update"]:
             if "--apply" not in flow_args:
                 raise AssertionError("ship --apply safe metadata repair must apply PR metadata update")
@@ -1405,6 +1454,7 @@ def assert_ship_apply_wrapper_contract() -> None:
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
     original_write_workstation_current = module.write_workstation_current
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = passing_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
@@ -1417,6 +1467,10 @@ def assert_ship_apply_wrapper_contract() -> None:
     }
     current_writes: list[dict[str, Any]] = []
     module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
+    }
     try:
         status = module.handle_ship(
             [
@@ -1446,6 +1500,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         if "global-current-closeout" not in step_names or not current_writes or current_writes[-1].get("state") != "no_active_item":
             raise AssertionError("ship --apply host-only closeout must clear the workstation current pointer")
         expected_prefixes = [
+            ["github-intake", "admission"],
             ["pr-metadata", "update"],
             ["carrier", "refresh"],
             ["shadow-parity", "--target"],
@@ -1458,16 +1513,22 @@ def assert_ship_apply_wrapper_contract() -> None:
         ]
         if [call[:2] for call in calls] != expected_prefixes:
             raise AssertionError(f"ship --apply delegated unexpected sequence: {[call[:2] for call in calls]}")
-        merge_call = calls[6]
+        merge_call = calls[7]
         if "--merge-method" not in merge_call or merge_call[merge_call.index("--merge-method") + 1] != "squash":
             raise AssertionError("ship --apply did not preserve merge method")
-        reconciliation_call = calls[7]
+        reconciliation_call = calls[8]
         for flag, expected in {"--item": "WI-1691", "--issue": "1691", "--pr": "1706", "--branch": "main"}.items():
             if flag not in reconciliation_call or reconciliation_call[reconciliation_call.index(flag) + 1] != expected:
                 raise AssertionError(f"ship --apply did not preserve {flag} for host closeout")
 
         def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {
+                    "command": "github-intake",
+                    "result": "pass",
+                    "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+                }
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1531,6 +1592,12 @@ def assert_ship_apply_wrapper_contract() -> None:
 
         def carrier_blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {
+                    "command": "github-intake",
+                    "result": "pass",
+                    "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+                }
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1563,7 +1630,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         findings = emitted.get("actionable_findings", [])
         if not any(isinstance(finding, dict) and finding.get("next_action") == "loom carrier refresh --target <repo> --item <id> --apply --json" for finding in findings):
             raise AssertionError("ship --apply must surface the carrier refresh single next action")
-        if [call[:2] for call in calls] != [["pr-metadata", "update"], ["carrier", "refresh"]]:
+        if [call[:2] for call in calls] != [["github-intake", "admission"], ["pr-metadata", "update"], ["carrier", "refresh"]]:
             raise AssertionError(f"ship --apply must stop before metadata preflight after carrier refresh block, got {[call[:2] for call in calls]}")
     finally:
         module.flow_payload = original_flow_payload
@@ -1571,6 +1638,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
         module.write_workstation_current = original_write_workstation_current
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_closeout_policy_admission_contract() -> None:
@@ -1585,6 +1653,12 @@ def assert_ship_closeout_policy_admission_contract() -> None:
 
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if flow_args[:2] == ["pr-metadata", "update"]:
             return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
         if flow_args[:2] == ["carrier", "refresh"]:
@@ -1624,6 +1698,7 @@ def assert_ship_closeout_policy_admission_contract() -> None:
     original_emit = module.emit
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
@@ -1633,6 +1708,10 @@ def assert_ship_closeout_policy_admission_contract() -> None:
         "source": "fixture",
         "changed_paths": ["skills/shared/scripts/loom_flow.py"],
         "missing_inputs": [],
+    }
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
     }
     try:
         status = module.handle_ship(
@@ -1667,6 +1746,7 @@ def assert_ship_closeout_policy_admission_contract() -> None:
         module.emit = original_emit
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
@@ -1693,6 +1773,12 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
         def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {
+                    "command": "github-intake",
+                    "result": "pass",
+                    "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+                }
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1775,6 +1861,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         if emitted.get("target_branch") != "main":
             raise AssertionError(f"{name} ordinary ship --apply must read back the target branch")
         expected_sequence = [
+            ["github-intake", "admission"],
             ["pr-metadata", "update"],
             ["carrier", "refresh"],
             ["shadow-parity", "--target"],
@@ -1818,6 +1905,8 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
         def versioned_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {"command": "github-intake", "result": "pass", "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False}}
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1881,6 +1970,8 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
         def release_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {"command": "github-intake", "result": "pass", "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False}}
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1943,6 +2034,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
     original_ship_pr_payload = module.ship_pr_payload
     original_changed_paths = module.ship_changed_paths_payload
     original_write_workstation_current = module.write_workstation_current
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.emit = fake_emit
     module.ship_pr_payload = lambda args, target: ({"headRefName": args.branch, "headRefOid": args.head_sha, "baseRefName": "main"}, [])
     module.ship_changed_paths_payload = lambda args, target, *, target_branch, head_sha: {
@@ -1953,6 +2045,10 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         "missing_inputs": [],
     }
     module.write_workstation_current = lambda target, payload: current_writes.append(payload) or Path("/tmp/loom-current-fixture.json")
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **kwargs: {
+        "result": "pass", "issue_number": kwargs["issue_number"], "issue_locator": f"{owner}/{repo}/issue/{kwargs['issue_number']}",
+        "pr_number": kwargs.get("pr_number"), "source": "fixture_authority_reconciliation", "errors": [],
+    }
     try:
         run_host_only_case(
             "light",
@@ -1982,6 +2078,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         module.ship_pr_payload = original_ship_pr_payload
         module.ship_changed_paths_payload = original_changed_paths
         module.write_workstation_current = original_write_workstation_current
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_docs_entry_contract() -> None:
@@ -3180,10 +3277,25 @@ def assert_build_consumes_global_suite_without_repo_local_tools(tmp: Path) -> No
         encoding="utf-8",
     )
     fake_loom.chmod(0o755)
+    host_env = write_fake_open_work_item_gh(fake_bin, 1930)
     status, payload = run_json_preserving_attempts(
-        ["build", "--target", str(target), "--item", fixture["item"], "--json"],
+        [
+            "build",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1930",
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+            "--json",
+        ],
         item=fixture["item"],
         env_overrides={
+            **host_env,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
             "LOOM_SOURCE_REPO_ROOT": "",
         },
@@ -3301,7 +3413,13 @@ def active_suite_path_not_applicable(active_item: str) -> bool:
     return bool(re.search(r"(?im)^\s*(?:[-*]\s*)?suite path\s*:\s*not_applicable\b", spec_text))
 
 
-def assert_closeout_blocks_missing_suite_evidence(active_item: str, closeout_payload: dict[str, Any]) -> None:
+def assert_closeout_blocks_missing_suite_evidence(
+    active_item: str,
+    closeout_payload: dict[str, Any],
+    *,
+    closeout_args: list[str],
+    env_overrides: dict[str, str],
+) -> None:
     if active_suite_path_not_applicable(active_item):
         return
     suite_gate = closeout_payload.get("suite_gate_validation")
@@ -3312,7 +3430,7 @@ def assert_closeout_blocks_missing_suite_evidence(active_item: str, closeout_pay
         path = REPO_ROOT / evidence_map
         if path.exists():
             path.unlink()
-        status, payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+        status, payload = run_json(closeout_args, env_overrides=env_overrides)
         payload = runtime_payload_from_agent_safe_output(payload)
         if status == 0 or payload.get("result") != "block":
             raise AssertionError("closeout did not fail closed when suite evidence was missing")
@@ -6263,7 +6381,8 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
     merge_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
     origin = target.parent / f"{target.name}-origin.git"
     subprocess.run(["git", "init", "--bare", str(origin)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["git", "remote", "add", "origin", str(origin)], cwd=target, check=True)
+    subprocess.run(["git", "remote", "add", "origin", "https://github.com/owner/repo.git"], cwd=target, check=True)
+    subprocess.run(["git", "remote", "set-url", "--push", "origin", str(origin)], cwd=target, check=True)
     subprocess.run(["git", "push", "-u", "origin", target_branch], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     fixture_dir = target / ".loom" / "fixtures" / "WI-1153"
@@ -10947,6 +11066,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     pass_target = tmp / "governance-chain-pass"
     pass_target.mkdir()
     fixture = write_governance_chain_fixture(pass_target)
+    env = write_fake_open_work_item_gh(tmp / "governance-chain-gh", int(fixture["issue"]))
     command = [
         "closeout",
         "check",
@@ -10980,7 +11100,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
         "--ruleset-file",
         fixture["ruleset_file"],
     ]
-    _, closeout_payload = run_flow_json(command, expect=0)
+    _, closeout_payload = run_flow_json(command, expect=0, env_overrides=env)
     subchecks = {entry.get("id"): entry for entry in closeout_payload.get("gate", {}).get("subchecks", []) if isinstance(entry, dict)}
     if (
         closeout_payload.get("result") != "pass"
@@ -11091,7 +11211,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     auto_lookup_command = command.copy()
     item_index = auto_lookup_command.index("--item")
     del auto_lookup_command[item_index : item_index + 2]
-    _, auto_lookup_payload = run_flow_json(auto_lookup_command, expect=0)
+    _, auto_lookup_payload = run_flow_json(auto_lookup_command, expect=0, env_overrides=env)
     auto_lookup_missing = auto_lookup_payload.get("missing_inputs", [])
     if (
         auto_lookup_payload.get("result") != "pass"
@@ -11150,7 +11270,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     )
     mismatched_item_command = command.copy()
     mismatched_item_command[mismatched_item_command.index("--item") + 1] = mismatched_item
-    _, mismatched_item_payload = run_flow_json(mismatched_item_command, expect=1)
+    _, mismatched_item_payload = run_flow_json(mismatched_item_command, expect=1, env_overrides=env)
     missing_inputs = mismatched_item_payload.get("missing_inputs", [])
     if (
         mismatched_item_payload.get("result") != "block"
@@ -11168,7 +11288,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     review_payload = json.loads(review_path.read_text(encoding="utf-8"))
     review_payload["authored_at"] = "2026-05-31T00:00:00Z"
     review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-    _, post_merge_closeout = run_flow_json(command)
+    _, post_merge_closeout = run_flow_json(command, env_overrides=env)
     review_subcheck = next(
         (
             entry
@@ -11229,6 +11349,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
             *command[4:],
         ],
         expect=1,
+        env_overrides=env,
     )
     finding_kinds = {finding.get("kind") for finding in negative_closeout.get("reconciliation", {}).get("findings", []) if isinstance(finding, dict)}
     missing_inputs = set(negative_closeout.get("missing_inputs", []))
@@ -11393,6 +11514,65 @@ if path.endswith("/pulls/2003"):
 print(json.dumps({"message": "not found"}), file=sys.stderr)
 raise SystemExit(1)
 """,
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    current_path = os.environ.get("PATH", "")
+    return {"PATH": str(bin_dir) if not current_path else f"{bin_dir}:{current_path}"}
+
+
+def write_fake_open_work_item_gh(bin_dir: Path, issue_number: int) -> dict[str, str]:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    fake_gh = bin_dir / "gh"
+    fake_gh.write_text(
+        f'''#!/usr/bin/env python3
+import json
+import sys
+
+args = sys.argv[1:]
+if args[:2] == ["auth", "status"]:
+    raise SystemExit(0)
+if args[:2] == ["api", "graphql"]:
+    print(json.dumps({{
+        "data": {{
+            "issueType": {{"fields": [{{"name": "blockedBy"}}, {{"name": "blocking"}}]}},
+            "mutationType": {{"mutationType": {{"fields": []}}}},
+            "repository": {{
+                "issue": {{
+                    "id": "I_{issue_number}",
+                    "blockedBy": {{"totalCount": 0, "pageInfo": {{"hasNextPage": False}}, "nodes": []}},
+                    "blocking": {{"totalCount": 0, "pageInfo": {{"hasNextPage": False}}, "nodes": []}}
+                }},
+                "pullRequest": {{
+                    "number": 1199,
+                    "state": "MERGED",
+                    "headRefName": "work/1153-pr-gate-closeout-integration",
+                    "closingIssuesReferences": {{
+                        "pageInfo": {{"hasNextPage": False}},
+                        "nodes": [{{"number": {issue_number}}}]
+                    }}
+                }}
+            }}
+        }}
+    }}))
+    raise SystemExit(0)
+path = args[1] if len(args) >= 2 and args[0] == "api" else ""
+if path.endswith("/issues/{issue_number}"):
+    print(json.dumps({{
+        "id": {issue_number},
+        "node_id": "I_{issue_number}",
+        "number": {issue_number},
+        "state": "open",
+        "title": "Fixture Work Item",
+        "body": "",
+        "html_url": "https://github.com/MC-and-his-Agents/Loom/issues/{issue_number}",
+        "closed_at": None,
+        "labels": [{{"name": "work-item"}}]
+    }}))
+    raise SystemExit(0)
+print(json.dumps({{"message": "not found"}}), file=sys.stderr)
+raise SystemExit(1)
+''',
         encoding="utf-8",
     )
     fake_gh.chmod(0o755)
@@ -12813,8 +12993,40 @@ def assert_closeout_checkpoint_normalization_contract() -> None:
         raise AssertionError("review checkpoint must normalize to merge")
 
 
-def assert_active_closeout_contract(active_item: str) -> None:
-    status, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+def assert_active_closeout_contract(active_item: str, tmp: Path) -> None:
+    issue_number = 900001
+    issue_payload = tmp / "open-work-item.json"
+    issue_payload.write_text(
+        json.dumps(
+            {
+                "id": f"I_{issue_number}",
+                "number": issue_number,
+                "state": "OPEN",
+                "title": "Fixture Work Item",
+                "url": f"https://github.com/MC-and-his-Agents/Loom/issues/{issue_number}",
+                "labels": ["work-item"],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = write_fake_open_work_item_gh(tmp / "open-work-item-gh", issue_number)
+    closeout_args = [
+        "closeout",
+        "--target",
+        str(REPO_ROOT),
+        "--issue",
+        str(issue_number),
+        "--owner",
+        "MC-and-his-Agents",
+        "--repo",
+        "Loom",
+        "--issue-payload-file",
+        str(issue_payload),
+        "--json",
+    ]
+    status, closeout_payload = run_json(closeout_args, env_overrides=env)
     closeout_payload = runtime_payload_from_agent_safe_output(closeout_payload)
     if closeout_payload["command"] != "closeout" or closeout_payload.get("schema_version") != "loom-scenario-control/v1":
         raise AssertionError("closeout did not wrap the closeout check runtime")
@@ -12822,7 +13034,12 @@ def assert_active_closeout_contract(active_item: str) -> None:
         raise AssertionError("closeout did not emit a structured pass/block/fallback result")
     assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
     if status == 0:
-        assert_closeout_blocks_missing_suite_evidence(active_item, closeout_payload)
+        assert_closeout_blocks_missing_suite_evidence(
+            active_item,
+            closeout_payload,
+            closeout_args=closeout_args,
+            env_overrides=env,
+        )
 
 
 def assert_idle_root_self_governance_direct_contract() -> None:
@@ -12854,12 +13071,12 @@ def run_governance_closeout_contract() -> None:
     assert_repo_local_closeout_runtime_argument_contract()
     assert_closeout_mode_docs_skill_protocol_contract()
     active_item = active_work_item_id()
-    assert_active_closeout_contract(active_item)
     assert_idle_root_self_governance_direct_contract()
     assert_reconciliation_suite_taxonomy_contract()
     assert_issue_dependency_machine_block_contract()
     with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
         tmp = Path(raw_tmp)
+        assert_active_closeout_contract(active_item, tmp)
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)
@@ -15781,7 +15998,34 @@ def run_aggregate_cli_contract() -> None:
             scenario_payload = runtime_payload_from_agent_safe_output(scenario_payload)
             if status == 0 or scenario_payload["schema"] != "loom-scenario-control/v1" or not scenario_payload.get("fallback_to"):
                 raise AssertionError(f"{command_name} did not fail closed with a structured locator payload")
-        status, build_payload = run_json(["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        status, missing_subject_build = run_json(
+            ["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json", "--full-output"]
+        )
+        missing_subject_build = runtime_payload_from_agent_safe_output(missing_subject_build)
+        lifecycle_admission = missing_subject_build.get("lifecycle_admission", {})
+        if (
+            status == 0
+            or missing_subject_build.get("result") != "block"
+            or lifecycle_admission.get("lifecycle_state") != "missing_subject"
+            or missing_subject_build.get("blocking_failures")
+            or missing_subject_build.get("provenance")
+            or missing_subject_build.get("suite_gate_validation")
+        ):
+            raise AssertionError("build without host subject did not stop before repository carrier reads")
+        issue_number = 900002
+        host_env = write_fake_open_work_item_gh(tmp / "non-current-work-item-gh", issue_number)
+        host_subject_args = [
+            "--issue",
+            str(issue_number),
+            "--owner",
+            "MC-and-his-Agents",
+            "--repo",
+            "Loom",
+        ]
+        status, build_payload = run_json(
+            ["build", "--target", str(REPO_ROOT), "--item", "WI-924", *host_subject_args, "--json", "--full-output"],
+            env_overrides=host_env,
+        )
         build_payload = runtime_payload_from_agent_safe_output(build_payload)
         if (
             status == 0
@@ -15789,9 +16033,13 @@ def run_aggregate_cli_contract() -> None:
             or build_payload.get("wrapped_command") != "flow"
             or build_payload.get("result") != "block"
             or build_payload.get("fallback_to") != "admission"
+            or not any("current item mismatch" in str(failure.get("message", "")) for failure in build_payload.get("blocking_failures", []))
         ):
             raise AssertionError("build did not fail closed through the flow runtime for a non-current item")
-        status, pre_review_payload = run_json(["pre-review", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        status, pre_review_payload = run_json(
+            ["pre-review", "--target", str(REPO_ROOT), "--item", "WI-924", *host_subject_args, "--json", "--full-output"],
+            env_overrides=host_env,
+        )
         pre_review_payload = runtime_payload_from_agent_safe_output(pre_review_payload)
         if (
             status == 0
@@ -15799,12 +16047,27 @@ def run_aggregate_cli_contract() -> None:
             or pre_review_payload.get("wrapped_command") != "flow"
             or pre_review_payload.get("result") != "block"
             or pre_review_payload.get("fallback_to") != "admission"
+            or not any("current item mismatch" in str(failure.get("message", "")) for failure in pre_review_payload.get("blocking_failures", []))
         ):
             raise AssertionError("pre-review did not fail closed through the flow runtime for a non-current item")
         active_item = active_work_item_id()
+        active_issue_match = re.fullmatch(r"WI-(\d+)", active_item)
+        if active_issue_match is None:
+            raise AssertionError("active Work Item does not expose a safe host issue number")
+        active_issue = int(active_issue_match.group(1))
+        active_host_env = write_fake_open_work_item_gh(tmp / "active-suite-work-item-gh", active_issue)
+        active_host_args = [
+            "--issue",
+            str(active_issue),
+            "--owner",
+            "MC-and-his-Agents",
+            "--repo",
+            "Loom",
+        ]
         status, active_build = run_json_preserving_attempts(
-            ["build", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            ["build", "--target", str(REPO_ROOT), "--item", active_item, *active_host_args, "--json"],
             item=active_item,
+            env_overrides=active_host_env,
         )
         active_build = runtime_payload_from_agent_safe_output(active_build)
         assert_suite_build_consumption(active_build)
@@ -15812,8 +16075,9 @@ def run_aggregate_cli_contract() -> None:
         assert_build_consumes_global_suite_without_repo_local_tools(tmp)
         assert_review_record_consumed_locators(tmp)
         _, active_pre_review = run_json_preserving_attempts(
-            ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, *active_host_args, "--json"],
             item=active_item,
+            env_overrides=active_host_env,
         )
         active_pre_review = runtime_payload_from_agent_safe_output(active_pre_review)
         assert_suite_gate_consumption(active_pre_review, expected_surface="pre_review")
@@ -15838,6 +16102,10 @@ def run_aggregate_cli_contract() -> None:
             "headRefName": "work/957-pre-review-readiness-cost-guard",
             "headRefOid": "0000000000000000000000000000000000000000",
             "baseRefName": "main",
+            "closingIssuesReferences": {
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [{"number": active_issue, "state": "OPEN", "labels": ["work-item"]}],
+            },
         }
         try:
             drift_fixture.write_text(json.dumps(drift_payload, indent=2) + "\n", encoding="utf-8")
@@ -15848,11 +16116,13 @@ def run_aggregate_cli_contract() -> None:
                     str(REPO_ROOT),
                     "--item",
                     active_item,
+                    *active_host_args,
                     "--pr-payload-file",
                     ".loom/runtime/WI-957-pr-head-drift-fixture.json",
                     "--json",
                 ],
                 item=active_item,
+                env_overrides=active_host_env,
             )
             drift_pre_review = runtime_payload_from_agent_safe_output(drift_pre_review)
         finally:
@@ -15883,7 +16153,7 @@ def run_aggregate_cli_contract() -> None:
         retire_payload = runtime_payload_from_agent_safe_output(retire_payload)
         if retire_payload["command"] != "retire" or not retire_payload.get("retire_contract"):
             raise AssertionError("retire did not expose structured non-mutating contract")
-        assert_active_closeout_contract(active_item)
+        assert_active_closeout_contract(active_item, tmp)
         assert_reconciliation_suite_taxonomy_contract()
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_metadata_render_readback_fixture(tmp)

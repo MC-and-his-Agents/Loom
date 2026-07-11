@@ -57,26 +57,50 @@ independent `product_acceptance` failure domain.
 `loom route --issue <FR>` remains the planning/proposal entrypoint and only
 creates native Work Items with explicit `--apply`. `loom-host-lifecycle-admission/v1`
 consumes that same native admission result before an execution entrypoint acts
-on the explicit `--fr <FR>` locator:
+on the host subject. An explicit `--fr <FR>` remains compatible, while the
+default path classifies `--issue <work-item-or-fr>` so omitting `--fr` cannot
+bypass admission:
 
 ```text
-loom build --fr <FR> ...
-loom ship --fr <FR> ...
-loom pre-review --fr <FR> ...
-loom closeout --fr <FR> ...
+loom build --issue <work-item-or-fr> ...
+loom ship --issue <work-item-or-fr> ...
+loom pre-review --issue <work-item-or-fr> ...
+loom closeout --issue <work-item-or-fr> ...
 ```
 
-`--issue` remains the existing Work Item/host-binding locator and does not add
-this lifecycle gate. This avoids treating an untyped bare issue number as an
-FR; only `--fr` invokes FR breakdown admission at execution time.
+The GitHub issue type/labels determine whether the subject is a Phase, FR, or
+Work Item. The caller does not choose that type by selecting a flag. If an
+execution entrypoint has neither an explicit FR nor a primary issue, Loom
+reads the explicit PR or current branch, resolves exactly one PR, and consumes
+that PR's native GitHub closing-issue relation. It never treats PR body text as
+subject proof. Missing, unreadable, or ambiguous host context fails closed with
+`missing_subject` before reading repository carriers.
+
+Every supplied authority is reconciled rather than prioritized away:
+`--issue`, compatibility `--fr`, an explicit PR, and an explicit or inferred
+branch must identify the same host subject. Explicit owner/repo values must
+match the target checkout's `origin`; an unreadable target origin cannot be
+replaced by a caller-authored repository name. Branch-only discovery uses all
+authenticated GitHub REST pages and fails closed on zero, multiple, or
+incomplete candidates. Execution consumes only an open PR and open Work Item;
+post-merge closeout is the only lifecycle intent that may consume closed host
+objects.
 
 - A planning FR can pass without a Work Item.
+- A Phase cannot be the primary implementation subject.
+- An FR with existing Work Items returns `work_item_required`; the caller must
+  bind one Work Item rather than execute the FR itself.
 - An executing FR without a native typed Work Item child returns
   `needs_breakdown` with one `primary_remediation`; it performs no carrier
   write. This is independent of a route plan marker, so a valid native WI is
   never rejected merely because it was created outside a previous Loom apply.
 - An existing Work Item produces `not_applicable` for this additional check,
   so the admission contract adds no new gate.
+- Completed closeout does not execute a Phase or FR. A Phase with a native
+  child breakdown, or an FR with at least one native Work Item, may only pass
+  through to the FR/Phase closure guard. An unbroken Phase or FR still returns
+  `needs_breakdown`; an explicit non-completion exception is left for that
+  closure guard to classify.
 
 This contract does not implement a product acceptance adapter, create a
 review ledger, or authorize WebEnvoy runtime actions.

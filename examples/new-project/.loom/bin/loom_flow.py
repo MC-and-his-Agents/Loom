@@ -59,6 +59,7 @@ from github_host import (
     github_issue_dependencies_payload,
     github_issue_payload,
     github_issue_state,
+    github_lifecycle_subject_readback,
     github_native_dependency_capability,
     github_pr_payload,
     github_public_rest_list,
@@ -15171,7 +15172,8 @@ def host_binding_validate_payload(
     target_root: Path,
     owner: str | None,
     repo_name: str | None,
-    issue_number: int | None,
+    issue_number: int | str | None,
+    fr_number: int | str | None = None,
     pr_number: int | None,
     branch_name: str | None,
     head_sha: str | None,
@@ -23147,25 +23149,58 @@ def lifecycle_admission_payload(
     owner: str | None,
     repo_name: str | None,
     issue_number: int | None,
+    fr_number: int | None = None,
+    pr_number: int | None = None,
+    branch_name: str | None = None,
     intent: str,
 ) -> dict[str, Any]:
     """Consume native admission before an execution entrypoint, never a carrier."""
 
-    if issue_number is None:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    effective_owner = owner or detected_owner
+    effective_repo = repo_name or detected_repo
+    if not detected_owner or not detected_repo or not effective_owner or not effective_repo:
         return {
             "schema_version": "loom-host-lifecycle-admission/v1",
-            "result": "pass",
-            "lifecycle_state": "not_applicable",
+            "result": "block",
+            "lifecycle_state": "missing_subject",
             "subject": None,
-            "admission_state": "not_requested",
+            "admission_state": "host_subject_required",
             "authority_verdict": authority_verdict(),
-            "primary_remediation": None,
+            "primary_remediation": "restore a readable target origin GitHub owner/repo binding before entering execution",
             "carrier_mutations": False,
+            "missing_inputs": ["target origin GitHub owner/repo"],
+        }
+    subject_readback = github_lifecycle_subject_readback(
+        target_root,
+        effective_owner,
+        effective_repo,
+        issue_number=issue_number,
+        fr_number=fr_number,
+        pr_number=pr_number,
+        branch_name=branch_name or (git_branch(target_root) if issue_number is None and fr_number is None and pr_number is None else None),
+        intent=intent,
+        target_owner=detected_owner,
+        target_repo=detected_repo,
+    )
+    issue_number = subject_readback.get("issue_number") if isinstance(subject_readback.get("issue_number"), int) else None
+    if subject_readback.get("result") != "pass" or issue_number is None:
+        return {
+            "schema_version": "loom-host-lifecycle-admission/v1",
+            "result": "block",
+            "lifecycle_state": "missing_subject",
+            "subject": None,
+            "subject_readback": subject_readback,
+            "admission_state": "host_subject_required",
+            "authority_verdict": authority_verdict(),
+            "primary_remediation": "provide --issue <work-item-or-fr> or bind the branch to one PR with exactly one native closing Work Item",
+            "carrier_mutations": False,
+            "missing_inputs": list(subject_readback.get("errors") or ["host lifecycle subject"]),
         }
     admission = github_fr_wi_admission_payload(
         target_root=target_root,
-        owner=owner,
-        repo_name=repo_name,
+        owner=effective_owner,
+        repo_name=effective_repo,
         issue_number=issue_number,
         intent=intent,
         task=None,
@@ -23177,7 +23212,7 @@ def lifecycle_admission_payload(
     verdict = admission.get("lifecycle_verdict")
     if not isinstance(verdict, dict):
         verdict = lifecycle_admission_verdict(admission)
-    return {**verdict, "admission": admission}
+    return {**verdict, "subject_readback": subject_readback, "admission": admission}
 
 
 def lifecycle_intent_for_operation(operation: str) -> str | None:
@@ -25649,7 +25684,10 @@ def handle_closeout(args: argparse.Namespace) -> int:
         target_root=target_root,
         owner=args.owner,
         repo_name=args.repo_name,
-        issue_number=args.fr,
+        issue_number=args.issue,
+        fr_number=args.fr,
+        pr_number=args.pr,
+        branch_name=args.branch,
         intent="closeout",
     )
     if lifecycle_admission["result"] != "pass":
@@ -25659,7 +25697,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
                 "operation": args.operation,
                 "result": "block",
                 "summary": "closeout stopped before repository carriers because the host-native lifecycle admission is blocked.",
-                "missing_inputs": lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                "missing_inputs": lifecycle_admission.get("missing_inputs") or lifecycle_admission.get("admission", {}).get("missing_inputs", []),
                 "fallback_to": lifecycle_admission.get("primary_remediation"),
                 "lifecycle_admission": lifecycle_admission,
             }
@@ -27441,7 +27479,10 @@ def handle_flow(args: argparse.Namespace) -> int:
             target_root=target_root,
             owner=args.owner,
             repo_name=args.repo_name,
-            issue_number=args.fr,
+            issue_number=args.issue,
+            fr_number=args.fr,
+            pr_number=args.pr,
+            branch_name=args.branch,
             intent=lifecycle_intent,
         )
         if lifecycle_intent is not None
@@ -27456,7 +27497,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                     "operation": args.operation,
                     "result": "block",
                     "summary": "flow stopped before repository carriers because the host-native lifecycle admission is blocked.",
-                    "missing_inputs": lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                    "missing_inputs": lifecycle_admission.get("missing_inputs") or lifecycle_admission.get("admission", {}).get("missing_inputs", []),
                     "fallback_to": lifecycle_admission.get("primary_remediation"),
                     "steps": steps,
                     "lifecycle_admission": lifecycle_admission,

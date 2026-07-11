@@ -200,7 +200,7 @@ def _result(
     failed_layer: str | None = None,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    locator = typed_locator(owner, repo, object_type, issue) if object_type in {"fr", "work_item"} else None
+    locator = typed_locator(owner, repo, object_type, issue) if object_type in {"phase", "fr", "work_item"} else None
     payload = {
         "command": "github-intake",
         "operation": "admission",
@@ -273,11 +273,83 @@ def github_fr_wi_admission_payload(
     surface = host.build_governance_surface(target_root)
     repo_interface = surface.get("repo_interface") if isinstance(surface.get("repo_interface"), dict) else None
     object_type, inference = host.github_intake_object_type(fr, repo_interface=repo_interface)
+    exception = _exception(host, fr)
     if object_type == "work_item":
+        if intent != "closeout" and fr.get("state") != "OPEN":
+            return respond(
+                "block",
+                "host_state_invalid",
+                "Execution requires an open Work Item.",
+                missing_inputs=[f"open Work Item; issue is {fr.get('state') or 'UNKNOWN'}"],
+                failed_layer="host-readback",
+                evidence={"type_inference": inference, "issue_state": fr.get("state")},
+            )
         return respond("pass", "admitted", "The requested GitHub issue is already a Work Item and may enter execution.", evidence={"type_inference": inference})
+    if object_type == "phase":
+        if intent == "closeout":
+            if exception:
+                return respond(
+                    "pass",
+                    "closure_evaluation_required",
+                    "A non-completion Phase closeout may proceed only to the native closure evaluator.",
+                    next_action="run the FR/Phase closure guard before completing closeout",
+                    evidence={"exception": exception, "type_inference": inference, "issue_state": fr.get("state")},
+                )
+            tree, tree_errors = host.issue_tree_payload(target_root, owner, repo, issue_number)
+            if tree_errors or tree is None:
+                return respond(
+                    "block",
+                    "host_unreadable",
+                    "Phase closeout could not read the native breakdown tree.",
+                    missing_inputs=[f"native tree: {message}" for message in tree_errors],
+                    failed_layer="host-readback",
+                )
+            children, children_errors = _subissues(tree)
+            if children_errors:
+                return respond(
+                    "block",
+                    "host_unreadable",
+                    "Phase closeout cannot treat an incomplete native breakdown tree as empty.",
+                    missing_inputs=children_errors,
+                    failed_layer="host-readback",
+                )
+            if not children:
+                return respond(
+                    "block",
+                    "needs_breakdown",
+                    "This Phase cannot enter completed closeout until it has a native child breakdown.",
+                    missing_inputs=["native Phase breakdown"],
+                    next_action=f"loom route --target . --issue {issue_number} --intent planning --json",
+                    failed_layer="phase-fr-wi-admission",
+                    evidence={"type_inference": inference, "native_subissue_count": 0},
+                )
+            return respond(
+                "pass",
+                "closure_evaluation_required",
+                "A broken-down Phase closeout may proceed only to the native closure evaluator.",
+                next_action="run the FR/Phase closure guard before completing closeout",
+                evidence={"type_inference": inference, "issue_state": fr.get("state"), "native_subissue_count": len(children)},
+            )
+        return respond(
+            "block",
+            "needs_breakdown",
+            "A Phase cannot enter implementation directly; select or admit a Work Item under an FR.",
+            missing_inputs=["FR and native Work Item breakdown"],
+            next_action=f"loom route --target . --issue {issue_number} --intent planning --json",
+            failed_layer="phase-fr-wi-admission",
+            evidence={"type_inference": inference},
+        )
     if object_type != "fr":
         return respond("block", "unsupported_subject", "FR-to-WI admission only accepts an explicitly typed FR or Work Item.", missing_inputs=["typed FR or Work Item"], failed_layer="host-planning-taxonomy", evidence={"type_inference": inference})
-    if exception := _exception(host, fr):
+    if intent == "closeout" and exception:
+        return respond(
+            "pass",
+            "closure_evaluation_required",
+            "A non-completion FR closeout may proceed only to the native closure evaluator.",
+            next_action="run the FR/Phase closure guard before completing closeout",
+            evidence={"exception": exception, "type_inference": inference, "issue_state": fr.get("state")},
+        )
+    if exception:
         return respond("pass", "not_planned", "The FR has an explicit non-completion exception and is not treated as product completion.", evidence={"exception": exception, "type_inference": inference})
 
     task: str | None = None
@@ -310,11 +382,31 @@ def github_fr_wi_admission_payload(
             for child in children
             if host.github_intake_object_type(child, repo_interface=repo_interface)[0] == "work_item"
         ]
-        if work_items:
+        if intent == "closeout" and work_items:
             return respond(
                 "pass",
-                "admitted",
-                "The FR has a native Work Item breakdown that may enter the requested lifecycle intent.",
+                "closure_evaluation_required",
+                "A broken-down FR closeout may proceed only to the native closure evaluator.",
+                next_action="run the FR/Phase closure guard before completing closeout",
+                evidence={
+                    "type_inference": inference,
+                    "issue_state": fr.get("state"),
+                    "native_subissue_count": len(children),
+                    "native_work_item_locators": [
+                        typed_locator(owner, repo, "work_item", number)
+                        for child in work_items
+                        if isinstance((number := child.get("number")), int) and number > 0
+                    ],
+                },
+            )
+        if work_items:
+            return respond(
+                "block",
+                "work_item_required",
+                "The FR has a native Work Item breakdown; execution must bind one of those Work Items directly.",
+                missing_inputs=["primary Work Item subject"],
+                next_action="rerun the same execution command with --issue <native-work-item-number>",
+                failed_layer="fr-wi-admission",
                 evidence={
                     "type_inference": inference,
                     "native_subissue_count": len(children),
