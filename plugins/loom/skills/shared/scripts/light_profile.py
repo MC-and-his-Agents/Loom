@@ -608,14 +608,40 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         text = content.decode("utf-8")
     except UnicodeDecodeError as exc:
         return [f"delivery workflow is not UTF-8: {exc}"]
-    required_tokens = ("loom-delivery-gate", "pull_request", "merge_group")
-    missing = [token for token in required_tokens if token not in text]
-    pinned_reusable = re.search(r"uses:\s*\S*/\.github/workflows/loom-delivery-gate\.yml@[0-9a-fA-F]{40}\b", text)
-    canonical_evaluator = "delivery_gate.py" in text and "enforce" in text
+    stack: list[tuple[int, str]] = []
+    triggers: set[str] = set()
+    pinned_reusable = False
+    for raw_line in text.splitlines():
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        line = re.sub(r"\s+#.*$", "", raw_line).rstrip()
+        indent = len(line) - len(line.lstrip())
+        match = re.match(r"^\s*([\w.'\"-]+)\s*:\s*(.*)$", line)
+        if not match:
+            continue
+        key = match.group(1).strip("'\"")
+        value = match.group(2).strip()
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        path = [item[1] for item in stack]
+        if key == "on" and not path and value.startswith("[") and value.endswith("]"):
+            triggers.update(item.strip().strip("'\"") for item in value[1:-1].split(","))
+        elif path == ["on"] and key in {"pull_request", "merge_group"}:
+            triggers.add(key)
+        if key == "uses" and len(path) == 2 and path[0] == "jobs":
+            pinned_reusable = pinned_reusable or bool(
+                re.fullmatch(
+                    r"\S*/\.github/workflows/loom-delivery-gate\.yml@[0-9a-fA-F]{40}",
+                    value,
+                )
+            )
+        stack.append((indent, key))
+
+    missing = sorted({"pull_request", "merge_group"} - triggers)
     if missing:
-        return ["delivery workflow is missing contract tokens: " + ", ".join(missing)]
-    if not pinned_reusable and not canonical_evaluator:
-        return ["delivery workflow neither pins the reusable gate to a commit SHA nor runs the enforcing evaluator"]
+        return ["delivery workflow is missing active triggers: " + ", ".join(missing)]
+    if not pinned_reusable:
+        return ["delivery workflow does not use the SHA-pinned reusable gate at job level"]
     return []
 
 

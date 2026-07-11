@@ -86,6 +86,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
             readback_error=False,
             invalid_companion=False,
             noop_workflow=False,
+            comment_spoof_workflow=False,
             workflow_sha="workflow-blob",
         )
 
@@ -119,7 +120,21 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
             value: object = {} if state["invalid_companion"] else companion
             return {"content": base64.b64encode(json.dumps(value).encode()).decode()}, []
         if "/contents/.github/workflows/loom-delivery-gate.yml" in path:
-            value = "name: no-op\n" if state["noop_workflow"] else workflow
+            if state["noop_workflow"]:
+                value = "name: no-op\n"
+            elif state["comment_spoof_workflow"]:
+                value = (
+                    "name: no-op\n"
+                    "# on: [pull_request, merge_group]\n"
+                    "jobs:\n"
+                    "  no-op:\n"
+                    "    runs-on: ubuntu-latest\n"
+                    "    # uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@"
+                    + "a" * 40
+                    + "\n"
+                )
+            else:
+                value = workflow
             return {"content": base64.b64encode(value.encode()).decode()}, []
         return None, [f"unexpected fake JSON endpoint: {path}"]
 
@@ -219,6 +234,12 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
         noop_workflow = evaluator.reconcile_payload(target, apply=True, **args)
         if noop_workflow.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "workflow" not in " ".join(noop_workflow.get("missing_inputs", [])):
             raise AssertionError(f"no-op workflow must block main-tree reconciliation: {noop_workflow}")
+
+        reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+        state["comment_spoof_workflow"] = True
+        comment_spoof = evaluator.reconcile_payload(target, apply=True, **args)
+        if comment_spoof.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "workflow" not in " ".join(comment_spoof.get("missing_inputs", [])):
+            raise AssertionError(f"comment-spoof workflow must block main-tree reconciliation: {comment_spoof}")
 
         reset([{"context": "loom-delivery-gate", "app_id": 15368}])
         state["workflow_sha"] = "drifted-workflow-blob"
