@@ -235,31 +235,13 @@ jobs:
         env:
           VALIDATION_TARGETS_JSON: ${{ needs.plan.outputs.validation_targets }}
           CANDIDATE_PATH: candidate
-          TRUSTED_MAKEFILE: ${{ github.workspace }}/loom/Makefile
+          TRUSTED_ROOT: ${{ github.workspace }}/loom
         run: |
           set -u
-          (
-            cd "$CANDIDATE_PATH"
-            python3 - "$VALIDATION_TARGETS_JSON" "$TRUSTED_MAKEFILE" <<'PY'
-          import json
-          import re
-          import subprocess
-          import sys
-
-          try:
-              targets = json.loads(sys.argv[1])
-          except (json.JSONDecodeError, TypeError):
-              targets = []
-          valid = isinstance(targets, list) and bool(targets) and all(
-              isinstance(target, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]*", target)
-              for target in targets
-          )
-          if not valid:
-              raise SystemExit(2)
-          completed = subprocess.run(["make", "-f", sys.argv[2], "--", *targets], check=False)
-          raise SystemExit(completed.returncode)
-          PY
-          )
+          python3 "$TRUSTED_ROOT/tools/run_trusted_candidate_validation.py" \
+            --trusted-root "$TRUSTED_ROOT" \
+            --candidate-root "$CANDIDATE_PATH" \
+            --targets-json "$VALIDATION_TARGETS_JSON"
 
   loom-delivery-gate:
     name: loom-delivery-gate

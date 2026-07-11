@@ -25,6 +25,7 @@ ALLOWED_MAKE_TARGETS = (
     "release-surface-check",
     "npm-package-check",
     "delivery-gate-check",
+    "composite-action-contract-check",
     "workflow-contract-check",
     "check",
     "test",

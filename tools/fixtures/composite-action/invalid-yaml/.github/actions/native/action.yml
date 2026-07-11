@@ -1,0 +1,4 @@
+name: Invalid YAML
+runs:
+  using: composite
+  steps: [

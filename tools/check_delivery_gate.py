@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,8 @@ WORKFLOW_MATRIX = FIXTURES / "workflow-event-matrix.json"
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_gate.py"
 SOURCE_DIR = SOURCE.parent
 IDENTITY_READER = ROOT / "tools" / "read_delivery_gate_required_identity.py"
+COMPOSITE_CHECKER = ROOT / "tools" / "check_composite_actions.py"
+TRUSTED_RUNNER = ROOT / "tools" / "run_trusted_candidate_validation.py"
 GENERATED_COPIES = (
     ROOT / "skills" / "shared" / "scripts" / "delivery_gate.py",
     ROOT / "plugins" / "loom" / "skills" / "shared" / "scripts" / "delivery_gate.py",
@@ -244,6 +247,7 @@ def check_native_surface_inventory() -> None:
         "npm-package-check",
         "release-surface-check",
         "workflow-contract-check",
+        "composite-action-contract-check",
     }
     available = set(evaluator.ALLOWED_MAKE_TARGETS)
     if not required_surfaces <= available:
@@ -256,7 +260,7 @@ def check_native_surface_inventory() -> None:
             raise AssertionError(f"{path} lacks semantic native validation: {selected} expected {expected}")
     fail_safe = {
         ".github/workflows/future-control.yml": "workflow-contract-check",
-        ".github/actions/native/action.yml": "workflow-contract-check",
+        ".github/actions/native/action.yml": "composite-action-contract-check",
         "tools/check_future_control.py": "cli-contract-check",
         "src/skills/shared/scripts/future_control.py": "cli-contract-check",
         "test/product_acceptance_test.py": "check",
@@ -624,7 +628,7 @@ def check_workflow() -> None:
         "LOOM_SOURCE_PATH",
         "CANDIDATE_PATH",
         "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py",
-        'subprocess.run(["make", "-f", sys.argv[2], "--", *targets], check=False)',
+        'python3 "$TRUSTED_ROOT/tools/run_trusted_candidate_validation.py"',
         '["native_validation"]["targets"]',
         "host_facts_base64",
         "needs: plan",
@@ -690,8 +694,8 @@ def check_workflow() -> None:
             raise AssertionError(f"{name} must use the trusted base SHA for direct evaluation")
         if "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in block or "path: candidate" not in block:
             raise AssertionError(f"{name} must isolate the candidate tree")
-    if "needs: plan" not in native_job or "TRUSTED_MAKEFILE: ${{ github.workspace }}/loom/Makefile" not in native_job:
-        raise AssertionError("candidate validation must run in a dependent job through the trusted Makefile")
+    if "needs: plan" not in native_job or "TRUSTED_ROOT: ${{ github.workspace }}/loom" not in native_job:
+        raise AssertionError("candidate validation must run in a dependent job through the trusted harness")
     if "needs: [plan, native-validation]" not in final_job or "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}" not in final_job:
         raise AssertionError("trusted finalizer must consume the isolated native job result")
     exposed = [name for name in ("HOST_FACTS_PATH", "LOOM_SOURCE_PATH", "DELIVERY_GATE_PLAN_PATH") if name in native_job]
@@ -712,6 +716,70 @@ def check_workflow() -> None:
     if missing or present:
         details = [*(f"missing `{item}`" for item in missing), *(f"forbidden `{item}`" for item in present)]
         raise AssertionError("delivery gate workflow contract failed: " + "; ".join(details))
+
+
+def check_composite_action_contract() -> None:
+    valid = subprocess.run(
+        [sys.executable, str(COMPOSITE_CHECKER)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if valid.returncode != 0:
+        raise AssertionError(f"repository composite action contract failed: {valid.stderr}")
+    for name in ("invalid-yaml", "invalid-schema"):
+        fixture = FIXTURES.parent / "composite-action" / name
+        completed = subprocess.run(
+            [sys.executable, str(COMPOSITE_CHECKER), "--root", str(fixture)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode == 0:
+            raise AssertionError(f"invalid composite action fixture passed: {name}")
+
+
+def check_trusted_candidate_harness() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-trusted-harness-") as temporary:
+        root = Path(temporary)
+        trusted = root / "trusted"
+        candidate = root / "candidate"
+        for tree in (trusted, candidate):
+            (tree / "tools" / "fixtures").mkdir(parents=True)
+            (tree / "src" / "skills" / "shared" / "scripts").mkdir(parents=True)
+        shutil.copy2(
+            ROOT / "src" / "skills" / "shared" / "scripts" / "native_validation.py",
+            trusted / "src" / "skills" / "shared" / "scripts" / "native_validation.py",
+        )
+        (trusted / "Makefile").write_text(
+            "delivery-gate-check:\n\tpython3 tools/check_probe.py\n",
+            encoding="utf-8",
+        )
+        (candidate / "Makefile").write_text("delivery-gate-check:\n\t@true\n", encoding="utf-8")
+        (trusted / "tools" / "check_probe.py").write_text("raise SystemExit(7)\n", encoding="utf-8")
+        (candidate / "tools" / "check_probe.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(TRUSTED_RUNNER),
+                "--trusted-root",
+                str(trusted),
+                "--candidate-root",
+                str(candidate),
+                "--targets-json",
+                '["delivery-gate-check"]',
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode == 0 or "Error 7" not in completed.stderr:
+            raise AssertionError(
+                "candidate-owned Makefile/checker replaced the trusted harness: "
+                f"returncode={completed.returncode} stdout={completed.stdout} stderr={completed.stderr}"
+            )
 
 
 def check_workflow_event_matrix() -> None:
@@ -774,6 +842,8 @@ def main() -> int:
     check_required_check_identity()
     check_identity_reader_boundary()
     check_workflow()
+    check_composite_action_contract()
+    check_trusted_candidate_harness()
     check_workflow_event_matrix()
     print("delivery gate contract: OK")
     return 0

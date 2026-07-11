@@ -38,6 +38,7 @@ EXACT_NATIVE_SURFACES = {
     ".github/workflows/pr-merge-gate.yml": ("pr-binding-workflow-check", "workflow-contract-check"),
     "tools/check_authority_contract.py": ("authority-contract-check", "fr-wi-admission-check"),
     "tools/check_cli_contract.py": ("cli-contract-check",),
+    "tools/check_composite_actions.py": ("composite-action-contract-check",),
     "tools/check_delivery_gate.py": ("delivery-gate-check",),
     "tools/check_demo_bootstrap_fixture.py": ("loom-demo-new-project-check",),
     "tools/check_fr_phase_close_guard.py": ("fr-phase-close-guard-check",),
@@ -51,6 +52,7 @@ EXACT_NATIVE_SURFACES = {
     "tools/check_release_surface.py": ("release-surface-check",),
     "tools/host_adapter_check.py": ("host-adapter-check",),
     "tools/read_delivery_gate_required_identity.py": ("delivery-gate-check",),
+    "tools/run_trusted_candidate_validation.py": ("delivery-gate-check",),
     "tools/skills_surface.py": ("skills-check",),
     "tools/stamp_plugin_payload_metadata.py": ("npm-package-check",),
     "tools/version_surface_check.py": ("release-surface-check",),
@@ -368,7 +370,7 @@ def _automatic_validation_targets(paths: list[str], profile: str) -> list[str]:
             targets.add("check")
             matched = True
         if path.startswith(".github/actions/"):
-            targets.add("workflow-contract-check")
+            targets.add("composite-action-contract-check")
             matched = True
         if path in {"VERSION", "package.json", "package-lock.json"} or path.startswith("bin/"):
             targets.update(("release-surface-check", "npm-package-check"))
