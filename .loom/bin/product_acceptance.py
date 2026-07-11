@@ -132,7 +132,7 @@ def evidence_errors(
             errors.append("operation_boundary actions must be string lists")
         else:
             required_actions = CLASS_REQUIRED_ACTIONS.get(str(evidence_class), frozenset())
-            required_prohibited = frozenset({"captcha_or_risk_bypass"}) if minimum_class == "external_visible_write" else PROHIBITED_ACTIONS
+            required_prohibited = frozenset({"captcha_or_risk_bypass"}) if evidence_class == "external_visible_write" else PROHIBITED_ACTIONS
             if not set(allowed).issubset(SAFE_ACTIONS) or not required_prohibited.issubset(set(prohibited)) or not set(observed).issubset(set(allowed)) or set(observed) & set(prohibited) or not required_actions.issubset(set(observed)):
                 errors.append("operation_boundary permits unsafe actions or does not prove the declared evidence class")
     return errors
@@ -249,10 +249,10 @@ def evaluate_acceptance(record: object, *, now: datetime | None = None) -> dict[
 def _artifact_record(archive: bytes) -> tuple[dict[str, Any] | None, list[str]]:
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
-            files = [entry for entry in bundle.infolist() if not entry.is_dir()]
-            if len(files) != 1 or files[0].filename != ARTIFACT_RECORD:
+            entries = bundle.infolist()
+            if len(entries) != 1 or entries[0].is_dir() or entries[0].filename != ARTIFACT_RECORD:
                 return None, [f"GitHub Actions artifact must contain only `{ARTIFACT_RECORD}`"]
-            entry = files[0]
+            entry = entries[0]
             if entry.file_size > MAX_RECORD_BYTES or entry.flag_bits & 0x1:
                 return None, ["acceptance record is oversized or encrypted"]
             raw = bundle.read(entry)
@@ -303,11 +303,11 @@ def resolve_acceptance(
     run_id = run_info.get("id")
     size = artifact.get("size_in_bytes")
     artifact_created_at = parse_time(artifact.get("created_at"))
-    if artifact.get("id") != artifact_id or artifact.get("name") != ARTIFACT_NAME or artifact.get("expired") is True:
+    if artifact.get("id") != artifact_id or artifact.get("name") != ARTIFACT_NAME or artifact.get("expired") is not False:
         errors.append(f"GitHub Actions artifact must be active and named `{ARTIFACT_NAME}`")
     if not isinstance(digest, str) or SHA256_DIGEST_RE.fullmatch(digest) is None or not isinstance(run_id, int) or run_id <= 0:
         errors.append("GitHub Actions artifact lacks a host digest or workflow run")
-    if not isinstance(size, int) or size <= 0 or size > MAX_ARTIFACT_BYTES or artifact_created_at is None:
+    if not isinstance(size, int) or isinstance(size, bool) or size <= 0 or size > MAX_ARTIFACT_BYTES or artifact_created_at is None:
         errors.append("GitHub Actions artifact size is missing or exceeds the resolver limit")
     run, run_errors = read_json(root, f"repos/{owner}/{repo}/actions/runs/{run_id}") if isinstance(run_id, int) else (None, [])
     if run_errors or not isinstance(run, dict):

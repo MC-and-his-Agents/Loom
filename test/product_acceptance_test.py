@@ -36,7 +36,7 @@ def live_record() -> dict:
             "artifact_refs": ["MC-and-his-Agents/Loom/artifact/7"],
             "provider_profile": {"provider": "provider-x", "profile": "redacted-profile", "redacted": True},
             "component_versions": {"MC-and-his-Agents/Loom": "a" * 40},
-            "operation_boundary": {"allowed_actions": ["launch", "read", "capture"], "prohibited_actions": PROHIBITED, "observed_actions": ["launch", "read", "capture"]},
+            "operation_boundary": {"allowed_actions": ["launch", "read", "capture"], "prohibited_actions": list(PROHIBITED), "observed_actions": ["launch", "read", "capture"]},
         }],
         "verifier": {"login": "maintainer", "id": 42},
     }
@@ -58,13 +58,15 @@ def host_reader(
     workflow_path: str = product_acceptance.TRUSTED_WORKFLOW_PATH,
     event: str = "workflow_dispatch",
     head_branch: str = "main",
+    artifact_expired: object = False,
+    artifact_size: object = "default",
 ):
     payload = archive(record)
     mapping = {
         "repos/MC-and-his-Agents/Loom": {"default_branch": "main"},
         "repos/MC-and-his-Agents/Loom/issues/225": {"number": 225},
         "repos/MC-and-his-Agents/Loom/actions/artifacts/7": {
-            "id": 7, "name": artifact_name, "expired": False, "size_in_bytes": len(payload),
+            "id": 7, "name": artifact_name, "expired": artifact_expired, "size_in_bytes": len(payload) if artifact_size == "default" else artifact_size,
             "digest": "sha256:" + __import__("hashlib").sha256(payload).hexdigest(), "workflow_run": {"id": 9},
             "created_at": "2026-07-11T00:01:00Z",
         },
@@ -118,6 +120,21 @@ class ProductAcceptanceTest(unittest.TestCase):
             ROOT, "MC-and-his-Agents/Loom/issue/225", 7, now=NOW, read_json=read_json, read_bytes=read_bytes,
         )
         self.assertEqual(result["result"], "pass")
+
+    def test_external_visible_write_satisfies_lower_minimum_when_its_actual_boundary_is_safe(self) -> None:
+        for minimum in ("live_readonly", "process_runtime"):
+            record = live_record()
+            record["minimum_evidence_class"] = minimum
+            evidence = record["evidence"][0]
+            evidence["evidence_class"] = "external_visible_write"
+            boundary = evidence["operation_boundary"]
+            boundary["allowed_actions"].append("external_visible_write")
+            boundary["prohibited_actions"].remove("external_visible_write")
+            boundary["observed_actions"].append("external_visible_write")
+            read_json, read_bytes = host_reader(record)
+            self.assertEqual(product_acceptance.resolve_acceptance(
+                ROOT, "MC-and-his-Agents/Loom/issue/225", 7, now=NOW, read_json=read_json, read_bytes=read_bytes,
+            )["result"], "pass")
 
     def test_auxiliary_weaker_evidence_does_not_block_a_qualifying_row(self) -> None:
         record = live_record()
@@ -209,6 +226,23 @@ class ProductAcceptanceTest(unittest.TestCase):
             self.assertEqual(product_acceptance.resolve_acceptance(
                 ROOT, "MC-and-his-Agents/Loom/issue/225", 7, now=NOW, read_json=read_json, read_bytes=read_bytes,
             )["result"], "block")
+
+    def test_artifact_metadata_and_zip_shape_fail_closed(self) -> None:
+        for kwargs in (
+            {"artifact_expired": True},
+            {"artifact_expired": None},
+            {"artifact_expired": "false"},
+            {"artifact_size": True},
+        ):
+            read_json, read_bytes = host_reader(live_record(), **kwargs)
+            self.assertEqual(product_acceptance.resolve_acceptance(
+                ROOT, "MC-and-his-Agents/Loom/issue/225", 7, now=NOW, read_json=read_json, read_bytes=read_bytes,
+            )["result"], "block")
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as bundle:
+            bundle.writestr("extra/", "")
+            bundle.writestr("acceptance.json", json.dumps(live_record()))
+        self.assertIsNone(product_acceptance._artifact_record(output.getvalue())[0])
 
     def test_invalid_cli_clock_fails_closed(self) -> None:
         with self.assertRaises(SystemExit) as raised:

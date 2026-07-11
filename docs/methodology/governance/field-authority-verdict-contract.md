@@ -88,7 +88,10 @@ process_runtime < live_readonly < live_write_precheck <
 external_visible_write`. A stronger class satisfies a lower minimum; a
 `fixture` or `contract_test` never satisfies `live_readonly`. The resolver
 requires class-specific observed actions (`launch`, `read`, provider precheck,
-or external-visible write as applicable). Auxiliary weaker evidence remains
+or external-visible write as applicable). The actual evidence class, not the
+declared minimum, owns this action boundary: actual external-visible evidence
+must observe and allow that write, while every non-external class must prohibit
+it. Auxiliary weaker evidence remains
 valid when at least one row satisfies the declared minimum; every row must
 still pass host binding, freshness, component, and operation-boundary checks.
 The resolver

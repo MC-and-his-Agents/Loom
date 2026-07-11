@@ -468,7 +468,7 @@
       "path": ".loom/bin/product_acceptance.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/product_acceptance.py",
-      "sha256": "08af381c8871e2c08e7ab8528346e0a01d404f3a0a4b1dca55b25767c593b475"
+      "sha256": "8b5b79171182db84d175b2a9b6ea549d41fea26e3ccf60266d76c6f93a0c1ccb"
     },
     {
       "path": ".loom/bin/host_attestation.py",
