@@ -901,6 +901,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     pr_gate.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     pr_gate.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_gate.add_argument("--issue", type=int, help="Explicit GitHub Work Item issue authority")
     pr_gate.add_argument("--pr", type=int, help="GitHub implementation PR number")
     pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
@@ -16194,27 +16195,23 @@ def authoritative_work_item_locator_for_metadata(
     issue_number: int | None,
     owner: str | None,
     repo: str | None,
-) -> str | None:
+) -> tuple[str | None, list[str]]:
     """Resolve metadata binding from explicit host authority or the Work Item carrier."""
 
-    explicit_issue = work_item_locator_for_metadata(None, issue_number, owner, repo)
-    if explicit_issue is not None:
-        return explicit_issue
-    explicit = work_item_locator_for_metadata(item_id, None, owner, repo)
-    if explicit is not None:
-        return explicit
-    if not item_id or not owner or not repo:
-        return None
-    match = re.fullmatch(r"WI-([1-9]\d*)", item_id)
-    if match is None:
-        return None
-    carrier_path = target_root / ".loom" / "work-items" / f"{item_id}.md"
-    if not carrier_path.is_file():
-        return None
-    carrier, errors = parse_work_item(carrier_path, target_root)
-    if errors or carrier.get("item_id") != item_id:
-        return None
-    return typed_locator(owner, repo, "work_item", int(match.group(1)))
+    issue_locator = work_item_locator_for_metadata(None, issue_number, owner, repo)
+    item_locator = work_item_locator_for_metadata(item_id, None, owner, repo)
+    if item_locator is None and item_id and owner and repo:
+        match = re.fullmatch(r"WI-([1-9]\d*)", item_id)
+        carrier_path = target_root / ".loom" / "work-items" / f"{item_id}.md"
+        if match is not None and carrier_path.is_file():
+            carrier, carrier_errors = parse_work_item(carrier_path, target_root)
+            if not carrier_errors and carrier.get("item_id") == item_id:
+                item_locator = typed_locator(owner, repo, "work_item", int(match.group(1)))
+    if issue_locator and item_locator and issue_locator != item_locator:
+        return None, [
+            f"explicit GitHub issue authority `{issue_locator}` conflicts with Work Item authority `{item_locator}`"
+        ]
+    return issue_locator or item_locator, []
 
 
 def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> list[str]:
@@ -16717,14 +16714,15 @@ def pr_metadata_preflight_payload(
     )
     if isinstance(body_artifact_result, dict):
         missing_inputs.extend(str(message) for message in body_artifact_result.get("missing_inputs", []))
-    authoritative_item = authoritative_work_item_locator_for_metadata(
+    authoritative_item, authority_errors = authoritative_work_item_locator_for_metadata(
         target_root,
         expected_item,
         issue_number,
         locator_owner,
         locator_repo,
     )
-    if expected_item and authoritative_item is None:
+    missing_inputs.extend(authority_errors)
+    if expected_item and authoritative_item is None and not authority_errors:
         missing_inputs.append(
             "authoritative Work Item locator is unavailable from explicit issue authority or the Work Item carrier"
         )
@@ -20107,6 +20105,7 @@ def pr_gate_payload(
     compare_body_file: str | None = None,
     gate_freeze_snapshot_file: str | None = None,
     surface: str | None = None,
+    issue_number: int | None = None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
@@ -20175,6 +20174,7 @@ def pr_gate_payload(
         effective_pr=effective_pr,
         governance_surface=governance_surface,
         expected_item=effective_item,
+        issue_number=issue_number,
         expected_head_sha=pr_head,
         expected_branch=effective_branch_name,
     )
@@ -20741,6 +20741,7 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
             expected_item=args.item,
             owner=args.owner,
             repo_name=args.repo_name,
+            issue_number=args.issue,
             pr_number=args.pr,
             head_sha=args.head_sha,
             branch_name=args.branch,

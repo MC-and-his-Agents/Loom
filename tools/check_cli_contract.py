@@ -6612,6 +6612,7 @@ def semantic_pr_gate_fixture_payload(
     body_file: str | None = None,
     compare_body_file: str | None = None,
     gate_freeze_snapshot_file: str | None = None,
+    issue_number: int | None = None,
 ) -> dict[str, Any]:
     command = [
         "pr-gate",
@@ -6631,6 +6632,8 @@ def semantic_pr_gate_fixture_payload(
         command.extend(["--compare-body-file", compare_body_file])
     if gate_freeze_snapshot_file:
         command.extend(["--gate-freeze-snapshot-file", gate_freeze_snapshot_file])
+    if issue_number is not None:
+        command.extend(["--issue", str(issue_number)])
     _, payload = run_flow_json(command)
     return payload
 
@@ -10508,6 +10511,22 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     target.mkdir()
     fixture = write_semantic_review_pr_gate_fixture(target)
     loom_flow = load_loom_flow_module()
+    canonical_locator = fixture["work_item_locator"]
+    conflict_locator, conflict_errors = loom_flow.authoritative_work_item_locator_for_metadata(
+        target, "owner/repo/work_item/9999", 1287, "owner", "repo"
+    )
+    if conflict_locator is not None or not conflict_errors:
+        raise AssertionError("canonical Work Item and explicit issue authority conflict must fail closed")
+    matching_locator, matching_errors = loom_flow.authoritative_work_item_locator_for_metadata(
+        target, fixture["item"], 1287, "owner", "repo"
+    )
+    if matching_locator != canonical_locator or matching_errors:
+        raise AssertionError("matching Work Item carrier and explicit issue authority must pass")
+    issue_only_locator, issue_only_errors = loom_flow.authoritative_work_item_locator_for_metadata(
+        target, None, 1287, "owner", "repo"
+    )
+    if issue_only_locator != canonical_locator or issue_only_errors:
+        raise AssertionError("explicit issue-only authority must produce the canonical Work Item locator")
     parser_cases = {
         "Loom Work Item: WI-1287\n": "WI-1287",
         "Loom Work Item: WI-1240-1242\n": "WI-1240-1242",
@@ -10546,6 +10565,12 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("PR body and machine carrier must not override the Work Item carrier authority")
     pr_payload["body"] = original_body
     pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
+    issue_conflict_payload = semantic_pr_gate_fixture_payload(target, fixture, issue_number=9999)
+    if (
+        issue_conflict_payload.get("result") != "block"
+        or not any("conflicts with Work Item authority" in message for message in issue_conflict_payload.get("missing_inputs", []))
+    ):
+        raise AssertionError("pr-gate must reject explicit issue authority that conflicts with its Work Item carrier")
     with isolated_loom_workstation(tmp / "workstation"):
         assert_gate_freeze_review_binding_fixture(tmp)
         assert_hosted_freeze_admission_pr_gate_fixture(tmp)
