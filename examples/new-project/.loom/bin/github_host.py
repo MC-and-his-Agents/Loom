@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -28,6 +30,7 @@ HOST_API_NEXT_ACTIONS = {
         "so the wrapper can bridge the local gh keyring token into GH_TOKEN for this process only."
     ),
 }
+SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def run_process(
@@ -156,6 +159,13 @@ def gh_graphql_json(root: Path, query: str, variables: dict[str, Any]) -> tuple[
     return data, []
 
 
+def gh_graphql_authenticated_json(root: Path, query: str, variables: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+    """Run an authenticated GraphQL query without any public fallback."""
+    if not host_api_env_token_present() and not host_api_gh_logged_in(root):
+        return None, [host_api_diagnostic_message("authenticated GitHub GraphQL read", ["no GitHub CLI login or process-local GH_TOKEN/GITHUB_TOKEN is available"])]
+    return gh_graphql_json(root, query, variables)
+
+
 def gh_rest_write_json(root: Path, *, method: str, path: str, request_payload: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
     return gh_json_input(root, ["api", "--method", method, path, "--input", "-"], request_payload)
 
@@ -207,6 +217,267 @@ def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]
     if fallback_payload:
         return fallback_payload, []
     return [], [host_api_diagnostic_message(f"gh api {path}", [detail]), *[f"public REST fallback: {message}" for message in fallback_errors]]
+
+
+def gh_rest_authenticated_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
+    """Read one GitHub REST object without the anonymous public-API fallback.
+
+    Attestation and closeout facts are security decisions.  A repository that is
+    public today must not silently turn an unavailable authenticated read into a
+    weaker unauthenticated read tomorrow.
+    """
+    if not host_api_env_token_present() and not host_api_gh_logged_in(root):
+        return None, [host_api_diagnostic_message(f"authenticated gh api {path}", ["no GitHub CLI login or process-local GH_TOKEN/GITHUB_TOKEN is available"])]
+    payload, errors = gh_json(root, ["api", path])
+    if payload is not None:
+        return payload, []
+    return None, [host_api_diagnostic_message(f"authenticated gh api {path}", errors)]
+
+
+def gh_rest_authenticated_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """Read every REST list page through authenticated ``gh`` or fail closed."""
+    if not host_api_env_token_present() and not host_api_gh_logged_in(root):
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", ["no GitHub CLI login or process-local GH_TOKEN/GITHUB_TOKEN is available"])]
+    try:
+        result = run_process(["gh", "api", "--paginate", "--slurp", path], root, timeout_seconds=30)
+    except FileNotFoundError:
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", ["gh command is unavailable in PATH"])]
+    except subprocess.TimeoutExpired:
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", ["request timed out after 30s"])]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
+        return [], [host_api_diagnostic_message(f"authenticated gh api {path}", [detail])]
+    try:
+        pages = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return [], [f"invalid JSON from authenticated gh api {path}: {exc.msg}"]
+    if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
+        return [], [f"authenticated gh api {path} did not return a paginated JSON list"]
+    rows: list[dict[str, Any]] = []
+    for page in pages:
+        rows.extend(row for row in page if isinstance(row, dict))
+    return rows, []
+
+
+def github_semantic_tree_digest(tree: list[Any]) -> tuple[str | None, list[str]]:
+    """Return a stable digest of Git blobs; reject an incomplete host tree."""
+    rows: list[tuple[str, str, str]] = []
+    for entry in tree:
+        if not isinstance(entry, dict):
+            return None, ["GitHub tree contains an unreadable entry"]
+        if entry.get("type") != "blob":
+            continue
+        path, blob, mode = entry.get("path"), entry.get("sha"), entry.get("mode")
+        if not all(isinstance(value, str) and value for value in (path, blob, mode)):
+            return None, ["GitHub tree blob lacks path, SHA, or mode"]
+        rows.append((path, blob, mode))
+    if not rows:
+        return None, ["GitHub tree contains no readable blobs"]
+    canonical = "".join(f"{path}\0{blob}\0{mode}\n" for path, blob, mode in sorted(rows))
+    return f"sha256:{sha256(canonical.encode('utf-8')).hexdigest()}", []
+
+
+def _github_commit_tree_readback(
+    root: Path,
+    owner: str,
+    repo_name: str,
+    commit_sha: str,
+    *,
+    read_json: Any = gh_rest_authenticated_json,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    commit, errors = read_json(root, f"repos/{owner}/{repo_name}/git/commits/{commit_sha}")
+    if errors or not isinstance(commit, dict):
+        return None, errors or ["GitHub commit read returned no object"]
+    tree_info = commit.get("tree") if isinstance(commit.get("tree"), dict) else {}
+    tree_sha = tree_info.get("sha")
+    if not isinstance(tree_sha, str) or not tree_sha:
+        return None, ["GitHub commit lacks a tree SHA"]
+    tree_payload, tree_errors = read_json(root, f"repos/{owner}/{repo_name}/git/trees/{tree_sha}?recursive=1")
+    if tree_errors or not isinstance(tree_payload, dict):
+        return None, tree_errors or ["GitHub recursive tree read returned no object"]
+    if tree_payload.get("truncated") is True:
+        return None, ["GitHub recursive tree is truncated; refusing incomplete semantic-tree attestation"]
+    tree_rows = tree_payload.get("tree")
+    if not isinstance(tree_rows, list):
+        return None, ["GitHub recursive tree is missing its entries"]
+    digest, digest_errors = github_semantic_tree_digest(tree_rows)
+    if digest_errors or digest is None:
+        return None, digest_errors
+    return {"commit_sha": commit_sha, "tree_sha": tree_sha, "semantic_digest": digest}, []
+
+
+def _current_approved_review(reviews: list[dict[str, Any]], head_sha: str) -> tuple[dict[str, Any] | None, list[str]]:
+    """Use each reviewer's latest state and bind approval to the current PR head."""
+    latest: dict[str, dict[str, Any]] = {}
+    for row in reviews:
+        reviewer = row.get("user") if isinstance(row.get("user"), dict) else {}
+        key = str(reviewer.get("id") or reviewer.get("login") or row.get("id") or "")
+        if not key:
+            return None, ["GitHub review lacks a stable reviewer identity"]
+        prior = latest.get(key)
+        if prior is None or int(row.get("id") or 0) > int(prior.get("id") or 0):
+            latest[key] = row
+    current = [row for row in latest.values() if row.get("commit_id") == head_sha]
+    if any(str(row.get("state") or "").upper() == "CHANGES_REQUESTED" for row in current):
+        return None, ["a current-head GitHub review requests changes"]
+    approved = [row for row in current if str(row.get("state") or "").upper() == "APPROVED"]
+    if not approved:
+        return None, ["no GitHub APPROVED review is bound to the current head"]
+    approved.sort(key=lambda row: int(row.get("id") or 0), reverse=True)
+    return approved[0], []
+
+
+def github_pr_attestation_readback(
+    root: Path,
+    owner: str,
+    repo_name: str,
+    pr_number: int,
+    artifact_id: int,
+    *,
+    allow_merged: bool = False,
+    read_json: Any = gh_rest_authenticated_json,
+    read_list: Any = gh_rest_authenticated_list,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Read all review-attestation facts from GitHub; no body/comment/carrier input."""
+    pr, errors = read_json(root, f"repos/{owner}/{repo_name}/pulls/{pr_number}")
+    if errors or not isinstance(pr, dict):
+        return None, errors or ["GitHub PR read returned no object"]
+    if (not allow_merged and (str(pr.get("state") or "").lower() != "open" or pr.get("draft") is True or pr.get("merged_at") is not None)):
+        return None, ["GitHub PR must be open, non-draft, and unmerged for review attestation"]
+    head = pr.get("head") if isinstance(pr.get("head"), dict) else {}
+    base = pr.get("base") if isinstance(pr.get("base"), dict) else {}
+    head_sha, base_ref = head.get("sha"), base.get("ref")
+    if not isinstance(head_sha, str) or not head_sha or not isinstance(base_ref, str) or not base_ref:
+        return None, ["GitHub PR lacks its head SHA or base branch"]
+    repository, repository_errors = read_json(root, f"repos/{owner}/{repo_name}")
+    if repository_errors or not isinstance(repository, dict):
+        return None, repository_errors or ["GitHub repository read returned no object"]
+    if repository.get("default_branch") != base_ref:
+        return None, ["GitHub PR base branch is not the repository default branch for trusted workflow attestation"]
+    reviews, review_errors = read_list(root, f"repos/{owner}/{repo_name}/pulls/{pr_number}/reviews")
+    if review_errors:
+        return None, review_errors
+    review, approval_errors = _current_approved_review(reviews, head_sha)
+    if approval_errors or review is None:
+        return None, approval_errors
+    tree, tree_errors = _github_commit_tree_readback(root, owner, repo_name, head_sha, read_json=read_json)
+    if tree_errors or tree is None:
+        return None, tree_errors
+    artifact, artifact_errors = read_json(root, f"repos/{owner}/{repo_name}/actions/artifacts/{artifact_id}")
+    if artifact_errors or not isinstance(artifact, dict):
+        return None, artifact_errors or ["GitHub Actions artifact read returned no object"]
+    digest = artifact.get("digest")
+    run_info = artifact.get("workflow_run") if isinstance(artifact.get("workflow_run"), dict) else {}
+    run_id = run_info.get("id")
+    if artifact.get("expired") is True or not isinstance(digest, str) or SHA256_DIGEST_RE.fullmatch(digest) is None or not isinstance(run_id, int):
+        return None, ["GitHub Actions artifact is expired or lacks a host digest/workflow run"]
+    run, run_errors = read_json(root, f"repos/{owner}/{repo_name}/actions/runs/{run_id}")
+    if run_errors or not isinstance(run, dict):
+        return None, run_errors or ["GitHub Actions workflow run read returned no object"]
+    pull_requests = run.get("pull_requests")
+    run_pr_numbers = {row.get("number") for row in pull_requests if isinstance(row, dict)} if isinstance(pull_requests, list) else set()
+    expected_path = f"@refs/heads/{base_ref}"
+    if (
+        run.get("head_sha") != head_sha
+        or run.get("event") != "pull_request"
+        or str(run.get("status") or "").lower() != "completed"
+        or str(run.get("conclusion") or "").lower() != "success"
+        or pr_number not in run_pr_numbers
+        or not isinstance(run.get("path"), str)
+        or not str(run.get("path")).endswith(expected_path)
+    ):
+        return None, ["GitHub Actions workflow run is not a completed successful base-branch pull_request run for this PR head"]
+    return {
+        "source": "github",
+        "read_complete": True,
+        "pr": {"number": pr_number, "head_sha": head_sha, "base_ref": base_ref, "merged_at": pr.get("merged_at"), "merge_commit_sha": pr.get("merge_commit_sha")},
+        "review": {"id": review.get("id"), "state": review.get("state"), "commit_id": review.get("commit_id")},
+        "semantic_tree": tree,
+        "artifact": {"id": artifact_id, "digest": digest, "run_id": run_id, "name": artifact.get("name")},
+        "workflow_run": {"id": run_id, "event": run.get("event"), "status": run.get("status"), "conclusion": run.get("conclusion"), "head_sha": run.get("head_sha"), "workflow_id": run.get("workflow_id"), "path": run.get("path")},
+    }, []
+
+
+def github_work_item_closed_by_pr_readback(
+    root: Path,
+    owner: str,
+    repo_name: str,
+    pr_number: int,
+    work_item: int,
+    *,
+    read_graphql: Any = gh_graphql_authenticated_json,
+) -> list[str]:
+    """Require the GitHub-native Work-Item-to-merged-PR closing relation, paginated."""
+    query = """
+    query($owner: String!, $repo: String!, $workItem: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $workItem) {
+          closedByPullRequestsReferences(first: 100) {
+            pageInfo { hasNextPage }
+            nodes { number merged }
+          }
+        }
+      }
+    }
+    """
+    payload, errors = read_graphql(root, query, {"owner": owner, "repo": repo_name, "workItem": work_item})
+    if errors or not isinstance(payload, dict):
+        return errors or ["GitHub PR closing-reference read returned no object"]
+    repository = payload.get("repository") if isinstance(payload.get("repository"), dict) else {}
+    issue = repository.get("issue") if isinstance(repository.get("issue"), dict) else {}
+    references = issue.get("closedByPullRequestsReferences") if isinstance(issue.get("closedByPullRequestsReferences"), dict) else {}
+    page = references.get("pageInfo") if isinstance(references.get("pageInfo"), dict) else {}
+    if page.get("hasNextPage") is True:
+        return ["GitHub Work Item closing PR references are paginated beyond the trusted read limit"]
+    nodes = references.get("nodes")
+    if not isinstance(nodes, list):
+        return ["GitHub Work Item closing PR references are unreadable"]
+    if pr_number not in {node.get("number") for node in nodes if isinstance(node, dict) and node.get("merged") is True}:
+        return ["GitHub Work Item is not natively closed by the merged PR"]
+    return []
+
+
+def github_pr_closeout_readback(
+    root: Path,
+    owner: str,
+    repo_name: str,
+    pr_number: int,
+    work_item: int,
+    artifact_id: int,
+    *,
+    read_json: Any = gh_rest_authenticated_json,
+    read_list: Any = gh_rest_authenticated_list,
+    read_graphql: Any = gh_graphql_authenticated_json,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Read a post-merge closeout from host facts, including default-branch containment."""
+    attestation, errors = github_pr_attestation_readback(root, owner, repo_name, pr_number, artifact_id, allow_merged=True, read_json=read_json, read_list=read_list)
+    if errors or attestation is None:
+        return None, errors
+    pr = attestation["pr"]
+    merge_sha, base_ref = pr.get("merge_commit_sha"), pr.get("base_ref")
+    if not isinstance(pr.get("merged_at"), str) or not isinstance(merge_sha, str) or not merge_sha:
+        return None, ["GitHub PR is not merged or lacks its merge commit"]
+    compare, compare_errors = read_json(root, f"repos/{owner}/{repo_name}/compare/{merge_sha}...{quote(base_ref, safe='')}")
+    if compare_errors or not isinstance(compare, dict):
+        return None, compare_errors or ["GitHub base-branch containment read returned no object"]
+    if compare.get("status") not in {"ahead", "identical"}:
+        return None, ["GitHub base branch does not contain the merge commit"]
+    merge_tree, tree_errors = _github_commit_tree_readback(root, owner, repo_name, merge_sha, read_json=read_json)
+    if tree_errors or merge_tree is None:
+        return None, tree_errors
+    issue, issue_errors = read_json(root, f"repos/{owner}/{repo_name}/issues/{work_item}")
+    if issue_errors or not isinstance(issue, dict):
+        return None, issue_errors or ["GitHub Work Item read returned no object"]
+    if str(issue.get("state") or "").lower() != "closed" or str(issue.get("state_reason") or "").lower() != "completed":
+        return None, ["typed Work Item is not closed as completed"]
+    labels = issue.get("labels")
+    label_names = {str(row.get("name") or "").strip().lower().replace("_", "-") for row in labels if isinstance(row, dict)} if isinstance(labels, list) else set()
+    if "work-item" not in label_names:
+        return None, ["GitHub issue is not typed as a work-item"]
+    relation_errors = github_work_item_closed_by_pr_readback(root, owner, repo_name, pr_number, work_item, read_graphql=read_graphql)
+    if relation_errors:
+        return None, relation_errors
+    return {**attestation, "closeout": {"work_item_locator": f"work_item:{work_item}", "merge_commit_sha": merge_sha, "base_contains_merge": True, "merge_semantic_tree": merge_tree, "issue_state": issue.get("state"), "issue_state_reason": issue.get("state_reason"), "work_item_closed_by_pr": pr_number}}, []
 
 
 def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:
