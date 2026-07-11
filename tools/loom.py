@@ -6413,6 +6413,8 @@ def handle_merge(argv: list[str]) -> int:
         flow_args.extend(["--head-sha", args.head_sha])
     if args.work_item:
         flow_args.extend(["--item", args.work_item])
+    if args.issue:
+        flow_args.extend(["--issue", args.issue])
     if args.owner:
         flow_args.extend(["--owner", args.owner])
     if args.repo_name:

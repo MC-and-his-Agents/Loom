@@ -1008,6 +1008,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     controlled_merge.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     controlled_merge.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    controlled_merge.add_argument("--issue", type=int, help="Explicit GitHub Work Item issue authority")
     controlled_merge.add_argument("--pr", type=int, required=True, help="GitHub implementation PR number")
     controlled_merge.add_argument("--head-sha", help="Expected PR head SHA")
     controlled_merge.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="squash")
@@ -21395,6 +21396,7 @@ def controlled_merge_payload(
     allow_advisory_local_enforced: bool = False,
     allow_high_risk_advisory: bool = False,
     change_class: str | None = None,
+    issue_number: int | None = None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
@@ -21470,6 +21472,7 @@ def controlled_merge_payload(
             expected_item=expected_item,
             owner=owner,
             repo_name=repo_name,
+            issue_number=issue_number,
             pr_number=pr_number,
             head_sha=head_sha,
             branch_name=None,
@@ -21738,6 +21741,7 @@ def handle_controlled_merge(args: argparse.Namespace) -> int:
             expected_item=args.item,
             owner=args.owner,
             repo_name=args.repo_name,
+            issue_number=args.issue,
             pr_number=args.pr,
             head_sha=args.head_sha,
             merge_method=args.merge_method,

@@ -449,6 +449,8 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
                 str(REPO_ROOT),
                 "--work-item",
                 "WI-1287",
+                "--issue",
+                "1287",
                 "--head-sha",
                 "fixture-head",
                 "--merge-method",
@@ -478,6 +480,8 @@ def assert_merge_wrapper_pr_argument_contract() -> None:
                 raise AssertionError(f"merge {action} wrapper leaked the literal `pr` placeholder to controlled-merge")
             if "--merge-method" not in flow_args or flow_args[flow_args.index("--merge-method") + 1] != "squash":
                 raise AssertionError(f"merge {action} wrapper did not preserve merge method")
+            if "--issue" not in flow_args or flow_args[flow_args.index("--issue") + 1] != "1287":
+                raise AssertionError(f"merge {action} wrapper did not pass explicit issue authority to controlled-merge")
             if action == "run" and "--execute" not in flow_args:
                 raise AssertionError("merge run --apply did not delegate to controlled-merge --execute")
         module.handle_merge([
@@ -521,6 +525,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
         branch_protection_contexts=[],
         ruleset_required_contexts=["loom-pr-merge-gate"],
         item="repo-native.release-0211",
+        issue_number=211,
     )
     checks_file = f".loom/fixtures/{fixture['item']}/checks.json"
     branch_protection_file = f".loom/fixtures/{fixture['item']}/branch-protection.json"
@@ -544,7 +549,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
         stderr=subprocess.DEVNULL,
     )
     fixture["head_sha"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
-    update_fixture_pr_head(target, fixture)
+    update_fixture_pr_head(target, fixture, issue_number=211)
     record_current_fixture_review(target, fixture)
     _, payload = run_json(
         [
@@ -559,6 +564,8 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             "repo",
             "--work-item",
             fixture["item"],
+            "--issue",
+            "211",
             "--head-sha",
             fixture["head_sha"],
             "--pr-payload-file",
@@ -626,6 +633,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             expected_item=fixture["item"],
             owner="owner",
             repo_name="repo",
+            issue_number=211,
             pr_number=1288,
             head_sha=fixture["head_sha"],
             merge_method="squash",
@@ -6588,7 +6596,14 @@ def commit_fixture_file(target: Path, path: str, message: str) -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
 
 
-def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str = "OPEN", extra: dict[str, Any] | None = None) -> None:
+def update_fixture_pr_head(
+    target: Path,
+    fixture: dict[str, str],
+    *,
+    state: str = "OPEN",
+    extra: dict[str, Any] | None = None,
+    issue_number: int | None = None,
+) -> None:
     pr_path = target / fixture["pr_file"]
     payload = json.loads(pr_path.read_text(encoding="utf-8"))
     head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
@@ -6599,6 +6614,8 @@ def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str 
         branch=fixture["branch"],
         head_sha=head_sha,
     )
+    if issue_number is not None:
+        payload["body"] = f"{payload['body'].rstrip()}\n\nIssue: #{issue_number}\n"
     if extra:
         payload.update(extra)
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -10330,13 +10347,19 @@ def prepare_controlled_merge_fixture(
     branch_protection_contexts: list[str],
     ruleset_required_contexts: list[str] | None = None,
     item: str = "WI-1287",
+    issue_number: int | None = None,
 ) -> tuple[Path, dict[str, Any], dict[str, Any], Path]:
     merge_target = tmp / fixture_name
     merge_target.mkdir()
     merge_fixture = write_semantic_review_pr_gate_fixture(merge_target, item=item)
-    merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
+    if issue_number is not None:
+        update_fixture_pr_head(merge_target, merge_fixture, issue_number=issue_number)
+    merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture, issue_number=issue_number)
     if merge_pass_payload.get("result") != "pass":
-        raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
+        raise AssertionError(
+            f"controlled-merge fixture `{fixture_name}` could not produce a retained pr-gate pass: "
+            f"{merge_pass_payload.get('missing_inputs')}"
+        )
     fixture_dir = merge_target / ".loom" / "fixtures" / merge_fixture["item"]
     check_names = sorted({"loom-pr-merge-gate", *branch_protection_contexts, *(ruleset_required_contexts or [])})
     (fixture_dir / "checks.json").write_text(
