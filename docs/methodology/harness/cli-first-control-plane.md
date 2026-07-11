@@ -1,6 +1,8 @@
 # CLI-First Control Plane
 
-Loom's CLI owns executable operating semantics. Skills, plugins, installer shims, and repo-local carriers may expose entry points, but they do not own the truth of command behavior.
+Loom's CLI owns executable operating semantics. Skills, plugins, host adapters,
+and repo-local carriers may expose entry points, but they do not own the truth
+of command behavior. The retired installer package is historical metadata only.
 
 ## Authority Split
 
@@ -11,7 +13,7 @@ Loom's CLI owns executable operating semantics. Skills, plugins, installer shims
 | Plugins / host adapters | Native host discovery, tool mapping, bootstrap wiring, and adapter version metadata. | Installation graph truth or governance truth. |
 | `.loom/` | Repo execution facts: companion contracts, work items, review evidence, status, checkpoints, and installed-state metadata when adopted. | Global Loom distribution truth or external backlog truth. |
 | Global CLI runtime provider | Workstation/user executable plus shipped runtime | Provider/runtime version provenance, command entry, and CLI-owned fallback semantics. | Repository truth, repo-owned governance residue, or workstation registration truth. |
-| `loom-installer` | Legacy compatibility shim and adapter-managed install path. | Primary command semantics after CLI-first adoption. |
+| `loom-installer` historical metadata | Final package/version/readback evidence for the retired installer line. | Executable install, compatibility routing, build, test, publish, or command semantics. |
 
 The repo-local wrapper is a compatibility surface inside this split. It can
 expose repo-local starter aliases or delegated runtime entrypoints, but it does
