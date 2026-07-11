@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from failure_envelope import envelope, primary_cause
-from light_profile import plan_payload as evaluate_light_profile
+from light_profile import LIGHT_PROFILES, STATE_FILENAMES, installed_state, plan_payload as evaluate_light_profile, read_json
 
 
 SCHEMA = "loom-delivery-gate/v1"
@@ -18,6 +18,13 @@ REQUIRED_CHECK_IDENTITY_SCHEMA = "loom-delivery-gate-required-check-identity/v3"
 REQUIRED_CHECK_IDENTITY_READINESS_SCHEMA = "loom-delivery-gate-required-check-readiness/v3"
 SUPPORTED_EVENTS = {"pull_request", "merge_group", "workflow_call"}
 PROFILES = {"light", "standard", "reinforced"}
+PROFILE_ORDER = {"light": 0, "standard": 1, "reinforced": 2}
+ADOPTION_PROFILES = {
+    "attach-only": "light",
+    "light-governance": "light",
+    "execution-control": "standard",
+    "strong-governance": "reinforced",
+}
 ENFORCEMENTS = {"advisory", "enforce"}
 LIGHT_PATH_PREFIXES = ("docs/",)
 LIGHT_PATHS = {"README.md", "README.zh-CN.md"}
@@ -40,6 +47,24 @@ CAUSES = {
         "owner": "repository",
         "retryable": False,
         "remediation_command": "set host_facts.profile to light, standard, or reinforced",
+    },
+    "candidate_profile_unreadable": {
+        "failure_domain": "governance_metadata",
+        "code": "unreadable",
+        "locator": "candidate_tree:repository_profile",
+        "summary": "The candidate repository profile metadata is unreadable or unsupported.",
+        "owner": "repository",
+        "retryable": False,
+        "remediation_command": "restore valid installed-state or companion repository profile metadata",
+    },
+    "profile_state_mismatch": {
+        "failure_domain": "governance_metadata",
+        "code": "mismatch",
+        "locator": "delivery_profile:candidate_state_mismatch",
+        "summary": "The requested delivery profile would downgrade the candidate repository profile.",
+        "owner": "repository",
+        "retryable": False,
+        "remediation_command": "remove the profile override or select a profile at least as strong as candidate state",
     },
     "invalid_change_set": {
         "failure_domain": "governance_metadata",
@@ -186,10 +211,53 @@ def _paths(value: object) -> tuple[list[str], list[str]]:
     return paths, list(dict.fromkeys(errors))
 
 
-def _profile(facts: dict[str, Any], paths: list[str]) -> tuple[str, str]:
+def _candidate_profile(candidate_path: Path | None, paths: list[str]) -> tuple[str | None, dict[str, Any], list[str]]:
+    profile = {"status": "not_declared", "profile": None, "adoption_mode": None, "authority": None}
+    if candidate_path is None:
+        return None, profile, []
+    if candidate_path.is_symlink() or not candidate_path.is_dir():
+        profile["status"] = "unreadable"
+        return None, profile, ["candidate tree is unavailable"]
+    existing_state = next((locator for locator in STATE_FILENAMES if (candidate_path / locator).exists() or (candidate_path / locator).is_symlink()), None)
+    if existing_state is not None:
+        locator, state, state_error = installed_state(candidate_path)
+        repo_payload = state.get("repo_payload") if isinstance(state, dict) else None
+        adoption_mode = repo_payload.get("adoption_mode") if isinstance(repo_payload, dict) else None
+        if state_error or adoption_mode not in ADOPTION_PROFILES:
+            profile.update({"status": "unreadable", "adoption_mode": adoption_mode, "authority": locator})
+            return None, profile, [state_error or "installed-state adoption_mode is unsupported"]
+        if adoption_mode in LIGHT_PROFILES and repo_payload.get("mode") != "metadata-only":
+            profile.update({"status": "unreadable", "adoption_mode": adoption_mode, "authority": locator})
+            return None, profile, [f"{adoption_mode} installed-state must use metadata-only repository payload"]
+        resolved = ADOPTION_PROFILES[adoption_mode]
+        profile.update({"status": "valid", "profile": resolved, "adoption_mode": adoption_mode, "authority": locator})
+        return resolved, profile, []
+    if any(path in STATE_FILENAMES for path in paths):
+        profile["status"] = "unreadable"
+        return None, profile, ["candidate change set removed installed-state profile authority"]
+    companion_locator = ".loom/companion/repo-interface.json"
+    companion_path = candidate_path / companion_locator
+    if companion_path.exists() or companion_path.is_symlink():
+        if companion_path.is_symlink() or not companion_path.is_file():
+            profile.update({"status": "unreadable", "authority": companion_locator})
+            return None, profile, ["repo companion profile authority must be a regular file"]
+        companion = read_json(companion_path)
+        if companion is None or companion.get("schema_version") != "loom-repo-interface/v2":
+            profile.update({"status": "unreadable", "authority": companion_locator})
+            return None, profile, ["repo companion profile authority is unreadable"]
+        adoption_mode = "attach-only" if isinstance(companion.get("host_truth_locators"), list) and companion["host_truth_locators"] else "execution-control"
+        resolved = ADOPTION_PROFILES[adoption_mode]
+        profile.update({"status": "valid", "profile": resolved, "adoption_mode": adoption_mode, "authority": companion_locator})
+        return resolved, profile, []
+    return None, profile, []
+
+
+def _profile(facts: dict[str, Any], paths: list[str], candidate_profile: str | None) -> tuple[str, str]:
     requested = facts.get("profile")
     if isinstance(requested, str) and requested in PROFILES:
         return requested, "host_facts"
+    if candidate_profile is not None:
+        return candidate_profile, "candidate_state"
     if paths and all(path in LIGHT_PATHS or path.startswith(LIGHT_PATH_PREFIXES) for path in paths):
         return "light", "changed_paths"
     return "standard", "default"
@@ -222,8 +290,13 @@ def _result(enforcement: str, cause_id: str) -> str:
     return "passed" if enforcement == "enforce" and cause_id == "passed" else "blocked"
 
 
-def _light_invariant(profile: str, profile_source: str, candidate_path: Path | None) -> tuple[dict[str, Any], str]:
-    if profile != "light" or profile_source != "host_facts":
+def _light_invariant(
+    candidate_profile: str | None,
+    profile: str,
+    profile_source: str,
+    candidate_path: Path | None,
+) -> tuple[dict[str, Any], str]:
+    if candidate_profile != "light" and not (candidate_profile is None and profile == "light" and profile_source == "host_facts"):
         return {"status": "not_evaluated", "applicable": False, "source": "delivery_profile"}, "passed"
     if candidate_path is None:
         return {"status": "blocked", "applicable": True, "source": "candidate_tree", "violations": []}, "light_profile_tree_unreadable"
@@ -232,6 +305,8 @@ def _light_invariant(profile: str, profile_source: str, candidate_path: Path | N
     except (OSError, ValueError):
         return {"status": "blocked", "applicable": True, "source": "candidate_tree", "violations": []}, "light_profile_tree_unreadable"
     cause_id = evaluated.get("primary_cause", {}).get("id")
+    if evaluated.get("result") == "pass" and evaluated.get("applicable") is False:
+        return {"status": "blocked", "applicable": False, "source": "candidate_tree", "violations": []}, "profile_state_mismatch"
     if evaluated.get("result") == "pass":
         return {"status": "passed", "applicable": bool(evaluated.get("applicable")), "source": "candidate_tree", "violations": []}, "passed"
     if cause_id not in {"light_profile_forbidden_carrier", "light_profile_state_unreadable", "light_profile_tree_unreadable"}:
@@ -268,8 +343,12 @@ def evaluate_host_facts(
         host_errors.append("repository.owner and repository.name are required")
         repository = {}
     paths, path_errors = _paths(facts.get("changed_paths"))
+    candidate_profile, candidate_profile_evidence, candidate_profile_errors = _candidate_profile(candidate_path, paths)
     profile_errors = ["profile must be light, standard, or reinforced when supplied"] if "profile" in facts and facts.get("profile") not in PROFILES else []
-    profile, profile_source = _profile(facts, paths)
+    requested_profile = facts.get("profile")
+    if isinstance(requested_profile, str) and requested_profile in PROFILES and candidate_profile in PROFILES and PROFILE_ORDER[requested_profile] < PROFILE_ORDER[candidate_profile]:
+        profile_errors.append("requested profile cannot downgrade candidate repository state")
+    profile, profile_source = _profile(facts, paths, candidate_profile)
     validation_command, validation_command_errors = _validation_command(facts)
     enforcement_mode, enforcement_errors = _enforcement(enforcement)
     light_invariant = {"status": "not_evaluated", "applicable": False, "source": "delivery_profile"}
@@ -278,13 +357,15 @@ def evaluate_host_facts(
     elif enforcement_errors:
         cause_id = "enforcement_unsupported"
     elif profile_errors:
-        cause_id = "profile_unsupported"
+        cause_id = "profile_state_mismatch" if "requested profile cannot downgrade candidate repository state" in profile_errors else "profile_unsupported"
     elif path_errors:
         cause_id = "invalid_change_set"
+    elif candidate_profile_errors:
+        cause_id = "candidate_profile_unreadable"
     elif validation_command_errors:
         cause_id = "validation_command_missing"
     else:
-        light_invariant, cause_id = _light_invariant(profile, profile_source, candidate_path)
+        light_invariant, cause_id = _light_invariant(candidate_profile, profile, profile_source, candidate_path)
 
     primary = _cause(cause_id)
     return {
@@ -307,6 +388,8 @@ def evaluate_host_facts(
             "changed_paths": paths,
             "profile_errors": profile_errors,
             "change_set_errors": path_errors,
+            "candidate_profile": candidate_profile_evidence,
+            "candidate_profile_errors": candidate_profile_errors,
         },
         "native_validation": {
             "command": validation_command,

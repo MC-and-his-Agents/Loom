@@ -138,24 +138,23 @@ def check_evaluator() -> None:
     assert_primary_cause(evaluator.finalize_delivery_gate(caller["host_facts"], {"status": "passed"}, "enforce"), "passed", "enforce", "passed")
 
 
-def materialize_light_candidate(root: Path, forbidden: bool) -> Path:
-    candidate = root / ("forbidden" if forbidden else "clean")
+def materialize_candidate(root: Path, adoption_mode: str | None, forbidden: bool) -> Path:
+    candidate = root / f"{adoption_mode or 'companion-standard'}-{'forbidden' if forbidden else 'clean'}"
     candidate.mkdir()
     subprocess.run(["git", "init"], cwd=candidate, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=candidate, check=True)
     subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=candidate, check=True)
-    state = candidate / ".loom" / "installed-state.json"
+    if adoption_mode is None:
+        state = candidate / ".loom" / "companion" / "repo-interface.json"
+        payload = {"schema_version": "loom-repo-interface/v2"}
+    else:
+        state = candidate / ".loom" / "installed-state.json"
+        payload = {
+            "schema_version": "loom-installed-state/v2",
+            "repo_payload": {"mode": "metadata-only", "adoption_mode": adoption_mode},
+        }
     state.parent.mkdir(parents=True)
-    state.write_text(
-        json.dumps(
-            {
-                "schema_version": "loom-installed-state/v2",
-                "repo_payload": {"mode": "metadata-only", "adoption_mode": "light-governance"},
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    state.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     if forbidden:
         carrier = candidate / ".loom" / "status" / "current.md"
         carrier.parent.mkdir(parents=True)
@@ -172,23 +171,43 @@ def check_light_profile_host_integration() -> None:
     assert_primary_cause(missing_candidate, "light_profile_tree_unreadable", "enforce", "blocked")
     with tempfile.TemporaryDirectory(prefix="loom-delivery-light-") as raw_tmp:
         root = Path(raw_tmp)
-        forbidden = materialize_light_candidate(root, True)
-        clean = materialize_light_candidate(root, False)
-        blocked = evaluator.finalize_delivery_gate(facts, {"status": "passed"}, "enforce", forbidden)
+        direct_facts = json.loads((FIXTURES / "direct-light.json").read_text(encoding="utf-8"))
+        if "profile" in direct_facts or direct_facts.get("event") != "pull_request":
+            raise AssertionError("direct-event fixture must not inject a caller profile")
+        forbidden = materialize_candidate(root, "light-governance", True)
+        clean = materialize_candidate(root, "light-governance", False)
+        blocked = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", forbidden)
         assert_primary_cause(blocked, "light_profile_forbidden_carrier", "enforce", "blocked")
-        if blocked.get("light_invariant", {}).get("status") != "blocked":
-            raise AssertionError("explicit light delivery profile must consume the forbidden candidate tree")
-        passed = evaluator.finalize_delivery_gate(facts, {"status": "passed"}, "enforce", clean)
+        delivery = blocked.get("delivery", {})
+        if blocked.get("light_invariant", {}).get("status") != "blocked" or delivery.get("profile") != "light" or delivery.get("profile_source") != "candidate_state":
+            raise AssertionError("direct light event must derive profile authority and consume the candidate tree")
+        passed = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", clean)
         assert_primary_cause(passed, "passed", "enforce", "passed")
         for profile in ("standard", "reinforced"):
-            bypassed = evaluator.finalize_delivery_gate({**facts, "profile": profile}, {"status": "passed"}, "enforce", forbidden)
-            assert_primary_cause(bypassed, "passed", "enforce", "passed")
-            if bypassed.get("light_invariant", {}).get("status") != "not_evaluated":
-                raise AssertionError(f"{profile} delivery profile must not consume the light invariant")
+            elevated = evaluator.finalize_delivery_gate({**direct_facts, "profile": profile}, {"status": "passed"}, "enforce", forbidden)
+            assert_primary_cause(elevated, "light_profile_forbidden_carrier", "enforce", "blocked")
+
+        mismatch_facts = json.loads((FIXTURES / "profile-mismatch.json").read_text(encoding="utf-8"))
+        for adoption_mode in ("execution-control", "strong-governance"):
+            candidate = materialize_candidate(root, adoption_mode, True)
+            mismatch = evaluator.finalize_delivery_gate(mismatch_facts, {"status": "passed"}, "enforce", candidate)
+            assert_primary_cause(mismatch, "profile_state_mismatch", "enforce", "blocked")
+
+        companion = materialize_candidate(root, None, True)
+        companion_result = evaluator.finalize_delivery_gate(direct_facts, {"status": "passed"}, "enforce", companion)
+        assert_primary_cause(companion_result, "passed", "enforce", "passed")
+        if companion_result.get("delivery", {}).get("candidate_profile", {}).get("authority") != ".loom/companion/repo-interface.json":
+            raise AssertionError("legacy execution-control candidate must authenticate its companion profile")
+
+        deleted_state = materialize_candidate(root, "attach-only", False)
+        (deleted_state / ".loom" / "installed-state.json").unlink()
+        deleted_facts = {**direct_facts, "changed_paths": [".loom/installed-state.json"]}
+        deleted = evaluator.finalize_delivery_gate(deleted_facts, {"status": "passed"}, "enforce", deleted_state)
+        assert_primary_cause(deleted, "candidate_profile_unreadable", "enforce", "blocked")
 
         host_facts = root / "host-facts.json"
         validation = root / "validation.json"
-        host_facts.write_text(json.dumps(facts) + "\n", encoding="utf-8")
+        host_facts.write_text(json.dumps(direct_facts) + "\n", encoding="utf-8")
         validation.write_text('{"status":"passed"}\n', encoding="utf-8")
         completed = subprocess.run(
             [
