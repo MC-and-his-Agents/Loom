@@ -1,0 +1,8 @@
+name: Invalid step key
+description: Contains a step property unsupported by composite actions.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo invalid
+      timeout-minutes: 5

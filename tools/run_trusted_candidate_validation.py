@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,27 @@ TRUSTED_TOOL_FILES = (
 )
 
 
-def replace_path(source: Path, destination: Path) -> None:
+def ensure_contained_path(root: Path, destination: Path) -> None:
+    lexical_root = root.absolute()
+    try:
+        relative = destination.absolute().relative_to(lexical_root)
+    except ValueError as error:
+        raise ValueError(f"overlay destination escapes validation root: {destination}") from error
+    current = lexical_root
+    for part in relative.parts[:-1]:
+        current /= part
+        if current.exists() and stat.S_ISLNK(os.lstat(current).st_mode):
+            raise ValueError(f"overlay ancestor is a symlink: {current}")
+    if destination.is_symlink():
+        raise ValueError(f"overlay destination is a symlink: {destination}")
+    if destination.parent.resolve().is_relative_to(root.resolve()) is False:
+        raise ValueError(f"resolved overlay parent escapes validation root: {destination.parent}")
+
+
+def replace_path(source: Path, destination: Path, output_root: Path) -> None:
+    if source.is_symlink():
+        raise ValueError(f"trusted overlay source is a symlink: {source}")
+    ensure_contained_path(output_root, destination)
     if destination.is_dir() and not destination.is_symlink():
         shutil.rmtree(destination)
     elif destination.exists() or destination.is_symlink():
@@ -37,27 +58,67 @@ def replace_path(source: Path, destination: Path) -> None:
         shutil.copy2(source, destination)
 
 
-def trusted_overlay(trusted_root: Path, candidate_root: Path, output_root: Path) -> None:
-    # Preserve candidate symlinks without dereferencing host paths into the validation tree.
-    shutil.copytree(candidate_root, output_root, symlinks=True)
-    replace_path(trusted_root / "Makefile", output_root / "Makefile")
-    replace_path(trusted_root / "tools" / "fixtures", output_root / "tools" / "fixtures")
+def candidate_symlinks(candidate_root: Path, policy: str) -> list[Path]:
+    symlinks: set[Path] = set()
+    indexed = subprocess.run(
+        ["git", "-C", str(candidate_root), "ls-files", "-s", "-z"],
+        check=False,
+        capture_output=True,
+    )
+    if indexed.returncode == 0:
+        for entry in indexed.stdout.split(b"\0"):
+            if not entry:
+                continue
+            metadata, raw_path = entry.split(b"\t", 1)
+            if metadata.split(b" ", 1)[0] == b"120000":
+                symlinks.add(candidate_root / os.fsdecode(raw_path))
+    for directory, names, files in os.walk(candidate_root, followlinks=False):
+        base = Path(directory)
+        for name in [*names, *files]:
+            path = base / name
+            if stat.S_ISLNK(os.lstat(path).st_mode):
+                symlinks.add(path)
+    if policy == "reject":
+        return sorted(symlinks)
+    protected = ("Makefile", "tools", ".github/actions")
+    return sorted(
+        path
+        for path in symlinks
+        if any(
+            path.relative_to(candidate_root).as_posix() == prefix
+            or path.relative_to(candidate_root).as_posix().startswith(prefix + "/")
+            for prefix in protected
+        )
+    )
+
+
+def trusted_overlay(trusted_root: Path, candidate_root: Path, output_root: Path, symlink_policy: str) -> None:
+    unsafe = candidate_symlinks(candidate_root, symlink_policy)
+    if unsafe:
+        raise ValueError("candidate tree contains symlinks: " + ", ".join(str(path) for path in unsafe))
+    shutil.copytree(candidate_root, output_root, symlinks=symlink_policy != "reject")
+    replace_path(trusted_root / "Makefile", output_root / "Makefile", output_root)
+    trusted_fixtures = trusted_root / "tools" / "fixtures"
+    if trusted_fixtures.is_dir():
+        replace_path(trusted_fixtures, output_root / "tools" / "fixtures", output_root)
     for source in sorted((trusted_root / "tools").glob("check_*.py")):
-        replace_path(source, output_root / "tools" / source.name)
+        replace_path(source, output_root / "tools" / source.name, output_root)
     for name in TRUSTED_TOOL_FILES:
         source = trusted_root / "tools" / name
         if source.is_file():
-            replace_path(source, output_root / "tools" / name)
+            replace_path(source, output_root / "tools" / name, output_root)
     package_test = trusted_root / "test" / "npm-package-smoke.test.mjs"
     if package_test.is_file():
-        replace_path(package_test, output_root / "test" / package_test.name)
+        replace_path(package_test, output_root / "test" / package_test.name, output_root)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--trusted-root", type=Path, required=True)
+    parser.add_argument("--runner-root", type=Path)
     parser.add_argument("--candidate-root", type=Path, required=True)
     parser.add_argument("--targets-json", required=True)
+    parser.add_argument("--symlink-policy", choices=("reject", "protected"), default="reject")
     args = parser.parse_args()
 
     try:
@@ -70,10 +131,11 @@ def main() -> int:
         return 2
 
     trusted_root = args.trusted_root.resolve()
+    runner_root = (args.runner_root or args.trusted_root).resolve()
     candidate_root = args.candidate_root.resolve()
     if not (trusted_root / "Makefile").is_file() or not candidate_root.is_dir():
         return 2
-    allowlist_path = trusted_root / "src" / "skills" / "shared" / "scripts" / "native_validation.py"
+    allowlist_path = runner_root / "src" / "skills" / "shared" / "scripts" / "native_validation.py"
     spec = importlib.util.spec_from_file_location("trusted_native_validation", allowlist_path)
     if spec is None or spec.loader is None:
         return 2
@@ -85,7 +147,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="loom-candidate-validation-") as temporary:
         validation_root = Path(temporary) / "candidate"
         try:
-            trusted_overlay(trusted_root, candidate_root, validation_root)
+            trusted_overlay(trusted_root, candidate_root, validation_root, args.symlink_policy)
             completed = subprocess.run(
                 ["make", "-f", str(validation_root / "Makefile"), "--", *targets],
                 cwd=validation_root,

@@ -59,6 +59,31 @@ reusable caller 必须显式声明 `host_facts`、与 `uses@SHA` 相同的 `loom
 分隔的 Make targets；表达式、多行值、shell operator 与任意 executable 都会被拒绝。
 Loom 不再给下游仓库默认注入 evaluator 自测命令。caller 的 `profile` 只能显式提升本次验证强度，不能降级 candidate repository profile，也不能覆盖 candidate adoption authority。无论模式为何，`product_acceptance: not_evaluated` 都不构成 delivery failure。
 
+候选 native validation 与 trusted evaluator/finalizer 分属不同 runner。direct Loom PR
+从 base SHA 读取 Makefile、checker 与固定 fixtures，把 head checkout 仅作为被测树；
+direct 被测树出现任何 Git symlink 或 `lstat` symlink 时 fail closed。该零 symlink
+规则只属于 Loom 自身 direct trusted validation，不自动外推到 reusable caller。
+reusable caller 使用其声明的 base/head SHA 建立 caller-owned trusted harness，并只对
+Makefile、`tools` 与 `.github/actions` 等受保护验证路径禁止 symlink。
+
+为使 direct 不变量可执行，本次删除以下已跟踪 legacy inventory，且不生成替代副本：
+
+- `.agents/skills/loom-adopt`
+- `.agents/skills/loom-build`
+- `.agents/skills/loom-handoff`
+- `.agents/skills/loom-init`
+- `.agents/skills/loom-merge-ready`
+- `.agents/skills/loom-pre-review`
+- `.agents/skills/loom-resume`
+- `.agents/skills/loom-retire`
+- `.agents/skills/loom-review`
+- `.agents/skills/loom-spec-review`
+- `.agents/skills/loom-story`
+
+这些路径原先都是绑定 `/Users/claw/dev/Loom/...` 的绝对 symlink；安装合同已将
+`.agents/skills` 定义为默认 absent 的 compatibility residue，因此不能继续参与 CI
+或安装事实判断。
+
 caller 的 `enforcement` input 可以随 PR workflow 改写，因而它只能选择本次执行模式，不能证明下游仓库已经把该检查设为 required。迁移保护面时必须采用增量顺序：先在现有保护面中追加 `loom-delivery-gate`，再执行只读 host readback，最后才移除旧 required checks。不能提交 registry、caller YAML、PR body 或 workflow 文件作为这种证明。
 
 ```bash

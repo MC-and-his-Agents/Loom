@@ -628,9 +628,11 @@ def check_workflow() -> None:
         "LOOM_SOURCE_PATH",
         "CANDIDATE_PATH",
         "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py",
-        'python3 "$TRUSTED_ROOT/tools/run_trusted_candidate_validation.py"',
+        'python3 "$RUNNER_ROOT/tools/run_trusted_candidate_validation.py"',
         '["native_validation"]["targets"]',
         "host_facts_base64",
+        "base_sha: ${{ steps.evaluate.outputs.base_sha }}",
+        "head_sha: ${{ steps.evaluate.outputs.head_sha }}",
         "needs: plan",
         "needs: [plan, native-validation]",
         "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}",
@@ -684,17 +686,27 @@ def check_workflow() -> None:
     checkouts = text.split("uses: actions/checkout@v4")[1:]
     if not checkouts or any("persist-credentials: false" not in checkout for checkout in checkouts):
         raise AssertionError("every checkout must drop credentials before untrusted native validation")
-    if len(checkouts) != 9:
-        raise AssertionError("plan, isolated native validation, and finalizer must each own separate checkouts")
+    if len(checkouts) != 10:
+        raise AssertionError("plan, isolated native validation, caller base harness, and finalizer need separate checkouts")
     plan_job = text.split("  plan:\n", 1)[1].split("  native-validation:\n", 1)[0]
     native_job = text.split("  native-validation:\n", 1)[1].split("  loom-delivery-gate:\n", 1)[0]
     final_job = text.split("  loom-delivery-gate:\n", 1)[1]
-    for name, block in (("plan", plan_job), ("native-validation", native_job), ("finalizer", final_job)):
+    for name, block in (("plan", plan_job), ("finalizer", final_job)):
         if "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" not in block or "path: loom" not in block:
             raise AssertionError(f"{name} must use the trusted base SHA for direct evaluation")
         if "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in block or "path: candidate" not in block:
             raise AssertionError(f"{name} must isolate the candidate tree")
-    if "needs: plan" not in native_job or "TRUSTED_ROOT: ${{ github.workspace }}/loom" not in native_job:
+    if "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" not in native_job:
+        raise AssertionError("direct native validation must use the trusted base SHA")
+    if "ref: ${{ needs.plan.outputs.head_sha || github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in native_job:
+        raise AssertionError("native validation must bind the candidate to the planned head SHA")
+    if (
+        "needs: plan" not in native_job
+        or "RUNNER_ROOT: ${{ github.workspace }}/loom" not in native_job
+        or "path: harness" not in native_job
+        or "ref: ${{ needs.plan.outputs.base_sha }}" not in native_job
+        or "SYMLINK_POLICY: ${{ inputs.loom_ref != '' && 'protected' || 'reject' }}" not in native_job
+    ):
         raise AssertionError("candidate validation must run in a dependent job through the trusted harness")
     if "needs: [plan, native-validation]" not in final_job or "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}" not in final_job:
         raise AssertionError("trusted finalizer must consume the isolated native job result")
@@ -728,7 +740,25 @@ def check_composite_action_contract() -> None:
     )
     if valid.returncode != 0:
         raise AssertionError(f"repository composite action contract failed: {valid.stderr}")
-    for name in ("invalid-yaml", "invalid-schema"):
+    nested = FIXTURES.parent / "composite-action" / "nested-valid"
+    nested_result = subprocess.run(
+        [sys.executable, str(COMPOSITE_CHECKER), "--root", str(nested)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if nested_result.returncode != 0 or "1 manifests" not in nested_result.stdout:
+        raise AssertionError(f"nested composite action was not discovered: {nested_result.stderr}")
+    for name in (
+        "invalid-yaml",
+        "invalid-schema",
+        "missing-name",
+        "missing-description",
+        "dangerous-uses",
+        "dangerous-local-uses",
+        "invalid-step-key",
+    ):
         fixture = FIXTURES.parent / "composite-action" / name
         completed = subprocess.run(
             [sys.executable, str(COMPOSITE_CHECKER), "--root", str(fixture)],
@@ -739,6 +769,41 @@ def check_composite_action_contract() -> None:
         )
         if completed.returncode == 0:
             raise AssertionError(f"invalid composite action fixture passed: {name}")
+    with tempfile.TemporaryDirectory(prefix="loom-action-symlink-") as temporary:
+        fixture = Path(temporary)
+        action = fixture / ".github" / "actions" / "native"
+        action.mkdir(parents=True)
+        target = fixture / "manifest.yml"
+        target.write_text(
+            "name: Linked\ndescription: Invalid linked manifest\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: echo invalid\n",
+            encoding="utf-8",
+        )
+        (action / "action.yml").symlink_to(target)
+        linked = subprocess.run(
+            [sys.executable, str(COMPOSITE_CHECKER), "--root", str(fixture)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if linked.returncode == 0 or "must not contain symlinks" not in linked.stderr:
+            raise AssertionError("composite action manifest symlink did not fail closed")
+    with tempfile.TemporaryDirectory(prefix="loom-action-root-symlink-") as temporary:
+        fixture = Path(temporary)
+        external = fixture / "external-actions"
+        external.mkdir()
+        github = fixture / ".github"
+        github.mkdir()
+        (github / "actions").symlink_to(external, target_is_directory=True)
+        linked_root = subprocess.run(
+            [sys.executable, str(COMPOSITE_CHECKER), "--root", str(fixture)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if linked_root.returncode == 0 or "ancestor must not be a symlink" not in linked_root.stderr:
+            raise AssertionError("composite actions root symlink did not fail closed")
 
 
 def check_trusted_candidate_harness() -> None:
@@ -780,6 +845,105 @@ def check_trusted_candidate_harness() -> None:
                 "candidate-owned Makefile/checker replaced the trusted harness: "
                 f"returncode={completed.returncode} stdout={completed.stdout} stderr={completed.stderr}"
             )
+        for relative in ("Makefile", "src", "tools", "tools/fixtures"):
+            unsafe = root / f"candidate-{relative.replace('/', '-')}"
+            shutil.copytree(candidate, unsafe)
+            path = unsafe / relative
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.symlink_to(root / "outside", target_is_directory=relative != "Makefile")
+            rejected = subprocess.run(
+                [
+                    sys.executable,
+                    str(TRUSTED_RUNNER),
+                    "--trusted-root",
+                    str(trusted),
+                    "--candidate-root",
+                    str(unsafe),
+                    "--targets-json",
+                    '["delivery-gate-check"]',
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if rejected.returncode != 2 or "candidate tree contains symlinks" not in rejected.stderr:
+                raise AssertionError(f"candidate symlink did not fail closed: {relative}: {rejected.stderr}")
+
+        reusable = root / "candidate-reusable"
+        shutil.copytree(candidate, reusable)
+        asset = reusable / "assets"
+        asset.mkdir()
+        (asset / "current").symlink_to(root / "outside")
+        reusable_result = subprocess.run(
+            [
+                sys.executable,
+                str(TRUSTED_RUNNER),
+                "--trusted-root",
+                str(trusted),
+                "--candidate-root",
+                str(reusable),
+                "--targets-json",
+                '["delivery-gate-check"]',
+                "--symlink-policy",
+                "protected",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if reusable_result.returncode == 0 or "Error 7" not in reusable_result.stderr:
+            raise AssertionError("reusable caller legal non-harness symlink was incorrectly rejected")
+
+        reusable_unsafe = root / "candidate-reusable-unsafe"
+        shutil.copytree(candidate, reusable_unsafe)
+        shutil.rmtree(reusable_unsafe / "tools")
+        (reusable_unsafe / "tools").symlink_to(root / "outside", target_is_directory=True)
+        unsafe_result = subprocess.run(
+            [
+                sys.executable,
+                str(TRUSTED_RUNNER),
+                "--trusted-root",
+                str(trusted),
+                "--candidate-root",
+                str(reusable_unsafe),
+                "--targets-json",
+                '["delivery-gate-check"]',
+                "--symlink-policy",
+                "protected",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if unsafe_result.returncode != 2 or "candidate tree contains symlinks" not in unsafe_result.stderr:
+            raise AssertionError("reusable caller protected harness symlink did not fail closed")
+
+        spec = importlib.util.spec_from_file_location("trusted_runner_contract", TRUSTED_RUNNER)
+        if spec is None or spec.loader is None:
+            raise AssertionError("trusted candidate runner is not importable")
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        source = trusted / "Makefile"
+        output_root = root / "validation-root"
+        output_root.mkdir()
+        try:
+            runner.replace_path(source, output_root / ".." / "escaped", output_root)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("trusted overlay accepted a path traversal destination")
+
+    indexed_symlinks = subprocess.run(
+        ["git", "ls-files", "-s"], cwd=ROOT, check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    if any(line.startswith("120000 ") for line in indexed_symlinks):
+        raise AssertionError("Loom direct candidate still tracks symlinks")
+    if (ROOT / ".agents" / "skills").exists():
+        raise AssertionError("legacy .agents/skills compatibility links must remain absent")
 
 
 def check_workflow_event_matrix() -> None:
