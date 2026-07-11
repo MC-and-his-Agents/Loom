@@ -7,6 +7,7 @@ import json
 import argparse
 import hashlib
 import importlib.util
+import io
 import os
 import re
 import shutil
@@ -14234,6 +14235,133 @@ def run_fr_wi_admission_surface() -> None:
     print("fr-wi-admission surface checks passed")
 
 
+def run_failure_envelope_surface() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_failure_envelope", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for failure envelope contract")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    stream = io.StringIO()
+    status = module.emit(
+        module.output(
+            "gate pr",
+            "block",
+            summary="candidate carrier drifted",
+            failed_layer="carrier-readback",
+            fallback_to=["loom gate pr --json"],
+        ),
+        stream=stream,
+    )
+    payload = json.loads(stream.getvalue())
+    envelope = payload.get("failure_envelope")
+    primary = envelope.get("primary_cause") if isinstance(envelope, dict) else None
+    if status != 1 or not isinstance(primary, dict) or primary.get("failure_domain") != "carrier":
+        raise AssertionError("public CLI failures must expose one classified primary cause")
+    for field in ("cause_class", "transient", "details"):
+        if field not in primary:
+            raise AssertionError(f"public CLI primary cause is missing {field}")
+    if envelope.get("consequences") != []:
+        raise AssertionError("public CLI must not invent additional top-level causes")
+    if envelope.get("suppressed_diagnostics") != [] or envelope.get("secondary_causes") != []:
+        raise AssertionError("empty public CLI diagnostics must preserve the v1 compatibility fields")
+
+    stream = io.StringIO()
+    module.emit(
+        module.output(
+            "acceptance validate",
+            "block",
+            summary="acceptance evidence is insufficient",
+            failed_layer="acceptance-adapter",
+        ),
+        stream=stream,
+    )
+    acceptance = json.loads(stream.getvalue())["failure_envelope"]["primary_cause"]
+    if acceptance.get("failure_domain") != "product_acceptance":
+        raise AssertionError("public acceptance failures must remain distinct from delivery failures")
+
+    legacy_primary = {
+        "id": "legacy_primary",
+        "failure_domain": "git_history",
+        "code": "unreadable",
+        "locator": "git:history",
+        "summary": "history is shallow",
+        "owner": "ci",
+        "retryable": True,
+        "consequence_of": [],
+        "remediation_command": "fetch the required history",
+    }
+    legacy_secondary = {
+        **legacy_primary,
+        "id": "legacy_secondary",
+        "failure_domain": "toolchain",
+        "locator": "validation:command",
+        "summary": "validation also failed",
+    }
+    stream = io.StringIO()
+    module.emit(
+        module.output(
+            "gate merge",
+            "block",
+            summary="legacy delegated failure",
+            failure_envelope={
+                "schema_version": "loom-failure-envelope/v1",
+                "primary_cause": legacy_primary,
+                "secondary_causes": [legacy_secondary],
+            },
+        ),
+        stream=stream,
+    )
+    legacy = json.loads(stream.getvalue())["failure_envelope"]
+    if legacy["primary_cause"].get("cause_class") != "unreadable" or legacy["primary_cause"].get("details") != {}:
+        raise AssertionError("legacy v1 primary causes must gain the v0.30 fields")
+    if legacy["consequences"] != [] or [item.get("id") for item in legacy["suppressed_diagnostics"]] != ["legacy_secondary"]:
+        raise AssertionError("non-causal legacy secondary causes must normalize as suppressed diagnostics")
+    if legacy["secondary_causes"] != legacy["suppressed_diagnostics"]:
+        raise AssertionError("v1 secondary_causes compatibility alias drifted")
+
+    stream = io.StringIO()
+    module.emit(module.output("gate merge", "block", summary="asserted primary", primary_cause=legacy_primary), stream=stream)
+    asserted_payload = json.loads(stream.getvalue())
+    asserted = asserted_payload["failure_envelope"]["primary_cause"]
+    if asserted.get("id") != "legacy_primary" or asserted.get("failure_domain") != "git_history" or asserted_payload.get("primary_cause") != asserted:
+        raise AssertionError("public CLI must consume payload primary_cause when no envelope exists")
+
+    stream = io.StringIO()
+    malformed_status = module.emit(
+        module.output(
+            "gate merge",
+            "pass",
+            summary="untrusted assertion",
+            failure_envelope={"schema_version": "loom-failure-envelope/v1", "primary_cause": {"id": "incomplete"}},
+        ),
+        stream=stream,
+    )
+    malformed = json.loads(stream.getvalue())
+    if malformed_status != 1 or malformed.get("result") != "block" or malformed.get("failure_envelope", {}).get("primary_cause", {}).get("id") != "malformed_failure_envelope":
+        raise AssertionError("malformed existing envelopes must fail closed instead of bypassing normalization")
+
+    stream = io.StringIO()
+    conflict_status = module.emit(
+        module.output(
+            "gate merge",
+            "block",
+            summary="conflicting assertions",
+            primary_cause=legacy_primary,
+            failure_envelope={
+                "schema_version": "loom-failure-envelope/v1",
+                "primary_cause": {**legacy_primary, "id": "other_primary"},
+                "secondary_causes": [],
+            },
+        ),
+        stream=stream,
+    )
+    conflict = json.loads(stream.getvalue())
+    if conflict_status != 1 or conflict.get("primary_cause") != conflict.get("failure_envelope", {}).get("primary_cause") or conflict.get("primary_cause", {}).get("id") != "malformed_failure_envelope":
+        raise AssertionError("conflicting payload and envelope primaries must collapse to one fail-closed primary")
+
+    print("failure envelope surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     assert_merge_wrapper_pr_argument_contract()
     assert_closeout_wrapper_argument_contract()
@@ -16469,6 +16597,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="fr-wi-admission",
             fixture_group="fr-wi-admission",
             run=run_fr_wi_admission_surface,
+        ),
+        SurfaceCheck(
+            name="failure-envelope",
+            fixture_group="failure-envelope",
+            run=run_failure_envelope_surface,
         ),
         SurfaceCheck(
             name="aggregate",

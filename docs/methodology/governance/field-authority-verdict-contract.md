@@ -41,8 +41,16 @@ class, suite path, review/release policy). Branch, head SHA, checks, merge
 commit, and merge state are read directly from GitHub and are rejected when
 authored in either the metadata block or as PR binding truth. Gate failures use
 `loom-failure-envelope/v1`: exactly one primary cause names its failure
-domain, owner, retryability, causal predecessors, and one remediation command.
-This envelope still never evaluates product acceptance.
+domain, cause class, owner, retryability, transience, details, causal
+predecessors, and one remediation command. `consequences` contains only
+diagnostics causally bound to that primary; independent lower-priority facts
+use `suppressed_diagnostics`. The deprecated v1 `secondary_causes` field
+remains a compatibility alias for both lists through v0.30 and is removed no
+earlier than v0.31 after consumers migrate. Public consumers accept and
+normalize legacy v1, but malformed assertions fail closed. Fallback is
+remediation, not another top-level failure. The delivery gate still never
+evaluates product acceptance, while the public acceptance adapter uses the
+independent `product_acceptance` failure domain.
 
 ## Lifecycle admission
 

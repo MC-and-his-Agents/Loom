@@ -66,6 +66,7 @@ for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
         sys.path.insert(0, str(shared_scripts_root))
 from runtime_paths import global_runtime_path, is_global_runtime_locator
 from authority_contract import parse_typed_locator, typed_locator
+from failure_envelope import public_cli_failure_envelope
 from host_attestation import main as host_attestation_main
 from product_acceptance import main as product_acceptance_main
 
@@ -2160,6 +2161,11 @@ def version_freshness_action(freshness: dict[str, Any]) -> dict[str, Any]:
 
 
 def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+    failure_envelope = public_cli_failure_envelope(payload)
+    if failure_envelope is not None:
+        payload["failure_envelope"] = failure_envelope
+        if "primary_cause" in payload:
+            payload["primary_cause"] = failure_envelope["primary_cause"]
     if stream is None:
         stream = sys.stdout
     stream.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
