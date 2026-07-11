@@ -22,6 +22,7 @@ from github_host import (
     gh_rest_write_json,
 )
 from failure_envelope import envelope, primary_cause
+from native_validation import parse_make_targets
 
 
 sys.dont_write_bytecode = True
@@ -646,7 +647,7 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         return [f"delivery workflow is not UTF-8: {exc}"]
     stack: list[tuple[int, str]] = []
     triggers: set[str] = set()
-    pinned_jobs: set[str] = set()
+    pinned_jobs: dict[str, str] = {}
     job_inputs: dict[str, dict[str, str]] = {}
     for raw_line in text.splitlines():
         if not raw_line.strip() or raw_line.lstrip().startswith("#"):
@@ -666,11 +667,12 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         elif path == ["on"] and key in {"pull_request", "merge_group"}:
             triggers.add(key)
         if key == "uses" and len(path) == 2 and path[0] == "jobs":
-            if re.fullmatch(
-                r"\S*/\.github/workflows/loom-delivery-gate\.yml@[0-9a-fA-F]{40}",
+            pinned = re.fullmatch(
+                r"\S*/\.github/workflows/loom-delivery-gate\.yml@([0-9a-fA-F]{40})",
                 value,
-            ):
-                pinned_jobs.add(path[1])
+            )
+            if pinned:
+                pinned_jobs[path[1]] = pinned.group(1).lower()
         elif len(path) == 3 and path[0] == "jobs" and path[2] == "with":
             job_inputs.setdefault(path[1], {})[key] = value.strip("'\"")
         stack.append((indent, key))
@@ -681,19 +683,16 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         errors.append("delivery workflow is missing active triggers: " + ", ".join(missing))
     if not pinned_jobs:
         errors.append("delivery workflow does not use the SHA-pinned reusable gate at job level")
-    for job in sorted(pinned_jobs):
+    for job, pinned_sha in sorted(pinned_jobs.items()):
         inputs = job_inputs.get(job, {})
-        validation = inputs.get("validation_command", "").strip()
-        if not validation or validation.startswith("${{") or validation in {":", "true"}:
-            errors.append(f"delivery workflow job {job!r} must declare a concrete native validation_command")
-        else:
-            try:
-                validation_tokens = shlex.split(validation)
-            except ValueError:
-                errors.append(f"delivery workflow job {job!r} validation_command is malformed")
-            else:
-                if validation_tokens == ["make", "delivery-gate-check"]:
-                    errors.append(f"delivery workflow job {job!r} validation_command cannot only self-test the evaluator")
+        host_facts = inputs.get("host_facts", "").strip()
+        if not host_facts or host_facts in {">", "|", ">-", "|-"}:
+            errors.append(f"delivery workflow job {job!r} must declare host_facts")
+        loom_ref = inputs.get("loom_ref", "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", loom_ref) or loom_ref != pinned_sha:
+            errors.append(f"delivery workflow job {job!r} loom_ref must equal its job-level uses SHA")
+        _targets, validation_errors = parse_make_targets(inputs.get("validation_command"))
+        errors.extend(f"delivery workflow job {job!r} {error}" for error in validation_errors)
         if inputs.get("enforcement") != "enforce":
             errors.append(f"delivery workflow job {job!r} must declare enforcement: enforce")
         if inputs.get("profile") != "light":

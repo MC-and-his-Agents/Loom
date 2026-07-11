@@ -10,6 +10,7 @@ from typing import Any
 
 from failure_envelope import envelope, primary_cause
 from light_profile import LIGHT_PROFILES, STATE_FILENAMES, installed_state, plan_payload as evaluate_light_profile, read_json
+from native_validation import ALLOWED_MAKE_TARGETS, parse_make_targets
 
 
 SCHEMA = "loom-delivery-gate/v1"
@@ -28,16 +29,44 @@ ADOPTION_PROFILES = {
 ENFORCEMENTS = {"advisory", "enforce"}
 LIGHT_PATH_PREFIXES = ("docs/",)
 LIGHT_PATHS = {"README.md", "README.zh-CN.md"}
-NATIVE_TARGET_ORDER = (
-    "py-compile",
-    "skills-doc-reference-sync-check",
-    "skills-check",
-    "cli-contract-check",
-    "light-profile-check",
-    "release-surface-check",
-    "npm-package-check",
-    "delivery-gate-check",
-)
+EXACT_NATIVE_SURFACES = {
+    ".github/workflows/host-attestation-evidence.yml": ("host-attestation-check", "workflow-contract-check"),
+    ".github/workflows/loom-check.yml": ("workflow-contract-check",),
+    ".github/workflows/loom-cli-release.yml": ("release-surface-check", "workflow-contract-check"),
+    ".github/workflows/loom-delivery-gate.yml": ("delivery-gate-check", "workflow-contract-check"),
+    ".github/workflows/loom-fr-phase-close-guard.yml": ("fr-phase-close-guard-check", "workflow-contract-check"),
+    ".github/workflows/pr-merge-gate.yml": ("pr-binding-workflow-check", "workflow-contract-check"),
+    "tools/check_authority_contract.py": ("authority-contract-check", "fr-wi-admission-check"),
+    "tools/check_cli_contract.py": ("cli-contract-check",),
+    "tools/check_delivery_gate.py": ("delivery-gate-check",),
+    "tools/check_demo_bootstrap_fixture.py": ("loom-demo-new-project-check",),
+    "tools/check_fr_phase_close_guard.py": ("fr-phase-close-guard-check",),
+    "tools/check_fr_phase_close_guard_workflow.py": ("fr-phase-close-guard-check",),
+    "tools/check_host_attestation.py": ("host-attestation-check",),
+    "tools/check_light_profile.py": ("light-profile-check",),
+    "tools/check_loom_check_runtime_regressions.py": ("loom-check-runtime-regression",),
+    "tools/check_npm_package.py": ("npm-package-check",),
+    "tools/check_pr_binding_workflow.py": ("pr-binding-workflow-check", "pr-metadata-check"),
+    "tools/check_product_acceptance_adapter.py": ("product-acceptance-adapter-check",),
+    "tools/check_release_surface.py": ("release-surface-check",),
+    "tools/host_adapter_check.py": ("host-adapter-check",),
+    "tools/read_delivery_gate_required_identity.py": ("delivery-gate-check",),
+    "tools/skills_surface.py": ("skills-check",),
+    "tools/stamp_plugin_payload_metadata.py": ("npm-package-check",),
+    "tools/version_surface_check.py": ("release-surface-check",),
+}
+SCRIPT_NATIVE_SURFACES = {
+    "authority_contract.py": ("authority-contract-check",),
+    "github_admission.py": ("authority-contract-check", "fr-wi-admission-check"),
+    "github_closure_guard.py": ("fr-phase-close-guard-check",),
+    "host_attestation.py": ("host-attestation-check",),
+    "light_profile.py": ("light-profile-check",),
+    "product_acceptance.py": ("product-acceptance-adapter-check",),
+    "failure_envelope.py": ("failure-envelope-check",),
+    "native_validation.py": ("delivery-gate-check", "light-profile-check"),
+    "delivery_gate.py": ("delivery-gate-check",),
+    "governance_surface.py": ("pr-metadata-check",),
+}
 CAUSES = {
     "host_facts_unreadable": {
         "failure_domain": "host_service",
@@ -312,42 +341,69 @@ def _automatic_validation_targets(paths: list[str], profile: str) -> list[str]:
         targets.add("skills-doc-reference-sync-check")
     if not docs_only or any(path.endswith(".py") for path in paths):
         targets.add("py-compile")
-    if any(path.startswith(("src/skills/", "skills/", "plugins/loom/skills/")) for path in paths):
-        targets.add("skills-check")
-    if any(
-        path.endswith("/light_profile.py")
-        or path == "tools/check_light_profile.py"
-        or path.startswith("tools/fixtures/light-profile/")
-        for path in paths
-    ):
-        targets.add("light-profile-check")
-    if any(path in {"VERSION", "package.json", "package-lock.json"} or path.startswith("bin/") for path in paths):
-        targets.update(("release-surface-check", "npm-package-check"))
-    if any(
-        path in {"Makefile", ".github/workflows/loom-check.yml", ".github/workflows/loom-delivery-gate.yml"}
-        or path.endswith("/delivery_gate.py")
-        or path == "tools/check_delivery_gate.py"
-        or path.startswith("tools/fixtures/delivery-gate/")
-        for path in paths
-    ):
-        targets.update(("py-compile", "delivery-gate-check"))
+    for path in paths:
+        matched = False
+        if path in EXACT_NATIVE_SURFACES:
+            targets.update(EXACT_NATIVE_SURFACES[path])
+            matched = True
+        script_targets = SCRIPT_NATIVE_SURFACES.get(Path(path).name)
+        if script_targets and path.startswith(("src/skills/shared/scripts/", "skills/shared/scripts/", "plugins/loom/skills/shared/scripts/")):
+            targets.update(script_targets)
+            matched = True
+        if path.startswith(("src/skills/", "skills/", "plugins/loom/skills/")):
+            targets.add("skills-check")
+            matched = True
+        if path.startswith(("src/skills/shared/scripts/", "skills/shared/scripts/", "plugins/loom/skills/shared/scripts/")) and not script_targets:
+            targets.add("cli-contract-check")
+        if path.startswith("tools/fixtures/product-acceptance/"):
+            targets.add("product-acceptance-adapter-check")
+            matched = True
+        elif path.startswith("tools/fixtures/light-profile/"):
+            targets.add("light-profile-check")
+            matched = True
+        elif path.startswith("tools/fixtures/delivery-gate/"):
+            targets.add("delivery-gate-check")
+            matched = True
+        if path in {"VERSION", "package.json", "package-lock.json"} or path.startswith("bin/"):
+            targets.update(("release-surface-check", "npm-package-check"))
+            matched = True
+        if path.startswith("examples/"):
+            targets.add("loom-demo-new-project-check")
+            matched = True
+        if path.endswith(".md"):
+            targets.add("skills-doc-reference-sync-check")
+            matched = True
+        if path == ".github/PULL_REQUEST_TEMPLATE.md":
+            targets.add("pr-metadata-check")
+        if path.startswith((".agents/", "plugins/")):
+            targets.add("skills-check")
+            matched = True
+        if path.startswith(".loom/"):
+            targets.add("cli-contract-check")
+            matched = True
+        if not matched and path.startswith(".github/workflows/"):
+            targets.add("workflow-contract-check")
+        elif not matched and path.startswith("tools/"):
+            targets.add("cli-contract-check")
+        elif not matched and path.startswith(("src/skills/", "skills/", "plugins/loom/skills/")):
+            targets.update(("skills-check", "cli-contract-check"))
+        elif path == "Makefile":
+            targets.update(("delivery-gate-check", "workflow-contract-check"))
     if profile == "reinforced":
         targets.update(("py-compile", "skills-check", "cli-contract-check"))
     if not targets:
         targets.add("py-compile")
-    return [target for target in NATIVE_TARGET_ORDER if target in targets]
+    return [target for target in ALLOWED_MAKE_TARGETS if target in targets]
 
 
 def _validation_command(
     facts: dict[str, Any], paths: list[str], profile: str
 ) -> tuple[str, list[str], list[str], str]:
     if "validation_command" in facts:
-        value = facts.get("validation_command")
-        if not isinstance(value, str) or not value.strip():
-            return "", [], ["validation_command must be a non-empty string"], "host_facts"
-        return value.strip(), [], [], "host_facts"
+        targets, errors = parse_make_targets(facts.get("validation_command"))
+        return (f"make -- {' '.join(targets)}" if targets else ""), targets, errors, "host_facts"
     targets = _automatic_validation_targets(paths, profile)
-    return f"make {' '.join(targets)}", targets, [], "changed_paths_profile"
+    return f"make -- {' '.join(targets)}", targets, [], "changed_paths_profile"
 
 
 def _enforcement(value: object) -> tuple[str, list[str]]:

@@ -99,21 +99,36 @@ def check_evaluator() -> None:
         if payload["host_facts"]["status"] != host_status:
             raise AssertionError(f"{name} unexpectedly rejected valid host facts")
         native = payload["native_validation"]
-        if native["targets"] != targets or native["command"] != f"make {' '.join(targets)}":
+        if native["targets"] != targets or native["command"] != f"make -- {' '.join(targets)}":
             raise AssertionError(f"{name} did not select its changed-path native validation: {native}")
         if native["selection_source"] != "changed_paths_profile" or native["command"] == "make delivery-gate-check":
             raise AssertionError(f"{name} must select candidate validation, not only evaluator self-tests")
 
     valid = json.loads((FIXTURES / "docs.json").read_text(encoding="utf-8"))
-    reusable = evaluator.evaluate_host_facts({**valid, "profile": "reinforced", "validation_command": "python -m pytest -q"})
+    reusable = evaluator.evaluate_host_facts({**valid, "profile": "reinforced", "validation_command": "py-compile skills-check"})
     assert_primary_cause(reusable, "passed")
     if (
         reusable["delivery"]["profile"] != "reinforced"
-        or reusable["native_validation"]["command"] != "python -m pytest -q"
-        or reusable["native_validation"]["targets"] != []
+        or reusable["native_validation"]["command"] != "make -- py-compile skills-check"
+        or reusable["native_validation"]["targets"] != ["py-compile", "skills-check"]
         or reusable["native_validation"]["selection_source"] != "host_facts"
     ):
         raise AssertionError("reusable callers must retain their declared profile and validation command")
+    for unsafe in (
+        "${{ github.sha }}",
+        "py-compile ${{ github.sha }}",
+        "py-compile\nskills-check",
+        "py-compile;curl",
+        "py-compile|curl",
+        "py-compile && curl",
+        "py-compile > result",
+        "py-compile $(curl)",
+        "curl",
+    ):
+        rejected = evaluator.evaluate_host_facts({**valid, "validation_command": unsafe})
+        assert_primary_cause(rejected, "validation_command_missing")
+        if rejected["native_validation"]["targets"] or not rejected["native_validation"]["command_errors"]:
+            raise AssertionError(f"unsafe validation input was not rejected: {unsafe!r}")
     reinforced = evaluator.evaluate_host_facts({**valid, "profile": "reinforced"})
     if reinforced["native_validation"]["targets"] != [
         "py-compile",
@@ -190,6 +205,64 @@ def check_evaluator() -> None:
     ):
         raise AssertionError("caller fixture must prove a pull_request caller selects pinned Loom and candidate paths")
     assert_primary_cause(evaluator.finalize_delivery_gate(caller["host_facts"], {"status": "passed"}, "enforce"), "passed", "enforce", "passed")
+
+
+def check_native_surface_inventory() -> None:
+    evaluator = load_evaluator()
+    workflows = {
+        str(path.relative_to(ROOT)) for path in (ROOT / ".github" / "workflows").glob("*.yml")
+    }
+    checker_tools = {
+        str(path.relative_to(ROOT)) for path in (ROOT / "tools").glob("check_*.py")
+    }
+    mapped = set(evaluator.EXACT_NATIVE_SURFACES)
+    missing_inventory = sorted((workflows | checker_tools) - mapped)
+    if missing_inventory:
+        raise AssertionError("native contract inventory is missing: " + ", ".join(missing_inventory))
+
+    make_targets = {
+        line.split(":", 1)[0]
+        for line in (ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith(("\t", ".")) and ":" in line
+    }
+    declared_targets = {
+        target for targets in evaluator.EXACT_NATIVE_SURFACES.values() for target in targets
+    }
+    missing_make_targets = sorted(declared_targets - make_targets)
+    if missing_make_targets:
+        raise AssertionError("native contract inventory references missing Make targets: " + ", ".join(missing_make_targets))
+
+    required_surfaces = {
+        "product-acceptance-adapter-check",
+        "fr-phase-close-guard-check",
+        "host-attestation-check",
+        "light-profile-check",
+        "authority-contract-check",
+        "fr-wi-admission-check",
+        "pr-metadata-check",
+        "failure-envelope-check",
+        "npm-package-check",
+        "release-surface-check",
+        "workflow-contract-check",
+    }
+    available = set(evaluator.ALLOWED_MAKE_TARGETS)
+    if not required_surfaces <= available:
+        raise AssertionError("native target allowlist is incomplete: " + ", ".join(sorted(required_surfaces - available)))
+
+    for path in sorted(workflows | checker_tools):
+        selected = set(evaluator._automatic_validation_targets([path], "standard"))
+        expected = set(evaluator.EXACT_NATIVE_SURFACES[path])
+        if not expected <= selected or selected <= {"py-compile"}:
+            raise AssertionError(f"{path} lacks semantic native validation: {selected} expected {expected}")
+    fail_safe = {
+        ".github/workflows/future-control.yml": "workflow-contract-check",
+        "tools/check_future_control.py": "cli-contract-check",
+        "src/skills/shared/scripts/future_control.py": "cli-contract-check",
+    }
+    for path, expected in fail_safe.items():
+        selected = evaluator._automatic_validation_targets([path], "standard")
+        if expected not in selected:
+            raise AssertionError(f"unknown control-plane path {path} did not fail safe: {selected}")
 
 
 def materialize_candidate(
@@ -280,6 +353,15 @@ def check_light_profile_host_integration() -> None:
         validation = root / "validation.json"
         host_facts.write_text(json.dumps(direct_facts) + "\n", encoding="utf-8")
         validation.write_text('{"status":"passed"}\n', encoding="utf-8")
+        malicious = forbidden / "src" / "skills" / "shared" / "scripts" / "delivery_gate.py"
+        malicious.parent.mkdir(parents=True)
+        malicious.write_text(
+            "import json\nprint(json.dumps({'result': 'passed', 'primary_cause': {'id': 'passed'}}))\n",
+            encoding="utf-8",
+        )
+        attacker = subprocess.run([sys.executable, str(malicious)], check=False, text=True, capture_output=True)
+        if json.loads(attacker.stdout).get("result") != "passed":
+            raise AssertionError("malicious candidate evaluator fixture must attempt to self-pass")
         completed = subprocess.run(
             [
                 sys.executable,
@@ -299,7 +381,7 @@ def check_light_profile_host_integration() -> None:
         )
         payload = json.loads(completed.stdout)
         if completed.returncode != 0 or payload.get("result") != "blocked" or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier":
-            raise AssertionError(f"host-level light-profile negative integration drifted: {payload}")
+            raise AssertionError(f"trusted evaluator consumed the malicious candidate evaluator: {payload}")
 
 
 def check_generated_copies() -> None:
@@ -497,6 +579,8 @@ def check_identity_reader_boundary() -> None:
 
 def check_workflow() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
+    host_facts_block = text.split("      host_facts:\n", 1)[1].split("      profile:\n", 1)[0] if "      host_facts:\n" in text else ""
+    profile_block = text.split("      profile:\n", 1)[1].split("      validation_command:\n", 1)[0] if "      profile:\n" in text else ""
     validation_command_block = text.split("      validation_command:\n", 1)[1].split("      loom_ref:\n", 1)[0] if "      validation_command:\n" in text else ""
     loom_ref_block = text.split("      loom_ref:\n", 1)[1].split("    outputs:", 1)[0] if "      loom_ref:\n" in text else ""
     enforcement_block = text.split("      enforcement:\n", 1)[1].split("    outputs:", 1)[0] if "      enforcement:\n" in text else ""
@@ -522,6 +606,8 @@ def check_workflow() -> None:
         "pull_number: context.payload.number",
         "repository: MC-and-his-Agents/Loom",
         "ref: ${{ inputs.loom_ref }}",
+        "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}",
+        "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}",
         "path: loom",
         "repository: ${{ github.repository }}",
         "path: candidate",
@@ -530,19 +616,23 @@ def check_workflow() -> None:
         "const reusable = process.env.REUSABLE_MODE === \"true\";",
         "if: ${{ always() && inputs.loom_ref != '' }}",
         "if: ${{ always() && inputs.loom_ref == '' }}",
-        "LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}",
-        "CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}",
+        "LOOM_SOURCE_PATH: loom",
+        "CANDIDATE_PATH: candidate",
         "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}",
         "LOOM_SOURCE_PATH",
         "CANDIDATE_PATH",
         "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py",
-        "bash -o pipefail -c \"$VALIDATION_COMMAND\"",
+        'subprocess.run(["make", "--", *targets], check=False)',
+        '["native_validation"]["targets"]',
+        "trusted_evaluator_sha256",
+        "host_facts_sha256",
+        "delivery_gate_sha256",
+        "trusted evaluator changed during candidate validation",
+        "host facts changed during candidate validation",
+        "delivery gate result changed after trusted finalization",
         "--validation-result-file",
         "--candidate-path \"$CANDIDATE_PATH\"",
         "--enforcement \"$DELIVERY_GATE_ENFORCEMENT\"",
-        "LOOM_DELIVERY_GATE_CHANGED_PATHS_FILE",
-        "LOOM_DELIVERY_GATE_HOST_FACTS_FILE",
-        "LOOM_DELIVERY_GATE_DECISION_FILE",
         "CHANGED_PATHS_PATH",
         "fs.writeFileSync(process.env.CHANGED_PATHS_PATH",
         "Product acceptance: not_evaluated.",
@@ -569,6 +659,10 @@ def check_workflow() -> None:
         "secrets: inherit",
         "GITHUB_TOKEN",
         "GH_TOKEN",
+        "bash -o pipefail -c",
+        "          VALIDATION_COMMAND:",
+        "LOOM_DELIVERY_GATE_HOST_FACTS_FILE",
+        "LOOM_DELIVERY_GATE_DECISION_FILE",
         "github.event_name",
         'event === "workflow_call"',
         'const cause = "product_acceptance:not_evaluated"',
@@ -585,7 +679,20 @@ def check_workflow() -> None:
     if not checkouts or any("persist-credentials: false" not in checkout for checkout in checkouts):
         raise AssertionError("every checkout must drop credentials before untrusted native validation")
     if len(checkouts) != 3:
-        raise AssertionError("workflow must keep separate canonical Loom, caller candidate, and direct Loom checkout paths")
+        raise AssertionError("workflow must define pinned reusable, trusted direct-base, and untrusted candidate checkouts")
+    trusted_direct = text.split("      - name: Checkout trusted Loom base for direct validation\n", 1)[-1].split("      - name: Checkout untrusted candidate validation tree\n", 1)[0]
+    candidate = text.split("      - name: Checkout untrusted candidate validation tree\n", 1)[-1].split("      - name: Evaluate delivery facts\n", 1)[0]
+    native_step = text.split("      - name: Run selected native validation with read-only token\n", 1)[-1].split("      - name: Finalize advisory delivery result\n", 1)[0]
+    if "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" not in trusted_direct or "path: loom" not in trusted_direct:
+        raise AssertionError("direct delivery evaluator must come from the trusted base SHA")
+    if "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in candidate or "path: candidate" not in candidate:
+        raise AssertionError("untrusted candidate must be isolated to the candidate validation tree")
+    exposed = [name for name in ("HOST_FACTS_PATH", "LOOM_SOURCE_PATH", "DELIVERY_GATE_PLAN_PATH") if name in native_step]
+    if exposed:
+        raise AssertionError("candidate validation received trusted evaluator paths: " + ", ".join(exposed))
+    for name, block in (("host_facts", host_facts_block), ("profile", profile_block)):
+        if "required: true" not in block or "default:" in block:
+            raise AssertionError(f"reusable callers must supply non-default {name}")
     if "required: true" not in loom_ref_block or "default:" in loom_ref_block:
         raise AssertionError("reusable callers must supply one non-default pinned Loom SHA")
     if "required: true" not in validation_command_block or "default:" in validation_command_block:
@@ -609,7 +716,12 @@ def check_workflow_event_matrix() -> None:
             "merge_group": ["py-compile"],
             "push_main": ["py-compile", "demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"],
         },
-        "loom-delivery-gate": {"pull_request": "enforce", "merge_group": "enforce"},
+        "loom-delivery-gate": {
+            "pull_request": "enforce",
+            "merge_group": "enforce",
+            "trusted_evaluator": "base_sha_or_pinned_loom_ref",
+            "candidate": "isolated_head_tree",
+        },
     }
     if matrix != expected:
         raise AssertionError(f"workflow event matrix fixture drifted: {matrix}")
@@ -649,6 +761,7 @@ def check_workflow_event_matrix() -> None:
 
 def main() -> int:
     check_evaluator()
+    check_native_surface_inventory()
     check_light_profile_host_integration()
     check_generated_copies()
     check_required_check_identity()

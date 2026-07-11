@@ -10,12 +10,11 @@ on:
         required: true
         type: string
       profile:
-        description: Optional delivery profile override (light, standard, or reinforced).
-        required: false
+        description: Required delivery profile (light, standard, or reinforced).
+        required: true
         type: string
-        default: ''
       validation_command:
-        description: Native validation command run with read-only permissions and no injected secrets.
+        description: Space-delimited allowlisted Make targets; shell commands and expressions are rejected.
         required: true
         type: string
       loom_ref:
@@ -144,24 +143,26 @@ jobs:
           path: loom
           persist-credentials: false
 
-      - name: Checkout caller candidate for reusable validation
-        if: ${{ always() && inputs.loom_ref != '' }}
-        continue-on-error: true
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-          path: candidate
-          persist-credentials: false
-
-      - name: Checkout Loom candidate for direct validation
+      - name: Checkout trusted Loom base for direct validation
         if: ${{ always() && inputs.loom_ref == '' }}
         continue-on-error: true
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout untrusted candidate validation tree
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          fetch-depth: 1
+          path: candidate
           persist-credentials: false
 
       - name: Evaluate delivery facts
@@ -172,53 +173,75 @@ jobs:
         env:
           HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
           DELIVERY_GATE_PLAN_PATH: ${{ runner.temp }}/loom-delivery-gate-plan.json
-          LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
-          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
+          LOOM_SOURCE_PATH: loom
+          CANDIDATE_PATH: candidate
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
+          PYTHONDONTWRITEBYTECODE: '1'
         run: |
           set -u
           python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" --host-facts-file "$HOST_FACTS_PATH" --candidate-path "$CANDIDATE_PATH" --enforcement "$DELIVERY_GATE_ENFORCEMENT" --output "$DELIVERY_GATE_PLAN_PATH"
-          COMMAND="$(python3 - "$DELIVERY_GATE_PLAN_PATH" <<'PY'
+          python3 - "$DELIVERY_GATE_PLAN_PATH" "$LOOM_SOURCE_PATH/src/skills/shared/scripts" "$HOST_FACTS_PATH" "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
           import json
           import sys
-          with open(sys.argv[1], encoding="utf-8") as stream:
-              print(json.load(stream)["native_validation"]["command"])
+
+          from pathlib import Path
+
+          plan_path, source_root, host_facts_path, output_path = map(Path, sys.argv[1:])
+          targets = json.loads(plan_path.read_text(encoding="utf-8"))["native_validation"]["targets"]
+          digest = hashlib.sha256()
+          for path in sorted(source_root.glob("*.py")):
+              digest.update(path.name.encode("utf-8"))
+              digest.update(b"\0")
+              digest.update(path.read_bytes())
+          with output_path.open("a", encoding="utf-8") as stream:
+              stream.write(f"validation_targets={json.dumps(targets, separators=(',', ':'))}\n")
+              stream.write(f"trusted_evaluator_sha256={digest.hexdigest()}\n")
+              stream.write(f"host_facts_sha256={hashlib.sha256(host_facts_path.read_bytes()).hexdigest()}\n")
           PY
-          )"
-          {
-            echo "validation_command<<EOF"
-            printf '%s\n' "$COMMAND"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Run selected native validation with read-only token
         if: ${{ always() }}
         continue-on-error: true
         shell: bash
         env:
-          VALIDATION_COMMAND: ${{ steps.evaluate.outputs.validation_command }}
-          VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-delivery-native-validation.json
-          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
-          LOOM_DELIVERY_GATE_CHANGED_PATHS_FILE: ${{ runner.temp }}/loom-delivery-changed-paths.txt
-          LOOM_DELIVERY_GATE_HOST_FACTS_FILE: ${{ runner.temp }}/loom-delivery-host-facts.json
-          LOOM_DELIVERY_GATE_DECISION_FILE: ${{ runner.temp }}/loom-delivery-gate-plan.json
+          VALIDATION_TARGETS_JSON: ${{ steps.evaluate.outputs.validation_targets }}
+          CANDIDATE_PATH: candidate
         run: |
           set -u
+          VALIDATION_RESULT_PATH="${{ runner.temp }}/loom-delivery-native-validation.json"
           (
             cd "$CANDIDATE_PATH"
-            if [ -z "${VALIDATION_COMMAND//[[:space:]]/}" ]; then
-              STATUS=command_missing
-            elif bash -o pipefail -c "$VALIDATION_COMMAND"; then
-              STATUS=passed
-            else
-              EXIT_CODE=$?
-              STATUS=$([ "$EXIT_CODE" -eq 127 ] && echo command_missing || echo failed)
-            fi
-            printf '{"status":"%s"}\n' "$STATUS" > "$VALIDATION_RESULT_PATH"
-            echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+            python3 - "$VALIDATION_TARGETS_JSON" "$VALIDATION_RESULT_PATH" <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          try:
+              targets = json.loads(sys.argv[1])
+          except (json.JSONDecodeError, TypeError):
+              targets = []
+          valid = isinstance(targets, list) and bool(targets) and all(
+              isinstance(target, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]*", target)
+              for target in targets
+          )
+          if not valid:
+              status = "command_missing"
+          else:
+              completed = subprocess.run(["make", "--", *targets], check=False)
+              status = "passed" if completed.returncode == 0 else "failed"
+          with open(sys.argv[2], "w", encoding="utf-8") as stream:
+              json.dump({"status": status}, stream)
+              stream.write("\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              stream.write(f"status={status}\n")
+          PY
           )
 
       - name: Finalize advisory delivery result
+        id: finalize
         if: ${{ always() }}
         continue-on-error: true
         shell: bash
@@ -226,17 +249,48 @@ jobs:
           HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
           VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-delivery-native-validation.json
           DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
-          LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
-          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
+          LOOM_SOURCE_PATH: loom
+          CANDIDATE_PATH: candidate
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
+          EXPECTED_EVALUATOR_SHA256: ${{ steps.evaluate.outputs.trusted_evaluator_sha256 }}
+          EXPECTED_HOST_FACTS_SHA256: ${{ steps.evaluate.outputs.host_facts_sha256 }}
+          PYTHONDONTWRITEBYTECODE: '1'
         run: |
           set -u
+          python3 - "$LOOM_SOURCE_PATH/src/skills/shared/scripts" "$HOST_FACTS_PATH" <<'PY'
+          import hashlib
+          import os
+          import sys
+
+          from pathlib import Path
+
+          source_root = Path(sys.argv[1])
+          digest = hashlib.sha256()
+          for path in sorted(source_root.glob("*.py")):
+              digest.update(path.name.encode("utf-8"))
+              digest.update(b"\0")
+              digest.update(path.read_bytes())
+          if digest.hexdigest() != os.environ.get("EXPECTED_EVALUATOR_SHA256"):
+              raise SystemExit("trusted evaluator changed during candidate validation")
+          if hashlib.sha256(Path(sys.argv[2]).read_bytes()).hexdigest() != os.environ.get("EXPECTED_HOST_FACTS_SHA256"):
+              raise SystemExit("host facts changed during candidate validation")
+          PY
           python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" \
             --host-facts-file "$HOST_FACTS_PATH" \
             --validation-result-file "$VALIDATION_RESULT_PATH" \
             --candidate-path "$CANDIDATE_PATH" \
             --enforcement "$DELIVERY_GATE_ENFORCEMENT" \
             --output "$DELIVERY_GATE_PATH"
+          python3 - "$DELIVERY_GATE_PATH" "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
+          import sys
+
+          from pathlib import Path
+
+          result_path, output_path = map(Path, sys.argv[1:])
+          with output_path.open("a", encoding="utf-8") as stream:
+              stream.write(f"delivery_gate_sha256={hashlib.sha256(result_path.read_bytes()).hexdigest()}\n")
+          PY
 
       - name: Publish terminal delivery result
         id: terminal
@@ -245,12 +299,19 @@ jobs:
         env:
           DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
+          EXPECTED_DELIVERY_GATE_SHA256: ${{ steps.finalize.outputs.delivery_gate_sha256 }}
         with:
           script: |
             const fs = require("fs");
+            const crypto = require("crypto");
             let payload = null;
             try {
-              payload = JSON.parse(fs.readFileSync(process.env.DELIVERY_GATE_PATH, "utf8"));
+              const encoded = fs.readFileSync(process.env.DELIVERY_GATE_PATH);
+              const actual = crypto.createHash("sha256").update(encoded).digest("hex");
+              if (!process.env.EXPECTED_DELIVERY_GATE_SHA256 || actual !== process.env.EXPECTED_DELIVERY_GATE_SHA256) {
+                throw new Error("delivery gate result changed after trusted finalization");
+              }
+              payload = JSON.parse(encoded.toString("utf8"));
             } catch (error) {
               core.warning(`delivery evaluator output unavailable: ${String(error.message || error)}`);
             }

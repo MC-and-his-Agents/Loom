@@ -200,15 +200,19 @@ native validation；以下结构才可被 reconciliation 消费：
 ```yaml
 jobs:
   gate:
-    uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@LOOM_40_CHAR_SHA
+    uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@0717f4db765179e437a214a46886046849c0015b
     with:
-      validation_command: make py-compile
+      host_facts: '{"schema_version":"loom-delivery-gate-host-facts/v1","event":"pull_request","repository":{"owner":"owner","name":"repo"},"changed_paths":["src/main.py"]}'
+      loom_ref: 0717f4db765179e437a214a46886046849c0015b
+      validation_command: py-compile
       enforcement: enforce
       profile: light
 ```
 
-`validation_command` 必须由目标仓提供，不能省略、使用动态空值或只执行
-`make delivery-gate-check` evaluator 自测。
+`host_facts` 应由 caller 的只读 host-facts job 产生；上例使用 literal 仅展示完整可调用
+结构。`loom_ref` 必须与 `uses@SHA` 完全相同。`validation_command` 只接受 Loom 固定
+allowlist 中以空格分隔的 Make targets，不能省略、包含表达式/多行/shell operator，
+也不能传入 `curl` 等任意命令。
 
 第二条命令默认只做 host readback 与计划；显式 `--apply` 才会先把新 delivery gate
 加入 branch protection、readback 其 check/app identity，再移除声明的 legacy checks。

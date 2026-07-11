@@ -7,6 +7,8 @@
   },
   "loom-delivery-gate": {
     "pull_request": "enforce",
-    "merge_group": "enforce"
+    "merge_group": "enforce",
+    "trusted_evaluator": "base_sha_or_pinned_loom_ref",
+    "candidate": "isolated_head_tree"
   }
 }

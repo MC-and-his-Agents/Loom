@@ -272,16 +272,30 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
 
         reset([{"context": "loom-delivery-gate", "app_id": 15368}])
         state["workflow_content"] = (WORKFLOW_FIXTURES / "workflow-valid.yml").read_text(encoding="utf-8").replace(
-            "validation_command: make py-compile", "validation_command: make delivery-gate-check"
+            "validation_command: py-compile", "validation_command: delivery-gate-check"
         )
         invalid_validation = evaluator.reconcile_payload(target, apply=True, **args)
         assert_single_failure_envelope(invalid_validation)
         if invalid_validation.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "self-test" not in " ".join(invalid_validation.get("missing_inputs", [])):
             raise AssertionError(f"evaluator-only validation must block reconciliation: {invalid_validation}")
 
+        for fixture_name in (
+            "workflow-expression-validation.yml",
+            "workflow-folded-validation.yml",
+            "workflow-curl-validation.yml",
+        ):
+            reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+            state["workflow_fixture"] = fixture_name
+            unsafe_validation = evaluator.reconcile_payload(target, apply=True, **args)
+            assert_single_failure_envelope(unsafe_validation)
+            if unsafe_validation.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "validation_command" not in " ".join(unsafe_validation.get("missing_inputs", [])):
+                raise AssertionError(f"unsafe caller validation must block reconciliation ({fixture_name}): {unsafe_validation}")
+
         for old, new, expected in (
             ("enforcement: enforce", "enforcement: advisory", "enforcement"),
             ("profile: light", "profile: standard", "profile"),
+            ("      host_facts:", "      missing_host_facts:", "host_facts"),
+            ("loom_ref: 0717f4db765179e437a214a46886046849c0015b", "loom_ref: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "loom_ref"),
         ):
             reset([{"context": "loom-delivery-gate", "app_id": 15368}])
             state["workflow_content"] = (WORKFLOW_FIXTURES / "workflow-valid.yml").read_text(encoding="utf-8").replace(old, new)
