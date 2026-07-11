@@ -2,38 +2,39 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-2012",
   "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "4cd961c47b42a9d68ee7a0a46f7d7e813fbd7f05",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "kind": "code_review",
+  "summary": "Current-head semantic review found no implementation defect; formal allow remains blocked until carrier freshness and required suite/spec admission are complete.",
+  "reviewer": "codex-manual-semantic-review",
+  "authored_at": "2026-07-11T00:22:32Z",
+  "reviewed_head": "5c5dbcc296f3f7d3885cbdfe613a0e36546b32ef",
+  "reviewed_validation_summary": "2026-07-11: targeted metadata-only carrier refresh unittest, py_compile, generated-tree-drift, runtime-copy-parity, demo bootstrap sync, git diff --check, and loom_check installed-runtime passed. The source-self-fixture run completed without a captured final result because the runner stream detached; do not treat it as evidence.",
+  "reviewed_validation_summary_hash": "2fc72e1134487501b8eeec9be1448273fa965f9917cb8a4df64fffd9c5ecc238",
+  "validation_summary_source": "recovery.latest_validation_summary",
+  "validation_summary_locator": ".loom/progress/WI-2012.md",
+  "fallback_to": "build",
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-2012.md",
+    "recovery_entry": ".loom/progress/WI-2012.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "block",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
