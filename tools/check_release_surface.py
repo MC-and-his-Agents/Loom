@@ -18,10 +18,8 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parents[1]
 CLI_RELEASE_DOC = ROOT / "docs" / "adoption" / "loom-cli-release-surface.md"
 VERSION_AUTHORITY = ROOT / "docs" / "adoption" / "version-authority-map.md"
-INSTALLER_RELEASE = ROOT / ".github" / "workflows" / "node-installer-release.yml"
-INSTALLER_PR = ROOT / ".github" / "workflows" / "node-installer-pr.yml"
 CLI_RELEASE = ROOT / ".github" / "workflows" / "loom-cli-release.yml"
-INSTALLER_BUMP_CHECK = ROOT / "packages" / "loom-installer" / "scripts" / "check-version-bump.mjs"
+INSTALLER_PACKAGE = ROOT / "packages" / "loom-installer" / "package.json"
 README = ROOT / "README.md"
 README_ZH = ROOT / "README.zh-CN.md"
 CODEX_INSTALL = ROOT / "docs" / "adoption" / "codex-install.md"
@@ -506,79 +504,68 @@ def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
         surface_label=surface_label,
         evidence_locator=locator,
     )
-    installer_release = require_needles(
-        INSTALLER_RELEASE,
-        (
-            "name: node-installer-release",
-            "PACKAGE_NAME: '@mc-and-his-agents/loom-installer'",
-            "reason=installer-sunset-no-publish",
-            "should_publish=false",
-            "create_release=false",
-        ),
-        errors,
-        surface_label=surface_label,
-        evidence_locator=locator,
-    )
-    require_needles(
-        INSTALLER_PR,
-        (
-            "Run tombstone regression",
-            "python3 tools/check_release_surface.py",
-        ),
-        errors,
-        surface_label=surface_label,
-        evidence_locator=locator,
-    )
-
-    forbidden_installer_behavior_needles = (
-        "plugins/loom/.codex-plugin/|src/skills/|skills/",
-        "plugins/loom/.codex-plugin/",
-        "'src/skills/**'",
-    )
-    release_state_section = installer_release.split("Resolve sunset state", 1)[-1]
-    for needle in forbidden_installer_behavior_needles:
-        if needle in release_state_section:
+    if not INSTALLER_PACKAGE.exists():
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-missing-historical-metadata",
+            evidence_locator=locator,
+            source_locator=relative_to_root(INSTALLER_PACKAGE),
+            summary="retired installer metadata must remain available for historical readback",
+        )
+    else:
+        metadata = json.loads(INSTALLER_PACKAGE.read_text(encoding="utf-8"))
+        if metadata.get("name") != "@mc-and-his-agents/loom-installer" or not metadata.get("version"):
             add_error(
                 errors,
                 surface_label=surface_label,
-                failure_label=f"{surface_label}-installer-shim-scope-expanded",
+                failure_label=f"{surface_label}-invalid-historical-metadata",
                 evidence_locator=locator,
-                source_locator=relative_to_root(INSTALLER_RELEASE),
-                summary=f"installer release state must not classify `{needle}` as installer shim behavior",
+                source_locator=relative_to_root(INSTALLER_PACKAGE),
+                summary="retired installer metadata must retain its package name and historical version",
+            )
+        if metadata.get("private") is not True:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-publishable-historical-package",
+                evidence_locator=locator,
+                source_locator=relative_to_root(INSTALLER_PACKAGE),
+                summary="retired installer metadata must be private",
+            )
+        for field in ("bin", "scripts", "files", "publishConfig", "dependencies", "devDependencies"):
+            if field in metadata:
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-executable-package-surface",
+                    evidence_locator=locator,
+                    source_locator=relative_to_root(INSTALLER_PACKAGE),
+                    summary=f"retired installer metadata must not expose `{field}`",
+                )
+
+    for relative in ("src", "test", "scripts", "package-lock.json", "tsconfig.json"):
+        executable_surface = INSTALLER_PACKAGE.parent / relative
+        if executable_surface.exists():
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-executable-package-path",
+                evidence_locator=locator,
+                source_locator=relative_to_root(executable_surface),
+                summary=f"retired installer executable surface `{relative}` must be absent",
             )
 
-    forbidden_installer_publish_needles = (
-        "npm publish",
-        "npm whoami",
-        "git tag -a",
-        "git push origin",
-        "gh release create",
-        "NODE_AUTH_TOKEN",
-        "NPM_TOKEN",
-        "contents: write",
-        "id-token: write",
-    )
-    for needle in forbidden_installer_publish_needles:
-        if needle in installer_release:
+    for workflow_name in ("node-installer-pr.yml", "node-installer-release.yml"):
+        workflow = ROOT / ".github" / "workflows" / workflow_name
+        if workflow.exists():
             add_error(
                 errors,
                 surface_label=surface_label,
-                failure_label=f"{surface_label}-active-publish-capability",
+                failure_label=f"{surface_label}-active-workflow",
                 evidence_locator=locator,
-                source_locator=relative_to_root(INSTALLER_RELEASE),
-                summary=f"installer release workflow must not contain active publish capability `{needle}`",
-            )
-
-    if INSTALLER_BUMP_CHECK.exists():
-        bump_check = INSTALLER_BUMP_CHECK.read_text(encoding="utf-8")
-        if "version bump gate retired" not in bump_check:
-            add_error(
-                errors,
-                surface_label=surface_label,
-                failure_label=f"{surface_label}-active-bump-gate",
-                evidence_locator=locator,
-                source_locator=relative_to_root(INSTALLER_BUMP_CHECK),
-                summary="installer version bump check must stay retired for the tombstone package",
+                source_locator=relative_to_root(workflow),
+                summary=f"retired installer workflow `{workflow_name}` must be absent",
             )
 
 

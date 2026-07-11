@@ -57,12 +57,6 @@ self-reference: either keep `plugin_payload_hash` in metadata outside the digest
 root, or normalize/exclude only the `plugin_payload_hash` field while computing
 the digest.
 
-The installer payload exposes aggregate version context in:
-
-```text
-packages/loom-installer/payload/manifest.json
-```
-
 The `loom` CLI release surface is defined in:
 
 ```text

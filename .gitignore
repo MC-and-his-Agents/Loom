@@ -105,7 +105,6 @@ plugins/loom/*
 !plugins/loom/skills/
 !plugins/loom/skills/**
 packages/skills/
-packages/loom-installer/payload/
 .worktrees/
 .loom/runtime/
 .loom/tmp/

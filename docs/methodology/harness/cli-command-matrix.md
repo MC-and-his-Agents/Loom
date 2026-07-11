@@ -143,7 +143,6 @@ diagnostic runtime surfaces for parent closeout evidence:
 ```text
 python3 tools/check_loom_check_runtime_regressions.py --surface single-flight-locking
 python3 tools/check_loom_check_runtime_regressions.py --surface worktree-local-lock-paths
-python3 tools/check_loom_check_runtime_regressions.py --surface installer-regression-lock-output
 python3 tools/check_loom_check_runtime_regressions.py --surface subprocess-env-purity
 python3 tools/check_loom_check_runtime_regressions.py --surface temp-dir-cleanup
 python3 tools/check_loom_check_runtime_regressions.py --surface demo-fixture-cleanliness

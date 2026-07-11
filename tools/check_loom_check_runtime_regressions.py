@@ -173,39 +173,6 @@ def check_subprocess_env_purity(loom_check, failures: list[str]) -> None:
         fail(f"{failure.category} evidence_locator={evidence_locator}: {failure.detail}", failures)
 
 
-def check_installer_busy_output(failures: list[str]) -> None:
-    package_root = ROOT / "packages/loom-installer"
-    lock_dir = package_root / ".installer-regression-lock"
-    owner_path = lock_dir / "owner.json"
-    if lock_dir.exists():
-        fail(f"installer regression lock already exists before regression: {lock_dir}", failures)
-        return
-    owner = {
-        "schema_version": "loom-installer-regression-lock/v1",
-        "run_id": "regression-owner",
-        "pid": os.getpid(),
-        "started_at": "2099-01-01T00:00:00.000Z",
-        "command": "regression lock owner",
-        "cwd": str(ROOT),
-    }
-    try:
-        lock_dir.mkdir()
-        owner_path.write_text(json.dumps(owner, indent=2) + "\n", encoding="utf-8")
-        result = run(
-            ["node", "packages/loom-installer/scripts/run-regression.mjs"],
-            env={"LOOM_INSTALLER_REGRESSION_LOCK_TIMEOUT_SECONDS": "0.1"},
-            timeout=15.0,
-        )
-        output = result.stdout + result.stderr
-        if result.returncode == 0:
-            fail("installer regression must not run while the package-root lock is owned", failures)
-        for term in ("installer regression lock is busy", "owner:", "started_at=", "owner_command:", "owner_cwd:", "fallback:"):
-            if term not in output:
-                fail(f"installer regression busy output must include `{term}`", failures)
-    finally:
-        shutil.rmtree(lock_dir, ignore_errors=True)
-
-
 def check_demo_fixture_stays_clean(failures: list[str]) -> None:
     before = run(["git", "status", "--short", "--", "examples/new-project"], timeout=30.0)
     if before.returncode != 0:
@@ -277,12 +244,6 @@ def runtime_regression_surfaces(loom_check, temp_dir_baseline: set[Path]) -> tup
             name="subprocess-env-purity",
             fixture_group="environment-purity",
             run=lambda failures: check_subprocess_env_purity(loom_check, failures),
-            selectable=True,
-        ),
-        RuntimeRegressionSurface(
-            name="installer-regression-lock-output",
-            fixture_group="locking",
-            run=check_installer_busy_output,
             selectable=True,
         ),
         RuntimeRegressionSurface(

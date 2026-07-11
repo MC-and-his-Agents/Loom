@@ -1,38 +1,8 @@
 {
   "name": "@mc-and-his-agents/loom-installer",
   "version": "0.1.149",
-  "description": "Retired tombstone package for the legacy Loom installer.",
-  "type": "module",
-  "bin": {
-    "loom-installer": "dist/src/cli.js"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check:docs": "node ./scripts/check-doc-sync.mjs",
-    "check:distribution": "node ./scripts/check-payload-drift.mjs",
-    "check:hosts": "node ./scripts/check-payload-drift.mjs",
-    "check:payload": "node ./scripts/check-payload-drift.mjs",
-    "check:versions": "cd ../.. && python3 tools/version_surface_check.py",
-    "check:release-surface": "cd ../.. && python3 tools/check_release_surface.py",
-    "check:release": "npm run check:docs && npm run check:versions && npm run check:release-surface && npm test",
-    "prepack": "npm run build",
-    "prepublishOnly": "npm test && npm run check:release",
-    "test": "npm run build && node --test dist/test/*.test.js"
-  },
-  "devDependencies": {
-    "@types/node": "^24.6.0",
-    "typescript": "^5.9.3"
-  },
+  "description": "Historical metadata for the retired Loom installer package.",
+  "private": true,
   "keywords": [
     "loom",
     "installer",

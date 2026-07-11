@@ -122,9 +122,6 @@ SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
     ".loom/cache",
     ".loom/runtime",
     ".loom/tmp",
-    "packages/loom-installer/dist",
-    "packages/loom-installer/node_modules",
-    "packages/loom-installer/payload",
 }
 
 
@@ -206,8 +203,6 @@ AREA_READMES = (
 CORE_DOCS = (
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".github/workflows/loom-check.yml",
-    ".github/workflows/node-installer-pr.yml",
-    ".github/workflows/node-installer-release.yml",
     "plugins/loom/.codex-plugin/plugin.json",
     "docs/adoption/codex-install.md",
     "docs/architecture/governance-design.md",
@@ -319,17 +314,8 @@ CORE_DOCS = (
     "docs/methodology/templates/scaffold/user-story.md",
     "tools/loom_status.py",
     "packages/loom-installer/README.md",
+    "packages/loom-installer/README.zh-CN.md",
     "packages/loom-installer/package.json",
-    "packages/loom-installer/package-lock.json",
-    "packages/loom-installer/tsconfig.json",
-    "packages/loom-installer/scripts/build-payload.mjs",
-    "packages/loom-installer/scripts/check-doc-sync.mjs",
-    "packages/loom-installer/scripts/check-payload-drift.mjs",
-    "packages/loom-installer/scripts/check-version-bump.mjs",
-    "packages/loom-installer/scripts/run-regression.mjs",
-    "packages/loom-installer/src/cli.ts",
-    "packages/loom-installer/src/index.ts",
-    "packages/loom-installer/test/installer.test.ts",
     "tools/loom_init.py",
     "tools/loom_flow.py",
     "tools/py_compile_clean.py",
@@ -383,8 +369,8 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
 )
 
 GENERATED_TRACKED_PATHS = (
+    ".loom/runtime",
     "packages/skills",
-    "packages/loom-installer/payload",
 )
 
 DEMO_ASSETS = (
@@ -591,13 +577,6 @@ class LoomCheckLock:
     run_id: str
 
 
-@dataclass(frozen=True)
-class InstallerRegressionLock:
-    path: Path
-    owner_path: Path
-    run_id: str
-
-
 class LoomCheckLockBusy(RuntimeError):
     def __init__(self, path: Path, owner: dict[str, object], fallback: str):
         self.path = path
@@ -719,78 +698,6 @@ def release_single_flight_lock(lock: LoomCheckLock) -> None:
         lock.path.unlink()
     except FileNotFoundError:
         pass
-
-
-def installer_regression_lock_path(package_root: Path) -> Path:
-    return package_root / ".installer-regression-lock"
-
-
-def format_installer_regression_lock_busy_message(path: Path, owner: dict[str, object], fallback: str) -> str:
-    run_id = owner.get("run_id") or "unknown"
-    pid = owner.get("pid") or "unknown"
-    started_at = owner.get("started_at") or "unknown"
-    command = owner.get("command") or "unknown"
-    cwd = owner.get("cwd") or "unknown"
-    return (
-        "installer regression lock is busy\n"
-        f"lock: {path}\n"
-        f"owner: run_id={run_id} pid={pid} started_at={started_at}\n"
-        f"owner_command: {command}\n"
-        f"owner_cwd: {cwd}\n"
-        f"fallback: {fallback}"
-    )
-
-
-def acquire_installer_regression_lock(
-    package_root: Path,
-    *,
-    command: str,
-    cwd: Path,
-    timeout_seconds: float = 300.0,
-) -> InstallerRegressionLock:
-    path = installer_regression_lock_path(package_root)
-    owner_path = path / "owner.json"
-    payload = {
-        "schema_version": "loom-installer-regression-lock/v1",
-        "run_id": uuid.uuid4().hex,
-        "pid": os.getpid(),
-        "started_at": utc_now_iso(),
-        "command": command,
-        "cwd": str(cwd.resolve()),
-    }
-    started = time.monotonic()
-    while True:
-        try:
-            path.mkdir()
-        except FileExistsError as exc:
-            owner = read_lock_owner(owner_path)
-            if lock_owner_is_stale(owner):
-                try:
-                    shutil.rmtree(path)
-                except FileNotFoundError:
-                    continue
-                except OSError:
-                    pass
-                else:
-                    continue
-            if time.monotonic() - started >= timeout_seconds:
-                fallback = "wait for the owner to finish, verify/remove a stale lock, or run in a different worktree"
-                raise RuntimeError(format_installer_regression_lock_busy_message(path, owner, fallback)) from exc
-            time.sleep(0.25)
-            continue
-        try:
-            owner_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except OSError:
-            shutil.rmtree(path, ignore_errors=True)
-            raise
-        return InstallerRegressionLock(path=path, owner_path=owner_path, run_id=str(payload["run_id"]))
-
-
-def release_installer_regression_lock(lock: InstallerRegressionLock) -> None:
-    owner = read_lock_owner(lock.owner_path)
-    if owner.get("run_id") != lock.run_id:
-        return
-    shutil.rmtree(lock.path, ignore_errors=True)
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -981,8 +888,6 @@ def iter_markdown_files(root: Path) -> list[Path]:
         if any(relative == part or relative.startswith(f"{part}/") for part in skipped_parts):
             continue
         if any(part.startswith(".payload-build-") for part in path.relative_to(root).parts):
-            continue
-        if relative.startswith("packages/loom-installer/payload/"):
             continue
         results.append(path)
     return sorted(results)
@@ -18586,32 +18491,6 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
     return failures
 
 
-def check_node_installer(root: Path) -> list[Failure]:
-    category = "node-installer"
-    failures: list[Failure] = []
-    package_root = root / "packages/loom-installer"
-    if not package_root.exists():
-        return [Failure(category, "missing `packages/loom-installer`")]
-    node_bin = shutil.which("node")
-    npm_bin = shutil.which("npm")
-    if not node_bin:
-        return [Failure(category, "`node` is required to validate the Node installer")]
-    if not npm_bin:
-        return [Failure(category, "`npm` is required to validate the Node installer")]
-    regression_script = package_root / "scripts/run-regression.mjs"
-    if not regression_script.exists():
-        return [Failure(category, "missing installer regression runner: `packages/loom-installer/scripts/run-regression.mjs`")]
-
-    try:
-        result = run_command(root, [node_bin, str(regression_script)], cwd=root, timeout_seconds=900)
-    except subprocess.TimeoutExpired:
-        return [Failure(category, "`node packages/loom-installer/scripts/run-regression.mjs` timed out")]
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
-        failures.append(Failure(category, f"`node packages/loom-installer/scripts/run-regression.mjs` failed: {detail}"))
-    return failures
-
-
 def check_generated_artifacts_untracked(root: Path) -> list[Failure]:
     if not (root / ".git").exists():
         return []
@@ -23138,7 +23017,6 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_CLOSEOUT_RECONCILIATION, "status-closeout-binding", lambda: check_status_closeout_binding_contract(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "behavior-first-locators", lambda: check_behavior_first_locator_contracts(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "adversarial-adoption", lambda: check_adversarial_adoption_fixture(root)),
-        (SOURCE_SURFACE_DISTRIBUTION_REGRESSION, "node-installer", lambda: check_node_installer(root)),
         (SOURCE_SURFACE_DISTRIBUTION_REGRESSION, "generated-artifacts", lambda: check_generated_artifacts_untracked(root)),
         (SOURCE_SURFACE_DISTRIBUTION_REGRESSION, "github-cli-budget", lambda: check_github_cli_budget(root)),
         (SOURCE_SURFACE_CONTRACT_ONLY, "operating-layer", lambda: check_operating_layer_contract(root)),
@@ -23204,10 +23082,6 @@ def check_loom_check_runtime_purity_contract(root: Path) -> list[Failure]:
         "同仓不同 worktree",
         "固定 `/tmp`",
         "stable fixture",
-        "Node installer regression",
-        "installer regression lock",
-        ".installer-regression-lock",
-        "npm cache",
         "CODEX_*",
         "LOOM_CODEX_APP_REVIEW_*",
         "显式 opt-in",
@@ -23228,19 +23102,6 @@ def check_loom_check_runtime_purity_contract(root: Path) -> list[Failure]:
     readme = root / "docs/methodology/harness/README.md"
     if not readme.exists() or "loom-check-runtime-purity.md" not in readme.read_text(encoding="utf-8"):
         failures.append(Failure(category, "harness README must link `loom-check-runtime-purity.md`"))
-    regression_script = root / "packages/loom-installer/scripts/run-regression.mjs"
-    if not regression_script.exists():
-        failures.append(Failure(category, "missing `packages/loom-installer/scripts/run-regression.mjs`"))
-    gitignore = root / "packages/loom-installer/.gitignore"
-    if not gitignore.exists() or ".installer-regression-lock/" not in gitignore.read_text(encoding="utf-8"):
-        failures.append(Failure(category, "installer package gitignore must exclude `.installer-regression-lock/`"))
-    for relative in (
-        ".github/workflows/node-installer-pr.yml",
-        ".github/workflows/node-installer-release.yml",
-    ):
-        workflow = root / relative
-        if not workflow.exists() or "scripts/run-regression.mjs" not in workflow.read_text(encoding="utf-8"):
-            failures.append(Failure(category, f"`{relative}` must run the installer regression lock entrypoint"))
     return failures
 
 
