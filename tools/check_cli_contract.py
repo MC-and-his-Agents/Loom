@@ -3277,10 +3277,25 @@ def assert_build_consumes_global_suite_without_repo_local_tools(tmp: Path) -> No
         encoding="utf-8",
     )
     fake_loom.chmod(0o755)
+    host_env = write_fake_open_work_item_gh(fake_bin, 1930)
     status, payload = run_json_preserving_attempts(
-        ["build", "--target", str(target), "--item", fixture["item"], "--json"],
+        [
+            "build",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--issue",
+            "1930",
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+            "--json",
+        ],
         item=fixture["item"],
         env_overrides={
+            **host_env,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
             "LOOM_SOURCE_REPO_ROOT": "",
         },
@@ -16036,9 +16051,23 @@ def run_aggregate_cli_contract() -> None:
         ):
             raise AssertionError("pre-review did not fail closed through the flow runtime for a non-current item")
         active_item = active_work_item_id()
+        active_issue_match = re.fullmatch(r"WI-(\d+)", active_item)
+        if active_issue_match is None:
+            raise AssertionError("active Work Item does not expose a safe host issue number")
+        active_issue = int(active_issue_match.group(1))
+        active_host_env = write_fake_open_work_item_gh(tmp / "active-suite-work-item-gh", active_issue)
+        active_host_args = [
+            "--issue",
+            str(active_issue),
+            "--owner",
+            "MC-and-his-Agents",
+            "--repo",
+            "Loom",
+        ]
         status, active_build = run_json_preserving_attempts(
-            ["build", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            ["build", "--target", str(REPO_ROOT), "--item", active_item, *active_host_args, "--json"],
             item=active_item,
+            env_overrides=active_host_env,
         )
         active_build = runtime_payload_from_agent_safe_output(active_build)
         assert_suite_build_consumption(active_build)
@@ -16046,8 +16075,9 @@ def run_aggregate_cli_contract() -> None:
         assert_build_consumes_global_suite_without_repo_local_tools(tmp)
         assert_review_record_consumed_locators(tmp)
         _, active_pre_review = run_json_preserving_attempts(
-            ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, *active_host_args, "--json"],
             item=active_item,
+            env_overrides=active_host_env,
         )
         active_pre_review = runtime_payload_from_agent_safe_output(active_pre_review)
         assert_suite_gate_consumption(active_pre_review, expected_surface="pre_review")
