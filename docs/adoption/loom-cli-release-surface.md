@@ -177,7 +177,10 @@ The final active legacy baseline is:
 - GitHub Release / tag: `loom-installer-v0.1.119`
 - npm package: `@mc-and-his-agents/loom-installer` `0.1.119`
 
-After #1005, the `node-installer-release` workflow keeps validation and read-only legacy evidence but must not publish npm, create `loom-installer-v*` tags, or create installer GitHub Releases. A later npm deprecation action may change registry metadata without advancing the package version.
+The repository retains only private historical package metadata for readback.
+There is no installer build, test, PR gate, release workflow, npm publish, tag,
+or GitHub Release path. A later npm deprecation action may change registry
+metadata without advancing the package version.
 
 Changes to CLI behavior, generated skills, runtime contracts, plugin discovery, or docs must not be treated as installer npm publish evidence. They require `loom` CLI release judgment instead.
 

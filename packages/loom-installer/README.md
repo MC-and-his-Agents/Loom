@@ -1,9 +1,7 @@
 # @mc-and-his-agents/loom-installer
 
-This package is retired.
-
-It is now a tombstone package: every CLI invocation fails closed and points to
-the current Loom install path.
+This package is retired. This directory retains historical npm metadata only;
+the executable tombstone, build, tests, and release workflows have been removed.
 
 ```bash
 npm install -g @mc-and-his-agents/loom
@@ -11,8 +9,8 @@ loom host install --host codex --scope user --apply --json
 loom host verify --host codex --scope user --json
 ```
 
-Do not use `loom-installer` for plugin install, single-skill install,
-`upgrade-plan`, or `verify-upgrade`. Those active installer surfaces are gone.
+Do not use or publish `loom-installer`. It is not an install, migration, build,
+test, or release surface.
 
 `npm deprecate @mc-and-his-agents/loom-installer` is a release closeout action
 and must be confirmed separately before execution.

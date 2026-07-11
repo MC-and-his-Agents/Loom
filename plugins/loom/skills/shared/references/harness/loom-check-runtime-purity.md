@@ -46,7 +46,7 @@ stale lock 必须可恢复，不得永久阻断后续检查。stale 判定可以
 
 - 当前 worktree 内明确属于运行态的 lock、cache 或生成 staging 目录
 - 本次运行创建并拥有的唯一临时目录
-- Node/npm 在隔离 cache、临时 package root 或受 lock 保护目录中的构建输出
+- 工具在隔离 cache、临时目录或受 lock 保护目录中的构建输出
 
 默认 `loom_check` 不得重写：
 
@@ -57,19 +57,7 @@ stale lock 必须可恢复，不得永久阻断后续检查。stale 判定可以
 
 需要刷新 stable fixture 时，必须走显式 generate/sync 入口，并在 PR 中把 fixture drift 作为正常变更审查。
 
-## 5. Node Installer Regression
-
-Node installer regression 覆盖 `npm ci`、`npm test`、`npm pack --dry-run`、`dist`、`payload`、`node_modules` 与 npm cache。
-
-这些写入必须满足以下任一策略：
-
-- 在同一 worktree installer regression lock 内串行执行，默认 lock 路径为 package root 下的 `.installer-regression-lock`
-- 在临时 package root 中执行，并把结果作为 drift evidence 消费
-- 对 payload build 使用覆盖完整 rebuild 窗口的 lock
-
-npm cache 必须使用本次运行唯一 cache。锁等待失败或超时必须输出 owner 信息，包括 `run_id`、`pid`、`started_at`、`command` 与 `cwd`，并给出等待、确认 stale lock 或切换 worktree 的处理路径。payload drift check 仍必须发现真实 drift，不能因为隔离而跳过 release readiness 的确定性验证。
-
-## 6. 宿主环境纯度
+## 5. 宿主环境纯度
 
 `loom_check` 默认 subprocess 环境必须清理只应由专用 fixture 显式传入的宿主变量，包括：
 
@@ -82,7 +70,7 @@ npm cache 必须使用本次运行唯一 cache。锁等待失败或超时必须�
 
 live GitHub、Codex App proof、dynamic tool live smoke 与 host adapter live drift 只能在显式 opt-in 或专用 synthetic fixture 中进入验证。默认 source self-check 不得因为当前 Codex Desktop thread 环境自动切换 review adapter 或 live host proof。
 
-## 7. 回归要求
+## 6. 回归要求
 
 #968 至少覆盖以下 P0-A 回归：
 
@@ -90,9 +78,8 @@ live GitHub、Codex App proof、dynamic tool live smoke 与 host adapter live dr
 - 同仓不同 worktree 并行不共享 worktree-local mutable outputs
 - 跨仓或临时 clone 不受固定 `/tmp` 路径影响
 - 默认 subprocess 环境不会继承 Codex App / host proof 污染源
-- Node installer regression 不互删 `node_modules`、`dist` 或 `payload`
 - 默认 `make loom-check` 不让 `examples/new-project` 因检查本身变脏
 
 重型并发矩阵可以作为显式 opt-in validation，但 P0-A 默认回归必须可在本地和 CI 中稳定消费。
 
-默认轻量入口为 `make loom-check-runtime-regression`，并由 `make loom-check` 消费。该入口只验证 fail-fast owner 诊断、worktree-local lock path、默认环境净化、唯一缺失路径、Node installer lock busy 输出和 demo fixture 不变脏；不得在默认 CI 中启动重型 full-check 并发矩阵。
+默认轻量入口为 `make loom-check-runtime-regression`，并由 `make loom-check` 消费。该入口只验证 fail-fast owner 诊断、worktree-local lock path、默认环境净化、唯一缺失路径和 demo fixture 不变脏；不得在默认 CI 中启动重型 full-check 并发矩阵。
