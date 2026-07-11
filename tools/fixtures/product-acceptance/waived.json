@@ -1,6 +1,6 @@
 {
   "schema_version": "loom-product-acceptance/v1",
-  "story_locator": "issue:225",
+  "story_locator": "MC-and-his-Agents/Loom/issue/225",
   "scenario_id": "READ-001",
   "verdict": "waived",
   "minimum_evidence_class": "live_readonly",

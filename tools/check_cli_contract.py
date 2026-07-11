@@ -73,6 +73,7 @@ REQUIRED_COMMANDS = {
     "version",
     "help",
     "acceptance validate",
+    "acceptance resolve",
     "installed-state show",
     "installed-state validate",
     "installed-state export",
@@ -14594,6 +14595,9 @@ def run_aggregate_cli_contract() -> None:
     acceptance_validate = matrix["acceptance validate"]
     if acceptance_validate.get("status") != "implemented" or acceptance_validate.get("domain") != "acceptance" or acceptance_validate.get("json") is not True:
         raise AssertionError("acceptance validate must be an implemented JSON acceptance command in the help catalog")
+    acceptance_resolve = matrix["acceptance resolve"]
+    if acceptance_resolve.get("status") != "implemented" or acceptance_resolve.get("domain") != "acceptance" or acceptance_resolve.get("json") is not True:
+        raise AssertionError("acceptance resolve must be an implemented JSON acceptance command in the help catalog")
     for command in ("detect", "doctor", "repair plan", "repair apply"):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #888")

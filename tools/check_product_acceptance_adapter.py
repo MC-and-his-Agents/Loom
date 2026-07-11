@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import io
 import json
 import sys
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,7 +23,7 @@ GENERATED_COPIES = (
     ROOT / "plugins" / "loom" / "skills" / "shared" / "scripts" / "product_acceptance.py",
     ROOT / ".loom" / "bin" / "product_acceptance.py",
 )
-NOW = datetime(2026, 7, 11, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 0, 30, tzinfo=timezone.utc)
 
 
 def load_adapter() -> Any:
@@ -52,15 +55,51 @@ def assert_result(result: dict[str, Any], *, outcome: str, verdict: str) -> None
     authority = result.get("authority_verdict", {}).get("verdict")
     if not isinstance(authority, dict) or authority.get("delivery_state") != "not_evaluated" or authority.get("reconciliation_state") != "not_evaluated":
         raise AssertionError("acceptance adapter must not infer delivery or reconciliation")
-    if result.get("mutates") is not False or result.get("network_access") is not False or result.get("runtime_actions_executed") != []:
-        raise AssertionError("acceptance adapter must remain read-only and non-executing")
+    if result.get("mutates") is not False or result.get("runtime_actions_executed") != []:
+        raise AssertionError("acceptance adapter must remain non-mutating and non-executing")
+
+
+def resolve(adapter: Any, record: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle:
+        bundle.writestr("acceptance.json", json.dumps(record))
+    archive = output.getvalue()
+    mapping = {
+        "repos/MC-and-his-Agents/Loom": {"default_branch": "main"},
+        "repos/MC-and-his-Agents/Loom/issues/225": {"number": 225},
+        "repos/MC-and-his-Agents/Loom/actions/artifacts/7": {"id": 7, "name": adapter.ARTIFACT_NAME, "expired": False, "size_in_bytes": len(archive), "digest": "sha256:" + hashlib.sha256(archive).hexdigest(), "workflow_run": {"id": 9}, "created_at": "2026-07-11T00:01:00Z"},
+        "repos/MC-and-his-Agents/Loom/actions/runs/9": {"id": 9, "status": "completed", "conclusion": "success", "head_sha": "a" * 40, "workflow_id": 11, "path": adapter.TRUSTED_WORKFLOW_PATH, "event": "workflow_dispatch", "head_branch": "main", "run_started_at": "2026-07-10T23:59:00Z", "updated_at": "2026-07-11T00:02:00Z", "repository": {"full_name": "MC-and-his-Agents/Loom"}, "triggering_actor": {"login": "maintainer", "id": 42}},
+        "repos/MC-and-his-Agents/Loom/actions/workflows/11": {"id": 11, "path": adapter.TRUSTED_WORKFLOW_PATH, "state": "active"},
+        "repos/MC-and-his-Agents/Loom/collaborators/maintainer/permission": {"permission": "write", "user": {"login": "maintainer", "id": 42}},
+        "repos/MC-and-his-Agents/Loom/commits/" + "a" * 40: {"sha": "a" * 40},
+    }
+    mapping.update(overrides)
+
+    def read_json(_root: Path, path: str):
+        return (mapping[path], []) if path in mapping else (None, [f"unexpected path: {path}"])
+
+    return adapter.resolve_acceptance(
+        ROOT,
+        "MC-and-his-Agents/Loom/issue/225",
+        7,
+        now=NOW,
+        read_json=read_json,
+        read_bytes=lambda _root, _path: (archive, []),
+    )
 
 
 def main() -> int:
     adapter = load_adapter()
-    assert_result(adapter.evaluate_acceptance(fixture("passed-live-readonly.json"), now=NOW), outcome="pass", verdict="passed")
+    local = adapter.evaluate_acceptance(fixture("passed-live-readonly.json"), now=NOW)
+    assert_result(local, outcome="block", verdict="blocked")
+    if local["product_acceptance"]["trusted"] is not False:
+        raise AssertionError("repo-authored acceptance JSON must not self-assert passed")
+    passed = resolve(adapter, fixture("passed-live-readonly.json"))
+    assert_result(passed, outcome="pass", verdict="passed")
+    if passed["product_acceptance"]["trusted"] is not True or passed["product_acceptance"]["owns_lifecycle_closure"] is not False:
+        raise AssertionError("resolved acceptance must be trusted without owning lifecycle closure")
     for name in ("fixture-insufficient.json", "blocked-write-boundary.json", "stale-live-readonly.json"):
-        assert_result(adapter.evaluate_acceptance(fixture(name), now=NOW), outcome="block", verdict="blocked")
+        assert_result(resolve(adapter, fixture(name)), outcome="block", verdict="blocked")
     waived = fixture("waived.json")
     assert_result(adapter.evaluate_acceptance(waived, now=NOW), outcome="pass", verdict="waived")
     if "delivery_gate" in SOURCE.read_text(encoding="utf-8"):

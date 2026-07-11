@@ -162,7 +162,14 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "acceptance",
         "status": "implemented",
         "json": True,
-        "summary": "Validate product acceptance evidence against the declared user-story and safety boundary requirements.",
+        "summary": "Structurally validate a product acceptance record without authorizing a trusted passed verdict.",
+    },
+    {
+        "command": "acceptance resolve",
+        "domain": "acceptance",
+        "status": "implemented",
+        "json": True,
+        "summary": "Resolve a trusted product acceptance verdict from authenticated GitHub host facts.",
     },
     {
         "command": "attestation readback",

@@ -1,6 +1,6 @@
 {
   "schema_version": "loom-product-acceptance/v1",
-  "story_locator": "issue:225",
+  "story_locator": "MC-and-his-Agents/Loom/issue/225",
   "scenario_id": "READ-001",
   "verdict": "passed",
   "minimum_evidence_class": "live_readonly",
@@ -9,11 +9,12 @@
       "evidence_class": "live_readonly",
       "observed_at": "2026-07-11T00:00:00Z",
       "freshness_window_seconds": 3600,
-      "run_id": "fixture-run-1",
-      "artifact_refs": ["artifact:fixture-run-1"],
+      "run_id": 9,
+      "artifact_refs": ["MC-and-his-Agents/Loom/artifact/7"],
       "provider_profile": {"provider": "provider-x", "profile": "redacted-profile", "redacted": true},
-      "component_versions": {"WebEnvoy/Core": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      "component_versions": {"MC-and-his-Agents/Loom": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
       "operation_boundary": {"allowed_actions": ["launch", "read", "capture"], "prohibited_actions": ["login", "captcha_or_risk_bypass", "submit", "publish", "send", "external_visible_write"], "observed_actions": ["launch", "read", "capture"]}
     }
-  ]
+  ],
+  "verifier": {"login": "maintainer", "id": 42}
 }
