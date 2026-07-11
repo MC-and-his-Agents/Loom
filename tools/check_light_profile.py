@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Targeted contract checks for the read-only light-profile migration plan."""
+"""Targeted contract checks for light-profile migration and reconciliation."""
 
 from __future__ import annotations
 
-import importlib.util
 import base64
+import importlib.util
 import json
 import subprocess
 import sys
@@ -30,24 +30,75 @@ def load_module() -> Any:
     return module
 
 
+def assert_paginated_host_readback() -> None:
+    import github_host
+
+    pages = [
+        {"check_runs": [{"id": value} for value in range(100)]},
+        {"check_runs": [{"id": 100}]},
+    ]
+    original_token = github_host.host_api_env_token_present
+    original_run = github_host.run_process
+    github_host.host_api_env_token_present = lambda: True
+    github_host.run_process = lambda *_args, **_kwargs: subprocess.CompletedProcess(
+        args=["gh"], returncode=0, stdout=json.dumps(pages), stderr=""
+    )
+    try:
+        rows, errors = github_host.gh_rest_authenticated_paginated_field(
+            ROOT, "repos/owner/repo/commits/head/check-runs?per_page=100", "check_runs"
+        )
+        if errors or [row.get("id") for row in rows] != list(range(101)):
+            raise AssertionError(f"paginated check-runs readback lost later pages: {rows} / {errors}")
+    finally:
+        github_host.host_api_env_token_present = original_token
+        github_host.run_process = original_run
+
+
 def assert_reconciliation(evaluator: Any, root: Path) -> None:
     target = root / "reconcile"
     target.mkdir()
-    checks = [{"context": "legacy-check", "app_id": 1}]
-    writes: list[dict[str, Any]] = []
-    fail_second_write = False
+    state: dict[str, Any] = {}
     installed = {
         "schema_version": "loom-installed-state/v2",
         "repo_payload": {"mode": "metadata-only", "adoption_mode": "light-governance"},
     }
+    companion = {
+        "schema_version": "loom-repo-interface/v2",
+        "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+        "specialized_gates": [],
+    }
+    workflow = (
+        "name: loom-delivery-gate\n"
+        "on: [pull_request, merge_group]\n"
+        "jobs:\n"
+        "  gate:\n"
+        "    uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@"
+        + "a" * 40
+        + "\n"
+    )
+
+    def reset(checks: list[dict[str, Any]], write_modes: list[str] | None = None) -> None:
+        state.clear()
+        state.update(
+            checks=list(checks),
+            write_modes=list(write_modes or []),
+            mutation_calls=[],
+            readback_error=False,
+            invalid_companion=False,
+            noop_workflow=False,
+            workflow_sha="workflow-blob",
+        )
 
     def fake_json(_root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
         if path.endswith("/pulls/10"):
-            return {"merged_at": "2026-01-01T00:00:00Z", "base": {"ref": "main"}, "head": {"sha": "gate-head"}}, []
-        if "commits/gate-head/check-runs" in path:
-            return {"check_runs": [{"name": "loom-delivery-gate", "conclusion": "success", "app": {"id": 15368}}]}, []
+            return {"merged_at": "2026-01-01T00:00:00Z", "merge_commit_sha": "gate-merge", "base": {"ref": "main"}, "head": {"sha": "gate-head"}}, []
+        if "git/trees/gate-merge" in path:
+            return {"truncated": False, "tree": [{"type": "blob", "path": ".github/workflows/loom-delivery-gate.yml", "sha": "workflow-blob"}]}, []
         if path.endswith("/protection"):
-            return {"required_status_checks": {"strict": True, "checks": list(checks)}}, []
+            if state["readback_error"]:
+                state["readback_error"] = False
+                return None, ["simulated readback timeout"]
+            return {"required_status_checks": {"strict": True, "checks": list(state["checks"])}}, []
         if path.endswith("/pulls/11"):
             return {"merged_at": "2026-01-02T00:00:00Z", "base": {"ref": "main"}, "head": {"sha": "migration-head"}}, []
         if path.endswith("/branches/main"):
@@ -57,13 +108,19 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
                 "truncated": False,
                 "tree": [
                     {"type": "blob", "path": ".loom/installed-state.json"},
-                    {"type": "blob", "path": ".loom/companion/repo-interface.json"},
-                    {"type": "blob", "path": ".github/workflows/loom-delivery-gate.yml"},
+                    {"type": "blob", "path": ".loom/companion/repo-interface.json", "sha": "companion-blob"},
+                    {"type": "blob", "path": ".github/workflows/loom-delivery-gate.yml", "sha": state["workflow_sha"]},
                 ],
             }, []
         if "/contents/.loom/installed-state.json" in path:
             encoded = base64.b64encode(json.dumps(installed).encode()).decode()
             return {"content": encoded}, []
+        if "/contents/.loom/companion/repo-interface.json" in path:
+            value: object = {} if state["invalid_companion"] else companion
+            return {"content": base64.b64encode(json.dumps(value).encode()).decode()}, []
+        if "/contents/.github/workflows/loom-delivery-gate.yml" in path:
+            value = "name: no-op\n" if state["noop_workflow"] else workflow
+            return {"content": base64.b64encode(value.encode()).decode()}, []
         return None, [f"unexpected fake JSON endpoint: {path}"]
 
     def fake_list(_root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -71,25 +128,36 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
             return [], []
         return [], [f"unexpected fake list endpoint: {path}"]
 
+    def fake_paginated(_root: Path, path: str, field: str) -> tuple[list[dict[str, Any]], list[str]]:
+        if "commits/gate-head/check-runs" not in path or field != "check_runs":
+            return [], [f"unexpected paginated endpoint: {path}#{field}"]
+        noise = [{"name": f"noise-{index}", "conclusion": "success", "app": {"id": 1}} for index in range(100)]
+        return [*noise, {"name": "loom-delivery-gate", "conclusion": "success", "app": {"id": 15368}}], []
+
     def fake_write(
         _root: Path, *, method: str, path: str, request_payload: dict[str, Any]
     ) -> tuple[dict[str, Any] | None, list[str]]:
-        nonlocal checks
         if method != "PATCH" or not path.endswith("/protection/required_status_checks"):
             return None, ["unexpected write"]
-        if fail_second_write and writes:
-            return None, ["simulated second host write failure"]
-        checks = list(request_payload["checks"])
-        writes.append(request_payload)
-        return {"checks": checks}, []
+        mode = state["write_modes"].pop(0) if state["write_modes"] else "success"
+        state["mutation_calls"].append({"mode": mode, "payload": request_payload})
+        if mode in {"success", "apply_timeout", "indeterminate_timeout"}:
+            state["checks"] = list(request_payload["checks"])
+        if mode == "indeterminate_timeout":
+            state["readback_error"] = True
+        if mode.endswith("timeout"):
+            return None, [f"simulated {mode}"]
+        return {"checks": state["checks"]}, []
 
     original = (
         evaluator.gh_rest_authenticated_json,
         evaluator.gh_rest_authenticated_list,
+        evaluator.gh_rest_authenticated_paginated_field,
         evaluator.gh_rest_write_json,
     )
     evaluator.gh_rest_authenticated_json = fake_json
     evaluator.gh_rest_authenticated_list = fake_list
+    evaluator.gh_rest_authenticated_paginated_field = fake_paginated
     evaluator.gh_rest_write_json = fake_write
     args = {
         "repository": "owner/repo",
@@ -103,28 +171,65 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
         "retained_contexts": [],
     }
     try:
+        reset([{"context": "legacy-check", "app_id": 1}])
         dry_run = evaluator.reconcile_payload(target, apply=False, **args)
-        if dry_run.get("result") != "pass" or dry_run.get("migration", {}).get("status") != "planned" or writes:
+        if dry_run.get("result") != "pass" or dry_run.get("migration", {}).get("status") != "planned" or state["mutation_calls"]:
             raise AssertionError(f"reconcile dry-run must be non-mutating and actionable: {dry_run}")
 
-        fail_second_write = True
+        reset([{"context": "legacy-check", "app_id": 1}], ["success", "unchanged_timeout"])
         partial = evaluator.reconcile_payload(target, apply=True, **args)
         if partial.get("result") != "partial_apply" or len(partial.get("host_writes", [])) != 1:
             raise AssertionError(f"partial host success must return partial_apply: {partial}")
         if "--work-item 2040" not in str(partial.get("next_action")):
             raise AssertionError(f"partial_apply recovery must reuse the Work Item: {partial}")
 
-        fail_second_write = False
+        reset([{"context": "legacy-check", "app_id": 1}], ["apply_timeout", "success"])
         reconciled = evaluator.reconcile_payload(target, apply=True, **args)
+        if reconciled.get("result") != "pass" or reconciled.get("host_mutation_attempts", [])[0].get("outcome") != "applied":
+            raise AssertionError(f"timeout followed by applied readback must converge: {reconciled}")
         repeated = evaluator.reconcile_payload(target, apply=True, **args)
-        if reconciled.get("result") != "pass" or repeated.get("result") != "pass":
+        if repeated.get("result") != "pass":
             raise AssertionError(f"reconcile apply must converge: {reconciled} / {repeated}")
         if repeated.get("host_writes") != [] or repeated.get("main_tree", {}).get("commit") != "main-head":
             raise AssertionError(f"repeated reconcile must be a read-only host readback: {repeated}")
+
+        reset([{"context": "legacy-check", "app_id": 1}], ["unchanged_timeout"])
+        unchanged = evaluator.reconcile_payload(target, apply=True, **args)
+        if unchanged.get("primary_cause", {}).get("id") != "host_write_unchanged" or unchanged.get("mutates") is not False or unchanged.get("host_mutation_attempts", [])[0].get("outcome") != "unchanged":
+            raise AssertionError(f"unchanged timeout must be classified from readback: {unchanged}")
+
+        reset([{"context": "legacy-check", "app_id": 1}], ["indeterminate_timeout"])
+        indeterminate = evaluator.reconcile_payload(target, apply=True, **args)
+        if indeterminate.get("result") != "partial_apply" or indeterminate.get("mutates") is not True or not indeterminate.get("host_writes") or indeterminate.get("host_mutation_attempts", [])[0].get("outcome") != "indeterminate":
+            raise AssertionError(f"indeterminate timeout must preserve uncertain mutation truth: {indeterminate}")
+
+        reset([{"context": "loom-delivery-gate", "app_id": 15368}, {"context": "loom-delivery-gate", "app_id": 9}])
+        conflict = evaluator.reconcile_payload(target, apply=False, **args)
+        if conflict.get("primary_cause", {}).get("id") != "required_check_app_conflict":
+            raise AssertionError(f"same-context conflicting app identity must block: {conflict}")
+
+        reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+        state["invalid_companion"] = True
+        invalid_companion = evaluator.reconcile_payload(target, apply=True, **args)
+        if invalid_companion.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "companion" not in " ".join(invalid_companion.get("missing_inputs", [])):
+            raise AssertionError(f"invalid companion must block main-tree reconciliation: {invalid_companion}")
+
+        reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+        state["noop_workflow"] = True
+        noop_workflow = evaluator.reconcile_payload(target, apply=True, **args)
+        if noop_workflow.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "workflow" not in " ".join(noop_workflow.get("missing_inputs", [])):
+            raise AssertionError(f"no-op workflow must block main-tree reconciliation: {noop_workflow}")
+
+        reset([{"context": "loom-delivery-gate", "app_id": 15368}])
+        state["workflow_sha"] = "drifted-workflow-blob"
+        workflow_drift = evaluator.reconcile_payload(target, apply=True, **args)
+        if workflow_drift.get("primary_cause", {}).get("id") != "main_tree_unreconciled" or "blob" not in " ".join(workflow_drift.get("missing_inputs", [])):
+            raise AssertionError(f"workflow drift from gate-enabler identity must block: {workflow_drift}")
     finally:
         (
             evaluator.gh_rest_authenticated_json,
             evaluator.gh_rest_authenticated_list,
+            evaluator.gh_rest_authenticated_paginated_field,
             evaluator.gh_rest_write_json,
         ) = original
 
@@ -243,6 +348,7 @@ def main() -> int:
     }:
         raise AssertionError("light-profile fixture catalog is incomplete")
     evaluator = load_module()
+    assert_paginated_host_readback()
     copies = [
         ROOT / "skills" / "shared" / "scripts" / "light_profile.py",
         ROOT / "plugins" / "loom" / "skills" / "shared" / "scripts" / "light_profile.py",
