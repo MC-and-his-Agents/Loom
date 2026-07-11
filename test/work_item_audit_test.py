@@ -21,6 +21,75 @@ spec.loader.exec_module(loom_flow)
 
 
 class WorkItemAuditTest(unittest.TestCase):
+    def test_metadata_only_global_cli_refresh_skips_only_intentionally_absent_manifest(self) -> None:
+        original_runtime_state = loom_flow.runtime_state_payload
+        original_load_context = loom_flow.load_context
+        original_shadow = loom_flow.refresh_shadow_evidence_actions
+        try:
+            loom_flow.runtime_state_payload = lambda _target: {
+                "result": "pass",
+                "summary": "runtime ok",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+            loom_flow.load_context = lambda _target, _output, _item: (None, [loom_flow.IDLE_FACT_CHAIN_ERROR])
+            loom_flow.refresh_shadow_evidence_actions = lambda _target: []
+
+            with tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                loom_root = root / ".loom"
+                bootstrap = loom_root / "bootstrap"
+                bootstrap.mkdir(parents=True)
+                (bootstrap / "init-result.json").write_text("{}\n", encoding="utf-8")
+                state_path = loom_root / "installed-state.json"
+
+                state_path.write_text(
+                    '{"schema_version":"loom-installed-state/v2","runtime_provider":"global-cli","repo_payload":{"mode":"metadata-only"}}\n',
+                    encoding="utf-8",
+                )
+                global_cli = loom_flow.carrier_refresh_payload(
+                    root,
+                    ".loom/bootstrap/init-result.json",
+                    None,
+                    dry_run=True,
+                )
+
+                state_path.write_text(
+                    '{"schema_version":"loom-installed-state/v2","runtime_provider":"repo-local-wrapper","repo_payload":{"mode":"repo-local-runtime"}}\n',
+                    encoding="utf-8",
+                )
+                repo_local = loom_flow.carrier_refresh_payload(
+                    root,
+                    ".loom/bootstrap/init-result.json",
+                    None,
+                    dry_run=True,
+                )
+
+                state_path.write_text(
+                    '{"schema_version":"loom-installed-state/v1","runtime_provider":"global-cli","repo_payload":{"mode":"metadata-only"}}\n',
+                    encoding="utf-8",
+                )
+                unsupported_schema = loom_flow.carrier_refresh_payload(
+                    root,
+                    ".loom/bootstrap/init-result.json",
+                    None,
+                    dry_run=True,
+                )
+
+                state_path.unlink()
+                state_path.symlink_to(root / "outside-installed-state.json")
+                self.assertFalse(loom_flow.uses_global_cli_metadata_only(root))
+
+            self.assertEqual(global_cli["result"], "pass")
+            self.assertEqual(repo_local["result"], "block")
+            self.assertEqual(unsupported_schema["result"], "block")
+            self.assertTrue(repo_local["missing_inputs"])
+            self.assertTrue(unsupported_schema["missing_inputs"])
+        finally:
+            loom_flow.runtime_state_payload = original_runtime_state
+            loom_flow.load_context = original_load_context
+            loom_flow.refresh_shadow_evidence_actions = original_shadow
+
     def test_carrier_refresh_apply_recomputes_remaining_after_readback(self) -> None:
         original_runtime_state = loom_flow.runtime_state_payload
         original_load_context = loom_flow.load_context
