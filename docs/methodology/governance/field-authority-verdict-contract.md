@@ -57,18 +57,21 @@ independent `product_acceptance` failure domain.
 `loom route --issue <FR>` remains the planning/proposal entrypoint and only
 creates native Work Items with explicit `--apply`. `loom-host-lifecycle-admission/v1`
 consumes that same native admission result before an execution entrypoint acts
-on the explicit `--fr <FR>` locator:
+on the host subject. An explicit `--fr <FR>` remains compatible, while the
+default path classifies `--issue <work-item-or-fr>` so omitting `--fr` cannot
+bypass admission:
 
 ```text
-loom build --fr <FR> ...
-loom ship --fr <FR> ...
-loom pre-review --fr <FR> ...
-loom closeout --fr <FR> ...
+loom build --issue <work-item-or-fr> ...
+loom ship --issue <work-item-or-fr> ...
+loom pre-review --issue <work-item-or-fr> ...
+loom closeout --issue <work-item-or-fr> ...
 ```
 
-`--issue` remains the existing Work Item/host-binding locator and does not add
-this lifecycle gate. This avoids treating an untyped bare issue number as an
-FR; only `--fr` invokes FR breakdown admission at execution time.
+The GitHub issue type/labels determine whether the subject is a Phase, FR, or
+Work Item. The caller does not choose that type by selecting a flag. If an
+execution entrypoint has neither an explicit FR nor a primary issue, it fails
+closed with `missing_subject` before reading repository carriers.
 
 - A planning FR can pass without a Work Item.
 - An executing FR without a native typed Work Item child returns

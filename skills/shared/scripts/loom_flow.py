@@ -23154,13 +23154,14 @@ def lifecycle_admission_payload(
     if issue_number is None:
         return {
             "schema_version": "loom-host-lifecycle-admission/v1",
-            "result": "pass",
-            "lifecycle_state": "not_applicable",
+            "result": "block",
+            "lifecycle_state": "missing_subject",
             "subject": None,
-            "admission_state": "not_requested",
+            "admission_state": "host_subject_required",
             "authority_verdict": authority_verdict(),
-            "primary_remediation": None,
+            "primary_remediation": "provide --issue <work-item-or-fr> so Loom can classify the host subject",
             "carrier_mutations": False,
+            "missing_inputs": ["host lifecycle subject: --issue <work-item-or-fr>"],
         }
     admission = github_fr_wi_admission_payload(
         target_root=target_root,
@@ -25649,7 +25650,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
         target_root=target_root,
         owner=args.owner,
         repo_name=args.repo_name,
-        issue_number=args.fr,
+        issue_number=args.fr if args.fr is not None else args.issue,
         intent="closeout",
     )
     if lifecycle_admission["result"] != "pass":
@@ -27441,7 +27442,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             target_root=target_root,
             owner=args.owner,
             repo_name=args.repo_name,
-            issue_number=args.fr,
+            issue_number=args.fr if args.fr is not None else args.issue,
             intent=lifecycle_intent,
         )
         if lifecycle_intent is not None

@@ -2615,7 +2615,13 @@ def host_lifecycle_admission_payload(
     """Use the shared host admission evaluator before a lifecycle entrypoint."""
 
     if issue is None:
-        return {"result": "pass", "lifecycle_state": "not_applicable", "primary_remediation": None, "carrier_mutations": False}
+        return {
+            "result": "block",
+            "lifecycle_state": "missing_subject",
+            "primary_remediation": "provide --issue <work-item-or-fr> so Loom can classify the host subject",
+            "carrier_mutations": False,
+            "missing_inputs": ["host lifecycle subject: --issue <work-item-or-fr>"],
+        }
     flow_args = ["github-intake", "admission", "--target", str(target), "--issue", str(issue), "--intent", intent, "--lifecycle-only"]
     if owner:
         flow_args.extend(["--owner", owner])
@@ -8428,7 +8434,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
     target = resolve_target(args.target)
     lifecycle_admission = host_lifecycle_admission_payload(
         target=target,
-        issue=args.fr,
+        issue=args.fr if args.fr is not None else args.issue,
         owner=args.owner,
         repo_name=args.repo_name,
         intent="ship",
@@ -8536,7 +8542,7 @@ def handle_ship(argv: list[str]) -> int:
     target = resolve_target(args.target)
     lifecycle_admission = host_lifecycle_admission_payload(
         target=target,
-        issue=args.fr,
+        issue=args.fr if args.fr is not None else args.issue,
         owner=args.owner,
         repo_name=args.repo_name,
         intent="ship",

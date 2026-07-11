@@ -174,44 +174,69 @@ def check_entrypoints() -> None:
     original_cli_emit = cli.emit
     original_cli_safe = cli.agent_safe_payload
     captured: list[dict[str, Any]] = []
+    flow_subjects: list[int | None] = []
+    cli_subjects: list[int | None] = []
     try:
-        flow.lifecycle_admission_payload = lambda **_kwargs: {
-            **blocked_admission(),
-            "lifecycle_state": "needs_breakdown",
-            "primary_remediation": blocked_admission()["next_action"],
-        }
+        def capture_flow_admission(**kwargs: Any) -> dict[str, Any]:
+            flow_subjects.append(kwargs.get("issue_number"))
+            return {
+                **blocked_admission(),
+                "lifecycle_state": "needs_breakdown",
+                "primary_remediation": blocked_admission()["next_action"],
+            }
+
+        flow.lifecycle_admission_payload = capture_flow_admission
         flow.emit = lambda payload: captured.append(payload) or 0
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
             for operation in ("build", "pre-review"):
                 status = flow.handle_flow(
                     SimpleNamespace(
-                        target=str(target), operation=operation, owner=None, repo_name=None, issue=None, fr=100
+                        target=str(target), operation=operation, owner=None, repo_name=None, issue=100, fr=None
                     )
                 )
                 if status != 0 or captured[-1].get("lifecycle_admission", {}).get("lifecycle_state") != "needs_breakdown":
                     raise AssertionError(f"flow {operation} did not stop at host-native lifecycle admission")
             status = flow.handle_closeout(
-                SimpleNamespace(target=str(target), operation="check", owner=None, repo_name=None, fr=100, issue=None)
+                SimpleNamespace(target=str(target), operation="check", owner=None, repo_name=None, fr=None, issue=100)
             )
             if status != 0 or captured[-1].get("command") != "closeout":
                 raise AssertionError("closeout did not stop at host-native lifecycle admission")
 
-            cli.host_lifecycle_admission_payload = lambda **_kwargs: {
-                **blocked_admission(),
-                "lifecycle_state": "needs_breakdown",
-                "primary_remediation": blocked_admission()["next_action"],
-            }
+            def capture_cli_admission(**kwargs: Any) -> dict[str, Any]:
+                cli_subjects.append(kwargs.get("issue"))
+                return {
+                    **blocked_admission(),
+                    "lifecycle_state": "needs_breakdown",
+                    "primary_remediation": blocked_admission()["next_action"],
+                }
+
+            cli.host_lifecycle_admission_payload = capture_cli_admission
             cli.emit = lambda payload: captured.append(payload) or 0
             cli.agent_safe_payload = lambda payload, **_kwargs: payload
-            status = cli.handle_ship(["--target", str(target), "--item", "WI-101", "--fr", "100", "--pr", "101"])
+            status = cli.handle_ship(["--target", str(target), "--item", "WI-101", "--issue", "100", "--pr", "101"])
             if status != 0 or captured[-1].get("command") != "ship":
                 raise AssertionError("ship did not stop at host-native lifecycle admission")
-            status = cli.handle_ship_status(["--target", str(target), "--fr", "100"], mode="preflight")
+            status = cli.handle_ship_status(["--target", str(target), "--issue", "100"], mode="preflight")
             if status != 0 or captured[-1].get("command") != "ship preflight":
                 raise AssertionError("ship preflight did not stop at host-native lifecycle admission")
             if any(target.iterdir()):
                 raise AssertionError("lifecycle admission fixture must not write repository carriers")
+            if flow_subjects != [100, 100, 100]:
+                raise AssertionError(f"flow entrypoints did not infer lifecycle subject from --issue: {flow_subjects}")
+            if cli_subjects != [100, 100]:
+                raise AssertionError(f"ship entrypoints did not infer lifecycle subject from --issue: {cli_subjects}")
+
+        missing_flow_subject = original_flow_admission(
+            target_root=Path("."), owner=None, repo_name=None, issue_number=None, intent="build"
+        )
+        if missing_flow_subject.get("result") != "block" or missing_flow_subject.get("lifecycle_state") != "missing_subject":
+            raise AssertionError("flow lifecycle entrypoint did not fail closed without a host subject")
+        missing_cli_subject = original_cli_admission(
+            target=Path("."), issue=None, owner=None, repo_name=None, intent="ship"
+        )
+        if missing_cli_subject.get("result") != "block" or missing_cli_subject.get("lifecycle_state") != "missing_subject":
+            raise AssertionError("ship lifecycle entrypoint did not fail closed without a host subject")
     finally:
         flow.lifecycle_admission_payload = original_flow_admission
         flow.emit = original_flow_emit
@@ -222,7 +247,19 @@ def check_entrypoints() -> None:
 
 def check_document() -> None:
     text = DOCUMENT.read_text(encoding="utf-8")
-    for needle in ("delivery_state", "product_acceptance", "reconciliation_state", "Typed locators", "owner/repo/type/id", "v0.31.0", "never changes `product_acceptance`", "loom route --issue <FR>", "--fr <FR>"):
+    for needle in (
+        "delivery_state",
+        "product_acceptance",
+        "reconciliation_state",
+        "Typed locators",
+        "owner/repo/type/id",
+        "v0.31.0",
+        "never changes `product_acceptance`",
+        "loom route --issue <FR>",
+        "--fr <FR>",
+        "--issue <work-item-or-fr>",
+        "missing_subject",
+    ):
         if needle not in text:
             raise AssertionError(f"authority contract document missing {needle}")
 
