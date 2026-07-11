@@ -364,6 +364,12 @@ def _automatic_validation_targets(paths: list[str], profile: str) -> list[str]:
         elif path.startswith("tools/fixtures/delivery-gate/"):
             targets.add("delivery-gate-check")
             matched = True
+        if path.startswith("test/"):
+            targets.add("check")
+            matched = True
+        if path.startswith(".github/actions/"):
+            targets.add("workflow-contract-check")
+            matched = True
         if path in {"VERSION", "package.json", "package-lock.json"} or path.startswith("bin/"):
             targets.update(("release-surface-check", "npm-package-check"))
             matched = True

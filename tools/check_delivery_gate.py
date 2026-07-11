@@ -256,8 +256,10 @@ def check_native_surface_inventory() -> None:
             raise AssertionError(f"{path} lacks semantic native validation: {selected} expected {expected}")
     fail_safe = {
         ".github/workflows/future-control.yml": "workflow-contract-check",
+        ".github/actions/native/action.yml": "workflow-contract-check",
         "tools/check_future_control.py": "cli-contract-check",
         "src/skills/shared/scripts/future_control.py": "cli-contract-check",
+        "test/product_acceptance_test.py": "check",
     }
     for path, expected in fail_safe.items():
         selected = evaluator._automatic_validation_targets([path], "standard")
@@ -622,13 +624,13 @@ def check_workflow() -> None:
         "LOOM_SOURCE_PATH",
         "CANDIDATE_PATH",
         "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py",
-        'subprocess.run(["make", "--", *targets], check=False)',
+        'subprocess.run(["make", "-f", sys.argv[2], "--", *targets], check=False)',
         '["native_validation"]["targets"]',
-        "trusted_evaluator_sha256",
-        "host_facts_sha256",
+        "host_facts_base64",
+        "needs: plan",
+        "needs: [plan, native-validation]",
+        "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}",
         "delivery_gate_sha256",
-        "trusted evaluator changed during candidate validation",
-        "host facts changed during candidate validation",
         "delivery gate result changed after trusted finalization",
         "--validation-result-file",
         "--candidate-path \"$CANDIDATE_PATH\"",
@@ -678,16 +680,21 @@ def check_workflow() -> None:
     checkouts = text.split("uses: actions/checkout@v4")[1:]
     if not checkouts or any("persist-credentials: false" not in checkout for checkout in checkouts):
         raise AssertionError("every checkout must drop credentials before untrusted native validation")
-    if len(checkouts) != 3:
-        raise AssertionError("workflow must define pinned reusable, trusted direct-base, and untrusted candidate checkouts")
-    trusted_direct = text.split("      - name: Checkout trusted Loom base for direct validation\n", 1)[-1].split("      - name: Checkout untrusted candidate validation tree\n", 1)[0]
-    candidate = text.split("      - name: Checkout untrusted candidate validation tree\n", 1)[-1].split("      - name: Evaluate delivery facts\n", 1)[0]
-    native_step = text.split("      - name: Run selected native validation with read-only token\n", 1)[-1].split("      - name: Finalize advisory delivery result\n", 1)[0]
-    if "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" not in trusted_direct or "path: loom" not in trusted_direct:
-        raise AssertionError("direct delivery evaluator must come from the trusted base SHA")
-    if "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in candidate or "path: candidate" not in candidate:
-        raise AssertionError("untrusted candidate must be isolated to the candidate validation tree")
-    exposed = [name for name in ("HOST_FACTS_PATH", "LOOM_SOURCE_PATH", "DELIVERY_GATE_PLAN_PATH") if name in native_step]
+    if len(checkouts) != 9:
+        raise AssertionError("plan, isolated native validation, and finalizer must each own separate checkouts")
+    plan_job = text.split("  plan:\n", 1)[1].split("  native-validation:\n", 1)[0]
+    native_job = text.split("  native-validation:\n", 1)[1].split("  loom-delivery-gate:\n", 1)[0]
+    final_job = text.split("  loom-delivery-gate:\n", 1)[1]
+    for name, block in (("plan", plan_job), ("native-validation", native_job), ("finalizer", final_job)):
+        if "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" not in block or "path: loom" not in block:
+            raise AssertionError(f"{name} must use the trusted base SHA for direct evaluation")
+        if "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}" not in block or "path: candidate" not in block:
+            raise AssertionError(f"{name} must isolate the candidate tree")
+    if "needs: plan" not in native_job or "TRUSTED_MAKEFILE: ${{ github.workspace }}/loom/Makefile" not in native_job:
+        raise AssertionError("candidate validation must run in a dependent job through the trusted Makefile")
+    if "needs: [plan, native-validation]" not in final_job or "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}" not in final_job:
+        raise AssertionError("trusted finalizer must consume the isolated native job result")
+    exposed = [name for name in ("HOST_FACTS_PATH", "LOOM_SOURCE_PATH", "DELIVERY_GATE_PLAN_PATH") if name in native_job]
     if exposed:
         raise AssertionError("candidate validation received trusted evaluator paths: " + ", ".join(exposed))
     for name, block in (("host_facts", host_facts_block), ("profile", profile_block)):

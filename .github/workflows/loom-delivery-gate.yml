@@ -39,21 +39,20 @@ on:
         description: JSON failure envelope with exactly one primary cause; product acceptance remains outside this delivery gate.
         value: ${{ jobs.loom-delivery-gate.outputs.failure_envelope }}
 
+concurrency:
+  group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
-  loom-delivery-gate:
-    name: loom-delivery-gate
+  plan:
+    name: plan trusted delivery validation
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     outputs:
-      result: ${{ steps.terminal.outputs.result }}
-      enforcement: ${{ steps.terminal.outputs.enforcement }}
-      primary_cause: ${{ steps.terminal.outputs.primary_cause }}
-      failure_envelope: ${{ steps.terminal.outputs.failure_envelope }}
-    concurrency:
-      group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
-      cancel-in-progress: true
+      host_facts_base64: ${{ steps.evaluate.outputs.host_facts_base64 }}
+      validation_targets: ${{ steps.evaluate.outputs.validation_targets }}
     steps:
       - name: Read GitHub host facts
         id: host-facts
@@ -154,7 +153,7 @@ jobs:
           path: loom
           persist-credentials: false
 
-      - name: Checkout untrusted candidate validation tree
+      - name: Checkout untrusted candidate tree for read-only planning
         if: ${{ always() }}
         continue-on-error: true
         uses: actions/checkout@v4
@@ -180,41 +179,69 @@ jobs:
         run: |
           set -u
           python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" --host-facts-file "$HOST_FACTS_PATH" --candidate-path "$CANDIDATE_PATH" --enforcement "$DELIVERY_GATE_ENFORCEMENT" --output "$DELIVERY_GATE_PLAN_PATH"
-          python3 - "$DELIVERY_GATE_PLAN_PATH" "$LOOM_SOURCE_PATH/src/skills/shared/scripts" "$HOST_FACTS_PATH" "$GITHUB_OUTPUT" <<'PY'
-          import hashlib
+          python3 - "$DELIVERY_GATE_PLAN_PATH" "$HOST_FACTS_PATH" "$GITHUB_OUTPUT" <<'PY'
+          import base64
           import json
           import sys
 
           from pathlib import Path
 
-          plan_path, source_root, host_facts_path, output_path = map(Path, sys.argv[1:])
+          plan_path, host_facts_path, output_path = map(Path, sys.argv[1:])
           targets = json.loads(plan_path.read_text(encoding="utf-8"))["native_validation"]["targets"]
-          digest = hashlib.sha256()
-          for path in sorted(source_root.glob("*.py")):
-              digest.update(path.name.encode("utf-8"))
-              digest.update(b"\0")
-              digest.update(path.read_bytes())
           with output_path.open("a", encoding="utf-8") as stream:
               stream.write(f"validation_targets={json.dumps(targets, separators=(',', ':'))}\n")
-              stream.write(f"trusted_evaluator_sha256={digest.hexdigest()}\n")
-              stream.write(f"host_facts_sha256={hashlib.sha256(host_facts_path.read_bytes()).hexdigest()}\n")
+              stream.write(f"host_facts_base64={base64.b64encode(host_facts_path.read_bytes()).decode('ascii')}\n")
           PY
 
+  native-validation:
+    name: isolated candidate native validation
+    needs: plan
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted Loom validation harness for reusable callers
+        if: ${{ inputs.loom_ref != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: MC-and-his-Agents/Loom
+          ref: ${{ inputs.loom_ref }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout trusted Loom validation harness for direct validation
+        if: ${{ inputs.loom_ref == '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout untrusted candidate validation tree
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          fetch-depth: 1
+          path: candidate
+          persist-credentials: false
+
       - name: Run selected native validation with read-only token
-        if: ${{ always() }}
-        continue-on-error: true
         shell: bash
         env:
-          VALIDATION_TARGETS_JSON: ${{ steps.evaluate.outputs.validation_targets }}
+          VALIDATION_TARGETS_JSON: ${{ needs.plan.outputs.validation_targets }}
           CANDIDATE_PATH: candidate
+          TRUSTED_MAKEFILE: ${{ github.workspace }}/loom/Makefile
         run: |
           set -u
-          VALIDATION_RESULT_PATH="${{ runner.temp }}/loom-delivery-native-validation.json"
           (
             cd "$CANDIDATE_PATH"
-            python3 - "$VALIDATION_TARGETS_JSON" "$VALIDATION_RESULT_PATH" <<'PY'
+            python3 - "$VALIDATION_TARGETS_JSON" "$TRUSTED_MAKEFILE" <<'PY'
           import json
-          import os
           import re
           import subprocess
           import sys
@@ -228,17 +255,56 @@ jobs:
               for target in targets
           )
           if not valid:
-              status = "command_missing"
-          else:
-              completed = subprocess.run(["make", "--", *targets], check=False)
-              status = "passed" if completed.returncode == 0 else "failed"
-          with open(sys.argv[2], "w", encoding="utf-8") as stream:
-              json.dump({"status": status}, stream)
-              stream.write("\n")
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
-              stream.write(f"status={status}\n")
+              raise SystemExit(2)
+          completed = subprocess.run(["make", "-f", sys.argv[2], "--", *targets], check=False)
+          raise SystemExit(completed.returncode)
           PY
           )
+
+  loom-delivery-gate:
+    name: loom-delivery-gate
+    needs: [plan, native-validation]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.terminal.outputs.result }}
+      enforcement: ${{ steps.terminal.outputs.enforcement }}
+      primary_cause: ${{ steps.terminal.outputs.primary_cause }}
+      failure_envelope: ${{ steps.terminal.outputs.failure_envelope }}
+    steps:
+      - name: Checkout canonical Loom source for reusable callers
+        if: ${{ inputs.loom_ref != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: MC-and-his-Agents/Loom
+          ref: ${{ inputs.loom_ref }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout trusted Loom base for direct validation
+        if: ${{ inputs.loom_ref == '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout candidate tree for profile readback
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          fetch-depth: 1
+          path: candidate
+          persist-credentials: false
 
       - name: Finalize advisory delivery result
         id: finalize
@@ -252,28 +318,27 @@ jobs:
           LOOM_SOURCE_PATH: loom
           CANDIDATE_PATH: candidate
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
-          EXPECTED_EVALUATOR_SHA256: ${{ steps.evaluate.outputs.trusted_evaluator_sha256 }}
-          EXPECTED_HOST_FACTS_SHA256: ${{ steps.evaluate.outputs.host_facts_sha256 }}
+          HOST_FACTS_BASE64: ${{ needs.plan.outputs.host_facts_base64 }}
+          NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           set -u
-          python3 - "$LOOM_SOURCE_PATH/src/skills/shared/scripts" "$HOST_FACTS_PATH" <<'PY'
-          import hashlib
+          python3 - "$HOST_FACTS_PATH" "$VALIDATION_RESULT_PATH" <<'PY'
+          import base64
+          import json
           import os
           import sys
 
           from pathlib import Path
 
-          source_root = Path(sys.argv[1])
-          digest = hashlib.sha256()
-          for path in sorted(source_root.glob("*.py")):
-              digest.update(path.name.encode("utf-8"))
-              digest.update(b"\0")
-              digest.update(path.read_bytes())
-          if digest.hexdigest() != os.environ.get("EXPECTED_EVALUATOR_SHA256"):
-              raise SystemExit("trusted evaluator changed during candidate validation")
-          if hashlib.sha256(Path(sys.argv[2]).read_bytes()).hexdigest() != os.environ.get("EXPECTED_HOST_FACTS_SHA256"):
-              raise SystemExit("host facts changed during candidate validation")
+          host_path, validation_path = map(Path, sys.argv[1:])
+          encoded = os.environ.get("HOST_FACTS_BASE64", "")
+          try:
+              host_path.write_bytes(base64.b64decode(encoded, validate=True))
+          except (ValueError, TypeError):
+              host_path.write_text("{}\n", encoding="utf-8")
+          status = "passed" if os.environ.get("NATIVE_JOB_RESULT") == "success" else "failed"
+          validation_path.write_text(json.dumps({"status": status}) + "\n", encoding="utf-8")
           PY
           python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" \
             --host-facts-file "$HOST_FACTS_PATH" \
