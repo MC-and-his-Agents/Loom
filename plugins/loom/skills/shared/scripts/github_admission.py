@@ -200,7 +200,7 @@ def _result(
     failed_layer: str | None = None,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    locator = typed_locator(owner, repo, object_type, issue) if object_type in {"fr", "work_item"} else None
+    locator = typed_locator(owner, repo, object_type, issue) if object_type in {"phase", "fr", "work_item"} else None
     payload = {
         "command": "github-intake",
         "operation": "admission",
@@ -275,6 +275,16 @@ def github_fr_wi_admission_payload(
     object_type, inference = host.github_intake_object_type(fr, repo_interface=repo_interface)
     if object_type == "work_item":
         return respond("pass", "admitted", "The requested GitHub issue is already a Work Item and may enter execution.", evidence={"type_inference": inference})
+    if object_type == "phase":
+        return respond(
+            "block",
+            "needs_breakdown",
+            "A Phase cannot enter implementation directly; select or admit a Work Item under an FR.",
+            missing_inputs=["FR and native Work Item breakdown"],
+            next_action=f"loom route --target . --issue {issue_number} --intent planning --json",
+            failed_layer="phase-fr-wi-admission",
+            evidence={"type_inference": inference},
+        )
     if object_type != "fr":
         return respond("block", "unsupported_subject", "FR-to-WI admission only accepts an explicitly typed FR or Work Item.", missing_inputs=["typed FR or Work Item"], failed_layer="host-planning-taxonomy", evidence={"type_inference": inference})
     if exception := _exception(host, fr):
@@ -312,9 +322,12 @@ def github_fr_wi_admission_payload(
         ]
         if work_items:
             return respond(
-                "pass",
-                "admitted",
-                "The FR has a native Work Item breakdown that may enter the requested lifecycle intent.",
+                "block",
+                "work_item_required",
+                "The FR has a native Work Item breakdown; execution must bind one of those Work Items directly.",
+                missing_inputs=["primary Work Item subject"],
+                next_action="rerun the same execution command with --issue <native-work-item-number>",
+                failed_layer="fr-wi-admission",
                 evidence={
                     "type_inference": inference,
                     "native_subissue_count": len(children),

@@ -892,6 +892,12 @@ def assert_ship_dry_run_wrapper_contract() -> None:
 
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if flow_args[:2] == ["pr-metadata", "preflight"]:
             return {
                 "command": "pr-metadata",
@@ -954,6 +960,7 @@ def assert_ship_dry_run_wrapper_contract() -> None:
         if emitted.get("next_action") != "run loom ship --apply after dry-run blockers are clear":
             raise AssertionError("ship dry-run must keep the short next_action for the ordinary apply path")
         expected_prefixes = [
+            ["github-intake", "admission"],
             ["pr-metadata", "preflight"],
             ["pr-gate", "check"],
             ["controlled-merge", "check"],
@@ -994,6 +1001,12 @@ def assert_ship_infers_pr_bindings_contract() -> None:
 
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if tuple(flow_args[:2]) in {("pr-metadata", "preflight"), ("pr-gate", "check"), ("controlled-merge", "check")}:
             if "--branch" in flow_args and flow_args[flow_args.index("--branch") + 1] != inferred_branch:
                 raise AssertionError("ship did not pass inferred branch to delegated gate")
@@ -1035,6 +1048,7 @@ def assert_ship_infers_pr_bindings_contract() -> None:
     original_git_branch = module.git_branch_for_target
     original_git_head = module.git_head_sha_for_target
     original_changed_paths = module.ship_changed_paths_payload
+    original_subject_readback = module.github_lifecycle_subject_readback
     module.flow_payload = fake_flow_payload
     module.emit = fake_emit
     module.ship_pr_payload = fake_ship_pr_payload
@@ -1046,6 +1060,14 @@ def assert_ship_infers_pr_bindings_contract() -> None:
         "source": "fixture",
         "changed_paths": ["README.md"],
         "missing_inputs": [],
+    }
+    module.github_lifecycle_subject_readback = lambda _target, owner, repo, **_kwargs: {
+        "result": "pass",
+        "issue_number": 1738,
+        "issue_locator": f"{owner}/{repo}/work_item/1738",
+        "pr_number": 1748,
+        "source": "pr_closing_issue_readback",
+        "errors": [],
     }
     try:
         status = module.handle_ship(["--item", "WI-1738", "--pr", "1748", "--json"])
@@ -1065,6 +1087,7 @@ def assert_ship_infers_pr_bindings_contract() -> None:
         module.git_branch_for_target = original_git_branch
         module.git_head_sha_for_target = original_git_head
         module.ship_changed_paths_payload = original_changed_paths
+        module.github_lifecycle_subject_readback = original_subject_readback
 
 
 def assert_ship_pr_readback_uses_api_contract() -> None:
@@ -1188,11 +1211,17 @@ def assert_ship_status_preflight_contract(tmp: Path) -> None:
     original_infer_repo = module.infer_github_repo
     original_git_branch = module.git_branch_for_target
     original_git_head = module.git_head_sha_for_target
+    original_lifecycle_admission = module.host_lifecycle_admission_payload
     module.run_capture = fake_run_capture
     module.emit = fake_emit
     module.infer_github_repo = lambda target: "MC-and-his-Agents/Loom"
     module.git_branch_for_target = lambda target: "work/1777-ship-preflight-status"
     module.git_head_sha_for_target = lambda target: "a" * 40
+    module.host_lifecycle_admission_payload = lambda **_kwargs: {
+        "result": "pass",
+        "lifecycle_state": "not_applicable",
+        "carrier_mutations": False,
+    }
     try:
         if module.resolve_command(["ship", "preflight", "--target", str(target)]) != ("ship preflight", ["--target", str(target)]):
             raise AssertionError("ship preflight must resolve as a first-class command")
@@ -1270,6 +1299,7 @@ def assert_ship_status_preflight_contract(tmp: Path) -> None:
         module.infer_github_repo = original_infer_repo
         module.git_branch_for_target = original_git_branch
         module.git_head_sha_for_target = original_git_head
+        module.host_lifecycle_admission_payload = original_lifecycle_admission
 
 
 def assert_ship_validation_profile_selection_contract() -> None:
@@ -1333,6 +1363,12 @@ def assert_ship_apply_wrapper_contract() -> None:
 
     def passing_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if flow_args[:2] == ["pr-metadata", "update"]:
             if "--apply" not in flow_args:
                 raise AssertionError("ship --apply safe metadata repair must apply PR metadata update")
@@ -1446,6 +1482,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         if "global-current-closeout" not in step_names or not current_writes or current_writes[-1].get("state") != "no_active_item":
             raise AssertionError("ship --apply host-only closeout must clear the workstation current pointer")
         expected_prefixes = [
+            ["github-intake", "admission"],
             ["pr-metadata", "update"],
             ["carrier", "refresh"],
             ["shadow-parity", "--target"],
@@ -1458,16 +1495,22 @@ def assert_ship_apply_wrapper_contract() -> None:
         ]
         if [call[:2] for call in calls] != expected_prefixes:
             raise AssertionError(f"ship --apply delegated unexpected sequence: {[call[:2] for call in calls]}")
-        merge_call = calls[6]
+        merge_call = calls[7]
         if "--merge-method" not in merge_call or merge_call[merge_call.index("--merge-method") + 1] != "squash":
             raise AssertionError("ship --apply did not preserve merge method")
-        reconciliation_call = calls[7]
+        reconciliation_call = calls[8]
         for flag, expected in {"--item": "WI-1691", "--issue": "1691", "--pr": "1706", "--branch": "main"}.items():
             if flag not in reconciliation_call or reconciliation_call[reconciliation_call.index(flag) + 1] != expected:
                 raise AssertionError(f"ship --apply did not preserve {flag} for host closeout")
 
         def blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {
+                    "command": "github-intake",
+                    "result": "pass",
+                    "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+                }
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1531,6 +1574,12 @@ def assert_ship_apply_wrapper_contract() -> None:
 
         def carrier_blocking_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {
+                    "command": "github-intake",
+                    "result": "pass",
+                    "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+                }
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1563,7 +1612,7 @@ def assert_ship_apply_wrapper_contract() -> None:
         findings = emitted.get("actionable_findings", [])
         if not any(isinstance(finding, dict) and finding.get("next_action") == "loom carrier refresh --target <repo> --item <id> --apply --json" for finding in findings):
             raise AssertionError("ship --apply must surface the carrier refresh single next action")
-        if [call[:2] for call in calls] != [["pr-metadata", "update"], ["carrier", "refresh"]]:
+        if [call[:2] for call in calls] != [["github-intake", "admission"], ["pr-metadata", "update"], ["carrier", "refresh"]]:
             raise AssertionError(f"ship --apply must stop before metadata preflight after carrier refresh block, got {[call[:2] for call in calls]}")
     finally:
         module.flow_payload = original_flow_payload
@@ -1585,6 +1634,12 @@ def assert_ship_closeout_policy_admission_contract() -> None:
 
     def fake_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
         calls.append(flow_args)
+        if flow_args[:2] == ["github-intake", "admission"]:
+            return {
+                "command": "github-intake",
+                "result": "pass",
+                "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+            }
         if flow_args[:2] == ["pr-metadata", "update"]:
             return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
         if flow_args[:2] == ["carrier", "refresh"]:
@@ -1693,6 +1748,12 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
         def host_only_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {
+                    "command": "github-intake",
+                    "result": "pass",
+                    "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
+                }
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1775,6 +1836,7 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
         if emitted.get("target_branch") != "main":
             raise AssertionError(f"{name} ordinary ship --apply must read back the target branch")
         expected_sequence = [
+            ["github-intake", "admission"],
             ["pr-metadata", "update"],
             ["carrier", "refresh"],
             ["shadow-parity", "--target"],
@@ -1818,6 +1880,8 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
         def versioned_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {"command": "github-intake", "result": "pass", "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False}}
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
             if flow_args[:2] == ["carrier", "refresh"]:
@@ -1881,6 +1945,8 @@ def assert_ship_inline_host_only_closeout_e2e_contract() -> None:
 
         def release_flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str] | None = None) -> dict[str, Any]:
             calls.append(flow_args)
+            if flow_args[:2] == ["github-intake", "admission"]:
+                return {"command": "github-intake", "result": "pass", "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False}}
             if flow_args[:2] == ["pr-metadata", "update"]:
                 return {"command": "pr-metadata", "result": "pass", "summary": "metadata repaired"}
             if flow_args[:2] == ["carrier", "refresh"]:

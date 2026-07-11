@@ -16,6 +16,7 @@ SCRIPTS = ROOT / "src" / "skills" / "shared" / "scripts"
 AUTHORITY = SCRIPTS / "authority_contract.py"
 FLOW = SCRIPTS / "loom_flow.py"
 ADMISSION = SCRIPTS / "github_admission.py"
+GITHUB_HOST = SCRIPTS / "github_host.py"
 CLI = ROOT / "tools" / "loom.py"
 DOCUMENT = ROOT / "docs" / "methodology" / "governance" / "field-authority-verdict-contract.md"
 
@@ -75,8 +76,60 @@ def check_authority_contract() -> None:
         raise AssertionError("planning FR and existing Work Item lifecycle results drifted")
     if blocked["result"] != "block" or blocked["primary_remediation"] != blocked_admission()["next_action"] or blocked["carrier_mutations"] is not False:
         raise AssertionError("blocked lifecycle verdict must retain one host-native remediation")
-    if deferred["result"] != "block" or unrelated["lifecycle_state"] != "not_applicable":
+    if deferred["result"] != "block" or unrelated["result"] != "block":
         raise AssertionError("deferred execution and unrelated issue lifecycle handling drifted")
+
+
+def check_host_subject_readback() -> None:
+    host = load_module("authority_contract_github_host", GITHUB_HOST)
+    original_rest_list = host.gh_rest_list
+    original_graphql = host.gh_graphql_authenticated_json
+    try:
+        explicit = host.github_lifecycle_subject_readback(Path("."), "owner", "repo", issue_number=41)
+        if explicit.get("issue_locator") != "owner/repo/issue/41" or explicit.get("source") != "explicit_issue":
+            raise AssertionError("explicit lifecycle subject did not use the canonical locator")
+
+        host.gh_graphql_authenticated_json = lambda _root, _query, variables: (
+            {
+                "repository": {
+                    "pullRequest": {
+                        "number": variables["pr"],
+                        "headRefName": "work/42",
+                        "closingIssuesReferences": {"pageInfo": {"hasNextPage": False}, "nodes": [{"number": 42}]},
+                    }
+                }
+            },
+            [],
+        )
+        pr = host.github_lifecycle_subject_readback(Path("."), "owner", "repo", pr_number=7)
+        if pr.get("issue_locator") != "owner/repo/issue/42" or pr.get("pr_locator") != "owner/repo/pr/7":
+            raise AssertionError("PR context did not resolve its native closing issue")
+
+        host.gh_rest_list = lambda _root, _path: ([{"number": 7, "state": "open"}], [])
+        branch = host.github_lifecycle_subject_readback(Path("."), "owner", "repo", branch_name="work/42")
+        if branch.get("issue_number") != 42 or branch.get("source") != "branch_pr_closing_issue_readback":
+            raise AssertionError("branch context did not resolve through its unique PR")
+
+        host.gh_rest_list = lambda _root, _path: ([{"number": 7, "state": "open"}, {"number": 8, "state": "open"}], [])
+        ambiguous = host.github_lifecycle_subject_readback(Path("."), "owner", "repo", branch_name="work/42")
+        if ambiguous.get("result") != "block" or "2 candidate" not in " ".join(ambiguous.get("errors", [])):
+            raise AssertionError("ambiguous branch PR context did not fail closed")
+
+        host.gh_rest_list = lambda _root, _path: ([], ["host unavailable"])
+        unreadable = host.github_lifecycle_subject_readback(Path("."), "owner", "repo", branch_name="work/42")
+        if unreadable.get("result") != "block" or unreadable.get("errors") != ["host unavailable"]:
+            raise AssertionError("unreadable branch context did not fail closed")
+
+        host.gh_graphql_authenticated_json = lambda _root, _query, _variables: (
+            {"repository": {"pullRequest": {"number": 7, "headRefName": "work/42", "closingIssuesReferences": {"pageInfo": {"hasNextPage": False}, "nodes": [{"number": 42}, {"number": 43}]}}}},
+            [],
+        )
+        multiple_closing = host.github_lifecycle_subject_readback(Path("."), "owner", "repo", pr_number=7)
+        if multiple_closing.get("result") != "block" or "exactly one primary Work Item" not in " ".join(multiple_closing.get("errors", [])):
+            raise AssertionError("multiple native closing issues did not fail closed")
+    finally:
+        host.gh_rest_list = original_rest_list
+        host.gh_graphql_authenticated_json = original_graphql
 
 
 def check_shared_admission_verdict() -> None:
@@ -152,14 +205,30 @@ def check_shared_admission_verdict() -> None:
             work_item_number=None,
             apply=False,
         )
+        issue_type = "phase"
+        phase = admission.github_fr_wi_admission_payload(
+            host=host,
+            target_root=target,
+            owner="owner",
+            repo_name="repo",
+            issue_number=99,
+            intent="build",
+            task=None,
+            blocked_by=[],
+            work_item_number=None,
+            apply=False,
+            lifecycle_only=True,
+        )
         if planning.get("lifecycle_verdict", {}).get("lifecycle_state") != "planning":
             raise AssertionError("route planning verdict was not attached to native admission")
         if executing.get("lifecycle_verdict", {}).get("lifecycle_state") != "needs_breakdown":
             raise AssertionError("executing FR did not use the shared native admission verdict")
-        if lifecycle.get("admission_state") != "admitted" or lifecycle.get("evidence", {}).get("native_work_item_locators") != ["owner/repo/work_item/102"]:
-            raise AssertionError("lifecycle admission did not accept an existing native Work Item child")
+        if lifecycle.get("admission_state") != "work_item_required" or lifecycle.get("evidence", {}).get("native_work_item_locators") != ["owner/repo/work_item/102"]:
+            raise AssertionError("lifecycle admission did not require binding the existing native Work Item child")
         if work_item.get("lifecycle_verdict", {}).get("lifecycle_state") != "not_applicable":
             raise AssertionError("existing Work Item did not avoid an additional lifecycle gate")
+        if phase.get("lifecycle_verdict", {}).get("lifecycle_state") != "needs_breakdown" or phase.get("subject", {}).get("locator") != "owner/repo/phase/99":
+            raise AssertionError("Phase execution did not fail closed with a canonical subject")
         if any(target.iterdir()):
             raise AssertionError("native admission contract fixture must not write repository carriers")
 
@@ -192,13 +261,13 @@ def check_entrypoints() -> None:
             for operation in ("build", "pre-review"):
                 status = flow.handle_flow(
                     SimpleNamespace(
-                        target=str(target), operation=operation, owner=None, repo_name=None, issue=100, fr=None
+                        target=str(target), operation=operation, owner=None, repo_name=None, issue=100, fr=None, pr=None, branch=None
                     )
                 )
                 if status != 0 or captured[-1].get("lifecycle_admission", {}).get("lifecycle_state") != "needs_breakdown":
                     raise AssertionError(f"flow {operation} did not stop at host-native lifecycle admission")
             status = flow.handle_closeout(
-                SimpleNamespace(target=str(target), operation="check", owner=None, repo_name=None, fr=None, issue=100)
+                SimpleNamespace(target=str(target), operation="check", owner=None, repo_name=None, fr=None, issue=100, pr=None, branch=None)
             )
             if status != 0 or captured[-1].get("command") != "closeout":
                 raise AssertionError("closeout did not stop at host-native lifecycle admission")
@@ -227,16 +296,6 @@ def check_entrypoints() -> None:
             if cli_subjects != [100, 100]:
                 raise AssertionError(f"ship entrypoints did not infer lifecycle subject from --issue: {cli_subjects}")
 
-        missing_flow_subject = original_flow_admission(
-            target_root=Path("."), owner=None, repo_name=None, issue_number=None, intent="build"
-        )
-        if missing_flow_subject.get("result") != "block" or missing_flow_subject.get("lifecycle_state") != "missing_subject":
-            raise AssertionError("flow lifecycle entrypoint did not fail closed without a host subject")
-        missing_cli_subject = original_cli_admission(
-            target=Path("."), issue=None, owner=None, repo_name=None, intent="ship"
-        )
-        if missing_cli_subject.get("result") != "block" or missing_cli_subject.get("lifecycle_state") != "missing_subject":
-            raise AssertionError("ship lifecycle entrypoint did not fail closed without a host subject")
     finally:
         flow.lifecycle_admission_payload = original_flow_admission
         flow.emit = original_flow_emit
@@ -266,6 +325,7 @@ def check_document() -> None:
 
 def main() -> int:
     check_authority_contract()
+    check_host_subject_readback()
     check_shared_admission_verdict()
     check_entrypoints()
     check_document()

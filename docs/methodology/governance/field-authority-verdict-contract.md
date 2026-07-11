@@ -70,10 +70,16 @@ loom closeout --issue <work-item-or-fr> ...
 
 The GitHub issue type/labels determine whether the subject is a Phase, FR, or
 Work Item. The caller does not choose that type by selecting a flag. If an
-execution entrypoint has neither an explicit FR nor a primary issue, it fails
-closed with `missing_subject` before reading repository carriers.
+execution entrypoint has neither an explicit FR nor a primary issue, Loom
+reads the explicit PR or current branch, resolves exactly one PR, and consumes
+that PR's native GitHub closing-issue relation. It never treats PR body text as
+subject proof. Missing, unreadable, or ambiguous host context fails closed with
+`missing_subject` before reading repository carriers.
 
 - A planning FR can pass without a Work Item.
+- A Phase cannot be the primary implementation subject.
+- An FR with existing Work Items returns `work_item_required`; the caller must
+  bind one Work Item rather than execute the FR itself.
 - An executing FR without a native typed Work Item child returns
   `needs_breakdown` with one `primary_remediation`; it performs no carrier
   write. This is independent of a route plan marker, so a valid native WI is

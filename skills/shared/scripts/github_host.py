@@ -626,6 +626,98 @@ def github_branch_payload(root: Path, owner: str, repo_name: str, branch_name: s
     }, []
 
 
+def github_lifecycle_subject_readback(
+    root: Path,
+    owner: str,
+    repo_name: str,
+    *,
+    issue_number: int | None = None,
+    pr_number: int | None = None,
+    branch_name: str | None = None,
+) -> dict[str, Any]:
+    """Resolve one lifecycle subject from GitHub facts, never PR body text."""
+
+    if issue_number is not None:
+        return {
+            "result": "pass",
+            "issue_number": issue_number,
+            "issue_locator": typed_locator(owner, repo_name, "issue", issue_number),
+            "pr_number": pr_number,
+            "source": "explicit_issue",
+            "errors": [],
+        }
+
+    effective_pr = pr_number
+    if effective_pr is None:
+        if not branch_name:
+            return {"result": "block", "issue_number": None, "source": "missing_context", "errors": ["no explicit issue, PR, or branch context is available"]}
+        pulls, errors = gh_rest_list(
+            root,
+            f"repos/{quote(owner, safe='')}/{quote(repo_name, safe='')}/pulls?state=all&head={quote(f'{owner}:{branch_name}', safe='')}&per_page=100",
+        )
+        if errors:
+            return {"result": "block", "issue_number": None, "source": "branch_pr_readback", "errors": errors}
+        matching = [row for row in pulls if isinstance(row.get("number"), int)]
+        open_matching = [row for row in matching if str(row.get("state") or "").lower() == "open"]
+        candidates = open_matching if open_matching else matching
+        if len(candidates) != 1:
+            return {
+                "result": "block",
+                "issue_number": None,
+                "source": "branch_pr_readback",
+                "errors": [f"branch `{branch_name}` resolves to {len(candidates)} candidate pull requests; exactly one is required"],
+            }
+        effective_pr = int(candidates[0]["number"])
+
+    query = """
+    query($owner: String!, $repo: String!, $pr: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $pr) {
+          number
+          headRefName
+          closingIssuesReferences(first: 100) {
+            pageInfo { hasNextPage }
+            nodes { number }
+          }
+        }
+      }
+    }
+    """
+    data, errors = gh_graphql_authenticated_json(root, query, {"owner": owner, "repo": repo_name, "pr": effective_pr})
+    if errors or data is None:
+        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": errors}
+    repository = data.get("repository") if isinstance(data.get("repository"), dict) else {}
+    pull_request = repository.get("pullRequest") if isinstance(repository.get("pullRequest"), dict) else None
+    if pull_request is None:
+        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": [f"pull request #{effective_pr} is unreadable"]}
+    if branch_name and pull_request.get("headRefName") != branch_name:
+        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": [f"pull request #{effective_pr} head does not match branch `{branch_name}`"]}
+    connection = pull_request.get("closingIssuesReferences") if isinstance(pull_request.get("closingIssuesReferences"), dict) else {}
+    page_info = connection.get("pageInfo") if isinstance(connection.get("pageInfo"), dict) else {}
+    if page_info.get("hasNextPage") is not False:
+        return {"result": "block", "issue_number": None, "pr_number": effective_pr, "source": "pr_closing_issue_readback", "errors": ["closing issue pagination is unreadable or incomplete"]}
+    issues = [node for node in connection.get("nodes", []) if isinstance(node, dict) and isinstance(node.get("number"), int)]
+    if len(issues) != 1:
+        return {
+            "result": "block",
+            "issue_number": None,
+            "pr_number": effective_pr,
+            "source": "pr_closing_issue_readback",
+            "errors": [f"pull request #{effective_pr} has {len(issues)} native closing issues; exactly one primary Work Item is required"],
+        }
+    subject = int(issues[0]["number"])
+    return {
+        "result": "pass",
+        "issue_number": subject,
+        "issue_locator": typed_locator(owner, repo_name, "issue", subject),
+        "pr_number": effective_pr,
+        "pr_locator": typed_locator(owner, repo_name, "pr", effective_pr),
+        "branch": pull_request.get("headRefName"),
+        "source": "pr_closing_issue_readback" if pr_number is not None else "branch_pr_closing_issue_readback",
+        "errors": [],
+    }
+
+
 def normalize_dependency_issue(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": payload.get("node_id") or payload.get("id"),

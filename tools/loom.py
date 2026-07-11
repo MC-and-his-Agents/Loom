@@ -67,6 +67,7 @@ for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
 from runtime_paths import global_runtime_path, is_global_runtime_locator
 from authority_contract import parse_typed_locator, typed_locator
 from failure_envelope import public_cli_failure_envelope
+from github_host import github_lifecycle_subject_readback
 from host_attestation import main as host_attestation_main
 from product_acceptance import main as product_acceptance_main
 
@@ -2611,22 +2612,41 @@ def host_lifecycle_admission_payload(
     owner: str | None,
     repo_name: str | None,
     intent: str,
+    pr: int | None = None,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     """Use the shared host admission evaluator before a lifecycle entrypoint."""
 
-    if issue is None:
+    repo_slug = f"{owner}/{repo_name}" if owner and repo_name else infer_github_repo(target)
+    if not repo_slug or "/" not in repo_slug:
         return {
             "result": "block",
             "lifecycle_state": "missing_subject",
-            "primary_remediation": "provide --issue <work-item-or-fr> so Loom can classify the host subject",
+            "primary_remediation": "restore a readable GitHub owner/repo binding before entering execution",
             "carrier_mutations": False,
-            "missing_inputs": ["host lifecycle subject: --issue <work-item-or-fr>"],
+            "missing_inputs": ["GitHub owner/repo"],
+        }
+    effective_owner, effective_repo = repo_slug.split("/", 1)
+    subject_readback = github_lifecycle_subject_readback(
+        target,
+        effective_owner,
+        effective_repo,
+        issue_number=issue,
+        pr_number=pr,
+        branch_name=branch or (git_branch_for_target(target) if pr is None else None),
+    )
+    issue = subject_readback.get("issue_number") if isinstance(subject_readback.get("issue_number"), int) else None
+    if subject_readback.get("result") != "pass" or issue is None:
+        return {
+            "result": "block",
+            "lifecycle_state": "missing_subject",
+            "primary_remediation": "provide --issue <work-item-or-fr> or bind the branch to one PR with exactly one native closing Work Item",
+            "carrier_mutations": False,
+            "subject_readback": subject_readback,
+            "missing_inputs": list(subject_readback.get("errors") or ["host lifecycle subject"]),
         }
     flow_args = ["github-intake", "admission", "--target", str(target), "--issue", str(issue), "--intent", intent, "--lifecycle-only"]
-    if owner:
-        flow_args.extend(["--owner", owner])
-    if repo_name:
-        flow_args.extend(["--repo", repo_name])
+    flow_args.extend(["--owner", effective_owner, "--repo", effective_repo])
     payload = flow_payload(
         "host-lifecycle-admission",
         flow_args,
@@ -2634,12 +2654,13 @@ def host_lifecycle_admission_payload(
     )
     verdict = payload.get("lifecycle_verdict")
     if isinstance(verdict, dict):
-        return {**verdict, "admission": payload}
+        return {**verdict, "subject_readback": subject_readback, "admission": payload}
     return {
         "result": "block",
         "lifecycle_state": "host_unreadable",
         "primary_remediation": "loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json",
         "carrier_mutations": False,
+        "subject_readback": subject_readback,
         "admission": payload,
     }
 
@@ -8423,6 +8444,8 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
     parser.add_argument("--item")
     parser.add_argument("--issue", type=int)
     parser.add_argument("--fr", type=int)
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--branch")
     parser.add_argument("--milestone")
     parser.add_argument("--version")
     parser.add_argument("--package")
@@ -8438,6 +8461,8 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
         owner=args.owner,
         repo_name=args.repo_name,
         intent="ship",
+        pr=args.pr,
+        branch=args.branch,
     )
     if lifecycle_admission["result"] != "pass":
         return emit(
@@ -8451,7 +8476,7 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
                     target=str(target),
                     issue={"number": args.issue},
                     fr={"number": args.fr},
-                    missing_inputs=lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                    missing_inputs=lifecycle_admission.get("missing_inputs") or lifecycle_admission.get("admission", {}).get("missing_inputs", []),
                     fallback_to=[lifecycle_admission.get("primary_remediation")],
                     lifecycle_admission=lifecycle_admission,
                 ),
@@ -8546,6 +8571,8 @@ def handle_ship(argv: list[str]) -> int:
         owner=args.owner,
         repo_name=args.repo_name,
         intent="ship",
+        pr=args.pr,
+        branch=args.branch,
     )
     if lifecycle_admission["result"] != "pass":
         return emit(
@@ -8563,7 +8590,7 @@ def handle_ship(argv: list[str]) -> int:
                     issue={"number": args.issue},
                     pr={"number": args.pr},
                     lifecycle_admission=lifecycle_admission,
-                    missing_inputs=lifecycle_admission.get("admission", {}).get("missing_inputs", []),
+                    missing_inputs=lifecycle_admission.get("missing_inputs") or lifecycle_admission.get("admission", {}).get("missing_inputs", []),
                     fallback_to=[lifecycle_admission.get("primary_remediation")],
                     next_action=lifecycle_admission.get("primary_remediation"),
                 ),
