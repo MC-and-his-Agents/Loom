@@ -1211,7 +1211,6 @@ def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any
     npm = readbacks.get("npm_package", {})
     workflow = readbacks.get("workflow_run", {})
     package_surface = readbacks.get("package_surface", {})
-    carrier = readbacks.get("carrier", {})
     merge_fallback = readbacks.get("merge_fallback", {})
     tag_exists = tag.get("exists") is True
     tag_matches = tag.get("matches_target_commit") is True
@@ -1220,7 +1219,6 @@ def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any
     npm_latest = npm.get("dist_tags", {}).get("latest") if isinstance(npm.get("dist_tags"), dict) else npm.get("latest")
     npm_latest_matches = not npm_exists or npm_latest in (None, npm.get("version"))
     package_surface_pass = not isinstance(package_surface, dict) or package_surface.get("result") in (None, "pass")
-    carrier_terminal = not isinstance(carrier, dict) or carrier.get("state") in (None, "terminal")
     workflow_selected = workflow.get("selected") if isinstance(workflow.get("selected"), dict) else None
     workflow_target_commit = workflow.get("target_commit")
     workflow_matches_target = (
@@ -1259,9 +1257,6 @@ def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any
         gaps.append("npm_latest_dist_tag_mismatch")
     if not package_surface_pass and isinstance(package_surface, dict):
         gaps.extend(str(gap) for gap in package_surface.get("gaps", []) if gap)
-    if tag_exists and tag_matches and release_exists and npm_exists and workflow_success and not carrier_terminal:
-        gaps.append("carrier_not_terminal")
-
     if isinstance(merge_fallback, dict) and merge_fallback.get("main_worktree_busy"):
         same_head = merge_fallback.get("same_head_sha") is True
         gate_passed = merge_fallback.get("gate_passed") is True
@@ -1298,15 +1293,6 @@ def classify_release_readback(*, release_judgment: str, readbacks: dict[str, Any
             "next_action": "publish path is still unoccupied; use the release workflow only after the release intent is authorized",
         }
     if tag_exists and tag_matches and release_exists and npm_exists and workflow_success:
-        if not carrier_terminal:
-            return {
-                "verdict": "blocked",
-                "classification": "blocked",
-                "reason": "release artifacts are published but the repo carrier is not terminal",
-                "gaps": gaps,
-                "resume_action": "run loom closeout sync to consume the published release facts into terminal carrier state",
-                "next_action": "run loom closeout sync to consume the published release facts into terminal carrier state",
-            }
         return {
             "verdict": "published",
             "classification": "published",
