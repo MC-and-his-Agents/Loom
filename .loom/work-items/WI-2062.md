@@ -6,7 +6,7 @@
 - Goal: 修复 hosted PR gate 将明确非阻塞的状态说明误判为 execution blocker 的回归。
 - Scope: Issue #2062；仅修改 canonical `loom_flow.py` blocker 判定、最小 CLI contract regression、生成分发面和 WI-2062 carriers；不修改 WebEnvoy 产品仓、不绕过 semantic review、required checks 或 terminal closeout 语义。
 - Execution Path: issue #2062 -> branch work/2062-hosted-pr-gate-nonblocking-blockers -> dedicated worktree -> ready PR
-- Workspace Entry: /Volumes/2T/dev/MC-and-his-Agents/Loom.worktrees/2062-hosted-pr-gate-nonblocking-blockers
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-2062.md
 - Review Entry: .loom/reviews/WI-2062.json
 - Validation Entry: targeted CLI contract regression; py-compile; generated surface drift; source Loom checks; git diff checks
