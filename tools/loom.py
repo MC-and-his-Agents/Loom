@@ -161,6 +161,20 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Validate product acceptance evidence against the declared user-story and safety boundary requirements.",
     },
     {
+        "command": "attestation readback",
+        "domain": "host-attestation",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read an approved PR review, semantic tree, and workflow artifact from GitHub only.",
+    },
+    {
+        "command": "attestation closeout",
+        "domain": "host-attestation",
+        "status": "implemented",
+        "json": True,
+        "summary": "Read a host-native Work Item closeout without creating repository carriers.",
+    },
+    {
         "command": "installed-state show",
         "domain": "installation",
         "status": "implemented",

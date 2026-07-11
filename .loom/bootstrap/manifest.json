@@ -22,123 +22,14 @@
       "source": "generated"
     },
     {
-      "path": ".loom/bootstrap/capability-map.md",
-      "kind": "capability-map",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/README.md",
-      "kind": "repo-companion-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/manifest.json",
-      "kind": "repo-companion-manifest",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/repo-interface.json",
-      "kind": "repo-companion-interface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/interop.json",
-      "kind": "repo-interop-contract",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/checkpoints.md",
-      "kind": "repo-companion-doc",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/review.md",
-      "kind": "repo-companion-doc",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/merge-ready.md",
-      "kind": "repo-companion-doc",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/closeout.md",
-      "kind": "repo-companion-doc",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/admission-loom.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/admission-repo.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/review-loom.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/review-repo.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/merge-ready-loom.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/merge-ready-repo.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/closeout-loom.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/shadow/closeout-repo.json",
-      "kind": "shadow-parity-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".gitignore",
-      "kind": "gitignore",
-      "source": "generated"
-    },
-    {
       "path": ".loom/bootstrap/manifest.json",
       "kind": "manifest",
       "source": "generated"
     },
     {
-      "path": ".loom/bin/authority_contract.py",
-      "kind": "loom-tool-support",
-      "source": "skills/shared/scripts/authority_contract.py",
-      "sha256": "4cc504db34b896bb6d3dc223c0be13337e17618df966a2a5ac50c0416544bab4"
-    },
-    {
-      "path": ".loom/bin/failure_envelope.py",
-      "kind": "loom-tool-support",
-      "source": "skills/shared/scripts/failure_envelope.py",
-      "sha256": "0838f25a3973c0c7378c9346fb85f2009f4774299b224ff532a6e2441c420003"
-    },
-    {
-      "path": ".loom/bin/product_acceptance.py",
-      "kind": "loom-tool-support",
-      "source": "skills/shared/scripts/product_acceptance.py",
-      "sha256": "56dae5792b68423b26eff59844052a9cef1441d17ebb6eec8599d4897de8187e"
-    },
-    {
-      "path": ".loom/bin/execution_attempts.py",
-      "kind": "loom-tool-support",
-      "source": "skills/shared/scripts/execution_attempts.py",
-      "sha256": "b30db4b57bc385531694fa28d1ce3a7ea75530ace30fb92a038c474e01389d37"
+      "path": ".loom/bootstrap/capability-map.md",
+      "kind": "capability-map",
+      "source": "generated"
     },
     {
       "path": ".loom/bin/loom_init.py",
@@ -207,13 +98,8 @@
       "sha256": "18cda4c17f2816fc25e98bcee441b48d30e8b5b50a8fca697a0398006cb6d7fb"
     },
     {
-      "path": ".loom/reviews/INIT-0001.json",
-      "kind": "review-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.spec.json",
-      "kind": "review-entry",
+      "path": "AGENTS.md",
+      "kind": "root-entry",
       "source": "generated"
     },
     {
@@ -227,14 +113,19 @@
       "source": "generated"
     },
     {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
+      "path": ".loom/reviews/INIT-0001.json",
+      "kind": "review-entry",
       "source": "generated"
     },
     {
-      "path": ".loom/stories/_template.md",
-      "kind": "story-carrier-template",
-      "source": "skills/shared/assets/templates/scaffold/user-story.md"
+      "path": ".loom/reviews/INIT-0001.spec.json",
+      "kind": "review-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
+      "source": "generated"
     },
     {
       "path": ".loom/specs/INIT-0001/spec.md",
