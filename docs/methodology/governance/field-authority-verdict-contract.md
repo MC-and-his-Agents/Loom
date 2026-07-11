@@ -21,17 +21,25 @@ between its inputs and never upgrades delivery or product acceptance.
 
 ## Typed locators
 
-Loom accepts `type:number`, never a bare number. Supported types are `issue`,
-`phase`, `fr`, `work_item`, `pr`, and `project`. An implementation primary
-binding remains `work_item:<number>`.
+The canonical locator is `owner/repo/type/id`, which is globally unique across
+repositories and object types. Supported types are `issue`, `phase`, `fr`,
+`work_item`, `pr`, and `project`; a bare number is never accepted. New output
+and PR bindings always render the canonical form, for example
+`MC-and-his-Agents/Loom/work_item/2043`.
+
+Legacy `type:number` values remain read-compatible through the v0.30.x line so
+existing retained evidence can be consumed and rewritten. They are never
+rendered by current code and will be rejected from v0.31.0. PR metadata already
+requires the canonical form; compatibility only applies to non-authoritative
+legacy reads.
 
 ## PR intent and failure output
 
-An implementation PR carries one typed `Work Item: work_item:<number>` plus
+An implementation PR carries one typed `Work Item: owner/repo/work_item/id` plus
 the policy intent that GitHub cannot supply (governance intensity, change
 class, suite path, review/release policy). Branch, head SHA, checks, merge
-commit, and merge state are GitHub host readback facts and are rejected when
-authored in the metadata block. Gate failures use
+commit, and merge state are read directly from GitHub and are rejected when
+authored in either the metadata block or as PR binding truth. Gate failures use
 `loom-failure-envelope/v1`: exactly one primary cause names its failure
 domain, owner, retryability, causal predecessors, and one remediation command.
 This envelope still never evaluates product acceptance.

@@ -19,7 +19,7 @@ Validation details:
 
 ## Related Work
 
-- Work Item: work_item:<GitHub issue number>
+- Work Item: <owner>/<repo>/work_item/<GitHub issue number>
 - Issue:
 - Spec / plan:
 
@@ -33,7 +33,7 @@ If this repository declares repo-specific PR metadata in `.loom/companion/repo-i
   "metadata_contract_id": "loom-governance-intensity",
   "surface": "merge_ready",
   "fields": {
-    "work_item_locator": "work_item:<GitHub issue number>",
+    "work_item_locator": "<owner>/<repo>/work_item/<GitHub issue number>",
     "governance_intensity": "standard",
     "change_class": "contract",
     "suite_path": "minimal",
@@ -46,6 +46,6 @@ If this repository declares repo-specific PR metadata in `.loom/companion/repo-i
     "upgrade_triggers": []
   },
   "source": {"rendered_hash": "sha256:replace-with-rendered-body-hash-or-renderer-id"},
-  "parser_version": "loom-pr-metadata-parser/v1"
+  "parser_version": "loom-pr-metadata-parser/v2"
 }
 -->

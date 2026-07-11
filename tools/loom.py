@@ -65,6 +65,7 @@ for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
     if shared_scripts_root.is_dir() and str(shared_scripts_root) not in sys.path:
         sys.path.insert(0, str(shared_scripts_root))
 from runtime_paths import global_runtime_path, is_global_runtime_locator
+from authority_contract import parse_typed_locator, typed_locator
 from host_attestation import main as host_attestation_main
 from product_acceptance import main as product_acceptance_main
 
@@ -6412,6 +6413,8 @@ def handle_merge(argv: list[str]) -> int:
         flow_args.extend(["--head-sha", args.head_sha])
     if args.work_item:
         flow_args.extend(["--item", args.work_item])
+    if args.issue:
+        flow_args.extend(["--issue", args.issue])
     if args.owner:
         flow_args.extend(["--owner", args.owner])
     if args.repo_name:
@@ -7346,6 +7349,7 @@ def pr_intent_governance_fields(metadata_payload: dict[str, Any] | None) -> dict
 
 def pr_intent_consistency_validation(
     *,
+    target: Path,
     profile_id: str,
     profile: dict[str, Any],
     item: str,
@@ -7357,8 +7361,20 @@ def pr_intent_consistency_validation(
 ) -> dict[str, Any]:
     fields = pr_intent_governance_fields(metadata_payload)
     missing: list[str] = []
+    parsed_item = parse_typed_locator(item, allowed_types={"work_item"})
+    repo_slug = infer_github_repo(target)
+    if isinstance(issue, str) and issue.isdigit() and repo_slug:
+        owner, repo = repo_slug.split("/", 1)
+        expected_work_item_locator = typed_locator(owner, repo, "work_item", int(issue))
+    elif parsed_item and not parsed_item["legacy"]:
+        expected_work_item_locator = str(parsed_item["locator"])
+    elif parsed_item and repo_slug:
+        owner, repo = repo_slug.split("/", 1)
+        expected_work_item_locator = typed_locator(owner, repo, "work_item", int(parsed_item["id"]))
+    else:
+        expected_work_item_locator = item
     expected = {
-        "work_item_locator": f"work_item:{issue}" if isinstance(issue, str) and issue.isdigit() else item,
+        "work_item_locator": expected_work_item_locator,
         "change_class": profile["change_class"],
         "suite_path": profile["suite_path"],
         "review_requirement": profile["review_requirement"],
@@ -7703,6 +7719,7 @@ def pr_intent_check_payload(
         missing_inputs.extend(f"scope path outside intent: {path}" for path in scope_validation.get("blocked_paths", []))
 
     consistency_validation = pr_intent_consistency_validation(
+        target=target,
         profile_id=profile_id,
         profile=profile,
         item=item or "",

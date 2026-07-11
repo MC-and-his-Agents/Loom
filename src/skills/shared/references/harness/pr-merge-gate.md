@@ -18,10 +18,13 @@ Raw review output, shadow evidence, runtime evidence, CI logs, GitHub review com
 
 PR metadata machine blocks are separate from PR summaries: malformed HTML comment JSON, missing required repo-specific fields, or required-but-absent machine blocks must return parser diagnostics instead of generic missing-field collapse.
 
-When machine carrier, explicit CLI input, and host readback agree on the same
-Work Item / issue / PR / branch / head binding, missing human-readable PR
-fields such as `Issue: #123` are repairable metadata drift, not semantic Work
-Item conflict.
+The PR binding is `Work Item: owner/repo/work_item/id`; its repository and id
+must match GitHub readback. Legacy `type:number` is not authoritative on this
+surface. When machine carrier, explicit CLI input, and host readback agree on
+the same Work Item / issue / PR binding, missing human-readable fields such as
+`Issue: #123` are repairable metadata drift, not semantic Work Item conflict.
+Branch, head, check, and merge facts remain GitHub readback and are never
+repaired into the PR body.
 
 Host enforcement is proven only by live branch protection or active ruleset readback requiring the stable check name `loom-pr-merge-gate`; workflow presence alone is not enough.
 

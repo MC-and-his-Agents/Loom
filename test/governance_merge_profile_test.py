@@ -108,7 +108,7 @@ class GovernanceMergeProfileTest(unittest.TestCase):
             base_body="## Summary\n\nTest PR\n",
             field={"id": "loom-governance-intensity", "machine_carrier": {"surface": "merge_ready"}},
             requested_surface="merge_ready",
-            item_id="WI-1805",
+            item_id="MC-and-his-Agents/Loom/work_item/1805",
             branch_name="work/1805-host-governance-capability",
             head_sha="a" * 40,
             governance_intensity="standard",

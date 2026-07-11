@@ -128,19 +128,19 @@
       "path": ".loom/bin/github_admission.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/github_admission.py",
-      "sha256": "4f5c30a6e23d4babfdf88d0df54277e6f5a53f75dd2f56291dcadd92764ee8f8"
+      "sha256": "168d0328641e449505616255ce73d50202ea18e58f304221af4f6be8c8d3b96c"
     },
     {
       "path": ".loom/bin/github_host.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/github_host.py",
-      "sha256": "b2dd0f23450c682f9d4251344145d5b36b58ac35ba6b61a1b152a00a8cf98cba"
+      "sha256": "e850e3652e8d19abd415acaa5ea6bf13fa1b89cc91addce45e98043bbf6abd22"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "794426ea32cf21471003f9547f8ca064822f7954a61aa4b5ac4cb4d5552b3957"
+      "sha256": "a7b5c00bc779816f1f08196ebcab0bcdb687e71a351ac8076b96d886ea3624e2"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -164,7 +164,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "543ace953ed03182efba704137e0b6eaee53ebe1059341cfb6f447576e0166f8"
+      "sha256": "2cd8643ee9f9e816d45a16a166508d790ac902bf63cdd663eadaae5421682d3c"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",

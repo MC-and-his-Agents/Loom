@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from authority_contract import authority_verdict, parse_typed_locator
+from authority_contract import authority_verdict, typed_locator
 from failure_envelope import envelope, primary_cause
 from github_host import github_pr_attestation_readback, github_pr_closeout_readback
 
@@ -16,13 +16,19 @@ from github_host import github_pr_attestation_readback, github_pr_closeout_readb
 SCHEMA = "loom-host-attestation/v1"
 
 
-def _result(*, work_item: int, facts: dict[str, Any] | None, errors: list[str], closeout: bool) -> dict[str, Any]:
+def _result(*, owner: str, repo: str, work_item: int, facts: dict[str, Any] | None, errors: list[str], closeout: bool) -> dict[str, Any]:
+    try:
+        work_item_locator = typed_locator(owner, repo, "work_item", work_item)
+    except ValueError:
+        work_item_locator = "invalid:work_item"
+        facts = None
+        errors = ["work_item locator is invalid", *errors]
     passed = not errors and facts is not None
     cause = primary_cause(
         cause_id="host_closeout_valid" if closeout and passed else "host_attestation_valid" if passed else "host_closeout_invalid" if closeout else "host_attestation_invalid",
         failure_domain="governance_metadata" if passed or any(error.startswith(("no GitHub APPROVED", "a current-head", "GitHub Actions artifact", "GitHub Actions workflow", "GitHub PR must", "GitHub PR is not", "GitHub base branch", "typed Work Item", "GitHub issue is not typed", "GitHub Work Item is not")) for error in errors) else "host_service",
         code="accepted" if passed else "readback_invalid",
-        locator=f"work_item:{work_item}",
+        locator=work_item_locator,
         summary="GitHub host facts bind the merged PR, review, tree, workflow artifact, and Work Item." if closeout and passed else "GitHub host facts bind the approved review, semantic tree, and workflow artifact." if passed else errors[0] if errors else "GitHub host readback returned no facts",
         owner="github" if passed else "operator" if any(error.startswith(("no GitHub APPROVED", "a current-head", "GitHub Actions artifact", "GitHub Actions workflow", "GitHub PR must", "GitHub PR is not", "GitHub base branch", "typed Work Item", "GitHub issue is not typed", "GitHub Work Item is not")) for error in errors) else "github",
         retryable=not passed,
@@ -39,7 +45,7 @@ def _result(*, work_item: int, facts: dict[str, Any] | None, errors: list[str], 
             "closeout": closeout,
         },
         "authority_verdict": authority_verdict(delivery_state="delivery_closed_out" if closeout and passed else "not_evaluated"),
-        "work_item_locator": f"work_item:{work_item}",
+        "work_item_locator": work_item_locator,
         "host_facts": facts if passed else None,
         "missing_inputs": errors,
         "observed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -61,14 +67,12 @@ def _artifact_id(path: Path) -> int:
 
 
 def readback(root: Path, owner: str, repo: str, number: int, work_item: int, artifact_id: int, *, closeout: bool = False) -> dict[str, Any]:
-    if parse_typed_locator(f"work_item:{work_item}", allowed_types={"work_item"}) is None:
-        return _result(work_item=work_item, facts=None, errors=["work_item locator is invalid"], closeout=closeout)
     reader = github_pr_closeout_readback if closeout else github_pr_attestation_readback
     if closeout:
         facts, errors = reader(root, owner, repo, number, work_item, artifact_id)
     else:
         facts, errors = reader(root, owner, repo, number, artifact_id)
-    return _result(work_item=work_item, facts=facts, errors=errors, closeout=closeout)
+    return _result(owner=owner, repo=repo, work_item=work_item, facts=facts, errors=errors, closeout=closeout)
 
 
 def main(argv: list[str] | None = None) -> int:
