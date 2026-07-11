@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-2062.json
 - Validation Entry: targeted CLI contract regression; py-compile; generated surface drift; source Loom checks; git diff checks
 - Closing Condition: Ready PR fixes Core #273 and App #281 blocker-text shapes while real blockers remain fail closed.
-- Current Checkpoint: build
-- Current Stop: Canonical source, generated runtime surfaces, and focused regression are implemented and validated.
-- Next Step: Commit the reviewed product head, author current-head semantic review, then push a ready PR and consume hosted checks.
+- Current Checkpoint: review
+- Current Stop: Product head `74220bd2` passed spec and implementation semantic review; review carrier is committed.
+- Next Step: Push the branch, create the ready PR, and consume required hosted checks without terminal closeout bypass.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-07-12 product head `74220bd2`: focused Core/App/real-blocker classifier regression and `python3 tools/check_cli_contract.py --surface governance-closeout` passed; `make py-compile`, `python3 tools/skills_surface.py check`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, `python3 tools/check_release_surface.py`, `python3 tools/version_surface_check.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface aggregate`, Loom fact-chain/suite/carrier/evidence validation, and `git diff --check` passed.
 - Recovery Boundary: Revert only WI-2062-owned Loom source, generated distribution, tests, and carriers. Do not alter WebEnvoy repositories or weaken review/check requirements.
