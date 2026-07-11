@@ -16102,6 +16102,10 @@ def run_aggregate_cli_contract() -> None:
             "headRefName": "work/957-pre-review-readiness-cost-guard",
             "headRefOid": "0000000000000000000000000000000000000000",
             "baseRefName": "main",
+            "closingIssuesReferences": {
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [{"number": active_issue, "state": "OPEN", "labels": ["work-item"]}],
+            },
         }
         try:
             drift_fixture.write_text(json.dumps(drift_payload, indent=2) + "\n", encoding="utf-8")
@@ -16112,11 +16116,13 @@ def run_aggregate_cli_contract() -> None:
                     str(REPO_ROOT),
                     "--item",
                     active_item,
+                    *active_host_args,
                     "--pr-payload-file",
                     ".loom/runtime/WI-957-pr-head-drift-fixture.json",
                     "--json",
                 ],
                 item=active_item,
+                env_overrides=active_host_env,
             )
             drift_pre_review = runtime_payload_from_agent_safe_output(drift_pre_review)
         finally:
@@ -16147,7 +16153,7 @@ def run_aggregate_cli_contract() -> None:
         retire_payload = runtime_payload_from_agent_safe_output(retire_payload)
         if retire_payload["command"] != "retire" or not retire_payload.get("retire_contract"):
             raise AssertionError("retire did not expose structured non-mutating contract")
-        assert_active_closeout_contract(active_item)
+        assert_active_closeout_contract(active_item, tmp)
         assert_reconciliation_suite_taxonomy_contract()
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_metadata_render_readback_fixture(tmp)
