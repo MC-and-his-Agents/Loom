@@ -49,11 +49,15 @@ jobs:
             if (issue.state !== "open" || typeLabels.length !== 1 || typeLabels[0] !== "work-item") {
               throw new Error(`${context.repo.owner}/${context.repo.repo}/work_item/${issueNumber} must resolve to one open GitHub Work Item`);
             }
-            const closingReferences = new Set(
-              [...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/gi)]
-                .map((match) => Number(match[1])),
-            );
-            if ([...closingReferences].some((number) => number !== issueNumber)) {
-              throw new Error("implementation PR closing references must target its primary work_item; FR/Phase references are not allowed");
+            const closingReferences = [
+              ...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)\/([A-Za-z0-9_.-]+))?#([1-9]\d*)\b/gi),
+            ];
+            for (const [, closingOwner = context.repo.owner, closingRepo = context.repo.repo, closingNumber] of closingReferences) {
+              if (closingOwner.toLowerCase() !== context.repo.owner.toLowerCase() || closingRepo.toLowerCase() !== context.repo.repo.toLowerCase()) {
+                throw new Error(`implementation PR closing reference targets another repository: ${closingOwner}/${closingRepo}#${closingNumber}`);
+              }
+              if (Number(closingNumber) !== issueNumber) {
+                throw new Error("implementation PR closing references must target its primary work_item; FR/Phase references are not allowed");
+              }
             }
             core.notice(`validated ${context.repo.owner}/${context.repo.repo}/work_item/${issueNumber} from GitHub host readback`);

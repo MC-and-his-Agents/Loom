@@ -16188,6 +16188,35 @@ def work_item_locator_for_metadata(
     return None
 
 
+def authoritative_work_item_locator_for_metadata(
+    target_root: Path,
+    item_id: str | None,
+    issue_number: int | None,
+    owner: str | None,
+    repo: str | None,
+) -> str | None:
+    """Resolve metadata binding from explicit host authority or the Work Item carrier."""
+
+    explicit_issue = work_item_locator_for_metadata(None, issue_number, owner, repo)
+    if explicit_issue is not None:
+        return explicit_issue
+    explicit = work_item_locator_for_metadata(item_id, None, owner, repo)
+    if explicit is not None:
+        return explicit
+    if not item_id or not owner or not repo:
+        return None
+    match = re.fullmatch(r"WI-([1-9]\d*)", item_id)
+    if match is None:
+        return None
+    carrier_path = target_root / ".loom" / "work-items" / f"{item_id}.md"
+    if not carrier_path.is_file():
+        return None
+    carrier, errors = parse_work_item(carrier_path, target_root)
+    if errors or carrier.get("item_id") != item_id:
+        return None
+    return typed_locator(owner, repo, "work_item", int(match.group(1)))
+
+
 def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> list[str]:
     missing_fields: list[str] = []
     missing_fields.extend(
@@ -16521,8 +16550,9 @@ def pr_metadata_contract_preflight(
                 normalized_fields = normalized.get("fields") if isinstance(normalized.get("fields"), dict) else {}
                 body_locator = pr_body_field_value(body, "Work Item")
                 normalized_body_locator = work_item_locator_for_metadata(body_locator, None, owner, repo)
+                authoritative_locator = work_item_locator_for_metadata(expected_item, None, owner, repo)
                 expected_bindings = {
-                    "work_item_locator": work_item_locator_for_metadata(expected_item, None, owner, repo) or normalized_body_locator,
+                    "work_item_locator": authoritative_locator,
                 }
                 body_bindings = {
                     "work_item_locator": normalized_body_locator,
@@ -16536,6 +16566,8 @@ def pr_metadata_contract_preflight(
                 ) != carrier_locator:
                     binding_missing.append("fields.work_item_locator")
                 if body_locator and normalized_body_locator is None:
+                    binding_missing.append("fields.work_item_locator")
+                if expected_item and authoritative_locator is None:
                     binding_missing.append("fields.work_item_locator")
                 for field_name, expected_value in expected_bindings.items():
                     carrier_value = normalized_fields.get(field_name)
@@ -16563,7 +16595,7 @@ def pr_metadata_contract_preflight(
                         **base,
                         "effective_carrier_surface": matched_surface,
                         "result": "block",
-                        "summary": "PR metadata machine block is present but its governance binding conflicts with stable PR body or branch inputs.",
+                        "summary": "PR metadata machine block is present but its governance binding conflicts with authoritative Work Item input.",
                         "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
                         "fallback_to": "update_pr_body",
                         "diagnostics": diagnostics,
@@ -16685,7 +16717,17 @@ def pr_metadata_preflight_payload(
     )
     if isinstance(body_artifact_result, dict):
         missing_inputs.extend(str(message) for message in body_artifact_result.get("missing_inputs", []))
-    body_item = pr_work_item_from_body(body) if isinstance(body, str) else None
+    authoritative_item = authoritative_work_item_locator_for_metadata(
+        target_root,
+        expected_item,
+        issue_number,
+        locator_owner,
+        locator_repo,
+    )
+    if expected_item and authoritative_item is None:
+        missing_inputs.append(
+            "authoritative Work Item locator is unavailable from explicit issue authority or the Work Item carrier"
+        )
     pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha
     pr_branch = pr_payload.get("headRefName") if isinstance(pr_payload, dict) else branch_name
     contract_results = [
@@ -16693,7 +16735,7 @@ def pr_metadata_preflight_payload(
             field=field,
             body=body if isinstance(body, str) else None,
             surface=surface,
-            expected_item=expected_item or body_item,
+            expected_item=authoritative_item,
             expected_branch=expected_branch or (pr_branch if isinstance(pr_branch, str) and pr_branch else None),
             owner=locator_owner,
             repo=locator_repo,

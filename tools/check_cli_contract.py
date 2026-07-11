@@ -6494,6 +6494,7 @@ def write_semantic_review_pr_gate_fixture(target: Path, *, item: str = "WI-1287"
     subprocess.run(["git", "init", "-b", "main"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=target, check=True)
     subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=target, check=True)
+    subprocess.run(["git", "remote", "add", "origin", "https://github.com/owner/repo.git"], cwd=target, check=True)
     subprocess.run(["git", "checkout", "-b", branch], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     (target / "fixture-change.txt").write_text("semantic review disposition fixture\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=target, check=True)
@@ -10530,6 +10531,21 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     metadata_fields = pass_payload.get("pr_metadata_preflight", {}).get("governance_intensity_carrier", {}).get("envelope", {}).get("fields", {})
     if not isinstance(metadata_fields, dict) or metadata_fields.get("work_item_locator") != fixture["work_item_locator"]:
         raise AssertionError("pr-gate did not consume the single typed Work Item metadata locator")
+    pr_path = target / fixture["pr_file"]
+    pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    original_body = pr_payload["body"]
+    pr_payload["body"] = governance_metadata_body(
+        item="WI-9999",
+        branch=fixture["branch"],
+        head_sha=pr_payload["headRefOid"],
+    )
+    pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
+    forged_body_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    forged_preflight = forged_body_payload.get("pr_metadata_preflight", {}).get("governance_intensity_carrier", {})
+    if forged_body_payload.get("result") != "block" or forged_preflight.get("result") != "block":
+        raise AssertionError("PR body and machine carrier must not override the Work Item carrier authority")
+    pr_payload["body"] = original_body
+    pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
     with isolated_loom_workstation(tmp / "workstation"):
         assert_gate_freeze_review_binding_fixture(tmp)
         assert_hosted_freeze_admission_pr_gate_fixture(tmp)
@@ -10542,7 +10558,6 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     assert_controlled_merge_ruleset_trigger_fixture(tmp)
     assert_cross_repo_review_gate_fixtures(tmp)
 
-    pr_path = target / fixture["pr_file"]
     merge_target, merge_fixture, merge_pass_payload, fixture_dir = prepare_controlled_merge_fixture(
         tmp,
         fixture_name="semantic-review-controlled-merge",
@@ -10777,9 +10792,12 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     aggregate_payload = semantic_pr_gate_fixture_payload(target, {**fixture, "item": aggregate_item})
     if aggregate_payload.get("pr", {}).get("work_item_from_body") != aggregate_item:
         raise AssertionError("pr-gate did not parse aggregate Work Item id from PR body")
-    aggregate_taxonomy = aggregate_payload.get("failure_taxonomy", [])
-    if aggregate_payload.get("result") != "block" or "work_item_binding_missing" in aggregate_taxonomy:
-        raise AssertionError("aggregate Work Item id parser fixture must consume the PR body Work Item binding")
+    if (
+        aggregate_payload.get("result") != "block"
+        or "authoritative Work Item locator is unavailable from explicit issue authority or the Work Item carrier"
+        not in aggregate_payload.get("missing_inputs", [])
+    ):
+        raise AssertionError("aggregate Work Item id must not become authority from the PR body alone")
     pr_path.write_text(json.dumps(original_pr_payload, indent=2) + "\n", encoding="utf-8")
 
     review_path = target / fixture["review_path"]
