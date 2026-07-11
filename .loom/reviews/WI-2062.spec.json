@@ -6,7 +6,7 @@
   "summary": "Spec review found no P0-P3 issue. The minimal suite is bounded to one checkpoint classifier, names the two observed passing shapes and real-blocker negative behavior, and explicitly excludes semantic-review, required-check, closeout, and product-repository bypasses.",
   "reviewer": "codex-main",
   "authored_at": "2026-07-11T17:32:00Z",
-  "reviewed_head": "74220bd2537a9f89ab8c95630ce7b775e247b73b",
+  "reviewed_head": "749dcd96055613ef08dc28ae509cf96a215262f4",
   "reviewed_validation_summary": "2026-07-12 product head `74220bd2`: focused Core/App/real-blocker classifier regression and `python3 tools/check_cli_contract.py --surface governance-closeout` passed; `make py-compile`, `python3 tools/skills_surface.py check`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, `python3 tools/check_release_surface.py`, `python3 tools/version_surface_check.py`, `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py --surface aggregate`, Loom fact-chain/suite/carrier/evidence validation, and `git diff --check` passed.",
   "reviewed_validation_summary_hash": "9c0e4911bc9a9b39351856c93e5a3b3abcf63bf4e2da46b403272d8eb12e5e8b",
   "validation_summary_source": "recovery.latest_validation_summary",
