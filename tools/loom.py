@@ -9,7 +9,9 @@ JSON block instead of silently falling back to legacy wrappers.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import os
 import re
@@ -708,18 +710,73 @@ COMMANDS: list[dict[str, Any]] = [
     },
 ]
 
+PUBLIC_COMMAND_NAMES = {
+    "version", "help", "acceptance resolve", "attestation readback", "attestation closeout",
+    "installed-state validate", "detect", "doctor", "repair plan", "install", "upgrade", "verify",
+    "route", "status", "profile status", "profile light-migration-reconcile", "story", "build",
+    "pre-review", "review", "merge-ready", "closeout", "pr gate", "merge check", "merge run", "ship",
+    "release readback", "workspace create", "workspace check", "workspace retire",
+}
+PUBLIC_PROTOCOL_TYPES = (
+    "manifest",
+    "locator",
+    "observation",
+    "delivery_verdict",
+    "product_acceptance",
+    "reconciliation_verdict",
+    "review_attestation",
+    "host_attestation",
+    "failure_envelope",
+    "migration_plan",
+    "release_judgment",
+    "readback",
+)
+LEGACY_SURFACE_REMOVE_BY = "v0.31.0"
+PUBLIC_COMMAND_PROTOCOL_TYPES = {
+    "version": "manifest",
+    "help": "manifest",
+    "acceptance resolve": "product_acceptance",
+    "attestation readback": "host_attestation",
+    "attestation closeout": "host_attestation",
+    "installed-state validate": "manifest",
+    "detect": "observation",
+    "doctor": "observation",
+    "repair plan": "migration_plan",
+    "install": "migration_plan",
+    "upgrade": "migration_plan",
+    "verify": "readback",
+    "route": "locator",
+    "status": "observation",
+    "profile status": "observation",
+    "profile light-migration-reconcile": "reconciliation_verdict",
+    "story": "locator",
+    "build": "delivery_verdict",
+    "pre-review": "delivery_verdict",
+    "review": "review_attestation",
+    "merge-ready": "delivery_verdict",
+    "closeout": "reconciliation_verdict",
+    "pr gate": "delivery_verdict",
+    "merge check": "delivery_verdict",
+    "merge run": "delivery_verdict",
+    "ship": "delivery_verdict",
+    "release readback": "release_judgment",
+    "workspace create": "locator",
+    "workspace check": "readback",
+    "workspace retire": "reconciliation_verdict",
+}
+
 HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
         "task": "resume",
         "summary": "Take over the current Work Item from repository facts.",
-        "first_command": "loom resume --target <repo> --item <WI> --json",
-        "next_step": "Continue with build, review, merge-ready, or closeout based on the resume checkpoint.",
+        "first_command": "loom route --target <repo> --item <WI> --json",
+        "next_step": "Continue with build, review, merge-ready, or closeout based on the derived route.",
     },
     {
         "task": "prepare-pr",
         "summary": "Prepare or verify a known PR intent carrier set before review/gate.",
-        "first_command": "loom pr-intent prepare --intent <intent> --target <repo> --item <WI> --apply --json",
-        "next_step": "Run pr-intent check after the PR body metadata is updated and read back.",
+        "first_command": "loom build --target <repo> --item <WI> --json",
+        "next_step": "Continue to pre-review only after build returns a passing delivery verdict.",
     },
     {
         "task": "review",
@@ -754,28 +811,28 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
         "task": "runtime-upgrade",
         "summary": "Update one repository's Loom workflow pin through a maintenance PR.",
-        "first_command": "loom runtime-upgrade status --target <repo> --json",
-        "next_step": "Use prepare/check/closeout; do not mix repo workflow mutation with user plugin cache mutation.",
+        "first_command": "loom upgrade --target <repo> --json",
+        "next_step": "Apply the reported migration plan through the repository's normal maintenance PR.",
     },
     {
         "task": "host-plugin-doctor",
         "summary": "Diagnose local Codex plugin/cache freshness.",
-        "first_command": "loom host doctor --host codex --scope user --json",
-        "next_step": "Run host install/register with --apply only when refreshing the user workstation surface is intended.",
+        "first_command": "loom doctor --target <repo> --json",
+        "next_step": "Use the reported remediation only when refreshing the user workstation surface is intended.",
     },
     {
         "task": "workstation-registry",
         "summary": "List or update the machine-local Loom repository registry.",
-        "first_command": "loom workstation list --json",
-        "next_step": "Use register/unregister to update ~/.loom/repositories.json; each repo still owns adoption truth.",
+        "first_command": "loom workspace check --target <repo> --json",
+        "next_step": "Use workspace create or retire to manage the explicit repository worktree binding.",
     },
 ]
 
 HELP_COMMAND_TIERS: dict[str, list[str]] = {
     "common_path": [
-        "resume",
-        "pr-intent prepare",
-        "pr-intent check",
+        "route",
+        "build",
+        "pre-review",
         "review",
         "merge-ready",
         "pr gate",
@@ -783,29 +840,19 @@ HELP_COMMAND_TIERS: dict[str, list[str]] = {
         "merge run",
         "attestation readback",
         "attestation closeout",
-        "closeout sync",
+        "closeout",
     ],
     "maintenance_path": [
-        "runtime-upgrade status",
-        "runtime-upgrade prepare",
-        "runtime-upgrade pr",
-        "runtime-upgrade check",
-        "runtime-upgrade closeout",
+        "detect",
+        "doctor",
+        "repair plan",
+        "install",
+        "upgrade",
+        "verify",
         "release readback",
-        "host doctor",
-        "workstation list",
-    ],
-    "advanced_debug_path": [
-        "carrier closeout-sync",
-        "closeout run",
-        "release closeout-sync",
-        "pr metadata-render",
-        "pr metadata-readback",
-        "pr metadata-update",
-        "pr metadata-preflight",
-        "suite validate",
-        "suite evidence validate",
-        "suite carrier validate",
+        "workspace create",
+        "workspace check",
+        "workspace retire",
     ],
 }
 
@@ -2197,6 +2244,9 @@ def version_freshness_action(freshness: dict[str, Any]) -> dict[str, Any]:
 
 
 def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+    command = payload.get("command")
+    if command in PUBLIC_COMMAND_NAMES:
+        payload["protocol_type"] = PUBLIC_COMMAND_PROTOCOL_TYPES[command]
     failure_envelope = public_cli_failure_envelope(payload)
     if failure_envelope is not None:
         payload["failure_envelope"] = failure_envelope
@@ -2216,6 +2266,24 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
         "generated_at": now_iso(),
         **fields,
     }
+
+
+def emit_imported_main(command: str, handler: Any, argv: list[str]) -> int:
+    stream = io.StringIO()
+    with contextlib.redirect_stdout(stream):
+        handler(argv)
+    try:
+        payload = json.loads(stream.getvalue())
+    except json.JSONDecodeError:
+        payload = output(
+            command,
+            "block",
+            summary="Imported command did not emit JSON.",
+            failed_layer="cli-command-router",
+            fail_closed_reason=f"invalid JSON from {command}",
+        )
+    payload["command"] = command
+    return emit(payload)
 
 
 def output_key_gaps(payload: dict[str, Any], *, limit: int = 10) -> list[Any]:
@@ -2843,7 +2911,21 @@ def command_matrix() -> list[dict[str, Any]]:
             "status": entry["status"],
             "json": entry.get("json", True),
             "summary": entry.get("summary", ""),
+            "protocol_type": PUBLIC_COMMAND_PROTOCOL_TYPES[entry["command"]],
             "output_policy": command_output_policy(entry["command"]),
+        }
+        for entry in COMMANDS
+        if entry["command"] in PUBLIC_COMMAND_NAMES
+    ]
+
+
+def internal_command_matrix() -> list[dict[str, Any]]:
+    return [
+        {
+            "command": entry["command"],
+            "domain": entry["domain"],
+            "status": entry["status"],
+            "json": entry.get("json", True),
         }
         for entry in COMMANDS
     ]
@@ -2957,7 +3039,7 @@ def suite_support_declaration(state: Any) -> tuple[bool, list[str], list[str]]:
 
 def suite_command_surface_check(state: Any) -> dict[str, Any]:
     declared, declarations, required_commands = suite_support_declaration(state)
-    matrix = {entry["command"]: entry for entry in command_matrix()}
+    matrix = {entry["command"]: entry for entry in internal_command_matrix()}
     exposed_suite_commands = sorted(command for command, entry in matrix.items() if entry.get("domain") == "suite")
     if not declared:
         return {
@@ -3123,12 +3205,32 @@ def handle_version(argv: list[str]) -> int:
 def handle_help(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom help")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--internal-capabilities", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.internal_capabilities:
+        capabilities = [
+            handle_gate_freeze_operation(operation, [], probe=True)["capability"]
+            for operation in ("check", "write")
+        ]
+        return emit(
+            output(
+                "help",
+                "pass",
+                summary="Internal compatibility capabilities resolved without target access.",
+                visibility="internal",
+                capabilities=capabilities,
+                mutates=False,
+            )
+        )
     payload = output(
         "help",
         "pass",
         summary="Task-oriented guidance plus the frozen CLI command matrix.",
-        command_count=len(COMMANDS),
+        command_count=len(PUBLIC_COMMAND_NAMES),
+        hidden_compatibility_count=len(COMMANDS) - len(PUBLIC_COMMAND_NAMES),
+        protocol_type_count=len(PUBLIC_PROTOCOL_TYPES),
+        protocol_types=list(PUBLIC_PROTOCOL_TYPES),
+        legacy_surface_remove_by=LEGACY_SURFACE_REMOVE_BY,
         task_routes=HELP_TASK_ROUTES,
         command_tiers=HELP_COMMAND_TIERS,
         commands=command_matrix(),
@@ -3167,6 +3269,8 @@ def handle_help(argv: list[str]) -> int:
         print(f"  {route['task']:<22} {route['first_command']}")
     print("\ncommands:")
     for entry in COMMANDS:
+        if entry["command"] not in PUBLIC_COMMAND_NAMES:
+            continue
         print(f"  {entry['command']:<32} {entry['status']:<11} {entry['domain']}")
     return 0
 
@@ -5663,7 +5767,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=f"loom {command}")
     parser.add_argument("--target", default=".")
     parser.add_argument("--item")
-    parser.add_argument("--host", default="codex", choices=("codex", "claude", "opencode", "gemini", "cursor"))
+    parser.add_argument("--host", default="codex", choices=("codex",))
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -10181,8 +10285,7 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
     home = Path.home()
     codex_home = Path(os.environ.get("CODEX_HOME", home / ".codex"))
     codex_paths = codex_workstation_paths(home=home, codex_home=codex_home)
-    claude_home = Path(os.environ.get("CLAUDE_CONFIG_DIR", home / ".claude"))
-    hosts = [
+    return [
         {
             "id": "codex",
             "support_status": "primary",
@@ -10193,17 +10296,7 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
             "workstation_marketplace_path": str(codex_paths["marketplace_path"]),
             "workstation_config_path": str(codex_paths["config_path"]),
         },
-        {
-            "id": "claude",
-            "support_status": "adapter",
-            "detected": claude_home.exists(),
-            "provider": "unsupported-for-install",
-        },
-        {"id": "opencode", "support_status": "adapter-contract", "detected": False, "provider": "unsupported-for-install"},
-        {"id": "gemini", "support_status": "adapter-contract", "detected": False, "provider": "unsupported-for-install"},
-        {"id": "cursor", "support_status": "adapter-contract", "detected": False, "provider": "unsupported-for-install"},
     ]
-    return hosts
 
 
 def workstation_registry_path() -> Path:
@@ -11934,7 +12027,7 @@ def handle_workstation(argv: list[str]) -> int:
 def handle_host(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom host")
     parser.add_argument("action", choices=("list", "doctor", "install", "verify", "register", "upgrade", "remove"))
-    parser.add_argument("--host", default="auto", choices=("auto", "codex", "claude", "opencode", "gemini", "cursor"))
+    parser.add_argument("--host", default="auto", choices=("auto", "codex"))
     parser.add_argument("--target", default=".")
     parser.add_argument("--source")
     parser.add_argument("--scope", default="user", choices=("user",))
@@ -12399,12 +12492,28 @@ def handle_gate(argv: list[str]) -> int:
         operation = rest[0]
         if operation not in {"check", "write"}:
             return emit(output("gate freeze", "block", schema=GATE_SCHEMA, summary="Unsupported gate freeze operation.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate freeze operation: {operation}", fallback_to=["loom gate freeze check --target <repo> --json", "loom gate freeze write --target <repo> --json"]))
-        return emit_flow(f"gate freeze {operation}", ["gate-freeze", operation, *rest[1:]], fallback_to=["loom pr metadata-preflight --surface merge_ready --target <repo> --json", "loom shadow-parity --target <repo> --surface all --blocking --json"])
+        return handle_gate_freeze_operation(operation, rest[1:])
     if gate == "closeout":
         return emit_flow("gate closeout", ["closeout", "check", *rest], fallback_to=["loom merge check <pr> --json", "loom status --target <repo> --json"])
     if gate == "repair-pr":
         return emit_flow("gate repair-pr", ["gate-repair-pr", *rest], fallback_to=["loom gate pr --target <repo> --pr <number> --json", "loom merge check <pr> --json"])
     return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Unsupported gate name.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate name: {gate}", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
+
+
+def handle_gate_freeze_operation(operation: str, forwarded: list[str], *, probe: bool = False) -> int | dict[str, Any]:
+    if operation not in {"check", "write"}:
+        raise ValueError(f"unsupported gate freeze operation: {operation}")
+    capability = f"gate-freeze-{operation}"
+    if probe:
+        return {"capability": capability, "mutates": False}
+    return emit_flow(
+        f"gate freeze {operation}",
+        ["gate-freeze", operation, *forwarded],
+        fallback_to=[
+            "loom pr metadata-preflight --surface merge_ready --target <repo> --json",
+            "loom shadow-parity --target <repo> --surface all --blocking --json",
+        ],
+    )
 
 
 def handle_closeout_queue_status(argv: list[str]) -> int:
@@ -12515,6 +12624,29 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         "retire": "handoff",
     }
     if command in flow_operations:
+        if command in {"build", "pre-review"}:
+            lifecycle_admission = host_lifecycle_admission_payload(
+                target=target,
+                issue=args.issue,
+                fr=args.fr,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                intent="pr" if command == "pre-review" else command,
+                pr=args.pr,
+                branch=args.branch,
+            )
+            if lifecycle_admission["result"] != "pass":
+                return emit(
+                    output(
+                        command,
+                        "block",
+                        schema=SCENARIO_SCHEMA,
+                        summary="Host lifecycle admission blocked before repository carrier reads.",
+                        lifecycle_admission=lifecycle_admission,
+                        missing_inputs=lifecycle_admission.get("missing_inputs", []),
+                        fallback_to=lifecycle_admission.get("primary_remediation"),
+                    )
+                )
         flow_args = ["flow", flow_operations[command], "--target", str(target)]
         for flag, value in (
             ("--item", args.item),
@@ -15471,10 +15603,10 @@ def main(argv: list[str]) -> int:
         return handle_suite(suite_args)
     if command == "acceptance" or command.startswith("acceptance "):
         acceptance_args = command.split()[1:] + forwarded if command.startswith("acceptance ") else forwarded
-        return product_acceptance_main(acceptance_args)
+        return emit_imported_main(command, product_acceptance_main, acceptance_args)
     if command == "attestation" or command.startswith("attestation "):
         attestation_args = command.split()[1:] + forwarded if command.startswith("attestation ") else forwarded
-        return host_attestation_main(attestation_args)
+        return emit_imported_main(command, host_attestation_main, attestation_args)
     if command == "init":
         return handle_init(forwarded)
     if command == "adopt" or command.startswith("adopt "):

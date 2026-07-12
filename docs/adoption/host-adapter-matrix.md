@@ -5,10 +5,6 @@ This matrix defines consistent Loom semantics across supported hosts. Implementa
 | Host | Support status | Default install path | Discovery surface | Bootstrap/session-start surface | Tool mapping surface | Upgrade surface | Verification surface |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Codex | primary | `npm install -g @mc-and-his-agents/loom`; install or refresh the user-level plugin via `loom host install --host codex --scope user --apply --json` plus `loom host register --host codex --scope user --apply --json`, or via the Loom Codex marketplace source when the workstation uses marketplace-managed plugins; downstream repository adoption uses `loom install --target . --apply --json` | metadata-only repositories consume the user-level Codex Loom plugin provider; the Loom source repository may publish `.agents/plugins/marketplace.json` for plugin discovery, but downstream repositories write no repo-local Loom plugin or skills payload | new Codex session or Codex Desktop restart after registration/marketplace update, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, rerun validation; specifically, update the root CLI through npm, refresh the user-level plugin through host install/register or Codex marketplace update, and rerun each repository's installed-state validation independently | metadata-only: `loom host verify --host codex --target . --json`; workstation dry-run: `loom host install --host codex --scope user --dry-run --json` and `loom host register --host codex --scope user --dry-run --json`; repository validation: `loom installed-state validate --target . --json`, `loom skills check --target . --json`, and `loom doctor --target . --json` |
-| Claude Code | adapter contract | root `loom` CLI only until a user-level adapter provider exists | no current repo-local Loom payload install surface | session guidance must point to `loom-init` when a provider is registered | Claude tools remain adapter-owned | update root CLI; no repo-local Loom adapter mutation | static adapter contract checks only |
-| OpenCode | adapter contract | root `loom` CLI only until a user-level adapter provider exists | no current repo-local Loom payload install surface | provider should name `loom-init` as root entry | plugin maps OpenCode tools to Loom host-action expectations | update root CLI; no repo-local Loom adapter mutation | static adapter check until OpenCode CLI is available |
-| Gemini | adapter contract | root `loom` CLI only until a user-level adapter provider exists | no current repo-local Loom payload install surface | provider should name `loom-init` as root entry | Gemini tool use is documented as adapter mapping | update root CLI; no repo-local Loom adapter mutation | static adapter check until Gemini extension CLI is available |
-| Cursor | adapter contract | root `loom` CLI only until a user-level adapter provider exists | no current repo-local Loom payload install surface | provider should name `loom-init` as root entry | Cursor tool mapping is adapter-owned | update root CLI; no repo-local Loom adapter mutation | static adapter check until Cursor plugin CLI is available |
 
 Each supported host has exactly one primary entry: the root `loom` CLI.
 For Codex, metadata-only repository adoption is the supported downstream mode.
@@ -85,7 +81,7 @@ Adapters must surface machine-readable version context instead of implying one g
 - plugin payload: `plugins/loom/skills/registry.json` and `plugins/loom/skills/upgrade-contract.json`
 - generated skills mirror: `skills/registry.json` and `skills/upgrade-contract.json`
 - plugin surface: the host plugin manifest, such as `plugins/loom/.codex-plugin/plugin.json`
-- deprecated installer evidence: `packages/loom-installer/package.json`
+- deprecated installer evidence: the historical `@mc-and-his-agents/loom-installer@0.1.119` registry/tag locator recorded in `version-authority-map.md`; no installer tombstone remains in the source tree
 
 The authority rules for these surfaces live in `version-authority-map.md`.
 
@@ -120,12 +116,6 @@ Codex mapping:
 - `before-run`: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`
 - `after-run`: `PostToolUse`, `Stop`, `PostCompact`
 - `cleanup`: `not_applicable` or Loom explicit `workspace cleanup|retire` extension; never required native hook
-
-Claude Code mapping:
-
-- `before-run`: `SessionStart`, `UserPromptSubmit`, `PreToolUse`
-- `after-run`: `PostToolUse`, `Stop`, `SubagentStop`, `PostCompact`
-- `cleanup`: optional `SessionEnd`, constrained by Loom cleanup safety
 
 Host-native hook output must be mapped into Loom runtime evidence and must not
 write authored progress, recovery/status truth, review verdict, validation

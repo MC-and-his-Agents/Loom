@@ -504,57 +504,15 @@ def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
         surface_label=surface_label,
         evidence_locator=locator,
     )
-    if not INSTALLER_PACKAGE.exists():
+    if INSTALLER_PACKAGE.parent.exists():
         add_error(
             errors,
             surface_label=surface_label,
-            failure_label=f"{surface_label}-missing-historical-metadata",
+            failure_label=f"{surface_label}-tracked-tombstone",
             evidence_locator=locator,
-            source_locator=relative_to_root(INSTALLER_PACKAGE),
-            summary="retired installer metadata must remain available for historical readback",
+            source_locator=relative_to_root(INSTALLER_PACKAGE.parent),
+            summary="retired installer metadata must remain in npm/tag history, not in the active source tree",
         )
-    else:
-        metadata = json.loads(INSTALLER_PACKAGE.read_text(encoding="utf-8"))
-        if metadata.get("name") != "@mc-and-his-agents/loom-installer" or not metadata.get("version"):
-            add_error(
-                errors,
-                surface_label=surface_label,
-                failure_label=f"{surface_label}-invalid-historical-metadata",
-                evidence_locator=locator,
-                source_locator=relative_to_root(INSTALLER_PACKAGE),
-                summary="retired installer metadata must retain its package name and historical version",
-            )
-        if metadata.get("private") is not True:
-            add_error(
-                errors,
-                surface_label=surface_label,
-                failure_label=f"{surface_label}-publishable-historical-package",
-                evidence_locator=locator,
-                source_locator=relative_to_root(INSTALLER_PACKAGE),
-                summary="retired installer metadata must be private",
-            )
-        for field in ("bin", "scripts", "files", "publishConfig", "dependencies", "devDependencies"):
-            if field in metadata:
-                add_error(
-                    errors,
-                    surface_label=surface_label,
-                    failure_label=f"{surface_label}-executable-package-surface",
-                    evidence_locator=locator,
-                    source_locator=relative_to_root(INSTALLER_PACKAGE),
-                    summary=f"retired installer metadata must not expose `{field}`",
-                )
-
-    for relative in ("src", "test", "scripts", "package-lock.json", "tsconfig.json"):
-        executable_surface = INSTALLER_PACKAGE.parent / relative
-        if executable_surface.exists():
-            add_error(
-                errors,
-                surface_label=surface_label,
-                failure_label=f"{surface_label}-executable-package-path",
-                evidence_locator=locator,
-                source_locator=relative_to_root(executable_surface),
-                summary=f"retired installer executable surface `{relative}` must be absent",
-            )
 
     for workflow_name in ("node-installer-pr.yml", "node-installer-release.yml"):
         workflow = ROOT / ".github" / "workflows" / workflow_name

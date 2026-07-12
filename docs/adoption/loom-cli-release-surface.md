@@ -20,7 +20,7 @@ The `loom` CLI release line is the primary release line for Loom execution behav
 | --- | --- | --- |
 | Loom CLI release candidate | `VERSION` | A `v*` value that names the next root Loom CLI release candidate. |
 | Published Loom CLI release | GitHub `v*` tag and GitHub Release | The tag must point at the release commit. Release notes must describe the CLI/runtime behavior being shipped or explicitly state that no CLI behavior changed. |
-| Deprecated installer legacy artifact | `packages/loom-installer/package.json` | Historical evidence only. The last active release baseline is `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`; it is not a current publish path. |
+| Deprecated installer legacy artifact | npm `@mc-and-his-agents/loom-installer@0.1.119` / tag `loom-installer-v0.1.119` | Historical host evidence only; no installer tombstone remains in the source tree and this is not a current publish path. |
 
 The `loom` CLI release line is the only active CLI release line. It is not synchronized with the deprecated installer package version, plugin surface version, skill contract version, runtime contract version, or schema version. The Codex plugin payload version follows the root Loom release because the payload is published inside the root `@mc-and-his-agents/loom` package, while the plugin surface version remains a separate host-interface compatibility line.
 

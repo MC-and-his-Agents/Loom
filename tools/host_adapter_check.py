@@ -4,14 +4,18 @@
 from __future__ import annotations
 
 import sys
+import json
+import subprocess
 from pathlib import Path
+import os
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / "docs" / "adoption" / "host-adapter-matrix.md"
 UNIFIED = ROOT / "docs" / "adoption" / "unified-install-experience.md"
 
-HOSTS = ("Codex", "Claude Code", "OpenCode", "Gemini", "Cursor")
+HOSTS = ("Codex",)
+UNSUPPORTED_HOSTS = ("Claude Code", "OpenCode", "Gemini", "Cursor")
 REQUIRED_FIELDS = (
     "default_install_path",
     "install_surface",
@@ -36,10 +40,46 @@ def require_contains(path: Path, needles: tuple[str, ...]) -> list[str]:
 def main() -> int:
     errors: list[str] = []
     errors.extend(require_contains(MATRIX, HOSTS))
+    matrix_text = MATRIX.read_text(encoding="utf-8") if MATRIX.exists() else ""
+    errors.extend(f"{MATRIX.relative_to(ROOT)} must not advertise unsupported host `{host}`" for host in UNSUPPORTED_HOSTS if f"| {host} |" in matrix_text)
     errors.extend(require_contains(MATRIX, REQUIRED_FIELDS))
-    errors.extend(require_contains(MATRIX, ("loom-init", "plugins/loom/skills", "fail closed", "static adapter check")))
+    errors.extend(require_contains(MATRIX, ("loom-init", "plugins/loom/skills", "fail closed")))
     errors.extend(require_contains(MATRIX, ("gh api", "host_api_unreadable", "permission", "CODEX_EXPORT_GH_TOKEN=1")))
     errors.extend(require_contains(UNIFIED, ("root CLI", "native", "plugins/loom/skills", "metadata-only", "loom-init")))
+    for args, expected in ((["help", "--json"], "help"), (["host", "list", "--json"], "host list")):
+        env = os.environ.copy()
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "loom.py"), *args],
+            cwd=ROOT,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            errors.append(f"loom {expected} did not emit JSON")
+            continue
+        if completed.returncode != 0 or payload.get("result") != "pass":
+            errors.append(f"loom {expected} did not pass")
+        if expected == "help" and (payload.get("command_count") != 30 or len(payload.get("commands", [])) != 30):
+            errors.append("public implemented command surface must contain exactly 30 entries")
+        if expected == "help" and (
+            payload.get("protocol_type_count") != 12
+            or len(payload.get("protocol_types", [])) != 12
+            or payload.get("legacy_surface_remove_by") != "v0.31.0"
+        ):
+            errors.append("public machine protocol must expose 12 owner types and a v0.31.0 legacy expiry")
+        if expected == "help" and any(
+            command.get("protocol_type") not in payload.get("protocol_types", [])
+            for command in payload.get("commands", [])
+        ):
+            errors.append("every public command must map to one public protocol owner type")
+        if expected == "host list" and [host.get("id") for host in payload.get("hosts", [])] != ["codex"]:
+            errors.append("public host adapter surface must contain only the real Codex provider")
     if errors:
         print("host adapter check failed:", file=sys.stderr)
         for error in errors:

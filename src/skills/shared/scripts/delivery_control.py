@@ -3597,14 +3597,15 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
 
 def blocker_text_is_clear(value: str) -> bool:
     normalized = " ".join(value.strip().lower().split())
-    return normalized in {
+    clear = {
         "none",
         "none.",
         "none recorded",
         "none recorded.",
-        "none. loom host issue binding reports stale dependency signals for already-merged pr numbers #240/#251; this is classified as a tool/host metadata surface issue and does not alter product scope.",
-        "core #270 is a detail-only follow-up and does not block this job-search slice.",
     }
+    if normalized in clear:
+        return True
+    return bool(re.fullmatch(r"(?:none|none recorded)\.? \| note: advisory:[a-z0-9][a-z0-9._-]*", normalized))
 
 
 def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_override: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -5361,41 +5362,36 @@ def gate_freeze_file_binding(target_root: Path, relative: str, *, label: str) ->
     return binding
 
 def gate_freeze_command_surface(context: dict[str, Any]) -> dict[str, Any]:
-    required = {"gate freeze check", "gate freeze write"}
+    required = {"gate-freeze-check", "gate-freeze-write"}
     errors: list[str] = []
     for loom_cli in suite_validate_command_candidates(context):
-        completed = run_process(
-            [sys.executable, str(loom_cli), "help", "--json"],
-            cwd=loom_cli.parents[1],
-            timeout_seconds=30.0,
+        completed = subprocess.run(
+            [sys.executable, str(loom_cli), "help", "--internal-capabilities", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-        raw_output = completed.stdout.strip()
         try:
-            payload = json.loads(raw_output) if raw_output else {}
-        except json.JSONDecodeError as exc:
-            errors.append(f"{loom_cli}: help emitted non-JSON output: {exc.msg}")
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            errors.append(f"{loom_cli}: internal capability readback did not emit JSON")
             continue
-        commands = {
-            str(entry.get("command"))
-            for entry in payload.get("commands", [])
-            if isinstance(entry, dict) and entry.get("status") == "implemented"
-        }
-        missing = sorted(required - commands)
-        if not missing:
+        observed = set(payload.get("capabilities", []))
+        if completed.returncode == 0 and payload.get("mutates") is False and required.issubset(observed):
             return {
                 "result": "pass",
-                "summary": "gate freeze commands are present in the implemented command matrix.",
+                "summary": "hidden gate freeze compatibility capabilities passed read-only dispatch readback.",
                 "source_locator": str(loom_cli),
                 "required_commands": sorted(required),
                 "missing_inputs": [],
             }
-        errors.append(f"{loom_cli}: missing implemented commands: {', '.join(missing)}")
+        errors.append(f"{loom_cli}: unavailable hidden compatibility capabilities: {', '.join(sorted(required - observed))}")
     return {
         "result": "block",
-        "summary": "gate freeze commands are missing from the implemented command matrix.",
+        "summary": "hidden gate freeze compatibility commands are unavailable.",
         "source_locator": "tools/loom.py",
         "required_commands": sorted(required),
-        "missing_inputs": errors or ["loom help --json command matrix unavailable"],
+        "missing_inputs": errors or ["hidden gate freeze compatibility commands unavailable"],
     }
 
 def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None, surface: str = "merge_ready") -> dict[str, Any]:
