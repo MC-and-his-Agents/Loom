@@ -764,10 +764,6 @@ PUBLIC_COMMAND_PROTOCOL_TYPES = {
     "workspace check": "readback",
     "workspace retire": "reconciliation_verdict",
 }
-INTERNAL_CAPABILITIES = (
-    "gate-freeze-check",
-    "gate-freeze-write",
-)
 
 HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
@@ -3212,13 +3208,17 @@ def handle_help(argv: list[str]) -> int:
     parser.add_argument("--internal-capabilities", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.internal_capabilities:
+        capabilities = [
+            handle_gate_freeze_operation(operation, [], probe=True)["capability"]
+            for operation in ("check", "write")
+        ]
         return emit(
             output(
                 "help",
                 "pass",
                 summary="Internal compatibility capabilities resolved without target access.",
                 visibility="internal",
-                capabilities=list(INTERNAL_CAPABILITIES),
+                capabilities=capabilities,
                 mutates=False,
             )
         )
@@ -12492,12 +12492,28 @@ def handle_gate(argv: list[str]) -> int:
         operation = rest[0]
         if operation not in {"check", "write"}:
             return emit(output("gate freeze", "block", schema=GATE_SCHEMA, summary="Unsupported gate freeze operation.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate freeze operation: {operation}", fallback_to=["loom gate freeze check --target <repo> --json", "loom gate freeze write --target <repo> --json"]))
-        return emit_flow(f"gate freeze {operation}", ["gate-freeze", operation, *rest[1:]], fallback_to=["loom pr metadata-preflight --surface merge_ready --target <repo> --json", "loom shadow-parity --target <repo> --surface all --blocking --json"])
+        return handle_gate_freeze_operation(operation, rest[1:])
     if gate == "closeout":
         return emit_flow("gate closeout", ["closeout", "check", *rest], fallback_to=["loom merge check <pr> --json", "loom status --target <repo> --json"])
     if gate == "repair-pr":
         return emit_flow("gate repair-pr", ["gate-repair-pr", *rest], fallback_to=["loom gate pr --target <repo> --pr <number> --json", "loom merge check <pr> --json"])
     return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Unsupported gate name.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate name: {gate}", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
+
+
+def handle_gate_freeze_operation(operation: str, forwarded: list[str], *, probe: bool = False) -> int | dict[str, Any]:
+    if operation not in {"check", "write"}:
+        raise ValueError(f"unsupported gate freeze operation: {operation}")
+    capability = f"gate-freeze-{operation}"
+    if probe:
+        return {"capability": capability, "mutates": False}
+    return emit_flow(
+        f"gate freeze {operation}",
+        ["gate-freeze", operation, *forwarded],
+        fallback_to=[
+            "loom pr metadata-preflight --surface merge_ready --target <repo> --json",
+            "loom shadow-parity --target <repo> --surface all --blocking --json",
+        ],
+    )
 
 
 def handle_closeout_queue_status(argv: list[str]) -> int:

@@ -14825,6 +14825,13 @@ def run_aggregate_cli_contract() -> None:
     _, internal_capabilities = run_json(["help", "--internal-capabilities", "--json"], expect=0)
     if internal_capabilities.get("mutates") is not False or set(internal_capabilities.get("capabilities", [])) != {"gate-freeze-check", "gate-freeze-write"}:
         raise AssertionError("internal gate-freeze capability readback must be exact and non-mutating")
+    loom_cli = load_loom_cli_module()
+    direct_probes = {
+        loom_cli.handle_gate_freeze_operation(operation, [], probe=True)["capability"]
+        for operation in ("check", "write")
+    }
+    if direct_probes != set(internal_capabilities["capabilities"]):
+        raise AssertionError("internal capability readback must derive from the callable used by real gate-freeze dispatch")
     for argv, command in ((["version", "--json"], "version"), (["detect", "--target", str(REPO_ROOT), "--json"], "detect")):
         _, payload = run_json(argv, expect=0)
         if payload.get("protocol_type") != public_matrix[command]["protocol_type"]:
