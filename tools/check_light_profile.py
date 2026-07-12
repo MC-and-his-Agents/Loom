@@ -90,7 +90,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
     }
     workflow = (WORKFLOW_FIXTURES / "workflow-valid.yml").read_text(encoding="utf-8")
 
-    def reset(checks: list[dict[str, Any]], write_modes: list[str] | None = None) -> None:
+    def reset(checks: list[dict[str, Any]], write_modes: list[str] | None = None, *, gate_app_id: int = 424242) -> None:
         state.clear()
         state.update(
             checks=list(checks),
@@ -103,6 +103,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
             workflow_fixture=None,
             workflow_content=None,
             workflow_sha="workflow-blob",
+            gate_app_id=gate_app_id,
         )
 
     def fake_json(_root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -166,7 +167,7 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
         if "commits/gate-head/check-runs" not in path or field != "check_runs":
             return [], [f"unexpected paginated endpoint: {path}#{field}"]
         noise = [{"name": f"noise-{index}", "conclusion": "success", "app": {"id": 1}} for index in range(100)]
-        return [*noise, {"name": "loom-delivery-gate", "conclusion": "success", "app": {"id": 424242}}], []
+        return [*noise, {"name": "loom-delivery-gate", "conclusion": "success", "app": {"id": state["gate_app_id"]}}], []
 
     def fake_write(
         _root: Path, *, method: str, path: str, request_payload: dict[str, Any]
@@ -206,19 +207,38 @@ def assert_reconciliation(evaluator: Any, root: Path) -> None:
         "retained_contexts": [],
     }
     try:
+        limited_args = {**args, "app_id": 15368, "trust_mode": "pull_request_target_same_app"}
+        reset([{"context": "legacy-check", "app_id": 1}], gate_app_id=15368)
+        limited_plan = evaluator.reconcile_payload(target, apply=False, **limited_args)
+        if limited_plan.get("result") != "pass" or limited_plan.get("migration", {}).get("status") != "planned":
+            raise AssertionError(f"limited same-app migration must produce a non-mutating plan: {limited_plan}")
+        reset([{"context": "legacy-check", "app_id": 1}], gate_app_id=15368)
+        limited = evaluator.reconcile_payload(target, apply=True, **limited_args)
+        if (
+            limited.get("result") != "pass"
+            or limited.get("required_set", {}).get("identity", {}).get("trust_verdict") != "limited"
+            or not state["mutation_calls"]
+        ):
+            raise AssertionError(f"limited same-app migration must converge without claiming strong: {limited}")
+        repeated_limited = evaluator.reconcile_payload(target, apply=True, **limited_args)
+        if repeated_limited.get("result") != "pass" or repeated_limited.get("host_writes") != []:
+            raise AssertionError(f"limited same-app reconciliation must be idempotent: {repeated_limited}")
+
         reset([{"context": "legacy-check", "app_id": 1}])
-        for trust_mode in ("pull_request_target_same_app", "required_workflow"):
-            limited_args = {**args, "app_id": 15368, "trust_mode": trust_mode}
-            for apply in (False, True):
-                limited = evaluator.reconcile_payload(target, apply=apply, **limited_args)
-                if (
-                    limited.get("result") != "block"
-                    or limited.get("primary_cause", {}).get("id") != "host_enforcement_unavailable"
-                    or limited.get("host_writes")
-                    or state["mutation_calls"]
-                    or state["checks"] != [{"context": "legacy-check", "app_id": 1}]
-                ):
-                    raise AssertionError(f"limited {trust_mode} migration must block before host mutation: {limited}")
+        required_workflow = evaluator.reconcile_payload(
+            target,
+            apply=False,
+            **{**args, "app_id": 15368, "trust_mode": "required_workflow"},
+        )
+        if required_workflow.get("primary_cause", {}).get("id") != "host_enforcement_unavailable" or state["mutation_calls"]:
+            raise AssertionError(f"unsupported required-workflow mode must remain non-mutating: {required_workflow}")
+        spoofed_strong = evaluator.reconcile_payload(
+            target,
+            apply=True,
+            **{**args, "app_id": 15368, "trust_mode": "distinct_app_check"},
+        )
+        if spoofed_strong.get("primary_cause", {}).get("id") != "host_enforcement_unavailable" or state["mutation_calls"]:
+            raise AssertionError(f"same-App identity must never enter distinct-App host mutation: {spoofed_strong}")
 
         reset([{"context": "legacy-check", "app_id": 1}])
         dry_run = evaluator.reconcile_payload(target, apply=False, **args)

@@ -1,0 +1,101 @@
+name: loom-product-acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      story_issue:
+        description: 'FR issue number receiving this Stage A verdict.'
+        required: true
+        type: choice
+        options:
+          - '1979'
+          - '1980'
+          - '1981'
+          - '1982'
+          - '1983'
+          - '1984'
+          - '1985'
+          - '1986'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loom-product-acceptance-${{ inputs.story_issue }}
+  cancel-in-progress: false
+
+jobs:
+  stage-a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bind default branch and verifier
+        id: authority
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.ref !== `refs/heads/${context.payload.repository.default_branch}`) {
+              core.setFailed("product acceptance must run from the default branch");
+              return;
+            }
+            const verifier = await github.rest.users.getByUsername({
+              username: process.env.GITHUB_TRIGGERING_ACTOR,
+            });
+            core.setOutput("verifier_id", String(verifier.data.id));
+
+      - name: Run Stage A targeted contracts
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 tools/check_authority_contract.py
+          python3 tools/check_light_profile.py
+          python3 tools/check_host_attestation.py
+          python3 tools/check_product_acceptance_adapter.py
+          python3 tools/check_delivery_gate.py
+          python3 tools/check_cli_contract.py --surface fr-wi-admission --surface failure-envelope --surface governance-closeout
+          python3 tools/check_npm_package.py
+          npm pack --dry-run --json --ignore-scripts >/dev/null
+
+      - name: Write host-bound acceptance record
+        env:
+          STORY: MC-and-his-Agents/Loom/issue/${{ inputs.story_issue }}
+          SCENARIO: v0.30-stage-a-${{ inputs.story_issue }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          VERIFIER_LOGIN: ${{ github.triggering_actor }}
+          VERIFIER_ID: ${{ steps.authority.outputs.verifier_id }}
+        run: |
+          python3 tools/write_product_acceptance.py \
+            --story "$STORY" \
+            --scenario "$SCENARIO" \
+            --repository "$REPOSITORY" \
+            --head-sha "$HEAD_SHA" \
+            --run-id "$RUN_ID" \
+            --verifier-login "$VERIFIER_LOGIN" \
+            --verifier-id "$VERIFIER_ID" \
+            --output acceptance.json
+
+      - name: Upload product acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: loom-product-acceptance
+          path: acceptance.json
+          if-no-files-found: error
+          retention-days: 30

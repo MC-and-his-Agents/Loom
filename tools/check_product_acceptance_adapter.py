@@ -17,6 +17,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "product_acceptance.py"
 SOURCE_DIR = SOURCE.parent
+WORKFLOW = ROOT / ".github" / "workflows" / "loom-product-acceptance.yml"
+WRITER = ROOT / "tools" / "write_product_acceptance.py"
 FIXTURES = ROOT / "tools" / "fixtures" / "product-acceptance"
 GENERATED_COPIES = (
     ROOT / "skills" / "shared" / "scripts" / "product_acceptance.py",
@@ -98,6 +100,11 @@ def main() -> int:
     assert_result(passed, outcome="pass", verdict="passed")
     if passed["product_acceptance"]["trusted"] is not True or passed["product_acceptance"]["owns_lifecycle_closure"] is not False:
         raise AssertionError("resolved acceptance must be trusted without owning lifecycle closure")
+    self_bound_record = fixture("passed-live-readonly.json")
+    self_bound_record["evidence"][0]["artifact_refs"] = [adapter.SELF_ARTIFACT_REF]
+    self_bound = resolve(adapter, self_bound_record)
+    if self_bound["result"] != "pass" or self_bound["host_facts"]["artifact_locator"] != "MC-and-his-Agents/Loom/artifact/7":
+        raise AssertionError("workflow-authored self artifact reference did not resolve to authenticated host facts")
     for name in ("fixture-insufficient.json", "blocked-write-boundary.json", "stale-live-readonly.json"):
         assert_result(resolve(adapter, fixture(name)), outcome="block", verdict="blocked")
     waived = fixture("waived.json")
@@ -111,6 +118,20 @@ def main() -> int:
     tracked_copies = [str(path.relative_to(ROOT)) for path in GENERATED_COPIES if path.exists()]
     if tracked_copies:
         raise AssertionError("product acceptance must remain canonical-source only: " + ", ".join(tracked_copies))
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    for required in (
+        "workflow_dispatch:",
+        "ref: ${{ github.sha }}",
+        "product acceptance must run from the default branch",
+        "tools/write_product_acceptance.py",
+        "name: loom-product-acceptance",
+        "actions/upload-artifact@v4",
+        "retention-days: 30",
+    ):
+        if required not in workflow:
+            raise AssertionError(f"trusted product acceptance workflow is missing {required}")
+    if "pull_request:" in workflow or "secrets." in workflow or not WRITER.is_file():
+        raise AssertionError("trusted product acceptance workflow must remain dispatch-only, credential-free, and writer-backed")
     print("product acceptance adapter checks passed")
     return 0
 
