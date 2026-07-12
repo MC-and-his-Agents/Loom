@@ -1,0 +1,8 @@
+name: Nested composite action
+description: Exercises recursive composite action discovery.
+runs:
+  using: composite
+  steps:
+    - name: Run validation
+      shell: bash
+      run: echo valid

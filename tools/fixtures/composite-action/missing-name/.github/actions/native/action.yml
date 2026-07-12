@@ -1,0 +1,6 @@
+description: Missing required action name.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo invalid

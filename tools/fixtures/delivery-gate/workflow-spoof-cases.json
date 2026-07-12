@@ -1,0 +1,10 @@
+{
+  "schema_version": "loom-delivery-gate-workflow-spoof-cases/v1",
+  "cases": [
+    {"name": "candidate-replaces-workflow", "coordinator_source": "candidate", "trust_mode": "pull_request_target_same_app", "expected": "blocked"},
+    {"name": "candidate-deletes-workflow", "coordinator_source": "missing", "trust_mode": "pull_request_target_same_app", "expected": "blocked"},
+    {"name": "candidate-adds-same-name-job", "coordinator_source": "base", "trust_mode": "pull_request_target_same_app", "expected": "limited"},
+    {"name": "base-required-workflow", "coordinator_source": "base", "trust_mode": "required_workflow", "expected": "limited"},
+    {"name": "base-distinct-app", "coordinator_source": "base", "trust_mode": "distinct_app_check", "expected": "strong"}
+  ]
+}

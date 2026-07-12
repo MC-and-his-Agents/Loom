@@ -1,0 +1,6 @@
+name: Dangerous uses
+description: Contains an expression-controlled action locator.
+runs:
+  using: composite
+  steps:
+    - uses: owner/repository@${{ inputs.ref }}

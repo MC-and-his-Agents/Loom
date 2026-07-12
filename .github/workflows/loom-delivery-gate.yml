@@ -1,7 +1,7 @@
 name: loom-delivery-gate
 
 on:
-  pull_request:
+  pull_request_target:
   merge_group:
   workflow_call:
     inputs:
@@ -10,15 +10,13 @@ on:
         required: true
         type: string
       profile:
-        description: Optional delivery profile override (light, standard, or reinforced).
-        required: false
+        description: Required delivery profile (light, standard, or reinforced).
+        required: true
         type: string
-        default: ''
       validation_command:
-        description: Native validation command run with read-only permissions and no injected secrets.
-        required: false
+        description: Space-delimited allowlisted Make targets; shell commands and expressions are rejected.
+        required: true
         type: string
-        default: make delivery-gate-check
       loom_ref:
         description: Required 40-character Loom commit SHA used as the canonical evaluator source.
         required: true
@@ -29,7 +27,7 @@ on:
         type: string
     outputs:
       result:
-        description: Advisory, passed, or blocked delivery-gate terminal result.
+        description: Limited compatibility or blocked delivery-gate terminal result.
         value: ${{ jobs.loom-delivery-gate.outputs.result }}
       enforcement:
         description: Effective delivery-gate enforcement mode.
@@ -40,19 +38,35 @@ on:
       failure_envelope:
         description: JSON failure envelope with exactly one primary cause; product acceptance remains outside this delivery gate.
         value: ${{ jobs.loom-delivery-gate.outputs.failure_envelope }}
+      assurance:
+        description: Host enforcement assurance; same-app GitHub Actions coordinators remain limited.
+        value: ${{ jobs.loom-delivery-gate.outputs.assurance }}
+      compatibility_check_success:
+        description: Whether the base-owned compatibility coordinator completed authenticated readback.
+        value: ${{ jobs.loom-delivery-gate.outputs.compatibility_check_success }}
+      trust_verdict:
+        description: Machine trust verdict; product consumers must require strong.
+        value: ${{ jobs.loom-delivery-gate.outputs.trust_verdict }}
+
+concurrency:
+  group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  loom-delivery-gate:
-    name: loom-delivery-gate
+  plan:
+    name: plan trusted delivery validation
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     outputs:
-      result: ${{ steps.terminal.outputs.result }}
-      enforcement: ${{ steps.terminal.outputs.enforcement }}
-      primary_cause: ${{ steps.terminal.outputs.primary_cause }}
-      failure_envelope: ${{ steps.terminal.outputs.failure_envelope }}
+      host_facts_base64: ${{ steps.host-facts.outputs.host_facts_base64 }}
+      validation_targets: ${{ steps.evaluate.outputs.validation_targets }}
+      base_sha: ${{ steps.host-facts.outputs.base_sha }}
+      head_sha: ${{ steps.host-facts.outputs.head_sha }}
+      base_repository: ${{ steps.host-facts.outputs.base_repository }}
+      head_repository: ${{ steps.host-facts.outputs.head_repository }}
+      authority_ready: ${{ steps.host-facts.outputs.authority_ready }}
     steps:
       - name: Read GitHub host facts
         id: host-facts
@@ -72,9 +86,10 @@ jobs:
             const fs = require("fs");
             const event = context.eventName;
             const reusable = process.env.REUSABLE_MODE === "true";
+            let suppliedAuthority = null;
+            let authorityReady = false;
             const repository = { owner: context.repo.owner, name: context.repo.repo };
             const apiRepository = { owner: context.repo.owner, repo: context.repo.repo };
-            const defaultValidationCommand = "make delivery-gate-check";
             const facts = {
               schema_version: "loom-delivery-gate-host-facts/v1",
               event,
@@ -90,30 +105,134 @@ jobs:
                 if (!supplied || typeof supplied !== "object" || Array.isArray(supplied)) {
                   throw new Error("reusable host_facts must be a JSON object");
                 }
-                Object.assign(facts, supplied);
+                const authorityKeys = new Set(["schema_version", "event", "repository", "change", "changed_paths"]);
+                suppliedAuthority = supplied;
+                for (const [key, value] of Object.entries(supplied)) {
+                  if (!authorityKeys.has(key)) facts[key] = value;
+                }
                 if (process.env.WORKFLOW_CALL_PROFILE) {
                   facts.profile = process.env.WORKFLOW_CALL_PROFILE;
                 }
-              } else if (event === "pull_request") {
-                const pull = context.payload.pull_request;
+              }
+              if (event === "pull_request_target") {
+                const eventPull = context.payload.pull_request;
+                if (!eventPull || !Number.isInteger(context.payload.number)) {
+                  throw new Error("pull_request event is missing its native locator");
+                }
+                const readback = await github.rest.pulls.get({
+                  ...apiRepository,
+                  pull_number: context.payload.number,
+                });
+                const pull = readback.data;
+                const baseRepository = pull.base?.repo?.full_name;
+                const headRepository = pull.head?.repo?.full_name;
+                const baseSha = pull.base?.sha;
+                const headSha = pull.head?.sha;
+                if (
+                  !/^[0-9a-f]{40}$/i.test(baseSha || "") ||
+                  !/^[0-9a-f]{40}$/i.test(headSha || "") ||
+                  baseRepository !== `${repository.owner}/${repository.name}` ||
+                  !/^[^/]+\/[^/]+$/.test(headRepository || "") ||
+                  eventPull.base?.sha !== baseSha ||
+                  eventPull.head?.sha !== headSha
+                ) {
+                  throw new Error("pull_request event and API authority do not bind the same repository/base/head");
+                }
                 const files = await github.paginate(github.rest.pulls.listFiles, {
                   ...apiRepository,
                   pull_number: context.payload.number,
                   per_page: 100,
                 });
-                facts.change = { base_sha: pull.base.sha, head_sha: pull.head.sha, number: context.payload.number };
+                if (files.length >= 3000) {
+                  throw new Error("pull_request changed paths reached GitHub's 3000-file completeness limit");
+                }
+                facts.repository = { owner: pull.base.repo.owner.login, name: pull.base.repo.name };
+                facts.change = {
+                  base_sha: baseSha,
+                  head_sha: headSha,
+                  base_repository: baseRepository,
+                  head_repository: headRepository,
+                  number: context.payload.number,
+                };
                 facts.changed_paths = files.map((file) => file.filename);
               } else if (event === "merge_group") {
                 const group = context.payload.merge_group;
+                if (
+                  !group ||
+                  !/^[0-9a-f]{40}$/i.test(group.base_sha || "") ||
+                  !/^[0-9a-f]{40}$/i.test(group.head_sha || "")
+                ) {
+                  throw new Error("merge_group event is missing authoritative base/head SHAs");
+                }
                 const comparison = await github.rest.repos.compareCommits({
                   ...apiRepository,
                   base: group.base_sha,
                   head: group.head_sha,
                   per_page: 100,
                 });
-                facts.change = { base_sha: group.base_sha, head_sha: group.head_sha, head_ref: group.head_ref };
-                facts.changed_paths = (comparison.data.files || []).map((file) => file.filename);
+                const comparisonFiles = comparison.data.files || [];
+                const comparisonHead = comparison.data.commits?.at(-1)?.sha;
+                if (
+                  comparison.data.base_commit?.sha !== group.base_sha ||
+                  comparisonHead !== group.head_sha
+                ) {
+                  throw new Error("merge_group comparison does not bind the event base/head SHAs");
+                }
+                if (comparisonFiles.length >= 300) {
+                  throw new Error("merge_group changed paths reached GitHub's 300-file completeness limit");
+                }
+                facts.change = {
+                  base_sha: group.base_sha,
+                  head_sha: group.head_sha,
+                  base_repository: `${repository.owner}/${repository.name}`,
+                  head_repository: `${repository.owner}/${repository.name}`,
+                  head_ref: group.head_ref,
+                };
+                facts.changed_paths = comparisonFiles.map((file) => file.filename);
+              } else {
+                throw new Error("delivery gate requires a pull_request_target or merge_group event authority");
               }
+              if (
+                !facts.change ||
+                !/^[0-9a-f]{40}$/i.test(facts.change.base_sha || "") ||
+                !/^[0-9a-f]{40}$/i.test(facts.change.head_sha || "") ||
+                !/^[^/]+\/[^/]+$/.test(facts.change.base_repository || "") ||
+                !/^[^/]+\/[^/]+$/.test(facts.change.head_repository || "") ||
+                facts.change.base_repository !== `${facts.repository.owner}/${facts.repository.name}`
+              ) {
+                throw new Error("GitHub host readback did not produce a complete repository/base/head authority");
+              }
+              if (reusable && suppliedAuthority) {
+                const declaredRepository = suppliedAuthority.repository;
+                if (
+                  declaredRepository &&
+                  (declaredRepository.owner !== facts.repository.owner || declaredRepository.name !== facts.repository.name)
+                ) {
+                  throw new Error("caller host_facts repository conflicts with GitHub host readback");
+                }
+                const declaredChange = suppliedAuthority.change;
+                if (declaredChange && typeof declaredChange === "object") {
+                  for (const key of ["base_sha", "head_sha", "base_repository", "head_repository", "number"]) {
+                    if (key in declaredChange && declaredChange[key] !== facts.change[key]) {
+                      throw new Error(`caller host_facts change.${key} conflicts with GitHub host readback`);
+                    }
+                  }
+                }
+                if (suppliedAuthority.event && suppliedAuthority.event !== event) {
+                  throw new Error("caller host_facts event conflicts with GitHub host readback");
+                }
+                if ("changed_paths" in suppliedAuthority) {
+                  if (!Array.isArray(suppliedAuthority.changed_paths)) {
+                    throw new Error("caller host_facts changed_paths conflicts with GitHub host readback");
+                  }
+                  const declaredPaths = [...new Set(suppliedAuthority.changed_paths)].sort();
+                  const observedPaths = [...new Set(facts.changed_paths)].sort();
+                  if (JSON.stringify(declaredPaths) !== JSON.stringify(observedPaths)) {
+                    throw new Error("caller host_facts changed_paths conflicts with GitHub host readback");
+                  }
+                }
+              }
+              authorityReady = true;
             } catch (error) {
               const message = String(error.message || error);
               if ([401, 403].includes(Number(error.status))) {
@@ -125,15 +244,23 @@ jobs:
               }
               core.warning(message);
             }
-            facts.validation_command = reusable
-              ? (process.env.WORKFLOW_CALL_VALIDATION_COMMAND || defaultValidationCommand)
-              : defaultValidationCommand;
+            if (reusable) {
+              facts.validation_command = process.env.WORKFLOW_CALL_VALIDATION_COMMAND || "";
+            }
             const changedPaths = Array.isArray(facts.changed_paths) ? [...new Set(facts.changed_paths)].sort() : [];
-            fs.writeFileSync(process.env.HOST_FACTS_PATH, `${JSON.stringify(facts)}\n`, "utf8");
+            const change = facts.change && typeof facts.change === "object" ? facts.change : {};
+            const encodedFacts = `${JSON.stringify(facts)}\n`;
+            fs.writeFileSync(process.env.HOST_FACTS_PATH, encodedFacts, "utf8");
             fs.writeFileSync(process.env.CHANGED_PATHS_PATH, changedPaths.length ? `${changedPaths.join("\n")}\n` : "", "utf8");
+            core.setOutput("authority_ready", authorityReady ? "true" : "false");
+            core.setOutput("base_repository", change.base_repository || "");
+            core.setOutput("head_repository", change.head_repository || "");
+            core.setOutput("base_sha", change.base_sha || "");
+            core.setOutput("head_sha", change.head_sha || "");
+            core.setOutput("host_facts_base64", Buffer.from(encodedFacts, "utf8").toString("base64"));
 
       - name: Checkout canonical Loom source for reusable callers
-        if: ${{ always() && inputs.loom_ref != '' }}
+        if: ${{ steps.host-facts.outputs.authority_ready == 'true' && inputs.loom_ref != '' }}
         continue-on-error: true
         uses: actions/checkout@v4
         with:
@@ -143,99 +270,236 @@ jobs:
           path: loom
           persist-credentials: false
 
-      - name: Checkout caller candidate for reusable validation
-        if: ${{ always() && inputs.loom_ref != '' }}
+      - name: Checkout trusted Loom base for direct validation
+        if: ${{ steps.host-facts.outputs.authority_ready == 'true' && inputs.loom_ref == '' }}
         continue-on-error: true
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.sha }}
+          repository: ${{ steps.host-facts.outputs.base_repository }}
+          ref: ${{ steps.host-facts.outputs.base_sha }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout untrusted candidate tree for read-only planning
+        if: ${{ steps.host-facts.outputs.authority_ready == 'true' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.host-facts.outputs.head_repository }}
+          ref: ${{ steps.host-facts.outputs.head_sha }}
           fetch-depth: 1
           path: candidate
           persist-credentials: false
 
-      - name: Checkout Loom candidate for direct validation
-        if: ${{ always() && inputs.loom_ref == '' }}
-        continue-on-error: true
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-          persist-credentials: false
-
       - name: Evaluate delivery facts
         id: evaluate
-        if: ${{ always() }}
+        if: ${{ steps.host-facts.outputs.authority_ready == 'true' }}
         continue-on-error: true
         shell: bash
         env:
           HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
           DELIVERY_GATE_PLAN_PATH: ${{ runner.temp }}/loom-delivery-gate-plan.json
-          LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
-          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
+          LOOM_SOURCE_PATH: loom
+          CANDIDATE_PATH: candidate
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
+          PYTHONDONTWRITEBYTECODE: '1'
         run: |
           set -u
           python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" --host-facts-file "$HOST_FACTS_PATH" --candidate-path "$CANDIDATE_PATH" --enforcement "$DELIVERY_GATE_ENFORCEMENT" --output "$DELIVERY_GATE_PLAN_PATH"
-          COMMAND="$(python3 - "$DELIVERY_GATE_PLAN_PATH" <<'PY'
+          python3 - "$DELIVERY_GATE_PLAN_PATH" "$GITHUB_OUTPUT" <<'PY'
           import json
           import sys
-          with open(sys.argv[1], encoding="utf-8") as stream:
-              print(json.load(stream)["native_validation"]["command"])
+
+          from pathlib import Path
+
+          plan_path, output_path = map(Path, sys.argv[1:])
+          targets = json.loads(plan_path.read_text(encoding="utf-8"))["native_validation"]["targets"]
+          with output_path.open("a", encoding="utf-8") as stream:
+              stream.write(f"validation_targets={json.dumps(targets, separators=(',', ':'))}\n")
           PY
-          )"
-          {
-            echo "validation_command<<EOF"
-            printf '%s\n' "$COMMAND"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+
+  native-validation:
+    name: isolated candidate native validation
+    needs: plan
+    if: ${{ needs.plan.outputs.authority_ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted Loom validation harness for reusable callers
+        if: ${{ needs.plan.outputs.authority_ready == 'true' && inputs.loom_ref != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: MC-and-his-Agents/Loom
+          ref: ${{ inputs.loom_ref }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout caller base validation harness for reusable callers
+        if: ${{ needs.plan.outputs.authority_ready == 'true' && inputs.loom_ref != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.plan.outputs.base_repository }}
+          ref: ${{ needs.plan.outputs.base_sha }}
+          fetch-depth: 1
+          path: harness
+          persist-credentials: false
+
+      - name: Checkout trusted Loom validation harness for direct validation
+        if: ${{ needs.plan.outputs.authority_ready == 'true' && inputs.loom_ref == '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.plan.outputs.base_repository }}
+          ref: ${{ needs.plan.outputs.base_sha }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout untrusted candidate validation tree
+        if: ${{ needs.plan.outputs.authority_ready == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.plan.outputs.head_repository }}
+          ref: ${{ needs.plan.outputs.head_sha }}
+          fetch-depth: 1
+          path: candidate
+          persist-credentials: false
 
       - name: Run selected native validation with read-only token
-        if: ${{ always() }}
+        id: native
         continue-on-error: true
         shell: bash
         env:
-          VALIDATION_COMMAND: ${{ steps.evaluate.outputs.validation_command }}
-          VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-delivery-native-validation.json
-          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
-          LOOM_DELIVERY_GATE_CHANGED_PATHS_FILE: ${{ runner.temp }}/loom-delivery-changed-paths.txt
-          LOOM_DELIVERY_GATE_HOST_FACTS_FILE: ${{ runner.temp }}/loom-delivery-host-facts.json
-          LOOM_DELIVERY_GATE_DECISION_FILE: ${{ runner.temp }}/loom-delivery-gate-plan.json
+          VALIDATION_TARGETS_JSON: ${{ needs.plan.outputs.validation_targets }}
+          CANDIDATE_PATH: candidate
+          RUNNER_ROOT: ${{ github.workspace }}/loom
+          TRUSTED_ROOT: ${{ inputs.loom_ref != '' && format('{0}/harness', github.workspace) || format('{0}/loom', github.workspace) }}
+          SYMLINK_POLICY: ${{ inputs.loom_ref != '' && 'protected' || 'reject' }}
+          NATIVE_RESULT_PATH: ${{ runner.temp }}/loom-native-validation/result.json
         run: |
           set -u
-          (
-            cd "$CANDIDATE_PATH"
-            if [ -z "${VALIDATION_COMMAND//[[:space:]]/}" ]; then
-              STATUS=command_missing
-            elif bash -o pipefail -c "$VALIDATION_COMMAND"; then
-              STATUS=passed
-            else
-              EXIT_CODE=$?
-              STATUS=$([ "$EXIT_CODE" -eq 127 ] && echo command_missing || echo failed)
-            fi
-            printf '{"status":"%s"}\n' "$STATUS" > "$VALIDATION_RESULT_PATH"
-            echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          )
+          mkdir -p "$(dirname "$NATIVE_RESULT_PATH")"
+          set +e
+          python3 "$RUNNER_ROOT/tools/run_trusted_candidate_validation.py" \
+            --runner-root "$RUNNER_ROOT" \
+            --trusted-root "$TRUSTED_ROOT" \
+            --candidate-root "$CANDIDATE_PATH" \
+            --targets-json "$VALIDATION_TARGETS_JSON" \
+            --symlink-policy "$SYMLINK_POLICY"
+          EXIT_CODE=$?
+          set -e
+          STATUS=$([ "$EXIT_CODE" -eq 0 ] && echo passed || echo failed)
+          printf '{"schema_version":"loom-native-validation-result/v1","status":"%s","exit_code":%s}\n' "$STATUS" "$EXIT_CODE" > "$NATIVE_RESULT_PATH"
+
+      - name: Upload isolated native validation artifact
+        if: ${{ always() && needs.plan.outputs.authority_ready == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: untrusted-loom-native-validation-${{ github.run_id }}
+          path: ${{ runner.temp }}/loom-native-validation/result.json
+          if-no-files-found: error
+          retention-days: 1
+
+  loom-delivery-gate:
+    name: loom-delivery-gate
+    needs: [plan, native-validation]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      result: ${{ steps.terminal.outputs.result }}
+      enforcement: ${{ steps.terminal.outputs.enforcement }}
+      primary_cause: ${{ steps.terminal.outputs.primary_cause }}
+      failure_envelope: ${{ steps.terminal.outputs.failure_envelope }}
+      assurance: ${{ steps.terminal.outputs.assurance }}
+      compatibility_check_success: ${{ steps.terminal.outputs.compatibility_check_success }}
+      trust_verdict: ${{ steps.terminal.outputs.trust_verdict }}
+    steps:
+      - name: Checkout canonical Loom source for reusable callers
+        if: ${{ needs.plan.outputs.authority_ready == 'true' && inputs.loom_ref != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: MC-and-his-Agents/Loom
+          ref: ${{ inputs.loom_ref }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout trusted Loom base for direct validation
+        if: ${{ needs.plan.outputs.authority_ready == 'true' && inputs.loom_ref == '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.plan.outputs.base_repository }}
+          ref: ${{ needs.plan.outputs.base_sha }}
+          fetch-depth: 1
+          path: loom
+          persist-credentials: false
+
+      - name: Checkout candidate tree for profile readback
+        if: ${{ needs.plan.outputs.authority_ready == 'true' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.plan.outputs.head_repository }}
+          ref: ${{ needs.plan.outputs.head_sha }}
+          fetch-depth: 1
+          path: candidate
+          persist-credentials: false
 
       - name: Finalize advisory delivery result
-        if: ${{ always() }}
+        id: finalize
+        if: ${{ needs.plan.outputs.authority_ready == 'true' }}
         continue-on-error: true
         shell: bash
         env:
           HOST_FACTS_PATH: ${{ runner.temp }}/loom-delivery-host-facts.json
-          VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-delivery-native-validation.json
+          VALIDATION_RESULT_PATH: ${{ runner.temp }}/loom-trusted-native-validation.json
           DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
-          LOOM_SOURCE_PATH: ${{ inputs.loom_ref != '' && 'loom' || '.' }}
-          CANDIDATE_PATH: ${{ inputs.loom_ref != '' && 'candidate' || '.' }}
+          LOOM_SOURCE_PATH: loom
+          CANDIDATE_PATH: candidate
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
+          HOST_FACTS_BASE64: ${{ needs.plan.outputs.host_facts_base64 }}
+          PYTHONDONTWRITEBYTECODE: '1'
         run: |
           set -u
+          printf '{"schema_version":"loom-native-validation-result/v1","status":"command_missing","source":"untrusted_raw_artifact_not_consumed"}\n' > "$VALIDATION_RESULT_PATH"
+          python3 - "$HOST_FACTS_PATH" <<'PY'
+          import base64
+          import os
+          import sys
+
+          from pathlib import Path
+
+          host_path = Path(sys.argv[1])
+          encoded = os.environ.get("HOST_FACTS_BASE64", "")
+          try:
+              host_path.write_bytes(base64.b64decode(encoded, validate=True))
+          except (ValueError, TypeError):
+              host_path.write_text("{}\n", encoding="utf-8")
+          PY
           python3 "$LOOM_SOURCE_PATH/src/skills/shared/scripts/delivery_gate.py" \
             --host-facts-file "$HOST_FACTS_PATH" \
             --validation-result-file "$VALIDATION_RESULT_PATH" \
             --candidate-path "$CANDIDATE_PATH" \
             --enforcement "$DELIVERY_GATE_ENFORCEMENT" \
             --output "$DELIVERY_GATE_PATH"
+          python3 - "$DELIVERY_GATE_PATH" "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
+          import sys
+
+          from pathlib import Path
+
+          result_path, output_path = map(Path, sys.argv[1:])
+          with output_path.open("a", encoding="utf-8") as stream:
+              stream.write(f"delivery_gate_sha256={hashlib.sha256(result_path.read_bytes()).hexdigest()}\n")
+          PY
 
       - name: Publish terminal delivery result
         id: terminal
@@ -244,43 +508,97 @@ jobs:
         env:
           DELIVERY_GATE_PATH: ${{ runner.temp }}/loom-delivery-gate.json
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
+          EXPECTED_DELIVERY_GATE_SHA256: ${{ steps.finalize.outputs.delivery_gate_sha256 }}
+          AUTHORITY_READY: ${{ needs.plan.outputs.authority_ready }}
+          EXPECTED_HEAD_SHA: ${{ needs.plan.outputs.head_sha }}
         with:
           script: |
             const fs = require("fs");
+            const crypto = require("crypto");
             let payload = null;
+            let authenticated = false;
             try {
-              payload = JSON.parse(fs.readFileSync(process.env.DELIVERY_GATE_PATH, "utf8"));
+              if (process.env.AUTHORITY_READY !== "true") {
+                throw new Error("GitHub host authority is not ready");
+              }
+              const run = (await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+              })).data;
+              const workflow = (await github.rest.actions.getWorkflow({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: run.workflow_id,
+              })).data;
+              const candidateBound = context.eventName === "pull_request_target"
+                ? (run.pull_requests || []).some((pull) => pull.head?.sha === process.env.EXPECTED_HEAD_SHA)
+                : context.eventName === "merge_group" && run.head_sha === process.env.EXPECTED_HEAD_SHA;
+              if (
+                run.id !== context.runId ||
+                run.event !== context.eventName ||
+                workflow.path !== ".github/workflows/loom-delivery-gate.yml" ||
+                workflow.state !== "active" ||
+                !candidateBound
+              ) {
+                throw new Error("workflow run/path/event/head host readback is incomplete or mismatched");
+              }
+              const encoded = fs.readFileSync(process.env.DELIVERY_GATE_PATH);
+              const actual = crypto.createHash("sha256").update(encoded).digest("hex");
+              if (!process.env.EXPECTED_DELIVERY_GATE_SHA256 || actual !== process.env.EXPECTED_DELIVERY_GATE_SHA256) {
+                throw new Error("delivery gate result changed after trusted finalization");
+              }
+              payload = JSON.parse(encoded.toString("utf8"));
+              authenticated = true;
             } catch (error) {
               core.warning(`delivery evaluator output unavailable: ${String(error.message || error)}`);
             }
             const profile = payload?.delivery?.profile || "standard";
             const fallbackCause = {
-              id: "environment_unavailable",
-              failure_domain: "environment",
-              code: "unavailable",
-              locator: "delivery_gate:evaluator_output",
-              summary: "The delivery-gate evaluator did not produce readable output.",
-              owner: "ci",
+              id: "host_authority_unavailable",
+              failure_domain: "host_service",
+              code: "authority_unavailable",
+              locator: "delivery_gate:github_host_authority",
+              summary: "GitHub host authority was unavailable or incomplete; no candidate checkout or evaluator was executed.",
+              owner: "github",
               retryable: true,
-              cause_class: "unavailable",
-              transient: true,
+              cause_class: "host_readback",
+              transient: false,
               details: {},
               consequence_of: [],
-              remediation_command: "rerun loom-delivery-gate after the execution environment is available",
+              remediation_command: "restore complete GitHub event/API readback and rerun loom-delivery-gate",
             };
-            const cause = payload?.primary_cause?.id || fallbackCause.id;
-            const failureEnvelope = payload?.failure_envelope || { schema_version: "loom-failure-envelope/v1", primary_cause: payload?.primary_cause || fallbackCause, consequences: [], suppressed_diagnostics: [], secondary_causes: [] };
+            const limitedCause = {
+              id: "host_enforcement_unavailable",
+              failure_domain: "host_service",
+              code: "host_enforcement_unavailable",
+              locator: "required_check_identity:host_enforcement_unavailable",
+              summary: "The compatibility coordinator completed, but this same-app workflow cannot prove strong host enforcement.",
+              owner: "github",
+              retryable: false,
+              cause_class: "host_identity",
+              transient: false,
+              details: {},
+              consequence_of: [],
+              remediation_command: "complete #2063 with a distinct GitHub App or fully bound required-workflow host adapter",
+            };
+            const primaryCause = authenticated ? limitedCause : fallbackCause;
+            const cause = primaryCause.id;
+            const failureEnvelope = { schema_version: "loom-failure-envelope/v1", primary_cause: primaryCause, consequences: [], suppressed_diagnostics: [], secondary_causes: [] };
             const enforcement = payload?.enforcement || process.env.DELIVERY_GATE_ENFORCEMENT || "advisory";
-            const result = payload?.result || (enforcement === "advisory" ? "advisory" : "blocked");
+            const result = authenticated ? "limited" : "blocked";
             core.setOutput("result", result);
             core.setOutput("enforcement", enforcement);
             core.setOutput("primary_cause", cause);
             core.setOutput("failure_envelope", JSON.stringify(failureEnvelope));
-            core.notice(`loom-delivery-gate enforcement=${enforcement} profile=${profile}; primary cause=${cause}; remediation=${failureEnvelope.primary_cause?.remediation_command || "unavailable"}`);
+            core.setOutput("assurance", "limited");
+            core.setOutput("compatibility_check_success", authenticated ? "true" : "false");
+            core.setOutput("trust_verdict", authenticated ? "limited" : "blocked");
+            core.notice(`loom-delivery-gate enforcement=${enforcement} assurance=limited host_enforcement=host_enforcement_unavailable profile=${profile}; primary cause=${cause}; remediation=${failureEnvelope.primary_cause?.remediation_command || "unavailable"}`);
             await core.summary
               .addHeading("Loom delivery gate")
-              .addRaw(`Enforcement: ${enforcement}\n\nResult: ${result}\n\nProfile: ${profile}\n\nPrimary cause: ${cause}\n\nFailure envelope:\n\n\`\`\`json\n${JSON.stringify(failureEnvelope, null, 2)}\n\`\`\`\n\nProduct acceptance: not_evaluated.`)
+              .addRaw(`Enforcement: ${enforcement}\n\nResult: ${result}\n\nAssurance: limited\n\nHost enforcement: host_enforcement_unavailable\n\nProfile: ${profile}\n\nPrimary cause: ${cause}\n\nFailure envelope:\n\n\`\`\`json\n${JSON.stringify(failureEnvelope, null, 2)}\n\`\`\`\n\nProduct acceptance: not_evaluated.`)
               .write();
-            if (result === "blocked") {
+            if (!authenticated) {
               core.setFailed(`loom-delivery-gate blocked: ${cause}`);
             }

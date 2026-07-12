@@ -1,0 +1,4 @@
+name: Invalid schema
+runs:
+  using: node20
+  steps: []

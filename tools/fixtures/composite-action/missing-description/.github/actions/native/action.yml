@@ -1,0 +1,6 @@
+name: Missing description
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo invalid

@@ -21,6 +21,8 @@ from github_host import (
     gh_rest_authenticated_paginated_field,
     gh_rest_write_json,
 )
+from failure_envelope import envelope, primary_cause
+from native_validation import parse_make_targets
 
 
 sys.dont_write_bytecode = True
@@ -52,6 +54,45 @@ DECLARATION_LOCATORS = (".loom/bootstrap/init-result.json", ".loom/bootstrap/man
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 DELIVERY_WORKFLOW = ".github/workflows/loom-delivery-gate.yml"
 COMPANION = ".loom/companion/repo-interface.json"
+CAUSE_CONTRACTS = {
+    "not_applicable": ("governance_metadata", "not_applicable", "loom", False, "none"),
+    "passed": ("governance_metadata", "passed", "loom", False, "none"),
+    "light_profile_tree_unreadable": ("git_history", "unreadable", "repository", True, "restore readable Git tree state, then rerun the migration plan"),
+    "light_profile_forbidden_carrier": ("carrier", "forbidden_carrier", "repository", False, "remove the reported forbidden carriers in the profile migration PR"),
+    "light_profile_state_unreadable": ("carrier", "unreadable", "repository", False, "restore valid metadata-only light-profile installed state"),
+    "invalid_input": ("governance_metadata", "invalid", "repository", False, "correct the reported reconciliation inputs, then rerun"),
+    "gate_enabler_unverified": ("host_service", "unverified", "github", True, "restore the gate-enabler PR and check readback, then rerun"),
+    "host_readback_unavailable": ("host_service", "unavailable", "github", True, "rerun after GitHub host readback is available"),
+    "host_enforcement_unavailable": ("host_service", "host_enforcement_unavailable", "github", False, "complete #2063 with a distinct GitHub App before mutating required checks"),
+    "required_set_unreadable": ("host_service", "unreadable", "github", True, "restore readable branch protection, then rerun"),
+    "required_check_app_conflict": ("governance_metadata", "conflict", "operator", False, "remove the conflicting required-check app binding"),
+    "unexpected_required_checks": ("governance_metadata", "unexpected", "operator", False, "declare each required check as retained or legacy"),
+    "ruleset_migration_required": ("governance_metadata", "migration_required", "operator", False, "update the owning GitHub ruleset, then rerun"),
+    "profile_migration_pr_unreadable": ("host_service", "unreadable", "github", True, "restore profile-migration PR readback, then rerun"),
+    "profile_migration_pr_invalid": ("governance_metadata", "invalid", "repository", False, "retarget the profile-migration PR to the declared branch"),
+    "planned": ("governance_metadata", "planned", "loom", False, "run the emitted reconciliation command with --apply when ready"),
+    "partial_apply": ("host_service", "partial_apply", "operator", True, "rerun the emitted reconciliation command to converge host state"),
+    "host_write_unchanged": ("host_service", "unchanged", "operator", True, "restore host write authority, then rerun reconciliation"),
+    "required_set_not_ready": ("governance_metadata", "not_ready", "operator", True, "converge the required check set, then rerun"),
+    "profile_migration_pending": ("governance_metadata", "pending", "repository", True, "merge the profile-migration PR, then rerun"),
+    "main_tree_unreconciled": ("carrier", "unreconciled", "repository", True, "fix the reported main-tree contract, then rerun"),
+    "reconciled": ("governance_metadata", "reconciled", "loom", False, "none"),
+}
+
+
+def _primary(cause_id: str, summary: str, *, details: dict[str, Any] | None = None) -> dict[str, Any]:
+    domain, code, owner, retryable, remediation = CAUSE_CONTRACTS[cause_id]
+    return primary_cause(
+        cause_id=cause_id,
+        failure_domain=domain,
+        code=code,
+        locator=f"light_profile:{cause_id}",
+        summary=summary,
+        owner=owner,
+        retryable=retryable,
+        details=details,
+        remediation_command=remediation,
+    )
 
 
 def resolve_target(raw_target: str) -> Path:
@@ -251,6 +292,7 @@ def plan_payload(target: Path) -> dict[str, Any]:
     if state_error is None and profile in LIGHT_PROFILES and repo_payload.get("mode") != "metadata-only":
         state_error = f"{profile} installed-state must use metadata-only repository payload"
     if state_error is None and profile not in LIGHT_PROFILES:
+        cause = _primary("not_applicable", "target does not declare a light-profile adoption")
         return {
             "schema_version": SCHEMA,
             "command": "profile light-migration-plan",
@@ -261,16 +303,14 @@ def plan_payload(target: Path) -> dict[str, Any]:
             "carrier_repair_actions": [],
             "applicable": False,
             "installed_state": {"locator": locator, "adoption_mode": profile},
-            "primary_cause": {
-                "id": "not_applicable",
-                "domain": "light_profile",
-                "summary": "target does not declare a light-profile adoption",
-            },
+            "primary_cause": cause,
+            "failure_envelope": envelope(cause),
             "migration": {"status": "not_applicable", "actions": []},
         }
 
     paths, git_error = observed_paths(target)
     if git_error:
+        cause = _primary("light_profile_tree_unreadable", git_error)
         return {
             "schema_version": SCHEMA,
             "command": "profile light-migration-plan",
@@ -284,11 +324,8 @@ def plan_payload(target: Path) -> dict[str, Any]:
             "legacy_gate_blocker": True,
             "violations": [],
             "migration": {"status": "blocked_tree_read", "reentrant": True, "actions": []},
-            "primary_cause": {
-                "id": "light_profile_tree_unreadable",
-                "domain": "git_tree",
-                "summary": git_error,
-            },
+            "primary_cause": cause,
+            "failure_envelope": envelope(cause),
             "failed_layer": "light-profile-tree",
             "fail_closed_reason": git_error,
         }
@@ -298,6 +335,14 @@ def plan_payload(target: Path) -> dict[str, Any]:
     migration = migration_actions(violations, state_error, profile)
     passed = not violations and state_error is None
     primary_id = "passed" if passed else "light_profile_forbidden_carrier" if violations else "light_profile_state_unreadable"
+    summary = (
+        "observed tree satisfies the light-profile carrier invariant"
+        if passed
+        else "observed Loom execution carriers conflict with light-profile adoption"
+        if violations
+        else str(state_error)
+    )
+    cause = _primary(primary_id, summary, details={"violation_count": len(violations)})
     return {
         "schema_version": SCHEMA,
         "command": "profile light-migration-plan",
@@ -312,17 +357,8 @@ def plan_payload(target: Path) -> dict[str, Any]:
             "sources": {source: sum(1 for value in paths.values() if value == source) for source in ("tracked", "untracked", "ignored")},
             "file_count": len(paths),
         },
-        "primary_cause": {
-            "id": primary_id,
-            "domain": "light_profile" if primary_id != "light_profile_state_unreadable" else "installed_state",
-            "summary": (
-                "observed tree satisfies the light-profile carrier invariant"
-                if passed
-                else "observed Loom execution carriers conflict with light-profile adoption"
-                if violations
-                else str(state_error)
-            ),
-        },
+        "primary_cause": cause,
+        "failure_envelope": envelope(cause),
         "legacy_gate_blocker": not passed,
         "violations": violations,
         "migration": {
@@ -357,6 +393,7 @@ def recovery_command(
     app_id: int,
     legacy_contexts: list[str],
     retained_contexts: list[str],
+    trust_mode: str,
 ) -> str:
     values = [
         "loom", "profile", "light-migration-reconcile",
@@ -364,6 +401,7 @@ def recovery_command(
         "--work-item", str(work_item), "--gate-pr", str(gate_pr),
         "--migration-pr", str(migration_pr), "--context", context,
         "--app-id", str(app_id),
+        "--trust-mode", trust_mode,
     ]
     for value in legacy_contexts:
         values.extend(("--legacy-context", value))
@@ -389,6 +427,7 @@ def _response(
 ) -> dict[str, Any]:
     mutation_attempts = attempts or []
     uncertain = any(item.get("outcome") == "indeterminate" for item in mutation_attempts)
+    primary = _primary(cause, summary, details={"operation": operation, "work_item": work_item})
     payload = {
         "schema_version": RECONCILE_SCHEMA,
         "command": "profile light-migration-reconcile",
@@ -402,7 +441,8 @@ def _response(
         "host_mutations": bool(writes) or uncertain,
         "host_writes": writes,
         "host_mutation_attempts": mutation_attempts,
-        "primary_cause": {"id": cause, "domain": "profile_migration", "summary": summary},
+        "primary_cause": primary,
+        "failure_envelope": envelope(primary),
         "next_action": next_action,
     }
     payload.update(extra)
@@ -417,6 +457,7 @@ def _required_set_readback(
     app_id: int,
     legacy_contexts: list[str],
     retained_contexts: list[str],
+    trust_mode: str,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]], list[str]]:
     from delivery_gate import build_required_check_identity, evaluate_required_check_identity
 
@@ -441,6 +482,7 @@ def _required_set_readback(
         protection,
         rules,
         datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        trust_mode=trust_mode,
     )
     return protection, evaluate_required_check_identity(evidence), rules, []
 
@@ -489,6 +531,7 @@ def _attempt_required_set_mutation(
     app_id: int,
     legacy_contexts: list[str],
     retained_contexts: list[str],
+    trust_mode: str,
     *,
     strict: bool,
     before: list[dict[str, Any]],
@@ -499,7 +542,7 @@ def _attempt_required_set_mutation(
         root, repository, branch, strict=strict, checks=desired
     )
     protection, identity, _rules, read_errors = _required_set_readback(
-        root, repository, branch, context, app_id, legacy_contexts, retained_contexts
+        root, repository, branch, context, app_id, legacy_contexts, retained_contexts, trust_mode
     )
     state = _branch_checks(protection or {})
     if state is not None and _checks_key(state[1]) == _checks_key(desired):
@@ -610,7 +653,8 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         return [f"delivery workflow is not UTF-8: {exc}"]
     stack: list[tuple[int, str]] = []
     triggers: set[str] = set()
-    pinned_reusable = False
+    pinned_jobs: dict[str, str] = {}
+    job_inputs: dict[str, dict[str, str]] = {}
     for raw_line in text.splitlines():
         if not raw_line.strip() or raw_line.lstrip().startswith("#"):
             continue
@@ -626,23 +670,40 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         path = [item[1] for item in stack]
         if key == "on" and not path and value.startswith("[") and value.endswith("]"):
             triggers.update(item.strip().strip("'\"") for item in value[1:-1].split(","))
-        elif path == ["on"] and key in {"pull_request", "merge_group"}:
+        elif path == ["on"] and key in {"pull_request_target", "merge_group"}:
             triggers.add(key)
         if key == "uses" and len(path) == 2 and path[0] == "jobs":
-            pinned_reusable = pinned_reusable or bool(
-                re.fullmatch(
-                    r"\S*/\.github/workflows/loom-delivery-gate\.yml@[0-9a-fA-F]{40}",
-                    value,
-                )
+            pinned = re.fullmatch(
+                r"\S*/\.github/workflows/loom-delivery-gate\.yml@([0-9a-fA-F]{40})",
+                value,
             )
+            if pinned:
+                pinned_jobs[path[1]] = pinned.group(1).lower()
+        elif len(path) == 3 and path[0] == "jobs" and path[2] == "with":
+            job_inputs.setdefault(path[1], {})[key] = value.strip("'\"")
         stack.append((indent, key))
 
-    missing = sorted({"pull_request", "merge_group"} - triggers)
+    errors: list[str] = []
+    missing = sorted({"pull_request_target", "merge_group"} - triggers)
     if missing:
-        return ["delivery workflow is missing active triggers: " + ", ".join(missing)]
-    if not pinned_reusable:
-        return ["delivery workflow does not use the SHA-pinned reusable gate at job level"]
-    return []
+        errors.append("delivery workflow is missing active triggers: " + ", ".join(missing))
+    if not pinned_jobs:
+        errors.append("delivery workflow does not use the SHA-pinned reusable gate at job level")
+    for job, pinned_sha in sorted(pinned_jobs.items()):
+        inputs = job_inputs.get(job, {})
+        host_facts = inputs.get("host_facts", "").strip()
+        if not host_facts or host_facts in {">", "|", ">-", "|-"}:
+            errors.append(f"delivery workflow job {job!r} must declare host_facts")
+        loom_ref = inputs.get("loom_ref", "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", loom_ref) or loom_ref != pinned_sha:
+            errors.append(f"delivery workflow job {job!r} loom_ref must equal its job-level uses SHA")
+        _targets, validation_errors = parse_make_targets(inputs.get("validation_command"))
+        errors.extend(f"delivery workflow job {job!r} {error}" for error in validation_errors)
+        if inputs.get("enforcement") != "enforce":
+            errors.append(f"delivery workflow job {job!r} must declare enforcement: enforce")
+        if inputs.get("profile") != "light":
+            errors.append(f"delivery workflow job {job!r} must declare profile: light")
+    return errors
 
 
 def _main_tree_readback(
@@ -759,6 +820,7 @@ def reconcile_payload(
     legacy_contexts: list[str],
     retained_contexts: list[str],
     apply: bool,
+    trust_mode: str = "pull_request_target_same_app",
 ) -> dict[str, Any]:
     operation = "apply" if apply else "dry_run"
     writes: list[dict[str, Any]] = []
@@ -766,7 +828,7 @@ def reconcile_payload(
     recovery = recovery_command(
         target=target, repository=repository, branch=branch, work_item=work_item,
         gate_pr=gate_pr, migration_pr=migration_pr, context=context, app_id=app_id,
-        legacy_contexts=legacy_contexts, retained_contexts=retained_contexts,
+        legacy_contexts=legacy_contexts, retained_contexts=retained_contexts, trust_mode=trust_mode,
     )
     try:
         repository_parts(repository)
@@ -776,13 +838,25 @@ def reconcile_payload(
         return _response("block", "invalid_input", "branch and context must be non-empty; numeric locators must be positive", operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=None, writes=writes)
     if context in legacy_contexts or set(legacy_contexts) & set(retained_contexts):
         return _response("block", "invalid_input", "expected, legacy, and retained contexts must not conflict", operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=None, writes=writes)
+    if trust_mode != "distinct_app_check" or app_id == 15368:
+        return _response(
+            "block",
+            "host_enforcement_unavailable",
+            "light migration cannot mutate required checks until a distinct GitHub App identity is configured",
+            operation=operation,
+            repository=repository,
+            branch=branch,
+            work_item=work_item,
+            next_action="complete #2063, then rerun with --trust-mode distinct_app_check and the distinct app id",
+            writes=writes,
+        )
 
     gate_readback, gate_errors = _gate_pr_readback(target, repository, branch, gate_pr, context, app_id)
     if gate_errors:
         return _response("block", "gate_enabler_unverified", gate_errors[0], operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=recovery, writes=writes, missing_inputs=gate_errors)
 
     protection, identity, rules, read_errors = _required_set_readback(
-        target, repository, branch, context, app_id, legacy_contexts, retained_contexts
+        target, repository, branch, context, app_id, legacy_contexts, retained_contexts, trust_mode
     )
     if read_errors or protection is None or identity is None:
         return _response("block", "host_readback_unavailable", (read_errors or ["required-set readback is incomplete"])[0], operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=recovery, writes=writes, missing_inputs=read_errors)
@@ -839,6 +913,7 @@ def reconcile_payload(
         desired = [*checks, expected]
         outcome, protection, identity, errors, attempt = _attempt_required_set_mutation(
             target, repository, branch, context, app_id, legacy_contexts, retained_contexts,
+            trust_mode,
             strict=strict, before=checks, desired=desired, action="add_delivery_gate_required_check",
         )
         attempts.append(attempt)
@@ -857,6 +932,7 @@ def reconcile_payload(
         desired = [item for item in checks if item["context"] not in legacy_contexts]
         outcome, _protection, _identity, errors, attempt = _attempt_required_set_mutation(
             target, repository, branch, context, app_id, legacy_contexts, retained_contexts,
+            trust_mode,
             strict=strict, before=checks, desired=desired, action="remove_legacy_required_checks",
         )
         attempts.append(attempt)
@@ -867,7 +943,7 @@ def reconcile_payload(
             return _response("partial_apply" if writes else "block", "partial_apply" if writes else "host_write_unchanged", (errors or ["legacy required-check mutation was not applied"])[0], operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=recovery, writes=writes, attempts=attempts, missing_inputs=errors)
         writes.append({**attempt, "contexts": sorted(legacy_contexts)})
 
-    final_protection, identity, _rules, errors = _required_set_readback(target, repository, branch, context, app_id, legacy_contexts, retained_contexts)
+    final_protection, identity, _rules, errors = _required_set_readback(target, repository, branch, context, app_id, legacy_contexts, retained_contexts, trust_mode)
     final_state = _branch_checks(final_protection or {})
     final_bindings = [item for item in final_state[1] if item["context"] == context] if final_state is not None else []
     if final_bindings != [expected]:
@@ -895,6 +971,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--migration-pr", type=int)
     parser.add_argument("--context")
     parser.add_argument("--app-id", type=int)
+    parser.add_argument("--trust-mode", choices=("required_workflow", "distinct_app_check", "pull_request_target_same_app"), default="pull_request_target_same_app")
     parser.add_argument("--legacy-context", action="append", default=[])
     parser.add_argument("--retained-context", action="append", default=[])
     parser.add_argument("--apply", action="store_true")
@@ -922,6 +999,7 @@ def main(argv: list[str]) -> int:
             app_id=args.app_id,
             legacy_contexts=args.legacy_context,
             retained_contexts=args.retained_context,
+            trust_mode=args.trust_mode,
             apply=args.apply,
         )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
