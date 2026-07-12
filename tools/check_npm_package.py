@@ -9,9 +9,13 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+sys.dont_write_bytecode = True
+import build_distribution
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_JSON = REPO_ROOT / "package.json"
@@ -144,16 +148,16 @@ SURFACES: dict[str, SurfaceDefinition] = {
     SURFACE_PLUGIN_PAYLOAD_HASH: SurfaceDefinition(
         name=SURFACE_PLUGIN_PAYLOAD_HASH,
         command=f"python3 tools/check_npm_package.py --surface {SURFACE_PLUGIN_PAYLOAD_HASH}",
-        description="Deterministic SHA-256 validation for the installable Codex plugin payload under plugins/loom.",
-        evidence_locators=("plugins/loom", "plugins/loom/.codex-plugin/plugin.json"),
+        description="Deterministic SHA-256 validation for the generated installable Codex plugin payload.",
+        evidence_locators=("src/skills", "tools/build_distribution.py", "plugins/loom/.codex-plugin/plugin.json"),
         evidence_labels=(SURFACE_PLUGIN_PAYLOAD_HASH,),
         failure_label="plugin-payload-hash-failed",
     ),
     SURFACE_RUNTIME_COPY_PARITY: SurfaceDefinition(
         name=SURFACE_RUNTIME_COPY_PARITY,
         command=f"python3 tools/check_npm_package.py --surface {SURFACE_RUNTIME_COPY_PARITY}",
-        description="Exact parity check for shared runtime copies across source, generated skills, plugin payload, and repo-local .loom/bin.",
-        evidence_locators=("skills/shared/scripts", "src/skills/shared/scripts", "plugins/loom/skills/shared/scripts", ".loom/bin"),
+        description="Reproducible build and digest validation from the only tracked Python source under src/skills.",
+        evidence_locators=("src/skills", "tools/build_distribution.py", "build/loom-distribution/manifest.json"),
         evidence_labels=(SURFACE_RUNTIME_COPY_PARITY,),
         failure_label="runtime-copy-parity-failed",
     ),
@@ -218,14 +222,21 @@ def npm_version_from_root() -> str:
 
 
 def npm_pack_files() -> set[str]:
-    completed = subprocess.run(
-        ["npm", "pack", "--dry-run", "--json", "--ignore-scripts"],
-        cwd=REPO_ROOT,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    with tempfile.TemporaryDirectory(prefix="loom-npm-distribution-") as tmp:
+        output = Path(tmp) / "distribution"
+        build_distribution.build(output)
+        build_distribution.materialize(output, "package")
+        try:
+            completed = subprocess.run(
+                ["npm", "pack", "--dry-run", "--json", "--ignore-scripts"],
+                cwd=REPO_ROOT,
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        finally:
+            build_distribution.clean_materialized("package")
     if completed.returncode != 0:
         fail(
             SURFACE_PAYLOAD,
@@ -410,26 +421,35 @@ def expected_plugin_payload_metadata() -> dict[str, str]:
 
 
 def validate_plugin_payload_hash() -> dict[str, Any]:
-    if not PLUGIN_PAYLOAD_ROOT.is_dir():
+    with tempfile.TemporaryDirectory(prefix="loom-plugin-distribution-") as tmp:
+        output = Path(tmp) / "distribution"
+        build_distribution.build(output)
+        payload_root = output / "plugins" / "loom"
+        return validate_generated_plugin_payload_hash(payload_root)
+
+
+def validate_generated_plugin_payload_hash(payload_root: Path) -> dict[str, Any]:
+    manifest_path = payload_root / ".codex-plugin" / "plugin.json"
+    if not payload_root.is_dir():
         fail(
             SURFACE_PLUGIN_PAYLOAD_HASH,
             "plugin payload root is missing: plugins/loom",
             evidence_locators=("plugins/loom",),
         )
-    if not PLUGIN_MANIFEST.is_file():
+    if not manifest_path.is_file():
         fail(
             SURFACE_PLUGIN_PAYLOAD_HASH,
             "plugin manifest is missing: plugins/loom/.codex-plugin/plugin.json",
             evidence_locators=("plugins/loom/.codex-plugin/plugin.json",),
         )
-    computed = compute_plugin_payload_hash(PLUGIN_PAYLOAD_ROOT)
+    computed = compute_plugin_payload_hash(payload_root)
     if computed["file_count"] == 0:
         fail(
             SURFACE_PLUGIN_PAYLOAD_HASH,
             "plugin payload hash has no input files",
             evidence_locators=("plugins/loom",),
         )
-    manifest = load_json(PLUGIN_MANIFEST)
+    manifest = load_json(manifest_path)
     x_loom = manifest.get("x-loom")
     if not isinstance(x_loom, dict):
         fail(
@@ -476,72 +496,48 @@ def validate_plugin_payload_hash() -> dict[str, Any]:
     return computed
 
 
-RUNTIME_COPY_ROOTS = (
-    "skills/shared/scripts",
-    "src/skills/shared/scripts",
-    "plugins/loom/skills/shared/scripts",
-    ".loom/bin",
-)
-RUNTIME_COPY_FILES = (
-    "authority_contract.py",
-    "failure_envelope.py",
-    "host_attestation.py",
-    "product_acceptance.py",
-    "execution_attempts.py",
-    "flow_runtime.py",
-    "companion_contract.py",
-    "live_smoke.py",
-    "delivery_control.py",
-    "host_profile.py",
-    "review_flow.py",
-    "closeout_flow.py",
-    "execution_flow.py",
-    "github_admission.py",
-    "github_host.py",
-    "loom_init.py",
-    "fact_chain_support.py",
-    "governance_surface.py",
-    "loom_flow.py",
-    "loom_status.py",
-    "runtime_paths.py",
-    "runtime_state.py",
-    "loom_check.py",
-    "loom_story_carriers.py",
-)
-RUNTIME_COPY_PAIRS = tuple(
-    (f"{left}/{name}", f"{right}/{name}")
-    for name in RUNTIME_COPY_FILES
-    for left, right in zip(RUNTIME_COPY_ROOTS, RUNTIME_COPY_ROOTS[1:])
-)
-
-
 def validate_runtime_copy_parity() -> dict[str, Any]:
-    drifted: list[str] = []
-    missing: list[str] = []
-    for source, copy in RUNTIME_COPY_PAIRS:
-        source_path = REPO_ROOT / source
-        copy_path = REPO_ROOT / copy
-        if not source_path.exists() or not copy_path.exists():
-            missing.append(f"{source} -> {copy}")
-            continue
-        if source_path.read_bytes() != copy_path.read_bytes():
-            drifted.append(f"{source} -> {copy}")
-    if missing or drifted:
-        details = []
-        if missing:
-            details.append("missing runtime copy pairs: " + ", ".join(missing))
-        if drifted:
-            details.append("drifted runtime copy pairs: " + ", ".join(drifted))
+    tracked = subprocess.run(
+        ["git", "ls-files", "skills/**/*.py", "plugins/loom/skills/**/*.py", ".loom/bin/*.py", "examples/new-project/.loom/bin/*.py"],
+        cwd=REPO_ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    ).stdout.splitlines()
+    if tracked:
         fail(
             SURFACE_RUNTIME_COPY_PARITY,
-            "; ".join(details),
-            evidence_locators=RUNTIME_COPY_ROOTS,
-            fallback_to=("sync shared runtime copies across skills, src/skills, plugin payload, and .loom/bin",),
+            "generated Python runtime copies remain tracked: " + ", ".join(tracked[:20]),
+            evidence_locators=("git ls-files", "src/skills"),
+            fallback_to=("remove tracked generated Python copies and rebuild from src/skills",),
         )
-    return {
-        "pair_count": len(RUNTIME_COPY_PAIRS),
-        "pairs": [{"source": source, "copy": copy} for source, copy in RUNTIME_COPY_PAIRS],
-    }
+    with tempfile.TemporaryDirectory(prefix="loom-runtime-distribution-") as tmp:
+        output = Path(tmp) / "distribution"
+        first = build_distribution.build(output)
+        second_output = Path(tmp) / "distribution-second"
+        second = build_distribution.build(second_output)
+        if first["aggregate_sha256"] != second["aggregate_sha256"]:
+            fail(
+                SURFACE_RUNTIME_COPY_PARITY,
+                "canonical distribution build is not reproducible",
+                evidence_locators=("src/skills", "tools/build_distribution.py"),
+            )
+        pairs: list[dict[str, str]] = []
+        for relative in build_distribution.canonical_python_files():
+            source = build_distribution.CANONICAL_SKILLS / relative
+            for copy_root in (output / "skills", output / "plugins" / "loom" / "skills"):
+                copy = copy_root / relative
+                if not copy.is_file() or source.read_bytes() != copy.read_bytes():
+                    fail(SURFACE_RUNTIME_COPY_PARITY, f"generated Python drift: {relative}", evidence_locators=("src/skills", str(copy_root)))
+                pairs.append({"source": source.relative_to(REPO_ROOT).as_posix(), "copy": copy.relative_to(output).as_posix()})
+        for name in build_distribution.RUNTIME_NAMES:
+            source = build_distribution.CANONICAL_SKILLS / "shared" / "scripts" / name
+            for copy_root in (output / "repo-runtime", output / "example-runtime"):
+                copy = copy_root / name
+                if source.read_bytes() != copy.read_bytes():
+                    fail(SURFACE_RUNTIME_COPY_PARITY, f"generated runtime drift: {name}", evidence_locators=("src/skills", str(copy_root)))
+                pairs.append({"source": source.relative_to(REPO_ROOT).as_posix(), "copy": copy.relative_to(output).as_posix()})
+    return {"pair_count": len(pairs), "pairs": pairs, "aggregate_sha256": first["aggregate_sha256"], "tracked_generated_python": []}
 
 
 def surface_pass(surface: str, *, payload_file_count: int | None = None) -> dict[str, Any]:

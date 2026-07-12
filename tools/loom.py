@@ -17,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -24,6 +25,8 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+
+import build_distribution
 
 try:
     import tomllib as _tomllib
@@ -4649,7 +4652,13 @@ def install_codex_workstation_plugin(source: Path) -> list[str]:
     if not (source / ".codex-plugin" / "plugin.json").exists():
         raise RuntimeError(f"Codex plugin source is missing .codex-plugin/plugin.json: {source}")
     plugin_cache_path = Path(paths["plugin_cache_path"])
-    copy_tree(source, plugin_cache_path)
+    if source.resolve() == global_codex_plugin_source().resolve():
+        with tempfile.TemporaryDirectory(prefix="loom-plugin-install-") as tmp:
+            output = Path(tmp) / "distribution"
+            build_distribution.build(output)
+            copy_tree(output / "plugins" / "loom", plugin_cache_path)
+    else:
+        copy_tree(source, plugin_cache_path)
     return [str(plugin_cache_path)]
 
 

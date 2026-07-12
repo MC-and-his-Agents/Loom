@@ -18,10 +18,9 @@ on:
       - 'tools/check_cli_contract.py'
       - 'tools/check_npm_package.py'
       - 'tools/check_release_surface.py'
+      - 'tools/build_distribution.py'
       - 'tools/version_surface_check.py'
-      - 'skills/shared/scripts/**'
       - 'src/skills/**'
-      - 'skills/**'
       - 'docs/adoption/loom-cli-release-surface.md'
       - 'docs/adoption/version-authority-map.md'
       - 'README.md'
@@ -39,10 +38,9 @@ on:
       - 'tools/check_cli_contract.py'
       - 'tools/check_npm_package.py'
       - 'tools/check_release_surface.py'
+      - 'tools/build_distribution.py'
       - 'tools/version_surface_check.py'
-      - 'skills/shared/scripts/**'
       - 'src/skills/**'
-      - 'skills/**'
       - 'docs/adoption/loom-cli-release-surface.md'
       - 'docs/adoption/version-authority-map.md'
       - 'README.md'
@@ -141,7 +139,7 @@ jobs:
             CHANGED_FILES=$(git diff --name-only "HEAD^..HEAD" 2>/dev/null || true)
           fi
 
-          if [ "$PUBLISH_REQUESTED" = "true" ] || printf '%s\n' "$CHANGED_FILES" | grep -E '^(VERSION|package\\.json|bin/loom\\.mjs|tools/loom\\.py|tools/loom_.*\\.py|skills/shared/scripts/|src/skills/|skills/)' >/dev/null; then
+          if [ "$PUBLISH_REQUESTED" = "true" ] || printf '%s\n' "$CHANGED_FILES" | grep -E '^(VERSION|package\\.json|bin/loom\\.mjs|tools/loom\\.py|tools/loom_.*\\.py|tools/build_distribution\\.py|src/skills/)' >/dev/null; then
             echo "cli_publish_behavior_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "cli_publish_behavior_changed=false" >> "$GITHUB_OUTPUT"

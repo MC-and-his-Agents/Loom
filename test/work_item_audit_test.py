@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SHARED_SCRIPTS = REPO_ROOT / "skills/shared/scripts"
+SHARED_SCRIPTS = REPO_ROOT / "src/skills/shared/scripts"
 sys.path.insert(0, str(SHARED_SCRIPTS))
 
 spec = importlib.util.spec_from_file_location("loom_flow", SHARED_SCRIPTS / "loom_flow.py")

@@ -7,8 +7,13 @@ import argparse
 import hashlib
 import json
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
+
+import sys
+sys.dont_write_bytecode = True
+import build_distribution
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +80,17 @@ def compute_hash() -> dict[str, Any]:
     }
 
 
+def compute_generated_hash() -> dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="loom-plugin-stamp-") as tmp:
+        output = Path(tmp) / "distribution"
+        build_distribution.build(output)
+        build_distribution.materialize(output, "package")
+        try:
+            return compute_hash()
+        finally:
+            build_distribution.clean_materialized("package")
+
+
 def expected_status(source_git_sha: str) -> str:
     return "pending_release_commit" if source_git_sha == "unreleased" else "release_commit"
 
@@ -96,14 +112,14 @@ def stamp(source_git_sha: str, *, write: bool) -> dict[str, Any]:
     if write:
         write_json(PLUGIN_MANIFEST, manifest)
 
-    digest = compute_hash()["digest"] if write else None
+    digest = compute_generated_hash()["digest"] if write else None
     if write:
         manifest = load_json(PLUGIN_MANIFEST)
         manifest["x-loom"]["plugin_payload_hash"] = digest
         write_json(PLUGIN_MANIFEST, manifest)
-        hash_payload = compute_hash()
+        hash_payload = compute_generated_hash()
     else:
-        current_hash = compute_hash()
+        current_hash = compute_generated_hash()
         digest = current_hash["digest"]
         hash_payload = current_hash
 

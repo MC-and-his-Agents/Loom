@@ -180,6 +180,7 @@ RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/loom_check.py": CHECK_RUNTIME_SOURCE,
     ".loom/bin/loom_story_carriers.py": STORY_CARRIERS_RUNTIME_SOURCE,
 }
+GENERATED_RUNTIME_MANIFEST = ".loom/bin/distribution-manifest.json"
 
 ROOT_BOUNDARY_FILES = (
     "AGENTS.md",
@@ -611,6 +612,110 @@ def stable_carrier_entries(target_root: Path, result: dict[str, object]) -> list
     return [entries[path] for path in sorted(entries)]
 
 
+def validate_generated_repo_runtime(target_root: Path) -> list[str]:
+    """Verify ignored repo runtime against the canonical distribution build manifest."""
+    manifest_path, boundary_errors = resolve_repo_relative_path(
+        target_root,
+        GENERATED_RUNTIME_MANIFEST,
+        label="generated runtime manifest",
+    )
+    if boundary_errors or manifest_path is None:
+        return boundary_errors
+    if not manifest_path.is_file():
+        return [f"generated runtime manifest is missing: {GENERATED_RUNTIME_MANIFEST}"]
+    try:
+        payload = read_json(manifest_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"generated runtime manifest is unreadable: {exc}"]
+    expected_keys = {
+        "schema_version",
+        "generator",
+        "canonical_root",
+        "output_root",
+        "aggregate_sha256",
+        "file_count",
+        "files",
+    }
+    if set(payload) != expected_keys:
+        return ["generated runtime manifest fields do not match loom-generated-distribution/v1"]
+    errors: list[str] = []
+    if payload.get("schema_version") != "loom-generated-distribution/v1":
+        errors.append("generated runtime manifest schema_version is unsupported")
+    if payload.get("generator") != "tools/build_distribution.py":
+        errors.append("generated runtime manifest generator is unsupported")
+    if payload.get("canonical_root") != "src/skills":
+        errors.append("generated runtime manifest canonical_root must be src/skills")
+    if payload.get("output_root") != ".":
+        errors.append("generated runtime manifest output_root must be the manifest-relative `.`")
+    rows = payload.get("files")
+    if not isinstance(rows, list):
+        return errors + ["generated runtime manifest files must be a list"]
+    normalized_rows: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"path", "sha256", "size"}:
+            errors.append("generated runtime manifest file rows must contain path, sha256, and size")
+            continue
+        relative = row.get("path")
+        digest = row.get("sha256")
+        size = row.get("size")
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or Path(relative).is_absolute()
+            or ".." in Path(relative).parts
+            or relative in seen
+        ):
+            errors.append("generated runtime manifest contains an invalid or duplicate file path")
+            continue
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            errors.append(f"generated runtime manifest has an invalid digest: {relative}")
+            continue
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            errors.append(f"generated runtime manifest has an invalid size: {relative}")
+            continue
+        seen.add(relative)
+        normalized_rows.append(row)
+    if payload.get("file_count") != len(normalized_rows):
+        errors.append("generated runtime manifest file_count does not match file rows")
+    aggregate = hashlib.sha256(
+        "".join(f"{row['path']}\0{row['sha256']}\n" for row in sorted(normalized_rows, key=lambda item: str(item["path"]))).encode("utf-8")
+    ).hexdigest()
+    if payload.get("aggregate_sha256") != aggregate:
+        errors.append("generated runtime manifest aggregate_sha256 does not match file rows")
+    row_by_path = {str(row["path"]): row for row in normalized_rows}
+    expected_names = {Path(relative).name for relative in RUNTIME_ARTIFACT_SOURCES}
+    runtime_names = {
+        path.removeprefix("repo-runtime/")
+        for path in row_by_path
+        if path.startswith("repo-runtime/")
+    }
+    if runtime_names != expected_names:
+        errors.append("generated runtime manifest repo-runtime inventory is missing files or contains unknown files")
+    runtime_root = target_root / ".loom/bin"
+    actual_names = {path.name for path in runtime_root.iterdir() if path.is_file()} if runtime_root.is_dir() else set()
+    if actual_names != expected_names | {Path(GENERATED_RUNTIME_MANIFEST).name}:
+        errors.append("generated .loom/bin inventory is missing files or contains unknown files")
+    for relative, canonical_source in RUNTIME_ARTIFACT_SOURCES.items():
+        name = Path(relative).name
+        runtime_row = row_by_path.get(f"repo-runtime/{name}")
+        # Distribution rows root canonical skills at `skills/`, matching source locators.
+        canonical_row = row_by_path.get(canonical_source) or row_by_path.get(f"skills/{canonical_source.removeprefix('skills/')}")
+        runtime_path, runtime_boundary_errors = resolve_repo_relative_path(target_root, relative, label=f"generated runtime {name}")
+        errors.extend(runtime_boundary_errors)
+        if runtime_row is None or canonical_row is None:
+            errors.append(f"generated runtime manifest lacks canonical/source binding for {name}")
+            continue
+        if runtime_row.get("sha256") != canonical_row.get("sha256"):
+            errors.append(f"generated runtime digest differs from canonical source: {name}")
+        if runtime_path is None or not runtime_path.is_file():
+            errors.append(f"generated runtime file is missing: {relative}")
+            continue
+        if sha256_file(runtime_path) != runtime_row.get("sha256") or runtime_path.stat().st_size != runtime_row.get("size"):
+            errors.append(f"generated runtime file drifted from distribution manifest: {relative}")
+    return errors
+
+
 def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) -> dict[str, object]:
     entries = stable_carrier_entries(target_root, result)
     report: dict[str, object] = {
@@ -640,6 +745,8 @@ def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) 
     untracked: list[dict[str, str]] = []
     unexpected_runtime_paths: list[dict[str, str]] = []
     blocking_errors: list[str] = []
+    generated_runtime_errors = validate_generated_repo_runtime(target_root)
+    generated_runtime_valid = not generated_runtime_errors
 
     for entry in entries:
         relative = entry["path"]
@@ -663,6 +770,9 @@ def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) 
             tracked_paths = tracked.stdout.splitlines() if tracked is not None and tracked.returncode == 0 else []
             if relative in tracked_paths:
                 status = "tracked"
+            elif relative.startswith(".loom/bin/") and generated_runtime_valid:
+                status = "generated"
+                remediation = "runtime is reproducibly generated from canonical source and verified by distribution manifest"
             else:
                 ignore = git_command(target_root, ["check-ignore", "-q", "--", relative])
                 if ignore is not None and ignore.returncode == 0:
@@ -677,6 +787,9 @@ def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) 
                     remediation = f"run `git add {relative}` before treating the adoption as committed"
                     untracked.append({**entry, "reason": status, "remediation": remediation})
         checked.append({**entry, "status": status, "remediation": remediation})
+
+    if any(entry["path"].startswith(".loom/bin/") for entry in entries) and generated_runtime_errors:
+        blocking_errors.extend(generated_runtime_errors)
 
     report["checked"] = checked
     report["ignored"] = ignored
@@ -2552,9 +2665,14 @@ def portable_bootstrap_value(
 
 
 def portable_bootstrap_result(result: dict[str, object], target_root: Path) -> dict[str, object]:
+    source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT", "")
+    if not source_repo_root:
+        top_level = git_command(Path.cwd(), ["rev-parse", "--show-toplevel"])
+        if top_level is not None and top_level.returncode == 0:
+            source_repo_root = top_level.stdout.strip()
     replacement_inputs = [
         (str(target_root.resolve()), "${TARGET_ROOT}"),
-        (os.environ.get("LOOM_SOURCE_REPO_ROOT", ""), "${SOURCE_REPO_ROOT}"),
+        (source_repo_root, "${SOURCE_REPO_ROOT}"),
         (os.environ.get("LOOM_INSTALLED_SKILLS_ROOT", ""), "${INSTALLED_SKILLS_ROOT}"),
         (git_head_sha(target_root) or "", "${CURRENT_HEAD}"),
     ]

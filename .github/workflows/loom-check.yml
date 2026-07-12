@@ -41,8 +41,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Build repo-local runtime fixtures
+        run: python3 tools/build_distribution.py generate --output "$RUNNER_TEMP/loom-distribution" --materialize all
       - name: "repo-local-cli: setup-demo-bootstrap"
         run: make loom-demo-new-project-check
+      - name: Restore generated runtime fixtures after demo isolation
+        run: python3 tools/build_distribution.py generate --output "$RUNNER_TEMP/loom-distribution" --materialize repo-fixtures
       - name: "repo-local-cli: init-runtime"
         working-directory: examples/new-project
         run: |
@@ -71,7 +75,7 @@ jobs:
           python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
       - name: "repo-local-cli: runtime-state-scene-conflict-negative"
         run: |
-          if LOOM_SOURCE_REPO_ROOT="$PWD" LOOM_INSTALLED_SKILLS_ROOT="$PWD/skills" LOOM_RUNTIME_SCENE=upgrade-rehearsal python3 skills/shared/scripts/loom_flow.py runtime-state --target examples/new-project --item INIT-0001; then
+          if LOOM_SOURCE_REPO_ROOT="$PWD" LOOM_INSTALLED_SKILLS_ROOT="$RUNNER_TEMP/loom-distribution/skills" LOOM_RUNTIME_SCENE=upgrade-rehearsal python3 "$RUNNER_TEMP/loom-distribution/skills/shared/scripts/loom_flow.py" runtime-state --target examples/new-project --item INIT-0001; then
             echo "expected runtime-state conflict to fail closed"
             exit 1
           fi
@@ -86,6 +90,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Materialize root runtime from canonical source
+        run: python3 tools/build_distribution.py generate --output "$RUNNER_TEMP/loom-distribution" --materialize repo-fixtures
       - name: Validate root self-governance carrier
         env:
           GH_TOKEN: ${{ github.token }}

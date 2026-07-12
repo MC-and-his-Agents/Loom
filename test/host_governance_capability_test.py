@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SHARED_SCRIPTS = REPO_ROOT / "skills/shared/scripts"
+SHARED_SCRIPTS = REPO_ROOT / "src/skills/shared/scripts"
 sys.path.insert(0, str(SHARED_SCRIPTS))
 
 
