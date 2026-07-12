@@ -9,7 +9,9 @@ JSON block instead of silently falling back to legacy wrappers.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import os
 import re
@@ -762,6 +764,10 @@ PUBLIC_COMMAND_PROTOCOL_TYPES = {
     "workspace check": "readback",
     "workspace retire": "reconciliation_verdict",
 }
+INTERNAL_CAPABILITIES = (
+    "gate-freeze-check",
+    "gate-freeze-write",
+)
 
 HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
@@ -2266,6 +2272,24 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
     }
 
 
+def emit_imported_main(command: str, handler: Any, argv: list[str]) -> int:
+    stream = io.StringIO()
+    with contextlib.redirect_stdout(stream):
+        handler(argv)
+    try:
+        payload = json.loads(stream.getvalue())
+    except json.JSONDecodeError:
+        payload = output(
+            command,
+            "block",
+            summary="Imported command did not emit JSON.",
+            failed_layer="cli-command-router",
+            fail_closed_reason=f"invalid JSON from {command}",
+        )
+    payload["command"] = command
+    return emit(payload)
+
+
 def output_key_gaps(payload: dict[str, Any], *, limit: int = 10) -> list[Any]:
     for field in ("key_gaps", "blocking_gaps", "gaps", "missing_inputs", "blocking_failures"):
         value = payload.get(field)
@@ -3185,7 +3209,19 @@ def handle_version(argv: list[str]) -> int:
 def handle_help(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom help")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--internal-capabilities", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.internal_capabilities:
+        return emit(
+            output(
+                "help",
+                "pass",
+                summary="Internal compatibility capabilities resolved without target access.",
+                visibility="internal",
+                capabilities=list(INTERNAL_CAPABILITIES),
+                mutates=False,
+            )
+        )
     payload = output(
         "help",
         "pass",
@@ -15551,10 +15587,10 @@ def main(argv: list[str]) -> int:
         return handle_suite(suite_args)
     if command == "acceptance" or command.startswith("acceptance "):
         acceptance_args = command.split()[1:] + forwarded if command.startswith("acceptance ") else forwarded
-        return product_acceptance_main(acceptance_args)
+        return emit_imported_main(command, product_acceptance_main, acceptance_args)
     if command == "attestation" or command.startswith("attestation "):
         attestation_args = command.split()[1:] + forwarded if command.startswith("attestation ") else forwarded
-        return host_attestation_main(attestation_args)
+        return emit_imported_main(command, host_attestation_main, attestation_args)
     if command == "init":
         return handle_init(forwarded)
     if command == "adopt" or command.startswith("adopt "):

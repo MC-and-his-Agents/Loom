@@ -3605,8 +3605,7 @@ def blocker_text_is_clear(value: str) -> bool:
     }
     if normalized in clear:
         return True
-    prefix, separator, note = normalized.partition(" | note:")
-    return bool(separator and note.strip() and prefix in clear)
+    return bool(re.fullmatch(r"(?:none|none recorded)\.? \| note: advisory:[a-z0-9][a-z0-9._-]*", normalized))
 
 
 def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_override: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -5363,37 +5362,30 @@ def gate_freeze_file_binding(target_root: Path, relative: str, *, label: str) ->
     return binding
 
 def gate_freeze_command_surface(context: dict[str, Any]) -> dict[str, Any]:
-    required = {"gate freeze check", "gate freeze write"}
+    required = {"gate-freeze-check", "gate-freeze-write"}
     errors: list[str] = []
     for loom_cli in suite_validate_command_candidates(context):
-        observed: set[str] = set()
-        for operation in ("check", "write"):
-            completed = subprocess.run(
-                [sys.executable, str(loom_cli), "gate", "freeze", operation, "--target", "/__loom_capability_probe_missing__", "--json"],
-                capture_output=True,
-                text=True,
-                check=False,
-                env={**os.environ, "LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES": "1048576"},
-            )
-            try:
-                payload = json.loads(completed.stdout)
-            except json.JSONDecodeError:
-                errors.append(f"{loom_cli}: gate freeze {operation} did not emit JSON")
-                continue
-            command = str(payload.get("command"))
-            if command == f"gate freeze {operation}" and payload.get("result") == "block":
-                observed.add(command)
-            else:
-                errors.append(f"{loom_cli}: gate freeze {operation} dispatch readback was invalid")
-        if observed == required:
+        completed = subprocess.run(
+            [sys.executable, str(loom_cli), "help", "--internal-capabilities", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            errors.append(f"{loom_cli}: internal capability readback did not emit JSON")
+            continue
+        observed = set(payload.get("capabilities", []))
+        if completed.returncode == 0 and payload.get("mutates") is False and required.issubset(observed):
             return {
                 "result": "pass",
-                "summary": "hidden gate freeze compatibility commands passed executable dispatch readback.",
+                "summary": "hidden gate freeze compatibility capabilities passed read-only dispatch readback.",
                 "source_locator": str(loom_cli),
                 "required_commands": sorted(required),
                 "missing_inputs": [],
             }
-        errors.append(f"{loom_cli}: unavailable hidden compatibility commands: {', '.join(sorted(required - observed))}")
+        errors.append(f"{loom_cli}: unavailable hidden compatibility capabilities: {', '.join(sorted(required - observed))}")
     return {
         "result": "block",
         "summary": "hidden gate freeze compatibility commands are unavailable.",

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import argparse
+import contextlib
 import hashlib
 import importlib.util
 import io
@@ -3504,20 +3505,25 @@ def load_loom_flow_module() -> Any:
     return module
 
 
-def internal_cli_matrix() -> dict[str, dict[str, Any]]:
+def load_loom_cli_module() -> Any:
     spec = importlib.util.spec_from_file_location("loom_cli_internal_matrix", LOOM)
     if spec is None or spec.loader is None:
         raise AssertionError("could not load tools/loom.py internal command matrix")
     loom_cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(loom_cli)
+    return loom_cli
+
+
+def internal_cli_matrix() -> dict[str, dict[str, Any]]:
+    loom_cli = load_loom_cli_module()
     return {entry["command"]: entry for entry in loom_cli.internal_command_matrix()}
 
 
 def assert_nonblocking_checkpoint_text_contract() -> None:
     loom_flow = load_loom_flow_module()
     clear_shapes = (
-        "None | note: host metadata is stale but advisory.",
-        "None recorded | note: a detail-only follow-up remains.",
+        "None | note: advisory:host-metadata-stale",
+        "None recorded | note: advisory:detail-follow-up",
         "None recorded.",
     )
     for blockers in clear_shapes:
@@ -3531,6 +3537,8 @@ def assert_nonblocking_checkpoint_text_contract() -> None:
         "Core #270 does not block documentation, but production validation is blocked.",
         "None. Security approval is still required and does not alter product scope.",
         "None. Production is blocked and this does not alter product scope.",
+        "None | note: Security approval is still required",
+        "None | note: production validation is blocked",
         "Security review does not block documentation although production validation is blocked.",
         "Security review does not block documentation.",
         "Waiting for security review.",
@@ -14814,10 +14822,29 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError("public CLI surface must expose 30 commands and 12 protocol owner types")
     if help_payload.get("protocol_type") != public_matrix["help"]["protocol_type"]:
         raise AssertionError("help payload must carry its declared protocol owner type")
+    _, internal_capabilities = run_json(["help", "--internal-capabilities", "--json"], expect=0)
+    if internal_capabilities.get("mutates") is not False or set(internal_capabilities.get("capabilities", [])) != {"gate-freeze-check", "gate-freeze-write"}:
+        raise AssertionError("internal gate-freeze capability readback must be exact and non-mutating")
     for argv, command in ((["version", "--json"], "version"), (["detect", "--target", str(REPO_ROOT), "--json"], "detect")):
         _, payload = run_json(argv, expect=0)
         if payload.get("protocol_type") != public_matrix[command]["protocol_type"]:
             raise AssertionError(f"{command} payload must carry its declared protocol owner type")
+    _, acceptance_payload = run_json(
+        ["acceptance", "resolve", "--story", "invalid-story", "--artifact-id", "1", "--json"]
+    )
+    if acceptance_payload.get("protocol_type") != public_matrix["acceptance resolve"]["protocol_type"]:
+        raise AssertionError("acceptance resolve imported handler must carry its declared protocol owner type")
+    module = load_loom_cli_module()
+    stream = io.StringIO()
+    with contextlib.redirect_stdout(stream):
+        module.emit_imported_main(
+            "attestation readback",
+            lambda _argv: print(json.dumps({"result": "block", "summary": "fixture"})),
+            [],
+        )
+    attestation_payload = json.loads(stream.getvalue())
+    if attestation_payload.get("protocol_type") != public_matrix["attestation readback"]["protocol_type"]:
+        raise AssertionError("attestation imported handler must carry its declared protocol owner type")
     matrix = internal_cli_matrix()
     commands = set(matrix)
     missing = sorted(REQUIRED_COMMANDS - commands)
