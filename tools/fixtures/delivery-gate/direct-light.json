@@ -1,6 +1,6 @@
 {
   "schema_version": "loom-delivery-gate-host-facts/v1",
-  "event": "pull_request",
+  "event": "pull_request_target",
   "repository": {
     "owner": "Example",
     "name": "LightRepo"

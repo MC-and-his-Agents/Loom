@@ -63,6 +63,7 @@ CAUSE_CONTRACTS = {
     "invalid_input": ("governance_metadata", "invalid", "repository", False, "correct the reported reconciliation inputs, then rerun"),
     "gate_enabler_unverified": ("host_service", "unverified", "github", True, "restore the gate-enabler PR and check readback, then rerun"),
     "host_readback_unavailable": ("host_service", "unavailable", "github", True, "rerun after GitHub host readback is available"),
+    "host_enforcement_unavailable": ("host_service", "host_enforcement_unavailable", "github", False, "complete #2063 with a distinct GitHub App before mutating required checks"),
     "required_set_unreadable": ("host_service", "unreadable", "github", True, "restore readable branch protection, then rerun"),
     "required_check_app_conflict": ("governance_metadata", "conflict", "operator", False, "remove the conflicting required-check app binding"),
     "unexpected_required_checks": ("governance_metadata", "unexpected", "operator", False, "declare each required check as retained or legacy"),
@@ -392,6 +393,7 @@ def recovery_command(
     app_id: int,
     legacy_contexts: list[str],
     retained_contexts: list[str],
+    trust_mode: str,
 ) -> str:
     values = [
         "loom", "profile", "light-migration-reconcile",
@@ -399,6 +401,7 @@ def recovery_command(
         "--work-item", str(work_item), "--gate-pr", str(gate_pr),
         "--migration-pr", str(migration_pr), "--context", context,
         "--app-id", str(app_id),
+        "--trust-mode", trust_mode,
     ]
     for value in legacy_contexts:
         values.extend(("--legacy-context", value))
@@ -454,6 +457,7 @@ def _required_set_readback(
     app_id: int,
     legacy_contexts: list[str],
     retained_contexts: list[str],
+    trust_mode: str,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]], list[str]]:
     from delivery_gate import build_required_check_identity, evaluate_required_check_identity
 
@@ -478,6 +482,7 @@ def _required_set_readback(
         protection,
         rules,
         datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        trust_mode=trust_mode,
     )
     return protection, evaluate_required_check_identity(evidence), rules, []
 
@@ -526,6 +531,7 @@ def _attempt_required_set_mutation(
     app_id: int,
     legacy_contexts: list[str],
     retained_contexts: list[str],
+    trust_mode: str,
     *,
     strict: bool,
     before: list[dict[str, Any]],
@@ -536,7 +542,7 @@ def _attempt_required_set_mutation(
         root, repository, branch, strict=strict, checks=desired
     )
     protection, identity, _rules, read_errors = _required_set_readback(
-        root, repository, branch, context, app_id, legacy_contexts, retained_contexts
+        root, repository, branch, context, app_id, legacy_contexts, retained_contexts, trust_mode
     )
     state = _branch_checks(protection or {})
     if state is not None and _checks_key(state[1]) == _checks_key(desired):
@@ -664,7 +670,7 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         path = [item[1] for item in stack]
         if key == "on" and not path and value.startswith("[") and value.endswith("]"):
             triggers.update(item.strip().strip("'\"") for item in value[1:-1].split(","))
-        elif path == ["on"] and key in {"pull_request", "merge_group"}:
+        elif path == ["on"] and key in {"pull_request_target", "merge_group"}:
             triggers.add(key)
         if key == "uses" and len(path) == 2 and path[0] == "jobs":
             pinned = re.fullmatch(
@@ -678,7 +684,7 @@ def _workflow_contract_errors(content: bytes) -> list[str]:
         stack.append((indent, key))
 
     errors: list[str] = []
-    missing = sorted({"pull_request", "merge_group"} - triggers)
+    missing = sorted({"pull_request_target", "merge_group"} - triggers)
     if missing:
         errors.append("delivery workflow is missing active triggers: " + ", ".join(missing))
     if not pinned_jobs:
@@ -814,6 +820,7 @@ def reconcile_payload(
     legacy_contexts: list[str],
     retained_contexts: list[str],
     apply: bool,
+    trust_mode: str = "pull_request_target_same_app",
 ) -> dict[str, Any]:
     operation = "apply" if apply else "dry_run"
     writes: list[dict[str, Any]] = []
@@ -821,7 +828,7 @@ def reconcile_payload(
     recovery = recovery_command(
         target=target, repository=repository, branch=branch, work_item=work_item,
         gate_pr=gate_pr, migration_pr=migration_pr, context=context, app_id=app_id,
-        legacy_contexts=legacy_contexts, retained_contexts=retained_contexts,
+        legacy_contexts=legacy_contexts, retained_contexts=retained_contexts, trust_mode=trust_mode,
     )
     try:
         repository_parts(repository)
@@ -831,13 +838,25 @@ def reconcile_payload(
         return _response("block", "invalid_input", "branch and context must be non-empty; numeric locators must be positive", operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=None, writes=writes)
     if context in legacy_contexts or set(legacy_contexts) & set(retained_contexts):
         return _response("block", "invalid_input", "expected, legacy, and retained contexts must not conflict", operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=None, writes=writes)
+    if trust_mode != "distinct_app_check" or app_id == 15368:
+        return _response(
+            "block",
+            "host_enforcement_unavailable",
+            "light migration cannot mutate required checks until a distinct GitHub App identity is configured",
+            operation=operation,
+            repository=repository,
+            branch=branch,
+            work_item=work_item,
+            next_action="complete #2063, then rerun with --trust-mode distinct_app_check and the distinct app id",
+            writes=writes,
+        )
 
     gate_readback, gate_errors = _gate_pr_readback(target, repository, branch, gate_pr, context, app_id)
     if gate_errors:
         return _response("block", "gate_enabler_unverified", gate_errors[0], operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=recovery, writes=writes, missing_inputs=gate_errors)
 
     protection, identity, rules, read_errors = _required_set_readback(
-        target, repository, branch, context, app_id, legacy_contexts, retained_contexts
+        target, repository, branch, context, app_id, legacy_contexts, retained_contexts, trust_mode
     )
     if read_errors or protection is None or identity is None:
         return _response("block", "host_readback_unavailable", (read_errors or ["required-set readback is incomplete"])[0], operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=recovery, writes=writes, missing_inputs=read_errors)
@@ -894,6 +913,7 @@ def reconcile_payload(
         desired = [*checks, expected]
         outcome, protection, identity, errors, attempt = _attempt_required_set_mutation(
             target, repository, branch, context, app_id, legacy_contexts, retained_contexts,
+            trust_mode,
             strict=strict, before=checks, desired=desired, action="add_delivery_gate_required_check",
         )
         attempts.append(attempt)
@@ -912,6 +932,7 @@ def reconcile_payload(
         desired = [item for item in checks if item["context"] not in legacy_contexts]
         outcome, _protection, _identity, errors, attempt = _attempt_required_set_mutation(
             target, repository, branch, context, app_id, legacy_contexts, retained_contexts,
+            trust_mode,
             strict=strict, before=checks, desired=desired, action="remove_legacy_required_checks",
         )
         attempts.append(attempt)
@@ -922,7 +943,7 @@ def reconcile_payload(
             return _response("partial_apply" if writes else "block", "partial_apply" if writes else "host_write_unchanged", (errors or ["legacy required-check mutation was not applied"])[0], operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=recovery, writes=writes, attempts=attempts, missing_inputs=errors)
         writes.append({**attempt, "contexts": sorted(legacy_contexts)})
 
-    final_protection, identity, _rules, errors = _required_set_readback(target, repository, branch, context, app_id, legacy_contexts, retained_contexts)
+    final_protection, identity, _rules, errors = _required_set_readback(target, repository, branch, context, app_id, legacy_contexts, retained_contexts, trust_mode)
     final_state = _branch_checks(final_protection or {})
     final_bindings = [item for item in final_state[1] if item["context"] == context] if final_state is not None else []
     if final_bindings != [expected]:
@@ -950,6 +971,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--migration-pr", type=int)
     parser.add_argument("--context")
     parser.add_argument("--app-id", type=int)
+    parser.add_argument("--trust-mode", choices=("required_workflow", "distinct_app_check", "pull_request_target_same_app"), default="pull_request_target_same_app")
     parser.add_argument("--legacy-context", action="append", default=[])
     parser.add_argument("--retained-context", action="append", default=[])
     parser.add_argument("--apply", action="store_true")
@@ -977,6 +999,7 @@ def main(argv: list[str]) -> int:
             app_id=args.app_id,
             legacy_contexts=args.legacy_context,
             retained_contexts=args.retained_context,
+            trust_mode=args.trust_mode,
             apply=args.apply,
         )
     print(json.dumps(payload, ensure_ascii=False, indent=2))

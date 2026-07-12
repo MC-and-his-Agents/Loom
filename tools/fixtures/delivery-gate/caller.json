@@ -2,7 +2,7 @@
   "loom_ref": "0123456789abcdef0123456789abcdef01234567",
   "host_facts": {
     "schema_version": "loom-delivery-gate-host-facts/v1",
-    "event": "pull_request",
+    "event": "pull_request_target",
     "repository": {
       "owner": "WebEnvoy",
       "name": "Lode"

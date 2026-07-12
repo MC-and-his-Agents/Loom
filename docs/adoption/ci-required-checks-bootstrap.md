@@ -51,7 +51,7 @@ Loom 不把 workflow 文件存在解释为宿主强制门禁。强制能力仍�
 
 ## Delivery Gate Enforcement 与身份 readback
 
-`loom-delivery-gate` 的 direct `pull_request` 与 `merge_group` 固定以 `enforce` 运行；primary cause 不是 `passed` 时，同名 terminal check 必须失败。gate 从 candidate tree 的 `loom-installed-state/v2` 读取 repository adoption profile；既有 execution-control 仓库可由 `loom-repo-interface/v2` companion 兼容识别。light adoption 无需在 direct-event facts 中手工声明 `profile`，其 forbidden carrier invariant 仍会被强制消费。candidate profile 不可读、installed-state 被删除，或 caller profile 低于 candidate state 时均 fail closed。
+`loom-delivery-gate` 的 base-owned direct `pull_request_target` 与默认分支 `merge_group` 固定以 `enforce` 运行。当前 partial delivery 只在 coordinator 的 run/path/event/head 与 trusted finalizer digest readback 不完整时让 terminal check 失败；读回完整时 compatibility check 成功，但机器结果固定为 `limited` / `host_enforcement_unavailable`，不能作为产品放行。gate 仍从 candidate tree 的 `loom-installed-state/v2` 读取 repository adoption profile；既有 execution-control 仓库可由 `loom-repo-interface/v2` companion 兼容识别。light adoption 无需在 direct-event facts 中手工声明 `profile`。candidate native 结果仅上传为带 `untrusted-` 前缀的诊断 artifact，不参与 terminal verdict；#2063 建立 strong host identity 后，forbidden carrier、profile mismatch 与 native validation 才能进入强制放行语义。
 
 reusable caller 必须显式声明 `host_facts`、与 `uses@SHA` 相同的 `loom_ref`、
 `profile`、`enforcement: advisory|enforce` 与目标仓自己的 `validation_command`。
@@ -66,7 +66,7 @@ direct 被测树出现任何 Git symlink 或 `lstat` symlink 时 fail closed。�
 reusable caller 使用 GitHub readback 的 base/head SHA 建立 caller-owned trusted harness，并只对
 Makefile、`tools` 与 `.github/actions` 等受保护验证路径禁止 symlink。
 这里的“声明”不是 caller 自报 authority：reusable workflow 必须从当前
-`pull_request`/`merge_group` 事件和 GitHub API readback 独立派生 base repository、
+`pull_request_target`/`merge_group` 事件和 GitHub API readback 独立派生 base repository、
 fork-aware head repository、base/head SHA 与 changed paths。caller `host_facts` 缺少
 `change` 不影响派生；若其中自报的 repository/change/event/changed paths 与 host
 readback 冲突，则以单一 host-readback failure 失败，且不得 fallback 到
@@ -109,6 +109,7 @@ python3 tools/read_delivery_gate_required_identity.py \
   --branch main \
   --context 'loom-delivery-gate / loom-delivery-gate' \
   --app-id 15368 \
+  --trust-mode pull_request_target_same_app \
   --retained-context py-compile \
   --legacy-context demo-bootstrap \
   --legacy-context repo-local-cli \
@@ -118,7 +119,31 @@ python3 tools/read_delivery_gate_required_identity.py \
 
 `--context` 与 `--app-id` 都是显式期望值：不能由 workflow 名、caller input 或 Loom 默认值猜测。上例来自 Lode PR #260 的 GitHub check-runs host readback：head `f910392…` 上成功 check 的 display context 是 `loom-delivery-gate / loom-delivery-gate`，app 是 `github-actions`（id `15368`）。切换前应先对目标仓库实际运行的 check-runs 做同样的只读读取，再把观察到的 pair 传给本命令。
 
-该命令同时只读 GitHub branch-protection API 与 `rules/branches/<branch>` 的适用 branch rules。后者由 GitHub 按目标 branch 计算，避免客户端自行猜测 ruleset 的 ref 条件。只有有效 required 集中存在显式 `--context` 与指定 `--app-id` 时才返回 `ready`；app identity 不可读、缺失、API 不可读或 app identity 不匹配一律返回 `blocked`。输出是一次 host readback evidence，不是应提交进仓库的 registry。
+该命令同时只读 GitHub branch-protection API、`rules/branches/<branch>` 的适用
+branch rules 与 Actions workflow id/path/state。后者由 GitHub 按目标 branch 计算，
+避免客户端自行猜测 ruleset 的 ref 条件。信任模式固定为：
+
+- `required_workflow`：当前只能收集诊断，固定为 `limited`；仅有 workflow path、
+  repository/ref/ruleset id 与 workflow id/path/state 仍不能证明当前 run、目标分支和
+  ruleset enforcement 的完整绑定，#2063 完成专用 host adapter 前不得返回 `strong`；
+- `distinct_app_check`：required check 绑定到不同于 GitHub Actions（app id
+  `15368`）的专用 GitHub App，才是 `strong`；
+- `pull_request_target_same_app`：base-owned coordinator 是受限防线，但同一
+  GitHub Actions app 下仍可产生同名 check，因此 verdict 固定为 `limited`，以
+  `host_enforcement_unavailable` 返回 `blocked`。
+
+当前 Loom repo rulesets 为空，org rulesets API 返回“Upgrade to GitHub Team”，且
+repo-level REST rules surface 不提供 required-workflow rule。因此现有计划没有可配置
+的 repo-level required-workflow payload，也没有 distinct App；#2054 必须把此限制
+记录为 blocked，不能把 same-app required context 表述为 stable/strong。输出是一次
+host readback evidence，不是应提交进仓库的 registry。
+
+当前 `pull_request_target` compatibility check 的 conclusion 可以成功，但机器输出固定为
+`assurance: limited`、`trust_verdict: limited` 与
+`host_enforcement: host_enforcement_unavailable`。GitHub branch protection 不消费这些
+workflow outputs，因此该同名 compatibility context 绝不能配置为 required product gate；
+只有 #2063 建立的独立 strong consumer/context 才能放行。当前能力只允许作为 #2046 的
+partial delivery 合入，不满足 #2046 FR closeout 或 #2054 stable release。
 
 `--retained-context` 可重复定义迁移后仍允许的 native 或 release check；默认没有额外保留项，但 `--context` 本身自动保留。`--legacy-context` 可重复提供所有应退役的旧检查。任意 branch-protection 或适用 ruleset 仍要求其中之一时，结果为 `legacy_required_checks_present`，即使新 check 已经出现也不能移除旧治理面。上例中的 `loom-pr-merge-gate` 来自 Lode `main` 的实际适用 ruleset（id `18294167`）。
 

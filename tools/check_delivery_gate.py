@@ -22,6 +22,7 @@ CHECK_WORKFLOW = ROOT / ".github" / "workflows" / "loom-check.yml"
 WORKFLOW_MATRIX = FIXTURES / "workflow-event-matrix.json"
 REUSABLE_AUTHORITY_CASES = FIXTURES / "reusable-authority-cases.json"
 HOST_AUTHORITY_FAILURE_CASES = FIXTURES / "host-authority-failure-cases.json"
+WORKFLOW_SPOOF_CASES = FIXTURES / "workflow-spoof-cases.json"
 SOURCE = ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_gate.py"
 SOURCE_DIR = SOURCE.parent
 IDENTITY_READER = ROOT / "tools" / "read_delivery_gate_required_identity.py"
@@ -207,9 +208,9 @@ def check_evaluator() -> None:
         or any(character not in "0123456789abcdef" for character in caller_ref)
         or not isinstance(expected, dict)
         or expected != {"reusable_mode": True, "loom_source_path": "loom", "candidate_path": "candidate"}
-        or caller.get("host_facts", {}).get("event") != "pull_request"
+        or caller.get("host_facts", {}).get("event") != "pull_request_target"
     ):
-        raise AssertionError("caller fixture must prove a pull_request caller selects pinned Loom and candidate paths")
+        raise AssertionError("caller fixture must prove a pull_request_target caller selects pinned Loom and candidate paths")
     assert_primary_cause(evaluator.finalize_delivery_gate(caller["host_facts"], {"status": "passed"}, "enforce"), "passed", "enforce", "passed")
 
 
@@ -320,7 +321,7 @@ def check_light_profile_host_integration() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-delivery-light-") as raw_tmp:
         root = Path(raw_tmp)
         direct_facts = json.loads((FIXTURES / "direct-light.json").read_text(encoding="utf-8"))
-        if "profile" in direct_facts or direct_facts.get("event") != "pull_request":
+        if "profile" in direct_facts or direct_facts.get("event") != "pull_request_target":
             raise AssertionError("direct-event fixture must not inject a caller profile")
         forbidden = materialize_candidate(root, "light-governance", True)
         clean = materialize_candidate(root, "light-governance", False)
@@ -418,8 +419,73 @@ def check_required_check_identity() -> None:
         observed_at,
     )
     ready = evaluator.evaluate_required_check_identity(valid)
-    if ready["result"] != "ready" or ready["primary_cause"]["id"] != "passed":
-        raise AssertionError("matching GitHub required check and app identity must be ready")
+    if ready["result"] != "blocked" or ready["primary_cause"]["id"] != "host_enforcement_unavailable":
+        raise AssertionError("same-app required context must remain limited because a candidate can spoof its name")
+
+    distinct_protection = json.loads((FIXTURES / "required-check-identity-valid.json").read_text(encoding="utf-8"))
+    distinct_protection["required_status_checks"]["checks"][0]["app_id"] = 424242
+    distinct = evaluator.evaluate_required_check_identity(
+        evaluator.build_required_check_identity(
+            repository,
+            "main",
+            context,
+            424242,
+            [],
+            [],
+            distinct_protection,
+            no_rulesets,
+            observed_at,
+            trust_mode="distinct_app_check",
+        )
+    )
+    if distinct["result"] != "ready" or distinct["identity"]["trust_verdict"] != "strong":
+        raise AssertionError("a required check bound to a distinct GitHub App must be strong")
+
+    for name, app_ids in (("conflicting", [424242, 999]), ("duplicate", [424242, 424242])):
+        ambiguous_protection = json.loads(json.dumps(distinct_protection))
+        ambiguous_protection["required_status_checks"]["checks"] = [
+            {"context": context, "app_id": app_id} for app_id in app_ids
+        ]
+        ambiguous = evaluator.evaluate_required_check_identity(
+            evaluator.build_required_check_identity(
+                repository,
+                "main",
+                context,
+                424242,
+                [],
+                [],
+                ambiguous_protection,
+                no_rulesets,
+                observed_at,
+                trust_mode="distinct_app_check",
+            )
+        )
+        if ambiguous["result"] != "blocked" or ambiguous["primary_cause"]["id"] != "required_check_identity_invalid":
+            raise AssertionError(f"{name} distinct-app bindings must fail closed: {ambiguous}")
+
+    required_workflow = evaluator.evaluate_required_check_identity(
+        evaluator.build_required_check_identity(
+            repository,
+            "main",
+            context,
+            15368,
+            [],
+            [],
+            {},
+            [
+                {
+                    "type": "workflows",
+                    "ruleset_id": 99,
+                    "parameters": {"workflows": [{"path": ".github/workflows/loom-delivery-gate.yml", "ref": "refs/heads/main", "repository_id": 1211191257}]},
+                }
+            ],
+            observed_at,
+            trust_mode="required_workflow",
+            workflow_readback={"id": 123, "path": ".github/workflows/loom-delivery-gate.yml", "state": "active", "enforcement_verified": True},
+        )
+    )
+    if required_workflow["result"] != "blocked" or required_workflow["primary_cause"]["id"] != "host_enforcement_unavailable":
+        raise AssertionError("required workflow proof remains limited until #2063 binds the full host identity")
 
     unknown = evaluator.evaluate_required_check_identity(
         evaluator.build_required_check_identity(
@@ -468,12 +534,13 @@ def check_required_check_identity() -> None:
             repository,
             "main",
             context,
-            15368,
+            424242,
             [],
             [],
             {},
             json.loads((FIXTURES / "required-check-identity-ruleset-expected.json").read_text(encoding="utf-8")),
             observed_at,
+            trust_mode="distinct_app_check",
         )
     )
     if expected_ruleset["result"] != "blocked" or expected_ruleset["primary_cause"]["id"] != "required_check_identity_unknown":
@@ -524,8 +591,8 @@ def check_required_check_identity() -> None:
             observed_at,
         )
     )
-    if retained["result"] != "ready" or retained["primary_cause"]["id"] != "passed":
-        raise AssertionError("explicitly retained native checks must remain allowed")
+    if retained["result"] != "blocked" or retained["primary_cause"]["id"] != "host_enforcement_unavailable":
+        raise AssertionError("retained checks do not upgrade a spoofable same-app delivery context")
 
     unexpected_branch = evaluator.evaluate_required_check_identity(
         evaluator.build_required_check_identity(
@@ -568,10 +635,13 @@ def check_identity_reader_boundary() -> None:
         "check=False",
         "branches/{quote(branch, safe='')}/protection",
         "rules/branches/{quote(branch, safe='')}",
+        "actions/workflows?per_page=100",
         "--repository",
         "--branch",
         "--context",
         "--app-id",
+        "--trust-mode",
+        "--workflow-path",
         "--legacy-context",
         "--retained-context",
         "REPOSITORY_PART",
@@ -595,7 +665,7 @@ def check_workflow() -> None:
     enforcement_block = text.split("      enforcement:\n", 1)[1].split("    outputs:", 1)[0] if "      enforcement:\n" in text else ""
     required = (
         "name: loom-delivery-gate",
-        "pull_request:",
+        "pull_request_target:",
         "merge_group:",
         "workflow_call:",
         "profile:",
@@ -646,7 +716,12 @@ def check_workflow() -> None:
         "authority_ready: ${{ steps.host-facts.outputs.authority_ready }}",
         "needs: plan",
         "needs: [plan, native-validation]",
-        "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}",
+        "actions/upload-artifact@v4",
+        "github.rest.actions.getWorkflowRun",
+        "github.rest.actions.getWorkflow",
+        'workflow.path !== ".github/workflows/loom-delivery-gate.yml"',
+        '"source":"untrusted_raw_artifact_not_consumed"',
+        "name: untrusted-loom-native-validation-${{ github.run_id }}",
         "files.length >= 3000",
         "comparisonFiles.length >= 300",
         "delivery_gate_sha256",
@@ -662,17 +737,20 @@ def check_workflow() -> None:
         'id: "host_authority_unavailable"',
         'failure_domain: "host_service"',
         "failure_envelope:",
+        'core.setOutput("assurance", "limited")',
+        "host_enforcement=host_enforcement_unavailable",
         "core.setOutput(\"failure_envelope\", JSON.stringify(failureEnvelope))",
         "remediation=${failureEnvelope.primary_cause?.remediation_command || \"unavailable\"}",
         "Publish terminal delivery result",
-        'const result = payload?.result || "blocked"',
+        'const result = authenticated ? "limited" : "blocked"',
+        'core.setOutput("compatibility_check_success", authenticated ? "true" : "false")',
+        'core.setOutput("trust_verdict", authenticated ? "limited" : "blocked")',
         "core.setFailed(`loom-delivery-gate blocked: ${cause}`)",
         "continue-on-error: true",
         "group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}",
         "cancel-in-progress: true",
     )
     forbidden = (
-        "pull_request_target",
         "contents: write",
         "pull-requests: write",
         "issues: write",
@@ -728,8 +806,14 @@ def check_workflow() -> None:
         or "SYMLINK_POLICY: ${{ inputs.loom_ref != '' && 'protected' || 'reject' }}" not in native_job
     ):
         raise AssertionError("candidate validation must run in a dependent job through the trusted harness")
-    if "needs: [plan, native-validation]" not in final_job or "NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}" not in final_job:
-        raise AssertionError("trusted finalizer must consume the isolated native job result")
+    if (
+        "needs: [plan, native-validation]" not in final_job
+        or '"status":"command_missing","source":"untrusted_raw_artifact_not_consumed"' not in final_job
+        or "actions/download-artifact@v4" in final_job
+        or "listWorkflowRunArtifacts" in final_job
+        or "listJobsForWorkflowRun" in final_job
+    ):
+        raise AssertionError("trusted finalizer must bind but never consume the untrusted native artifact verdict")
     for step_name in ("Evaluate delivery facts", "Finalize advisory delivery result"):
         block = text.split(f"      - name: {step_name}\n", 1)[1].split("      - name: ", 1)[0]
         if "authority_ready == 'true'" not in block:
@@ -752,26 +836,26 @@ def check_workflow() -> None:
     if missing or present:
         details = [*(f"missing `{item}`" for item in missing), *(f"forbidden `{item}`" for item in present)]
         raise AssertionError("delivery gate workflow contract failed: " + "; ".join(details))
-    script_tail = text.split("          script: |\n", 1)[1]
-    script_lines: list[str] = []
-    for line in script_tail.splitlines():
-        if line and not line.startswith("            "):
-            break
-        script_lines.append(line[12:] if line else "")
-    compiled = subprocess.run(
-        [
-            "node",
-            "-e",
-            "const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor; new AsyncFunction('github','context','core',process.argv[1]);",
-            "\n".join(script_lines),
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if compiled.returncode != 0:
-        raise AssertionError(f"GitHub host-readback script is not valid async JavaScript: {compiled.stderr}")
+    for index, script_tail in enumerate(text.split("          script: |\n")[1:], start=1):
+        script_lines: list[str] = []
+        for line in script_tail.splitlines():
+            if line and not line.startswith("            "):
+                break
+            script_lines.append(line[12:] if line else "")
+        compiled = subprocess.run(
+            [
+                "node",
+                "-e",
+                "const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor; new AsyncFunction('github','context','core',process.argv[1]);",
+                "\n".join(script_lines),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if compiled.returncode != 0:
+            raise AssertionError(f"GitHub script {index} is not valid async JavaScript: {compiled.stderr}")
 
 
 def check_composite_action_contract() -> None:
@@ -858,17 +942,23 @@ def check_trusted_candidate_harness() -> None:
         for tree in (trusted, candidate):
             (tree / "tools" / "fixtures").mkdir(parents=True)
             (tree / "src" / "skills" / "shared" / "scripts").mkdir(parents=True)
-        shutil.copy2(
-            ROOT / "src" / "skills" / "shared" / "scripts" / "native_validation.py",
-            trusted / "src" / "skills" / "shared" / "scripts" / "native_validation.py",
-        )
-        (trusted / "Makefile").write_text(
-            "delivery-gate-check:\n\tpython3 tools/check_probe.py\n",
-            encoding="utf-8",
-        )
-        (candidate / "Makefile").write_text("delivery-gate-check:\n\t@true\n", encoding="utf-8")
-        (trusted / "tools" / "check_probe.py").write_text("raise SystemExit(7)\n", encoding="utf-8")
-        (candidate / "tools" / "check_probe.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+            (tree / ".github" / "workflows").mkdir(parents=True)
+            (tree / "test").mkdir()
+            shutil.copy2(
+                ROOT / "src" / "skills" / "shared" / "scripts" / "native_validation.py",
+                tree / "src" / "skills" / "shared" / "scripts" / "native_validation.py",
+            )
+            for name in ("delivery_gate.py", "failure_envelope.py", "light_profile.py"):
+                (tree / "src" / "skills" / "shared" / "scripts" / name).write_text("# protected fixture\n", encoding="utf-8")
+            (tree / ".github" / "workflows" / "loom-delivery-gate.yml").write_text("name: fixture\n", encoding="utf-8")
+            (tree / "test" / "npm-package-smoke.test.mjs").write_text("// protected fixture\n", encoding="utf-8")
+            for name in ("host_adapter_check.py", "py_compile_clean.py", "read_delivery_gate_required_identity.py", "skills_surface.py", "version_surface_check.py"):
+                (tree / "tools" / name).write_text("# protected fixture\n", encoding="utf-8")
+            (tree / "Makefile").write_text(
+                "delivery-gate-check:\n\tpython3 tools/check_probe.py\n",
+                encoding="utf-8",
+            )
+            (tree / "tools" / "check_probe.py").write_text("raise SystemExit(7)\n", encoding="utf-8")
         completed = subprocess.run(
             [
                 sys.executable,
@@ -886,9 +976,68 @@ def check_trusted_candidate_harness() -> None:
         )
         if completed.returncode == 0 or "Error 7" not in completed.stderr:
             raise AssertionError(
-                "candidate-owned Makefile/checker replaced the trusted harness: "
+                "trusted baseline harness did not control candidate validation: "
                 f"returncode={completed.returncode} stdout={completed.stdout} stderr={completed.stderr}"
             )
+        drift_cases = {
+            "makefile": ("Makefile", "delivery-gate-check:\n\t@true\n"),
+            "checker": ("tools/check_probe.py", "raise SystemExit(0)\n"),
+            "os-exit": ("src/skills/shared/scripts/delivery_gate.py", "import os\nos._exit(0)\n"),
+            "top-level-side-effect": ("src/skills/shared/scripts/light_profile.py", "raise SystemExit(0)\n"),
+        }
+        for name, (relative, content) in drift_cases.items():
+            drifted = root / f"candidate-drift-{name}"
+            shutil.copytree(candidate, drifted)
+            (drifted / relative).write_text(content, encoding="utf-8")
+            rejected = subprocess.run(
+                [
+                    sys.executable,
+                    str(TRUSTED_RUNNER),
+                    "--trusted-root",
+                    str(trusted),
+                    "--candidate-root",
+                    str(drifted),
+                    "--targets-json",
+                    '["delivery-gate-check"]',
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if rejected.returncode != 2 or "protected validation harness drift" not in rejected.stderr:
+                raise AssertionError(f"candidate {name} drift did not fail closed: {rejected.stderr}")
+
+        env_trusted = root / "trusted-env"
+        env_candidate = root / "candidate-env"
+        shutil.copytree(trusted, env_trusted)
+        shutil.copytree(trusted, env_candidate)
+        env_probe = (
+            "import os\n"
+            "for prefix in ('ACTIONS_', 'GITHUB_', 'RUNNER_'):\n"
+            "    assert not any(key.startswith(prefix) for key in os.environ), prefix\n"
+        )
+        for tree in (env_trusted, env_candidate):
+            (tree / "tools" / "check_probe.py").write_text(env_probe, encoding="utf-8")
+        safe_env = os.environ.copy()
+        safe_env.update({"ACTIONS_RUNTIME_TOKEN": "secret", "GITHUB_TOKEN": "secret", "RUNNER_TRACKING_ID": "secret"})
+        stripped = subprocess.run(
+            [
+                sys.executable,
+                str(TRUSTED_RUNNER),
+                "--trusted-root",
+                str(env_trusted),
+                "--candidate-root",
+                str(env_candidate),
+                "--targets-json",
+                '["delivery-gate-check"]',
+            ],
+            env=safe_env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if stripped.returncode != 0:
+            raise AssertionError(f"candidate validation inherited Actions credentials: {stripped.stderr}")
         for relative in ("Makefile", "src", "tools", "tools/fixtures"):
             unsafe = root / f"candidate-{relative.replace('/', '-')}"
             shutil.copytree(candidate, unsafe)
@@ -1054,7 +1203,7 @@ def check_host_authority_failure_cases() -> None:
     if fixture.get("schema_version") != "loom-delivery-gate-host-authority-failure-cases/v1":
         raise AssertionError("host authority failure fixture schema drifted")
     for case in fixture["cases"]:
-        cap = 3000 if case["event"] == "pull_request" else 300
+        cap = 3000 if case["event"] == "pull_request_target" else 300
         authority_ready = (
             case["api_status"] == 200
             and case["authority_fields_complete"]
@@ -1064,6 +1213,21 @@ def check_host_authority_failure_cases() -> None:
         result = "passed_to_evaluator" if authority_ready else "blocked"
         if result != case["expected"] or (not authority_ready and checkout_count != 0):
             raise AssertionError(f"host authority failure case drifted: {case['name']}")
+
+
+def check_workflow_spoof_cases() -> None:
+    fixture = json.loads(WORKFLOW_SPOOF_CASES.read_text(encoding="utf-8"))
+    if fixture.get("schema_version") != "loom-delivery-gate-workflow-spoof-cases/v1":
+        raise AssertionError("workflow spoof fixture schema drifted")
+    for case in fixture["cases"]:
+        if case["coordinator_source"] != "base":
+            verdict = "blocked"
+        elif case["trust_mode"] == "distinct_app_check":
+            verdict = "strong"
+        else:
+            verdict = "limited"
+        if verdict != case["expected"]:
+            raise AssertionError(f"workflow spoof case drifted: {case['name']}: {verdict}")
 
 
 def check_workflow_event_matrix() -> None:
@@ -1076,7 +1240,7 @@ def check_workflow_event_matrix() -> None:
             "push_main": ["py-compile", "demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"],
         },
         "loom-delivery-gate": {
-            "pull_request": "enforce",
+            "pull_request_target": "enforce",
             "merge_group": "enforce",
             "trusted_evaluator": "base_sha_or_pinned_loom_ref",
             "candidate": "isolated_head_tree",
@@ -1130,6 +1294,7 @@ def main() -> int:
     check_trusted_candidate_harness()
     check_reusable_host_authority_cases()
     check_host_authority_failure_cases()
+    check_workflow_spoof_cases()
     check_workflow_event_matrix()
     print("delivery gate contract: OK")
     return 0

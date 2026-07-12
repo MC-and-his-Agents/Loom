@@ -24,6 +24,8 @@ sys.dont_write_bytecode = True
 
 
 def load_evaluator() -> Any:
+    if str(SOURCE.parent) not in sys.path:
+        sys.path.insert(0, str(SOURCE.parent))
     spec = importlib.util.spec_from_file_location("delivery_gate", SOURCE)
     if spec is None or spec.loader is None:
         raise RuntimeError("delivery evaluator is not importable")
@@ -66,12 +68,29 @@ def github_applicable_rulesets(repository: dict[str, str], branch: str) -> tuple
     return github_api_json(endpoint)
 
 
+def github_workflow_readback(repository: dict[str, str], workflow_path: str) -> tuple[object, str | None]:
+    endpoint = f"repos/{repository['owner']}/{repository['name']}/actions/workflows?per_page=100"
+    payload, error = github_api_json(endpoint)
+    if error or not isinstance(payload, dict) or not isinstance(payload.get("workflows"), list):
+        return {}, error or "workflow list readback is malformed"
+    matching = [workflow for workflow in payload["workflows"] if isinstance(workflow, dict) and workflow.get("path") == workflow_path]
+    if len(matching) != 1:
+        return {}, f"expected exactly one workflow at {workflow_path}, observed {len(matching)}"
+    return matching[0], None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", type=parse_repository, required=True)
     parser.add_argument("--branch", required=True)
     parser.add_argument("--context", required=True)
     parser.add_argument("--app-id", type=int, required=True)
+    parser.add_argument(
+        "--trust-mode",
+        choices=("required_workflow", "distinct_app_check", "pull_request_target_same_app"),
+        default="pull_request_target_same_app",
+    )
+    parser.add_argument("--workflow-path", default=".github/workflows/loom-delivery-gate.yml")
     parser.add_argument("--legacy-context", action="append", default=[])
     parser.add_argument("--retained-context", action="append", default=[])
     parser.add_argument("--output", type=Path)
@@ -94,6 +113,11 @@ def main() -> int:
     evaluator = load_evaluator()
     protection, branch_protection_read_error = github_branch_protection(args.repository, args.branch)
     branch_rules, branch_rules_read_error = github_applicable_rulesets(args.repository, args.branch)
+    workflow, workflow_read_error = (
+        github_workflow_readback(args.repository, args.workflow_path)
+        if args.trust_mode == "required_workflow"
+        else (None, None)
+    )
     evidence = evaluator.build_required_check_identity(
         args.repository,
         args.branch,
@@ -106,6 +130,10 @@ def main() -> int:
         datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         branch_protection_read_error,
         branch_rules_read_error,
+        args.trust_mode,
+        args.workflow_path,
+        workflow,
+        workflow_read_error,
     )
     payload = evaluator.evaluate_required_check_identity(evidence)
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)

@@ -1,6 +1,6 @@
 {
   "schema_version": "loom-delivery-gate-host-facts/v1",
-  "event": "workflow_call",
+  "event": "pull_request_target",
   "repository": {
     "owner": "Example",
     "name": "GovernedRepo"

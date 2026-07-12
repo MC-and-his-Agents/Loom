@@ -24,6 +24,16 @@ TRUSTED_TOOL_FILES = (
     "skills_surface.py",
     "version_surface_check.py",
 )
+PROTECTED_HARNESS_FILES = (
+    ".github/workflows/loom-delivery-gate.yml",
+    "Makefile",
+    "src/skills/shared/scripts/delivery_gate.py",
+    "src/skills/shared/scripts/failure_envelope.py",
+    "src/skills/shared/scripts/light_profile.py",
+    "src/skills/shared/scripts/native_validation.py",
+    "test/npm-package-smoke.test.mjs",
+    *tuple(f"tools/{name}" for name in TRUSTED_TOOL_FILES),
+)
 
 
 def ensure_contained_path(root: Path, destination: Path) -> None:
@@ -56,6 +66,38 @@ def replace_path(source: Path, destination: Path, output_root: Path) -> None:
         shutil.copytree(source, destination)
     else:
         shutil.copy2(source, destination)
+
+
+def path_snapshot(path: Path) -> object:
+    if not path.exists():
+        return None
+    if path.is_file():
+        return ("file", path.read_bytes())
+    if path.is_dir():
+        return (
+            "directory",
+            tuple(
+                (str(item.relative_to(path)), item.read_bytes())
+                for item in sorted(path.rglob("*"))
+                if item.is_file()
+            ),
+        )
+    return ("unsupported",)
+
+
+def protected_harness_drift(trusted_root: Path, candidate_root: Path) -> list[str]:
+    protected = set(PROTECTED_HARNESS_FILES)
+    protected.add("tools/fixtures")
+    protected.update(
+        f"tools/{path.name}"
+        for root in (trusted_root, candidate_root)
+        for path in (root / "tools").glob("check_*.py")
+    )
+    return sorted(
+        relative
+        for relative in protected
+        if path_snapshot(trusted_root / relative) != path_snapshot(candidate_root / relative)
+    )
 
 
 def candidate_symlinks(candidate_root: Path, policy: str) -> list[Path]:
@@ -107,6 +149,9 @@ def trusted_overlay(trusted_root: Path, candidate_root: Path, output_root: Path,
     unsafe = candidate_symlinks(candidate_root, symlink_policy)
     if unsafe:
         raise ValueError("candidate tree contains symlinks: " + ", ".join(str(path) for path in unsafe))
+    drift = protected_harness_drift(trusted_root, candidate_root)
+    if drift:
+        raise ValueError("protected validation harness drift requires a base-trusted bootstrap: " + ", ".join(drift))
     shutil.copytree(candidate_root, output_root, symlinks=symlink_policy != "reject")
     replace_path(trusted_root / "Makefile", output_root / "Makefile", output_root)
     trusted_fixtures = trusted_root / "tools" / "fixtures"
@@ -159,10 +204,16 @@ def main() -> int:
         validation_root = Path(temporary) / "candidate"
         try:
             trusted_overlay(trusted_root, candidate_root, validation_root, args.symlink_policy)
+            safe_environment = {
+                key: value
+                for key, value in os.environ.items()
+                if key in {"HOME", "LANG", "LC_ALL", "PATH", "SHELL", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR"}
+            }
+            safe_environment.update({"LOOM_CANDIDATE_VALIDATION": "1", "PYTHONSAFEPATH": "1"})
             completed = subprocess.run(
                 ["make", "-f", str(validation_root / "Makefile"), "--", *targets],
                 cwd=validation_root,
-                env={**os.environ, "PYTHONSAFEPATH": "1"},
+                env=safe_environment,
                 check=False,
             )
         except ValueError as error:

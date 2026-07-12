@@ -1,10 +1,10 @@
 name: loom-delivery-gate
-on: [pull_request, merge_group]
+on: [pull_request_target, merge_group]
 jobs:
   gate:
     uses: MC-and-his-Agents/Loom/.github/workflows/loom-delivery-gate.yml@0717f4db765179e437a214a46886046849c0015b
     with:
-      host_facts: '{"schema_version":"loom-delivery-gate-host-facts/v1","event":"pull_request","repository":{"owner":"owner","name":"repo"},"changed_paths":["src/main.py"]}'
+      host_facts: '{"schema_version":"loom-delivery-gate-host-facts/v1","event":"pull_request_target","repository":{"owner":"owner","name":"repo"},"changed_paths":["src/main.py"]}'
       loom_ref: 0717f4db765179e437a214a46886046849c0015b
       validation_command: >-
         py-compile

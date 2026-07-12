@@ -1,7 +1,7 @@
 {
   "schema_version": "loom-delivery-gate-reusable-authority-cases/v1",
   "observed": {
-    "event": "pull_request",
+    "event": "pull_request_target",
     "repository": {"owner": "base-owner", "name": "base-repo"},
     "change": {
       "base_sha": "1111111111111111111111111111111111111111",

@@ -17,7 +17,7 @@ SCHEMA = "loom-delivery-gate/v1"
 HOST_FACTS_SCHEMA = "loom-delivery-gate-host-facts/v1"
 REQUIRED_CHECK_IDENTITY_SCHEMA = "loom-delivery-gate-required-check-identity/v3"
 REQUIRED_CHECK_IDENTITY_READINESS_SCHEMA = "loom-delivery-gate-required-check-readiness/v3"
-SUPPORTED_EVENTS = {"pull_request", "merge_group", "workflow_call"}
+SUPPORTED_EVENTS = {"pull_request_target", "merge_group"}
 PROFILES = {"light", "standard", "reinforced"}
 PROFILE_ORDER = {"light": 0, "standard": 1, "reinforced": 2}
 ADOPTION_PROFILES = {
@@ -257,6 +257,15 @@ IDENTITY_CAUSES = {
         "retryable": False,
         "remediation_command": "declare or remove the unexpected required checks in GitHub branch controls",
     },
+    "host_enforcement_unavailable": {
+        "failure_domain": "host_service",
+        "code": "host_enforcement_unavailable",
+        "locator": "required_check_identity:host_enforcement_unavailable",
+        "summary": "GitHub host enforcement cannot distinguish the trusted delivery gate from a spoofed same-app context.",
+        "owner": "operator",
+        "retryable": False,
+        "remediation_command": "configure a required workflow/path or a distinct GitHub App check identity",
+    },
     "passed": {
         "failure_domain": "governance_metadata",
         "code": "passed",
@@ -490,7 +499,7 @@ def evaluate_host_facts(
     )
     event = facts.get("event")
     if event not in SUPPORTED_EVENTS:
-        host_errors.append("event must be pull_request, merge_group, or workflow_call")
+        host_errors.append("event must be pull_request_target or merge_group")
     repository = facts.get("repository")
     if not isinstance(repository, dict) or not all(isinstance(repository.get(key), str) and repository[key] for key in ("owner", "name")):
         host_errors.append("repository.owner and repository.name are required")
@@ -620,6 +629,11 @@ def build_required_check_identity(
     observed_at: str,
     branch_protection_read_error: str | None = None,
     branch_rules_read_error: str | None = None,
+    trust_mode: str = "pull_request_target_same_app",
+    expected_workflow_path: str = ".github/workflows/loom-delivery-gate.yml",
+    workflow_readback: object = None,
+    workflow_read_error: str | None = None,
+    github_actions_app_id: int = 15368,
 ) -> dict[str, Any]:
     """Normalize effective required checks from GitHub branch protection and applicable rulesets."""
 
@@ -645,10 +659,28 @@ def build_required_check_identity(
                 branch_protection_checks.append({"context": check["context"], "app_id": check["app_id"], "plane": "branch_protection"})
 
     ruleset_checks: list[dict[str, Any]] = []
+    required_workflows: list[dict[str, Any]] = []
     if not isinstance(branch_rules, list):
         errors.append("applicable branch rules readback must be a list")
     else:
         for rule in branch_rules:
+            if isinstance(rule, dict) and rule.get("type") in {"workflows", "required_workflows"}:
+                parameters = rule.get("parameters")
+                workflows = parameters.get("workflows") if isinstance(parameters, dict) else None
+                if not isinstance(workflows, list):
+                    errors.append("applicable required-workflow rules must expose workflows as a list")
+                else:
+                    for workflow in workflows:
+                        if isinstance(workflow, dict) and isinstance(workflow.get("path"), str):
+                            required_workflows.append(
+                                {
+                                    "path": workflow["path"],
+                                    "ref": workflow.get("ref"),
+                                    "repository_id": workflow.get("repository_id"),
+                                    "ruleset_id": rule.get("ruleset_id"),
+                                }
+                            )
+                continue
             if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
                 continue
             parameters = rule.get("parameters")
@@ -675,6 +707,11 @@ def build_required_check_identity(
         "branch": branch,
         "observed_at": observed_at,
         "required_check": {"context": expected_context, "app_id": expected_app_id},
+        "trust_mode": trust_mode,
+        "github_actions_app_id": github_actions_app_id,
+        "expected_workflow_path": expected_workflow_path,
+        "workflow_readback": workflow_readback,
+        "required_workflows": required_workflows,
         "legacy_contexts": legacy_contexts,
         "retained_contexts": retained_contexts,
         "branch_protection_checks": branch_protection_checks,
@@ -683,6 +720,7 @@ def build_required_check_identity(
         "host_read_errors": {
             "branch_protection": branch_protection_read_error,
             "applicable_rulesets": branch_rules_read_error,
+            "workflow": workflow_read_error,
         },
     }
 
@@ -714,6 +752,25 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
     ):
         errors.append("required_check must name a non-empty context and a positive expected app_id")
         required_check = {"context": None, "app_id": None}
+    trust_mode = value.get("trust_mode")
+    if trust_mode not in {"required_workflow", "distinct_app_check", "pull_request_target_same_app"}:
+        errors.append("trust_mode must be required_workflow, distinct_app_check, or pull_request_target_same_app")
+    github_actions_app_id = value.get("github_actions_app_id")
+    if not isinstance(github_actions_app_id, int) or github_actions_app_id <= 0:
+        errors.append("github_actions_app_id must be a positive integer")
+        github_actions_app_id = 15368
+    expected_workflow_path = value.get("expected_workflow_path")
+    if not isinstance(expected_workflow_path, str) or not expected_workflow_path.startswith(".github/workflows/"):
+        errors.append("expected_workflow_path must identify a repository workflow")
+        expected_workflow_path = None
+    workflow_readback = value.get("workflow_readback")
+    if workflow_readback is not None and not isinstance(workflow_readback, dict):
+        errors.append("workflow_readback must be an object when present")
+        workflow_readback = None
+    required_workflows = value.get("required_workflows")
+    if not isinstance(required_workflows, list):
+        errors.append("required_workflows must be a list")
+        required_workflows = []
     legacy_contexts = value.get("legacy_contexts")
     retained_contexts = value.get("retained_contexts")
     if not isinstance(legacy_contexts, list) or any(not isinstance(context, str) or not context.strip() for context in legacy_contexts):
@@ -745,12 +802,17 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
     host_read_errors = value.get("host_read_errors")
     if not isinstance(host_read_errors, dict) or any(
         key not in host_read_errors or host_read_errors[key] is not None and not isinstance(host_read_errors[key], str)
-        for key in ("branch_protection", "applicable_rulesets")
+        for key in ("branch_protection", "applicable_rulesets", "workflow")
     ):
         errors.append("host_read_errors must describe branch protection and applicable rulesets")
         host_read_errors = {}
 
     expected_context = required_check["context"]
+    branch_context_checks = [
+        item
+        for item in branch_protection_checks
+        if isinstance(item, dict) and item.get("context") == expected_context
+    ]
     matching_app_ids = [item.get("app_id") for item in checks if isinstance(item, dict) and item.get("context") == expected_context]
     matching_known_app_ids = [app_id for app_id in matching_app_ids if isinstance(app_id, int) and app_id > 0]
     matching_app_identity_unavailable = any(app_id is None for app_id in matching_app_ids)
@@ -773,10 +835,23 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
         cause_id = "legacy_required_checks_present"
     elif unexpected_required_checks:
         cause_id = "unexpected_required_checks_present"
+    elif trust_mode == "required_workflow":
+        cause_id = "host_enforcement_unavailable"
+    elif trust_mode == "distinct_app_check":
+        if (
+            len(branch_context_checks) == 1
+            and branch_context_checks[0].get("app_id") == required_check["app_id"]
+            and required_check["app_id"] != github_actions_app_id
+        ):
+            cause_id = "passed"
+        elif matching_app_identity_unavailable and not branch_context_checks:
+            cause_id = "required_check_identity_unknown"
+        else:
+            cause_id = "required_check_identity_invalid"
     elif not matching_app_ids:
         cause_id = "required_check_identity_unknown"
     elif required_check["app_id"] in matching_known_app_ids:
-        cause_id = "passed"
+        cause_id = "host_enforcement_unavailable"
     elif matching_app_identity_unavailable:
         cause_id = "required_check_identity_unknown"
     else:
@@ -799,6 +874,11 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
             "legacy_required_checks": legacy_required_checks,
             "retained_contexts": sorted(allowed_contexts),
             "unexpected_required_checks": unexpected_required_checks,
+            "trust_mode": trust_mode,
+            "trust_verdict": "strong" if cause_id == "passed" else ("limited" if cause_id == "host_enforcement_unavailable" else "blocked"),
+            "expected_workflow_path": expected_workflow_path,
+            "required_workflows": required_workflows,
+            "workflow_readback": workflow_readback,
         },
         "input_errors": errors,
     }

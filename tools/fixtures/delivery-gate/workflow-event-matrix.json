@@ -6,7 +6,7 @@
     "push_main": ["py-compile", "demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"]
   },
   "loom-delivery-gate": {
-    "pull_request": "enforce",
+    "pull_request_target": "enforce",
     "merge_group": "enforce",
     "trusted_evaluator": "base_sha_or_pinned_loom_ref",
     "candidate": "isolated_head_tree"
