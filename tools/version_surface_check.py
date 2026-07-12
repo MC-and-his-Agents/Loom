@@ -11,7 +11,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 AUTHORITY_MAP = ROOT / "docs" / "adoption" / "version-authority-map.md"
 PLUGIN_MANIFEST = ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
-INSTALLER_PACKAGE = ROOT / "packages" / "loom-installer" / "package.json"
 REPO_VERSION = ROOT / "VERSION"
 SKILLS_REGISTRY = ROOT / "skills" / "registry.json"
 PLUGIN_SKILLS_REGISTRY = ROOT / "plugins" / "loom" / "skills" / "registry.json"
@@ -86,14 +85,13 @@ def main() -> int:
             errors.append("plugin_surface_version must equal plugin manifest version")
 
     repo_version = REPO_VERSION.read_text(encoding="utf-8").strip()
-    installer_version = read_json(INSTALLER_PACKAGE).get("version")
     registry = read_json(SKILLS_REGISTRY)
     registry_version = registry.get("registry_version")
     plugin_registry = read_json(PLUGIN_SKILLS_REGISTRY)
     if not repo_version.startswith("v"):
         errors.append("repo VERSION must use v-prefixed release candidate syntax")
-    if not installer_version:
-        errors.append("installer package version is missing")
+    if (ROOT / "packages" / "loom-installer").exists():
+        errors.append("retired installer tombstone must be absent from the source tree")
     if not registry_version:
         errors.append("skills registry_version is missing")
     package_version = read_json(ROOT / "package.json").get("version")

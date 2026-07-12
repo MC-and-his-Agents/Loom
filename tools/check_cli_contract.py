@@ -3504,6 +3504,15 @@ def load_loom_flow_module() -> Any:
     return module
 
 
+def internal_cli_matrix() -> dict[str, dict[str, Any]]:
+    spec = importlib.util.spec_from_file_location("loom_cli_internal_matrix", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py internal command matrix")
+    loom_cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loom_cli)
+    return {entry["command"]: entry for entry in loom_cli.internal_command_matrix()}
+
+
 def assert_nonblocking_checkpoint_text_contract() -> None:
     loom_flow = load_loom_flow_module()
     clear_shapes = (
@@ -13117,7 +13126,7 @@ def assert_suite_carrier_aggregate_fixtures(tmp: Path) -> None:
 
 def assert_governance_closeout_help_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
-    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    matrix = internal_cli_matrix()
     routes = {entry["task"]: entry for entry in help_payload.get("task_routes", [])}
     tiers = help_payload.get("command_tiers", {})
     for command in ("reconcile", "gate closeout", "closeout", "closeout queue status"):
@@ -13480,7 +13489,7 @@ def run_work_item_audit_surface() -> None:
 
 def run_release_readback_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
-    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    matrix = internal_cli_matrix()
     for command in ("release readback", "release resume"):
         if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
             raise AssertionError(f"{command} must be declared as an implemented delivery command")
@@ -14793,7 +14802,10 @@ def run_aggregate_cli_contract() -> None:
     assert_pr_metadata_wrapper_argument_contract()
     loom_flow = load_loom_flow_module()
     _, help_payload = run_json(["help", "--json"], expect=0)
-    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    public_matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    if len(public_matrix) != 30 or help_payload.get("protocol_type_count") != 12:
+        raise AssertionError("public CLI surface must expose 30 commands and 12 protocol owner types")
+    matrix = internal_cli_matrix()
     commands = set(matrix)
     missing = sorted(REQUIRED_COMMANDS - commands)
     if missing:
@@ -16420,7 +16432,7 @@ def run_aggregate_cli_contract() -> None:
 
 def run_suite_evidence_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
-    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    matrix = internal_cli_matrix()
     for command, source_issue in (
         ("suite evidence inspect", "#1127"),
         ("suite evidence scaffold", "#1129"),
@@ -16437,7 +16449,7 @@ def run_suite_evidence_surface() -> None:
 
 def run_suite_carrier_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
-    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    matrix = internal_cli_matrix()
     for command, source_issue in (
         ("suite carrier inspect", "#1131"),
         ("suite carrier validate", "#1131"),
@@ -16453,7 +16465,7 @@ def run_suite_carrier_surface() -> None:
 
 def run_suite_contract_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
-    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    matrix = internal_cli_matrix()
     for command, source_issue in (
         ("suite inspect", "#1111"),
         ("suite scaffold", "#1114"),

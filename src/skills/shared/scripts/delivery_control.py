@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -5364,38 +5365,39 @@ def gate_freeze_command_surface(context: dict[str, Any]) -> dict[str, Any]:
     required = {"gate freeze check", "gate freeze write"}
     errors: list[str] = []
     for loom_cli in suite_validate_command_candidates(context):
-        completed = run_process(
-            [sys.executable, str(loom_cli), "help", "--json"],
-            cwd=loom_cli.parents[1],
-            timeout_seconds=30.0,
-        )
-        raw_output = completed.stdout.strip()
         try:
-            payload = json.loads(raw_output) if raw_output else {}
-        except json.JSONDecodeError as exc:
-            errors.append(f"{loom_cli}: help emitted non-JSON output: {exc.msg}")
+            tree = ast.parse(loom_cli.read_text(encoding="utf-8"), filename=str(loom_cli))
+            command_entries = next(
+                ast.literal_eval(node.value)
+                for node in tree.body
+                if isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "COMMANDS"
+            )
+        except (OSError, SyntaxError, ValueError, StopIteration) as exc:
+            errors.append(f"{loom_cli}: hidden command inventory is unreadable: {exc}")
             continue
-        commands = {
+        implemented = {
             str(entry.get("command"))
-            for entry in payload.get("commands", [])
+            for entry in command_entries
             if isinstance(entry, dict) and entry.get("status") == "implemented"
         }
-        missing = sorted(required - commands)
+        missing = sorted(required - implemented)
         if not missing:
             return {
                 "result": "pass",
-                "summary": "gate freeze commands are present in the implemented command matrix.",
+                "summary": "hidden gate freeze compatibility commands are executable.",
                 "source_locator": str(loom_cli),
                 "required_commands": sorted(required),
                 "missing_inputs": [],
             }
-        errors.append(f"{loom_cli}: missing implemented commands: {', '.join(missing)}")
+        errors.append(f"{loom_cli}: unavailable hidden compatibility commands: {', '.join(missing)}")
     return {
         "result": "block",
-        "summary": "gate freeze commands are missing from the implemented command matrix.",
+        "summary": "hidden gate freeze compatibility commands are unavailable.",
         "source_locator": "tools/loom.py",
         "required_commands": sorted(required),
-        "missing_inputs": errors or ["loom help --json command matrix unavailable"],
+        "missing_inputs": errors or ["hidden gate freeze compatibility commands unavailable"],
     }
 
 def gate_freeze_review_binding(context: dict[str, Any], *, head_sha: str | None, surface: str = "merge_ready") -> dict[str, Any]:

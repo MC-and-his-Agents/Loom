@@ -30,6 +30,16 @@ Inside the Loom source checkout, maintainers may also run
 `python3 tools/loom.py help --json` as a local development entrypoint. Downstream
 operators should use the global `loom` CLI.
 
+As of v0.30, that public matrix contains exactly 30 implemented entries. Older
+leaf commands remain hidden compatibility decoders only and expire no later
+than v0.31.0; they are not separate product capabilities, schemas, or default
+recommendations. The public machine protocol is owned by 12 generic types:
+manifest, locator, observation, delivery verdict, product acceptance,
+reconciliation verdict, review attestation, host attestation, failure envelope,
+migration plan, release judgment, and readback. Historical `loom-*/vN` values
+may still be decoded during the compatibility window, but are not public type
+owners.
+
 ## Output Contract
 
 Supported agent-facing commands default to context-safe stdout. `loom ... --json`
