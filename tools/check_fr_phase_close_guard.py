@@ -92,6 +92,7 @@ def main() -> int:
     pr = {
         "number": 31,
         "merged": True,
+        "merged_at": "2026-07-11T00:02:30Z",
         "base_ref": "main",
         "head_sha": "a" * 40,
         "merge_commit": "b" * 40,
@@ -134,10 +135,11 @@ def main() -> int:
     retried_checks = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "FAILURE", "contexts_complete": True, "contexts": [
         {"type": "CheckRun", "name": "loom-pr-merge-gate", "status": "COMPLETED", "conclusion": "FAILURE", "completed_at": "2026-07-11T00:00:00Z"},
         {"type": "CheckRun", "name": "loom-pr-merge-gate", "status": "COMPLETED", "conclusion": "SUCCESS", "completed_at": "2026-07-11T00:02:00Z"},
+        {"type": "CheckRun", "name": "loom-pr-merge-gate", "status": "COMPLETED", "conclusion": "FAILURE", "completed_at": "2026-07-11T00:03:00Z"},
         {"type": "CheckRun", "name": "optional-demo", "status": "COMPLETED", "conclusion": "FAILURE", "completed_at": "2026-07-11T00:03:00Z"},
     ]}}])
     if module.evaluate_closure(snapshot(1, [phase, fr, retried_checks]), host_resolved=True).get("verdict") != "allow_completed_close":
-        raise AssertionError("latest successful delivery check attempt must supersede stale failures and unrelated optional checks")
+        raise AssertionError("latest pre-merge successful delivery attempt must supersede stale failures, post-merge checks, and unrelated optional checks")
     skipped_optional = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "SUCCESS", "contexts_complete": True, "contexts": [*pr["check_rollup"]["contexts"], {"type": "CheckRun", "status": "COMPLETED", "conclusion": "SKIPPED"}]}}])
     if module.evaluate_closure(snapshot(1, [phase, fr, skipped_optional]), host_resolved=True).get("verdict") != "allow_completed_close":
         raise AssertionError("a successful aggregate rollup must allow intentionally skipped optional checks")
