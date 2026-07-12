@@ -1239,7 +1239,7 @@ def check_workflow_event_matrix() -> None:
         "loom-check": {
             "pull_request": ["py-compile"],
             "merge_group": ["py-compile"],
-            "push_main": ["py-compile", "demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"],
+            "push_main": ["py-compile", "host-native-lifecycle"],
         },
         "loom-delivery-gate": {
             "pull_request_target": "enforce",
@@ -1262,7 +1262,7 @@ def check_workflow_event_matrix() -> None:
     missing = [needle for needle in required if needle not in text]
     if missing:
         raise AssertionError("loom-check event contract missing: " + ", ".join(missing))
-    job_names = ["demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"]
+    job_names = ["host-native-lifecycle"]
     for name in job_names:
         start = text.index(f"  {name}:\n")
         following = [text.find(f"  {other}:\n", start + 1) for other in ["py-compile", *job_names]]
@@ -1278,6 +1278,10 @@ def check_workflow_event_matrix() -> None:
     delivery = WORKFLOW.read_text(encoding="utf-8")
     if "\n  push:\n" in delivery or "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}" not in delivery:
         raise AssertionError("delivery gate must enforce direct PR/merge-group events without a duplicate push run")
+    release = (ROOT / ".github" / "workflows" / "loom-cli-release.yml").read_text(encoding="utf-8")
+    cli_step = release[release.index("      - name: Check CLI contract") : release.index("      - name: Check npm package contract")]
+    if "if: ${{ github.event_name != 'pull_request' }}" not in cli_step:
+        raise AssertionError("feature pull requests must not repeat the full CLI aggregate in release judgment")
     for workflow in (ROOT / ".github" / "workflows").glob("*.yml"):
         workflow_text = workflow.read_text(encoding="utf-8")
         if "\n  push:\n" in workflow_text and "\n    branches:\n      - main\n" not in workflow_text:

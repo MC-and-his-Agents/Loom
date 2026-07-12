@@ -454,8 +454,8 @@ def main() -> int:
         ROOT / "skills" / "shared" / "scripts" / "light_profile.py",
         ROOT / "plugins" / "loom" / "skills" / "shared" / "scripts" / "light_profile.py",
     ]
-    if any(not path.is_file() or path.read_bytes() != SOURCE.read_bytes() for path in copies):
-        raise AssertionError("light-profile evaluator distribution copies drifted")
+    if any(path.exists() for path in copies):
+        raise AssertionError("light-profile evaluator must remain canonical-source only")
     if (ROOT / ".loom" / "bin" / "light_profile.py").exists():
         raise AssertionError("light-profile evaluator must not become a repo-local runtime carrier")
     with tempfile.TemporaryDirectory(prefix="loom-light-profile-") as raw_tmp:
