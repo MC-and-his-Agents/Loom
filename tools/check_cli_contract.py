@@ -13259,7 +13259,73 @@ def run_runtime_paths_surface() -> None:
     print("runtime path resolver checks passed")
 
 
+def assert_subprocess_argv_boundary_contract() -> None:
+    spec = importlib.util.spec_from_file_location("loom_cli_argv_contract", LOOM)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load tools/loom.py for subprocess argv regression")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    observed: list[list[str]] = []
+    original_run = module.subprocess.run
+
+    def fake_run(args, **_kwargs):
+        observed.append(list(args))
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps({"result": "pass"}), stderr="")
+
+    module.subprocess.run = fake_run
+    try:
+        module.run_capture(["fixture", Path("relative/path"), 1288])
+        module.flow_payload(
+            "controlled merge argv fixture",
+            ["controlled-merge", "check", "--pr", 1288, "--issue", 2042],
+            fallback_to=["fixture"],
+        )
+        module.flow_payload(
+            "runtime upgrade argv fixture",
+            ["pr-metadata", "render", "--issue", 2042, "--pr", 1288],
+            fallback_to=["fixture"],
+        )
+    finally:
+        module.subprocess.run = original_run
+
+    if observed[0] != ["fixture", "relative/path", "1288"]:
+        raise AssertionError(f"run_capture did not normalize int/path argv: {observed[0]}")
+    for argv in observed[1:]:
+        if not all(isinstance(value, str) for value in argv):
+            raise AssertionError(f"flow_payload leaked non-string argv: {argv}")
+    if not any("1288" in argv and "2042" in argv for argv in observed[1:]):
+        raise AssertionError("controlled-merge/runtime-upgrade numeric issue and PR values were not preserved")
+
+    runtime_args = module.runtime_upgrade_pr_metadata_flow_args(
+        argparse.Namespace(
+            branch="work/2042-host-default",
+            head_sha="a" * 40,
+            pr=None,
+            item="WI-2042",
+            issue=2042,
+            base_body_file=None,
+        ),
+        REPO_ROOT,
+        action="render",
+        surface="merge_ready",
+        pr="1288",
+    )
+    if not all(isinstance(value, str) for value in runtime_args) or runtime_args[runtime_args.index("--issue") + 1] != "2042":
+        raise AssertionError(f"runtime-upgrade flow args did not preserve a numeric issue as string argv: {runtime_args}")
+
+    for invalid in (None, True, 1.5, {}, [], object()):
+        try:
+            module.normalize_subprocess_argv(["fixture", invalid])
+        except TypeError as exc:
+            if "argv[1]" not in str(exc):
+                raise AssertionError(f"invalid argv rejection did not identify its index: {exc}") from exc
+        else:
+            raise AssertionError(f"unsupported argv value was silently accepted: {invalid!r}")
+
+
 def run_merge_wrapper_surface() -> None:
+    assert_subprocess_argv_boundary_contract()
     run_host_default_lifecycle_contract()
     with tempfile.TemporaryDirectory(prefix="loom-merge-wrapper-") as raw_tmp:
         assert_controlled_merge_triggered_check_rollup_contract(Path(raw_tmp))
@@ -13764,6 +13830,7 @@ def run_plain_cli(args: list[str]) -> str:
 
 
 def run_runtime_upgrade_surface() -> None:
+    assert_subprocess_argv_boundary_contract()
     short_version = run_plain_cli(["-v"])
     long_version = run_plain_cli(["--version"])
     if not short_version or short_version != long_version:

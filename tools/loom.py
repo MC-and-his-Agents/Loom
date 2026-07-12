@@ -2596,10 +2596,41 @@ def closeout_current_pr_input(args: argparse.Namespace) -> int | None:
     return getattr(args, "pr", None)
 
 
-def run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+def normalize_subprocess_argv(args: list[object] | tuple[object, ...]) -> list[str]:
+    """Normalize supported CLI argv scalars and reject ambiguous internal values."""
+    normalized: list[str] = []
+    for index, value in enumerate(args):
+        if value is None or isinstance(value, bool):
+            raise TypeError(f"subprocess argv[{index}] must not be {type(value).__name__}")
+        if isinstance(value, str):
+            normalized.append(value)
+            continue
+        if isinstance(value, int):
+            normalized.append(str(value))
+            continue
+        if isinstance(value, os.PathLike):
+            path_value = os.fspath(value)
+            normalized.append(os.fsdecode(path_value) if isinstance(path_value, bytes) else path_value)
+            continue
+        raise TypeError(
+            f"subprocess argv[{index}] has unsupported type {type(value).__name__}; "
+            "expected str, int, or os.PathLike"
+        )
+    return normalized
+
+
+def run_capture(args: list[object] | tuple[object, ...], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    return subprocess.run(args, cwd=cwd, env=env, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.run(
+        normalize_subprocess_argv(args),
+        cwd=cwd,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
 
 def parse_json_or_block(command: str, completed: subprocess.CompletedProcess[str], *, failed_layer: str, fallback_to: list[str]) -> dict[str, Any]:
