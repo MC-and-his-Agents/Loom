@@ -48,6 +48,7 @@ MAX_RECORD_BYTES = 1024 * 1024
 MAX_EVIDENCE_ROWS = 20
 MAX_COMPONENTS_PER_ROW = 20
 MAX_UNIQUE_COMPONENTS = 50
+HOST_TIMESTAMP_PRECISION_TOLERANCE = timedelta(seconds=1)
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 COMPONENT_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?/[A-Za-z0-9_.-]+$")
 CLASS_REQUIRED_ACTIONS = {
@@ -105,7 +106,12 @@ def evidence_errors(
     if observed_at is not None and host_binding is not None:
         run_started_at = parse_time(host_binding.get("run_started_at"))
         artifact_created_at = parse_time(host_binding.get("artifact_created_at"))
-        if run_started_at is None or artifact_created_at is None or observed_at < run_started_at or observed_at > artifact_created_at:
+        if (
+            run_started_at is None
+            or artifact_created_at is None
+            or observed_at < run_started_at - HOST_TIMESTAMP_PRECISION_TOLERANCE
+            or observed_at > artifact_created_at + HOST_TIMESTAMP_PRECISION_TOLERANCE
+        ):
             errors.append("observed_at is outside the authenticated workflow run and artifact time window")
     run_id = evidence.get("run_id")
     if host_binding is None:

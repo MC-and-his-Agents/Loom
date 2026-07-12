@@ -9,7 +9,7 @@ import io
 import json
 import sys
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +105,17 @@ def main() -> int:
     self_bound = resolve(adapter, self_bound_record)
     if self_bound["result"] != "pass" or self_bound["host_facts"]["artifact_locator"] != "MC-and-his-Agents/Loom/artifact/7":
         raise AssertionError("workflow-authored self artifact reference did not resolve to authenticated host facts")
+    precision_boundary = fixture("passed-live-readonly.json")
+    precision_boundary["evidence"][0]["observed_at"] = (
+        datetime(2026, 7, 11, 0, 1, tzinfo=timezone.utc) + timedelta(microseconds=999999)
+    ).isoformat().replace("+00:00", "Z")
+    if resolve(adapter, precision_boundary)["result"] != "pass":
+        raise AssertionError("GitHub second-precision artifact timestamps must tolerate same-second evidence microseconds")
+    outside_precision = fixture("passed-live-readonly.json")
+    outside_precision["evidence"][0]["observed_at"] = "2026-07-11T00:01:01.000001Z"
+    outside_result = resolve(adapter, outside_precision)
+    if outside_result["result"] != "block" or "outside the authenticated workflow run" not in outside_result["missing_inputs"][0]:
+        raise AssertionError("host timestamp tolerance must remain bounded to one second")
     for name in ("fixture-insufficient.json", "blocked-write-boundary.json", "stale-live-readonly.json"):
         assert_result(resolve(adapter, fixture(name)), outcome="block", verdict="blocked")
     waived = fixture("waived.json")
