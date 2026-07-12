@@ -205,20 +205,22 @@ def generate_surface(source_root: Path = SOURCE_ROOT, target_root: Path = TARGET
         shutil.rmtree(staging, ignore_errors=True)
 
 
-def comparable_files(root: Path) -> list[Path]:
+def comparable_files(root: Path, *, include_python: bool = True) -> list[Path]:
     files: list[Path] = []
     for path in root.rglob("*"):
         if should_ignore(path):
+            continue
+        if not include_python and path.suffix == ".py":
             continue
         if path.is_file():
             files.append(path.relative_to(root))
     return sorted(files)
 
 
-def compare_trees(expected: Path, actual: Path) -> list[str]:
+def compare_trees(expected: Path, actual: Path, *, include_python: bool = True) -> list[str]:
     errors: list[str] = []
-    expected_files = comparable_files(expected)
-    actual_files = comparable_files(actual)
+    expected_files = comparable_files(expected, include_python=include_python)
+    actual_files = comparable_files(actual, include_python=include_python)
     if expected_files != actual_files:
         missing = sorted(set(expected_files) - set(actual_files))
         extra = sorted(set(actual_files) - set(expected_files))
@@ -321,10 +323,11 @@ def validate_reference_copy_parity(source_root: Path, package_root: Path, runtim
 
 def check_reference_integrity_surface() -> None:
     errors: list[str] = []
-    errors.extend(compare_source_install_runtime_parity(SOURCE_ROOT, TARGET_ROOT))
-    errors.extend(compare_source_install_runtime_parity(SOURCE_ROOT, PLUGIN_SKILLS_ROOT))
-    errors.extend(assert_no_package_external_links(TARGET_ROOT, TARGET_ROOT))
-    errors.extend(assert_no_package_external_links(PLUGIN_SKILLS_ROOT, PLUGIN_SKILLS_ROOT))
+    with tempfile.TemporaryDirectory(prefix="loom-reference-integrity-") as tmp:
+        generated = Path(tmp) / "skills"
+        generate_surface(SOURCE_ROOT, generated)
+        errors.extend(compare_source_install_runtime_parity(SOURCE_ROOT, generated))
+        errors.extend(assert_no_package_external_links(generated, generated))
 
     if errors:
         raise SurfaceFailure(
@@ -420,10 +423,14 @@ def run_launcher_smoke(package_root: Path, skill_id: str) -> list[str]:
     contract = read_json(package_root / "contract.json")
     launcher_value = skill_launcher(contract)
     launcher = package_root / str(launcher_value)
-    evidence_locator = f"{package_root.relative_to(REPO_ROOT).as_posix()}/contract.json"
+    try:
+        package_display = package_root.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        package_display = f"generated/{skill_id}"
+    evidence_locator = f"{package_display}/contract.json"
     if isinstance(launcher_value, str) and launcher_value:
-        evidence_locator += f"; {(package_root / launcher_value).relative_to(REPO_ROOT).as_posix()}"
-    detail_prefix = f"skill={skill_id} plugin_payload={package_root.parent.relative_to(REPO_ROOT).as_posix()} evidence_locator={evidence_locator}"
+        evidence_locator += f"; {package_display}/{launcher_value}"
+    detail_prefix = f"skill={skill_id} plugin_payload={package_root.parent} evidence_locator={evidence_locator}"
     args = [sys.executable, str(launcher), "runtime-state", "--target", str(REPO_ROOT)]
     if skill_id not in {"loom-init", "loom-adopt"}:
         args.extend(["--item", "INIT-0001"])
@@ -474,8 +481,10 @@ def verify_surface(root: Path = TARGET_ROOT, *, run_launchers: bool = True) -> l
 
 def check_package_metadata_surface() -> None:
     try:
-        errors = verify_surface(TARGET_ROOT, run_launchers=False)
-        errors.extend(f"plugin payload: {error}" for error in verify_surface(PLUGIN_SKILLS_ROOT, run_launchers=False))
+        with tempfile.TemporaryDirectory(prefix="loom-package-metadata-") as tmp:
+            generated = Path(tmp) / "skills"
+            generate_surface(SOURCE_ROOT, generated)
+            errors = verify_surface(generated, run_launchers=False)
     except Exception as exc:
         errors = [str(exc)]
     if errors:
@@ -510,22 +519,24 @@ def selected_skill_ids(root: Path, requested_skill_ids: tuple[str, ...] | None) 
 
 def check_launcher_smoke_surface(requested_skill_ids: tuple[str, ...] | None = None) -> None:
     errors: list[str] = []
-    try:
-        skill_ids = selected_skill_ids(TARGET_ROOT, requested_skill_ids)
-    except SurfaceFailure:
-        raise
-    except Exception as exc:
-        errors = [str(exc)]
-        skill_ids = []
-    for skill_id in skill_ids:
-        for payload_root in (TARGET_ROOT, PLUGIN_SKILLS_ROOT):
-            package_root = payload_root / skill_id
+    with tempfile.TemporaryDirectory(prefix="loom-launcher-smoke-") as tmp:
+        generated = Path(tmp) / "skills"
+        generate_surface(SOURCE_ROOT, generated)
+        try:
+            skill_ids = selected_skill_ids(generated, requested_skill_ids)
+        except SurfaceFailure:
+            raise
+        except Exception as exc:
+            errors = [str(exc)]
+            skill_ids = []
+        for skill_id in skill_ids:
+            package_root = generated / skill_id
             try:
                 errors.extend(run_launcher_smoke(package_root, skill_id))
             except Exception as exc:
                 errors.append(
-                    f"skill={skill_id} plugin_payload={payload_root.relative_to(REPO_ROOT).as_posix()} "
-                    f"evidence_locator={package_root.relative_to(REPO_ROOT).as_posix()}/contract.json "
+                    f"skill={skill_id} plugin_payload=generated "
+                    f"evidence_locator={skill_id}/contract.json "
                     f"failure=launcher-smoke-exception output={exc}"
                 )
     if errors:
@@ -541,8 +552,8 @@ def check_generated_tree_drift_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-skills-check-") as tmp:
         expected = Path(tmp) / "skills"
         generate_surface(SOURCE_ROOT, expected)
-        drift = compare_trees(expected, TARGET_ROOT)
-        drift.extend(f"plugin payload: {error}" for error in compare_trees(expected, PLUGIN_SKILLS_ROOT))
+        drift = compare_trees(expected, TARGET_ROOT, include_python=False)
+        drift.extend(f"plugin payload: {error}" for error in compare_trees(expected, PLUGIN_SKILLS_ROOT, include_python=False))
         if drift:
             raise SurfaceFailure(
                 surface_label=GENERATED_TREE_DRIFT_SURFACE,

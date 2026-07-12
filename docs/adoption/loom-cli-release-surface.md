@@ -1,5 +1,15 @@
 # Loom CLI Release Surface
 
+## Generated distribution boundary
+
+Release and package jobs consume `tools/build_distribution.py` output. Python
+runtime code is authored only under `src/skills`; npm `prepack` generates the
+Codex plugin launchers and shared scripts, while `postpack` removes the ignored
+materialized files. Package checks build the same payload in isolation, verify
+its manifest digest and assert that the final npm artifact contains the plugin
+entrypoints. `.loom/bin`, demo runtime and install/plugin Python copies are not
+tracked release sources.
+
 This document defines the release surface for the CLI-first Loom line after #1001.
 
 ## Authority

@@ -24,12 +24,14 @@ from typing import Any, Callable
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 sys.dont_write_bytecode = True
 
+import build_distribution
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
 RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "release-readback-fixtures.json"
 WORKSTATION_REGISTRY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "workstation-registry-fixtures.json"
-RUNTIME_PATHS = REPO_ROOT / "skills" / "shared" / "scripts" / "runtime_paths.py"
+RUNTIME_PATHS = REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "runtime_paths.py"
 CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS = 60
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
@@ -3231,7 +3233,7 @@ def assert_work_item_activate_from_idle_syncs_fact_chain_mode(tmp: Path) -> None
     completed = subprocess.run(
         [
             sys.executable,
-            str(REPO_ROOT / "skills" / "shared" / "scripts" / "loom_flow.py"),
+            str(REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "loom_flow.py"),
             "work-item",
             "create",
             "--target",
@@ -3361,7 +3363,7 @@ def assert_review_record_consumed_locators(tmp: Path) -> None:
     spec_consumed = spec_record.get("consumed_inputs", {})
     base_spec_consumed = (
         spec_consumed.get("suite_validation") == "suite validate"
-        and spec_consumed.get("suite_validator_mode") == "repo-local-cli"
+        and spec_consumed.get("suite_validator_mode") in {"repo-local-cli", "global-cli"}
         and spec_consumed.get("suite_spec") == expected_spec
         and "suite_consistency_analysis" in spec_consumed
     )
@@ -10687,7 +10689,7 @@ def assert_gate_repair_pr_evidence_contract(tmp: Path) -> None:
     if blocked_validate.get("result") != "block" or "result must be `pass`" not in blocked_validate.get("missing_inputs", []):
         raise AssertionError("gate repair-pr validate mode accepted a saved block repair record")
 
-    source = (REPO_ROOT / "skills" / "shared" / "scripts" / "delivery_control.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_control.py").read_text(encoding="utf-8")
     start = source.index("def gate_repair_pr_payload")
     end = source.index("def handle_gate_repair_pr", start)
     repair_source = source[start:end]
@@ -11633,8 +11635,23 @@ def install_bootstrapped_runtime(target: Path) -> None:
     source_manifest = REPO_ROOT / ".loom" / "bootstrap" / "manifest.json"
     if runtime_target.exists():
         shutil.rmtree(runtime_target)
-    shutil.copytree(REPO_ROOT / ".loom" / "bin", runtime_target)
+    distribution = target.parent / f".{target.name}-distribution"
+    build_distribution.build(distribution)
+    try:
+        shutil.copytree(distribution / "repo-runtime", runtime_target)
+        shutil.copy2(distribution / "manifest.json", runtime_target / build_distribution.RUNTIME_MANIFEST_NAME)
+    finally:
+        shutil.rmtree(distribution)
     manifest_payload = json.loads(source_manifest.read_text(encoding="utf-8"))
+    for artifact in manifest_payload.get("artifacts", []):
+        if not isinstance(artifact, dict):
+            continue
+        relative = str(artifact.get("path") or "")
+        if not relative.startswith(".loom/bin/"):
+            continue
+        generated = runtime_target / Path(relative).name
+        if generated.is_file():
+            artifact["sha256"] = hashlib.sha256(generated.read_bytes()).hexdigest()
     host_artifact = next(
         (
             artifact
@@ -11648,7 +11665,39 @@ def install_bootstrapped_runtime(target: Path) -> None:
     ).hexdigest():
         raise AssertionError("fresh bootstrap manifest must bind the generated github_host runtime artifact")
     manifest_target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source_manifest, manifest_target)
+    manifest_target.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    if init_result.is_file():
+        payload = json.loads(init_result.read_text(encoding="utf-8"))
+
+        def refresh_runtime_hashes(value: object) -> None:
+            if isinstance(value, dict):
+                relative = value.get("path")
+                if isinstance(relative, str) and relative.startswith(".loom/bin/") and "sha256" in value:
+                    generated = runtime_target / Path(relative).name
+                    if generated.is_file():
+                        value["sha256"] = hashlib.sha256(generated.read_bytes()).hexdigest()
+                for child in value.values():
+                    refresh_runtime_hashes(child)
+            elif isinstance(value, list):
+                for child in value:
+                    refresh_runtime_hashes(child)
+
+        refresh_runtime_hashes(payload)
+        init_result.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    tools_target = target / "tools"
+    tools_target.mkdir(exist_ok=True)
+    shutil.copy2(REPO_ROOT / "tools" / "loom.py", tools_target / "loom.py")
+    shutil.copy2(REPO_ROOT / "tools" / "build_distribution.py", tools_target / "build_distribution.py")
+    shared_target = target / "src" / "skills" / "shared" / "scripts"
+    shutil.copytree(runtime_target, shared_target, ignore=shutil.ignore_patterns(build_distribution.RUNTIME_MANIFEST_NAME))
+    shutil.copy2(REPO_ROOT / "VERSION", target / "VERSION")
+    contract_target = target / "docs" / "methodology" / "harness"
+    contract_target.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(
+        REPO_ROOT / "docs" / "methodology" / "harness" / "full-spec-suite-cli-surface.md",
+        contract_target / "full-spec-suite-cli-surface.md",
+    )
 
 
 def write_idle_fact_chain_target(target: Path) -> None:

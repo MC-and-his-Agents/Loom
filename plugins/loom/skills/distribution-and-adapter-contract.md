@@ -1,5 +1,24 @@
 # Skills Distribution And Adapter Contract
 
+## Canonical Python source and generated payloads
+
+`src/skills/**/*.py` is the only tracked Python source for executable skills and
+the shared Loom runtime. The install tree (`skills`), Codex plugin tree
+(`plugins/loom/skills`), repo-local runtime (`.loom/bin`) and demo runtime are
+build outputs; Git must not track Python copies in those locations.
+
+`python3 tools/build_distribution.py generate` writes the reproducible, ignored
+`build/loom-distribution` artifact and its digest manifest without changing Git
+status. `--materialize package|repo-fixtures|all` is reserved for an automated
+consumer and must be paired with `clean --materialize ...`. npm `prepack` /
+`postpack`, plugin installation, package validation and repo-local fixture tests
+own that pairing; developers do not manually synchronize copies.
+
+The generated artifact must contain every Python launcher referenced by skill
+contracts and the Codex plugin manifest. Digest/readback compares each generated
+file with `src/skills`, proves a second build has the same aggregate digest, and
+fails when any generated Python path is tracked.
+
 ## 定位
 
 本文定义 Loom skills 的发布与宿主适配合同。

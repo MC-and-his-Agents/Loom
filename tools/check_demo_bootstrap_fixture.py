@@ -15,6 +15,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from build_distribution import RUNTIME_NAMES
+
 
 BUCKET_LABEL = "demo-bootstrap"
 AGGREGATE_SURFACE_LABEL = "demo-bootstrap-fixture"
@@ -563,6 +565,7 @@ def run(args: argparse.Namespace) -> int:
         return 2
 
     ignored_relatives = set(DEFAULT_IGNORES)
+    ignored_relatives.update(f".loom/bin/{name}" for name in RUNTIME_NAMES)
     ignored_relatives.update(args.ignore)
     needs_cleanliness = args.surface in ("aggregate", "cleanliness")
     cleanliness_before = read_tracked_status(repo_root, fixture) if needs_cleanliness else None

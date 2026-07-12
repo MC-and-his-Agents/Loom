@@ -19,7 +19,7 @@ from typing import Callable
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
-SHARED_SCRIPTS = ROOT / "skills/shared/scripts"
+SHARED_SCRIPTS = ROOT / "src/skills/shared/scripts"
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ loom-check: pr-binding-workflow-check fr-phase-close-guard-check authority-contr
 	python3 tools/loom_check.py
 
 py-compile:
-	python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/light_profile.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/py_compile_clean.py tools/check_cli_contract.py tools/check_authority_contract.py tools/check_product_acceptance_adapter.py tools/check_light_profile.py tools/check_npm_package.py tools/check_release_surface.py tools/check_pr_binding_workflow.py tools/check_fr_phase_close_guard.py tools/check_fr_phase_close_guard_workflow.py tools/check_demo_bootstrap_fixture.py tools/check_loom_check_runtime_regressions.py tools/check_composite_actions.py tools/run_trusted_candidate_validation.py tools/read_delivery_gate_required_identity.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-spec-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-build/scripts/*.py skills/loom-story/scripts/*.py
+	python3 tools/py_compile_clean.py tools/loom.py tools/runtime_wrapper.py tools/loom_init.py tools/light_profile.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/build_distribution.py tools/py_compile_clean.py tools/check_cli_contract.py tools/check_authority_contract.py tools/check_product_acceptance_adapter.py tools/check_light_profile.py tools/check_npm_package.py tools/check_release_surface.py tools/check_pr_binding_workflow.py tools/check_fr_phase_close_guard.py tools/check_fr_phase_close_guard_workflow.py tools/check_demo_bootstrap_fixture.py tools/check_loom_check_runtime_regressions.py tools/check_composite_actions.py tools/run_trusted_candidate_validation.py tools/read_delivery_gate_required_identity.py src/skills/shared/scripts/*.py src/skills/loom-init/scripts/*.py src/skills/loom-adopt/scripts/*.py src/skills/loom-resume/scripts/*.py src/skills/loom-pre-review/scripts/*.py src/skills/loom-review/scripts/*.py src/skills/loom-spec-review/scripts/*.py src/skills/loom-handoff/scripts/*.py src/skills/loom-build/scripts/*.py src/skills/loom-story/scripts/*.py
 
 skills-check:
 	python3 tools/skills_surface.py check
@@ -163,16 +163,21 @@ loom-self-plugin-check:
 repo-local-cli-fast:
 	@test -n "$(GROUP)" || { echo "usage: make repo-local-cli-fast GROUP=<group>"; echo "groups: $(REPO_LOCAL_CLI_GROUPS)"; exit 2; }
 	@case " $(REPO_LOCAL_CLI_GROUPS) " in *" $(GROUP) "*) ;; *) echo "unknown repo-local-cli group: $(GROUP)"; echo "groups: $(REPO_LOCAL_CLI_GROUPS)"; exit 2;; esac
-	$(MAKE) --no-print-directory repo-local-cli-$(GROUP)
+	@set -e; trap 'python3 tools/build_distribution.py clean --materialize all >/dev/null' EXIT; \
+		python3 tools/build_distribution.py generate --materialize all >/dev/null; \
+		$(MAKE) --no-print-directory repo-local-cli-$(GROUP)
 
 repo-local-cli-full:
-	$(MAKE) --no-print-directory repo-local-cli-setup-demo-bootstrap
-	$(MAKE) --no-print-directory repo-local-cli-init-runtime
-	$(MAKE) --no-print-directory repo-local-cli-fact-chain
-	$(MAKE) --no-print-directory repo-local-cli-flow-gates
-	$(MAKE) --no-print-directory repo-local-cli-workspace-locate
-	$(MAKE) --no-print-directory repo-local-cli-purity-check
-	$(MAKE) --no-print-directory repo-local-cli-runtime-state-scene-conflict-negative
+	@set -e; trap 'python3 tools/build_distribution.py clean --materialize all >/dev/null' EXIT; \
+		python3 tools/build_distribution.py generate --materialize all >/dev/null; \
+		$(MAKE) --no-print-directory repo-local-cli-setup-demo-bootstrap; \
+		python3 tools/build_distribution.py generate --materialize repo-fixtures >/dev/null; \
+		$(MAKE) --no-print-directory repo-local-cli-init-runtime; \
+		$(MAKE) --no-print-directory repo-local-cli-fact-chain; \
+		$(MAKE) --no-print-directory repo-local-cli-flow-gates; \
+		$(MAKE) --no-print-directory repo-local-cli-workspace-locate; \
+		$(MAKE) --no-print-directory repo-local-cli-purity-check; \
+		$(MAKE) --no-print-directory repo-local-cli-runtime-state-scene-conflict-negative
 
 repo-local-cli-setup-demo-bootstrap:
 	$(MAKE) --no-print-directory loom-demo-new-project-check
@@ -189,7 +194,11 @@ repo-local-cli-fact-chain:
 	cd examples/new-project && python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
 
 repo-local-cli-flow-gates:
-	cd examples/new-project && python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
+	@cd examples/new-project && output="$$(mktemp)"; \
+		if python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001 >"$$output"; then \
+			echo "expected host-native pre-review admission to require a GitHub subject"; rm -f "$$output"; exit 1; \
+		fi; \
+		grep -q 'target origin GitHub owner/repo' "$$output"; rm -f "$$output"
 	cd examples/new-project && python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
 
 repo-local-cli-workspace-locate:

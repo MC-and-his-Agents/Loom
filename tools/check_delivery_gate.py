@@ -13,6 +13,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from build_distribution import build
+
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,12 +30,6 @@ SOURCE_DIR = SOURCE.parent
 IDENTITY_READER = ROOT / "tools" / "read_delivery_gate_required_identity.py"
 COMPOSITE_CHECKER = ROOT / "tools" / "check_composite_actions.py"
 TRUSTED_RUNNER = ROOT / "tools" / "run_trusted_candidate_validation.py"
-GENERATED_COPIES = (
-    ROOT / "skills" / "shared" / "scripts" / "delivery_gate.py",
-    ROOT / "plugins" / "loom" / "skills" / "shared" / "scripts" / "delivery_gate.py",
-)
-
-
 def load_evaluator() -> Any:
     if str(SOURCE_DIR) not in sys.path:
         sys.path.insert(0, str(SOURCE_DIR))
@@ -396,9 +392,15 @@ def check_light_profile_host_integration() -> None:
 
 def check_generated_copies() -> None:
     source = SOURCE.read_bytes()
-    drifted = [str(path.relative_to(ROOT)) for path in GENERATED_COPIES if not path.is_file() or path.read_bytes() != source]
-    if drifted:
-        raise AssertionError("delivery-gate generated copy drift: " + ", ".join(drifted))
+    with tempfile.TemporaryDirectory(prefix="loom-delivery-gate-distribution-") as tmp:
+        output = Path(tmp) / "distribution"
+        build(output)
+        copies = (
+            output / "skills" / "shared" / "scripts" / "delivery_gate.py",
+            output / "plugins" / "loom" / "skills" / "shared" / "scripts" / "delivery_gate.py",
+        )
+        if any(path.read_bytes() != source for path in copies):
+            raise AssertionError("delivery-gate generated artifact drift")
 
 
 def check_required_check_identity() -> None:

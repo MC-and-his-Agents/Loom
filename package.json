@@ -40,9 +40,12 @@
     "access": "public"
   },
   "scripts": {
+    "build:distribution": "python3 tools/build_distribution.py generate --json",
+    "prepack": "python3 tools/build_distribution.py generate --materialize package",
+    "postpack": "python3 tools/build_distribution.py clean --materialize package",
     "check:package": "python3 tools/check_npm_package.py",
     "test:package": "node --test test/npm-package-smoke.test.mjs",
-    "pack:dry-run": "npm pack --dry-run --json --ignore-scripts"
+    "pack:dry-run": "python3 tools/build_distribution.py pack"
   },
   "keywords": [
     "loom",

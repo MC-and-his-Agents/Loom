@@ -89,6 +89,10 @@ bin/
 !.loom/bin/**
 !examples/new-project/.loom/bin/
 !examples/new-project/.loom/bin/**
+/skills/**/*.py
+/plugins/loom/skills/**/*.py
+/.loom/bin/*.py
+/examples/new-project/.loom/bin/*.py
 *.test
 *.out
 cover.out
