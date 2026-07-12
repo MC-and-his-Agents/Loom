@@ -213,7 +213,12 @@ def main() -> int:
                 {
                     "LOOM_CANDIDATE_VALIDATION": "1",
                     "PYTHONSAFEPATH": "1",
-                    "PYTHONPATH": str(validation_root / "tools"),
+                    "PYTHONPATH": os.pathsep.join(
+                        (
+                            str(validation_root / "src" / "skills" / "shared" / "scripts"),
+                            str(validation_root / "tools"),
+                        )
+                    ),
                 }
             )
             completed = subprocess.run(
