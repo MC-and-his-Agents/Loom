@@ -31,4 +31,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Check host-native lifecycle contracts
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
         run: make loom-check

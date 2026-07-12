@@ -1284,6 +1284,7 @@ def check_workflow_event_matrix() -> None:
         "if: ${{ github.event_name != 'pull_request' }}" not in cli_step
         or "name: Check host-native lifecycle contracts" not in cli_step
         or "if: ${{ github.event_name == 'pull_request' }}" not in cli_step
+        or "PYTHONDONTWRITEBYTECODE: '1'" not in cli_step
         or "run: make loom-check" not in cli_step
     ):
         raise AssertionError("feature pull requests must not repeat the full CLI aggregate in release judgment")
