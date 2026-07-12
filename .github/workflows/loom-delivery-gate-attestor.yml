@@ -1,0 +1,295 @@
+name: loom-delivery-gate-attestor
+
+on:
+  workflow_run:
+    workflows: [loom-delivery-gate]
+    types: [requested, in_progress, completed]
+
+concurrency:
+  group: loom-delivery-gate-attestor-${{ github.event.workflow_run.pull_requests[0].head.sha || github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  attest:
+    if: ${{ vars.LOOM_DELIVERY_GATE_APP_ID != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Create distinct App token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.LOOM_DELIVERY_GATE_APP_ID }}
+          private-key: ${{ secrets.LOOM_DELIVERY_GATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Publish distinct-App required verdict
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          SOURCE_RUN_ACTION: ${{ github.event.action }}
+          CANDIDATE_HEAD_SHA: ${{ github.event.workflow_run.pull_requests[0].head.sha || github.event.workflow_run.head_sha }}
+          EXPECTED_APP_ID: ${{ vars.LOOM_DELIVERY_GATE_APP_ID }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const sourceRunId = Number(process.env.SOURCE_RUN_ID);
+            const sourceRunAttempt = Number(process.env.SOURCE_RUN_ATTEMPT);
+            const sourceRunAction = process.env.SOURCE_RUN_ACTION;
+            const eventHeadSha = process.env.CANDIDATE_HEAD_SHA || "";
+            const expectedAppId = Number(process.env.EXPECTED_APP_ID);
+            if (
+              !Number.isInteger(sourceRunAttempt) ||
+              sourceRunAttempt < 1 ||
+              !Number.isInteger(expectedAppId) ||
+              expectedAppId < 1 ||
+              !/^[0-9a-f]{40}$/.test(eventHeadSha)
+            ) {
+              throw new Error("workflow_run event attempt/head is invalid");
+            }
+            const externalId = `loom-delivery-gate-strong:${sourceRunId}:${sourceRunAttempt}:${eventHeadSha}`;
+            const priorChecks = await github.paginate(github.rest.checks.listForRef, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: eventHeadSha,
+              check_name: "loom-delivery-gate-strong",
+              filter: "all",
+              per_page: 100,
+            });
+            const appChecks = priorChecks.filter((check) => check.app?.id === expectedAppId);
+            let pendingCheck = appChecks
+              .filter((check) => check.external_id === externalId)
+              .sort((a, b) => b.id - a.id)[0];
+            if (["requested", "in_progress"].includes(sourceRunAction)) {
+              const pendingSourceRun = (await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: sourceRunId,
+              })).data;
+              if (
+                pendingSourceRun.id !== sourceRunId ||
+                pendingSourceRun.run_attempt !== sourceRunAttempt ||
+                !["pull_request_target", "merge_group"].includes(pendingSourceRun.event)
+              ) {
+                throw new Error("pending source run/event/attempt readback is invalid");
+              }
+              const pendingHeadSha = pendingSourceRun.event === "pull_request_target"
+                ? pendingSourceRun.pull_requests?.[0]?.head?.sha
+                : pendingSourceRun.head_sha;
+              if (pendingHeadSha !== eventHeadSha) {
+                throw new Error("pending source run does not bind the event candidate head");
+              }
+              const pendingRuns = (await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: pendingSourceRun.workflow_id,
+                event: pendingSourceRun.event,
+                per_page: 100,
+              })).data.workflow_runs || [];
+              const latestPendingRun = pendingRuns.filter((run) => {
+                if (run.event !== pendingSourceRun.event) return false;
+                if (run.event === "pull_request_target") {
+                  return (run.pull_requests || []).some((pull) => pull.head?.sha === eventHeadSha);
+                }
+                return run.head_sha === eventHeadSha;
+              }).sort((a, b) => b.id - a.id)[0];
+              const newerRunExists = latestPendingRun && (
+                latestPendingRun.id > sourceRunId ||
+                (latestPendingRun.id === sourceRunId && latestPendingRun.run_attempt > sourceRunAttempt)
+              );
+              const newerCheckExists = appChecks.some((check) => {
+                const match = check.external_id?.match(/^loom-delivery-gate-strong:(\d+):(\d+):[0-9a-f]{40}$/);
+                if (!match) return false;
+                const checkRunId = Number(match[1]);
+                const checkRunAttempt = Number(match[2]);
+                return checkRunId > sourceRunId ||
+                  (checkRunId === sourceRunId && checkRunAttempt > sourceRunAttempt);
+              });
+              if (newerRunExists || newerCheckExists) {
+                core.info("Ignoring stale pending event for a superseded candidate run.");
+                return;
+              }
+              if (pendingCheck?.status === "completed") {
+                core.info("Ignoring late pending event for an already completed attestation.");
+                return;
+              }
+              if (pendingCheck) {
+                await github.rest.checks.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  check_run_id: pendingCheck.id,
+                  status: "in_progress",
+                });
+              } else {
+                await github.rest.checks.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: "loom-delivery-gate-strong",
+                  head_sha: eventHeadSha,
+                  status: "in_progress",
+                  external_id: externalId,
+                });
+              }
+              return;
+            }
+            if (sourceRunAction !== "completed") {
+              throw new Error("workflow_run action is not supported");
+            }
+            if (!pendingCheck) pendingCheck = (await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: "loom-delivery-gate-strong",
+              head_sha: eventHeadSha,
+              status: "in_progress",
+              external_id: externalId,
+            })).data;
+            try {
+            const sourceRun = (await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: sourceRunId,
+            })).data;
+            const workflow = (await github.rest.actions.getWorkflow({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: sourceRun.workflow_id,
+            })).data;
+            if (
+              sourceRun.id !== sourceRunId ||
+              sourceRun.run_attempt !== sourceRunAttempt ||
+              !/^[0-9a-f]{40}$/.test(sourceRun.head_sha || "") ||
+              workflow.path !== ".github/workflows/loom-delivery-gate.yml" ||
+              workflow.state !== "active" ||
+              !["pull_request_target", "merge_group"].includes(sourceRun.event)
+            ) {
+              throw new Error("source workflow run/path/event readback is invalid");
+            }
+            const sourceWorkflow = (await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: workflow.path,
+              ref: sourceRun.head_sha,
+            })).data;
+            const trustedWorkflow = (await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: workflow.path,
+              ref: context.payload.repository.default_branch,
+            })).data;
+            if (
+              Array.isArray(sourceWorkflow) ||
+              Array.isArray(trustedWorkflow) ||
+              !sourceWorkflow.sha ||
+              sourceWorkflow.sha !== trustedWorkflow.sha
+            ) {
+              throw new Error("source workflow revision is not the trusted default-branch revision");
+            }
+            let headSha;
+            if (sourceRun.event === "pull_request_target") {
+              const pulls = sourceRun.pull_requests || [];
+              if (pulls.length !== 1 || !/^[0-9a-f]{40}$/.test(pulls[0]?.head?.sha || "")) {
+                throw new Error("source run must bind exactly one pull request head");
+              }
+              headSha = pulls[0].head.sha;
+            } else {
+              if (!/^[0-9a-f]{40}$/.test(sourceRun.head_sha || "")) {
+                throw new Error("merge-group source run head is invalid");
+              }
+              headSha = sourceRun.head_sha;
+            }
+            if (headSha !== eventHeadSha) {
+              throw new Error("workflow_run event head does not match source run candidate head");
+            }
+            const readLatestRun = async () => {
+              const recentRuns = (await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: sourceRun.workflow_id,
+                event: sourceRun.event,
+                per_page: 100,
+              })).data.workflow_runs || [];
+              return recentRuns.filter((run) => {
+                if (run.event !== sourceRun.event) return false;
+                if (run.event === "pull_request_target") {
+                  return (run.pull_requests || []).some((pull) => pull.head?.sha === headSha);
+                }
+                return run.head_sha === headSha;
+              }).sort((a, b) => b.id - a.id)[0];
+            };
+            const latestRun = await readLatestRun();
+            if (
+              !latestRun ||
+              latestRun.id !== sourceRunId ||
+              latestRun.run_attempt !== sourceRunAttempt
+            ) {
+              throw new Error("source run is not the latest attempt for the candidate head");
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: sourceRunId,
+              filter: "latest",
+              per_page: 100,
+            });
+            const nativeJobs = jobs.filter((job) => job.name === "isolated candidate native validation");
+            if (nativeJobs.length !== 1 || nativeJobs[0].head_sha !== sourceRun.head_sha) {
+              throw new Error("source run must expose exactly one native-validation job for its execution head");
+            }
+            const native = {
+              job_id: nativeJobs[0].id,
+              status: nativeJobs[0].status,
+              conclusion: nativeJobs[0].conclusion,
+            };
+            const passed = native.status === "completed" && native.conclusion === "success";
+            const conclusion = passed ? "success" : "failure";
+            const summary = passed
+              ? "Base-owned native validation passed for the current candidate head."
+              : "Base-owned native validation did not pass; strong delivery enforcement is blocked.";
+            const finalLatestRun = await readLatestRun();
+            if (
+              !finalLatestRun ||
+              finalLatestRun.id !== sourceRunId ||
+              finalLatestRun.run_attempt !== sourceRunAttempt
+            ) {
+              throw new Error("a newer candidate run appeared before verdict publication");
+            }
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: pendingCheck.id,
+              status: "completed",
+              conclusion,
+              output: {
+                title: `Loom strong delivery gate: ${conclusion}`,
+                summary,
+                text: JSON.stringify({
+                  schema_version: "loom-distinct-app-check/v1",
+                  source_run_id: sourceRunId,
+                  source_workflow_path: workflow.path,
+                  head_sha: headSha,
+                  native_validation: native,
+                  product_acceptance: "not_evaluated",
+                }, null, 2),
+              },
+            });
+            if (!passed) core.setFailed(summary);
+            } catch (error) {
+              const summary = `Strong delivery attestation failed closed: ${error.message}`;
+              await github.rest.checks.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                check_run_id: pendingCheck.id,
+                status: "completed",
+                conclusion: "failure",
+                output: {
+                  title: "Loom strong delivery gate: failure",
+                  summary,
+                },
+              });
+              throw error;
+            }
