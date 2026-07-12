@@ -1022,11 +1022,17 @@ def check_trusted_candidate_harness() -> None:
         shutil.copytree(trusted, env_trusted)
         shutil.copytree(trusted, env_candidate)
         env_probe = (
+            "import build_distribution\n"
             "import os\n"
+            "assert build_distribution.VALUE == 'candidate-support'\n"
             "for prefix in ('ACTIONS_', 'GITHUB_', 'RUNNER_'):\n"
             "    assert not any(key.startswith(prefix) for key in os.environ), prefix\n"
         )
         for tree in (env_trusted, env_candidate):
+            (tree / "tools" / "build_distribution.py").write_text(
+                "VALUE = 'candidate-support'\n",
+                encoding="utf-8",
+            )
             (tree / "tools" / "check_probe.py").write_text(env_probe, encoding="utf-8")
         safe_env = os.environ.copy()
         safe_env.update({"ACTIONS_RUNTIME_TOKEN": "secret", "GITHUB_TOKEN": "secret", "RUNNER_TRACKING_ID": "secret"})

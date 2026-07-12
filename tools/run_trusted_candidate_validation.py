@@ -209,7 +209,13 @@ def main() -> int:
                 for key, value in os.environ.items()
                 if key in {"HOME", "LANG", "LC_ALL", "PATH", "SHELL", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR"}
             }
-            safe_environment.update({"LOOM_CANDIDATE_VALIDATION": "1", "PYTHONSAFEPATH": "1"})
+            safe_environment.update(
+                {
+                    "LOOM_CANDIDATE_VALIDATION": "1",
+                    "PYTHONSAFEPATH": "1",
+                    "PYTHONPATH": str(validation_root / "tools"),
+                }
+            )
             completed = subprocess.run(
                 ["make", "-f", str(validation_root / "Makefile"), "--", *targets],
                 cwd=validation_root,
