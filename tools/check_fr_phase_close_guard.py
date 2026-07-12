@@ -97,7 +97,7 @@ def main() -> int:
         "merge_commit": "b" * 40,
         "commit_sha": "a" * 40,
         "review_decision": "APPROVED",
-        "check_rollup": {"state": "SUCCESS", "contexts_complete": True, "contexts": [{"type": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"}]},
+        "check_rollup": {"state": "SUCCESS", "contexts_complete": True, "contexts": [{"type": "CheckRun", "name": "py-compile", "status": "COMPLETED", "conclusion": "SUCCESS", "completed_at": "2026-07-11T00:01:00Z"}]},
     }
     work_item = issue(3, "work_item", merged_prs=[pr])
     fr = issue(2, "fr", children=[3])
@@ -128,9 +128,16 @@ def main() -> int:
     pending_checks = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "PENDING", "contexts_complete": True, "contexts": pr["check_rollup"]["contexts"]}}])
     if module.evaluate_closure({"subject": 1, "default_branch": "main", "issues": [phase, fr, pending_checks]}).get("verdict") != "reopen_required":
         raise AssertionError("a merged PR without a successful check rollup must reopen")
-    failed_checks = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "FAILURE", "contexts_complete": True, "contexts": pr["check_rollup"]["contexts"]}}])
-    if module.evaluate_closure({"subject": 1, "default_branch": "main", "issues": [phase, fr, failed_checks]}).get("verdict") != "reopen_required":
+    failed_checks = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "FAILURE", "contexts_complete": True, "contexts": [{**pr["check_rollup"]["contexts"][0], "conclusion": "FAILURE"}]}}])
+    if module.evaluate_closure(snapshot(1, [phase, fr, failed_checks]), host_resolved=True).get("verdict") != "reopen_required":
         raise AssertionError("a merged PR with a failed check rollup must reopen")
+    retried_checks = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "FAILURE", "contexts_complete": True, "contexts": [
+        {"type": "CheckRun", "name": "loom-pr-merge-gate", "status": "COMPLETED", "conclusion": "FAILURE", "completed_at": "2026-07-11T00:00:00Z"},
+        {"type": "CheckRun", "name": "loom-pr-merge-gate", "status": "COMPLETED", "conclusion": "SUCCESS", "completed_at": "2026-07-11T00:02:00Z"},
+        {"type": "CheckRun", "name": "optional-demo", "status": "COMPLETED", "conclusion": "FAILURE", "completed_at": "2026-07-11T00:03:00Z"},
+    ]}}])
+    if module.evaluate_closure(snapshot(1, [phase, fr, retried_checks]), host_resolved=True).get("verdict") != "allow_completed_close":
+        raise AssertionError("latest successful delivery check attempt must supersede stale failures and unrelated optional checks")
     skipped_optional = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "SUCCESS", "contexts_complete": True, "contexts": [*pr["check_rollup"]["contexts"], {"type": "CheckRun", "status": "COMPLETED", "conclusion": "SKIPPED"}]}}])
     if module.evaluate_closure(snapshot(1, [phase, fr, skipped_optional]), host_resolved=True).get("verdict") != "allow_completed_close":
         raise AssertionError("a successful aggregate rollup must allow intentionally skipped optional checks")

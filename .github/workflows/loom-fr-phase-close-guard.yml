@@ -60,8 +60,8 @@ jobs:
                                   pageInfo { hasNextPage }
                                   nodes {
                                     __typename
-                                    ... on CheckRun { name status conclusion }
-                                    ... on StatusContext { context state }
+                                    ... on CheckRun { name status conclusion startedAt completedAt }
+                                    ... on StatusContext { context state createdAt }
                                   }
                                 }
                               }
@@ -113,6 +113,9 @@ jobs:
                           status: context.status,
                           conclusion: context.conclusion,
                           state: context.state,
+                          started_at: context.startedAt,
+                          completed_at: context.completedAt,
+                          created_at: context.createdAt,
                         })) || [],
                       },
                       commit_sha: commit?.oid,

@@ -29,10 +29,21 @@ SINGLE_MAINTAINER_LABEL = "review_policy_single_maintainer"
 PRODUCT_ARTIFACT_RE = re.compile(r"<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->", re.IGNORECASE)
 ATTESTATION_ARTIFACT_RE = re.compile(r"<!--\s*loom:host-attestation-artifact\s+pr:(\d+)\s+head:([0-9a-f]{40})\s+id:(\d+)\s*-->", re.IGNORECASE)
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+DELIVERY_CHECK_CONTEXTS = frozenset({"py-compile", "loom-delivery-gate", "loom-pr-merge-gate"})
 
 
 def _text(value: object) -> str:
     return str(value or "").strip().casefold().replace("-", "_").replace(" ", "_")
+
+
+def _parse_time(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
 
 
 def _labels(issue: dict[str, Any]) -> set[str]:
@@ -95,10 +106,40 @@ def _deferred_ready(issue: dict[str, Any]) -> list[dict[str, str]]:
 
 def _successful_check_rollup(pr: dict[str, Any]) -> bool:
     rollup = pr.get("check_rollup")
-    if not isinstance(rollup, dict) or _text(rollup.get("state")) != "success" or rollup.get("contexts_complete") is not True:
+    if not isinstance(rollup, dict) or rollup.get("contexts_complete") is not True:
         return False
     contexts = rollup.get("contexts")
-    return isinstance(contexts, list) and bool(contexts)
+    if not isinstance(contexts, list):
+        return False
+    latest: dict[str, tuple[datetime, int, dict[str, Any]]] = {}
+    for index, context in enumerate(contexts):
+        if not isinstance(context, dict):
+            return False
+        name = str(context.get("name") or "").strip()
+        if name not in DELIVERY_CHECK_CONTEXTS:
+            continue
+        timestamp = (
+            _parse_time(context.get("completed_at"))
+            or _parse_time(context.get("started_at"))
+            or _parse_time(context.get("created_at"))
+            or datetime.min.replace(tzinfo=timezone.utc)
+        )
+        current = latest.get(name)
+        if current is None or (timestamp, index) > (current[0], current[1]):
+            latest[name] = (timestamp, index, context)
+    if not latest:
+        return False
+    for _timestamp, _index, context in latest.values():
+        kind = _text(context.get("type"))
+        if kind == "checkrun":
+            if _text(context.get("status")) != "completed" or _text(context.get("conclusion")) not in {"success", "neutral", "skipped"}:
+                return False
+        elif kind == "statuscontext":
+            if _text(context.get("state")) != "success":
+                return False
+        else:
+            return False
+    return True
 
 
 def _comment_marker(bodies: object, pattern: re.Pattern[str], *, pr_number: int | None = None) -> tuple[int | None, list[str]]:
