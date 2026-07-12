@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-from fact_chain_support import inspect_fact_chain
+from fact_chain_support import inspect_fact_chain, resolve_repo_relative_path
 from governance_surface import build_governance_surface, workspace_lifecycle_expectations
 from runtime_paths import registry_path, shared_asset
 from runtime_state import detect_runtime_state
@@ -1183,7 +1183,7 @@ def effective_adoption_intent(adoption_path: str, intake: dict[str, object]) -> 
     if adoption_path in {"minimal-bootstrap", "lightweight-retrofit"}:
         return "light-governance"
     if adoption_path == "full-bootstrap":
-        return "execution-control"
+        return "light-governance"
     if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
         return adoption_path
     return UNSPECIFIED_ADOPTION_INTENT
@@ -1204,7 +1204,7 @@ def scaffold_profile_key(adoption_path: str, intake: dict[str, object]) -> str:
     if uses_attach_only_path(adoption_path):
         return "attach-only"
     if adoption_path == "full-bootstrap":
-        return "execution-control"
+        return "light-governance"
     return "light-governance"
 
 
@@ -1663,8 +1663,19 @@ def profile_common_artifacts(global_cli_metadata_only: bool = False) -> list[dic
 def profile_light_governance_artifacts() -> list[dict[str, str]]:
     return [
         {"path": ".loom/README.md", "kind": "rule-entry", "source": "generated"},
-        {"path": ".loom/bootstrap/init-result.json", "kind": "init-result", "source": "generated"},
+        {"path": ".loom/bootstrap/manifest.json", "kind": "manifest", "source": "generated"},
         {"path": ".loom/companion/README.md", "kind": "repo-companion-entry", "source": "generated"},
+        {"path": ".loom/companion/repo-interface.json", "kind": "repo-companion-interface", "source": "generated"},
+        {"path": ".loom/companion/interop.json", "kind": "repo-interop-contract", "source": "generated"},
+    ]
+
+
+def profile_attach_only_artifacts() -> list[dict[str, str]]:
+    return [
+        {"path": ".loom/README.md", "kind": "rule-entry", "source": "generated"},
+        {"path": ".loom/bootstrap/manifest.json", "kind": "manifest", "source": "generated"},
+        {"path": ".loom/companion/README.md", "kind": "repo-companion-entry", "source": "generated"},
+        {"path": ".loom/companion/manifest.json", "kind": "repo-companion-manifest", "source": "generated"},
         {"path": ".loom/companion/repo-interface.json", "kind": "repo-companion-interface", "source": "generated"},
         {"path": ".loom/companion/interop.json", "kind": "repo-interop-contract", "source": "generated"},
     ]
@@ -1846,6 +1857,18 @@ def initial_artifacts(
 
     if profile == "light-governance":
         artifacts = profile_light_governance_artifacts()
+        if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
+            artifacts.append(
+                {
+                    "path": ".github/PULL_REQUEST_TEMPLATE.md",
+                    "kind": "pr-template",
+                    "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md",
+                }
+            )
+        return artifacts
+
+    if profile == "attach-only":
+        artifacts = profile_attach_only_artifacts()
         if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
             artifacts.append(
                 {
@@ -3060,15 +3083,93 @@ def runtime_artifact(path: str, kind: str, source: str) -> dict[str, str]:
 
 
 def manifest_payload(result: dict[str, object]) -> dict[str, object]:
+    profile = result.get("scaffold_profile")
+    profile_name = str(profile.get("name")) if isinstance(profile, dict) else "light-governance"
+    if profile_name in {"execution-control", "strong-governance"}:
+        return {
+            "schema_version": "loom-bootstrap-manifest/v1",
+            "tool": RUNTIME_SOURCE,
+            "tool_version": TOOL_VERSION,
+            "root_entry": "loom-init",
+            "contract_version": CONTRACT_VERSION,
+            "output": ".loom/bootstrap/init-result.json",
+            "artifacts": result["initial_artifacts"],
+        }
+    adoption = result.get("recommended_adoption")
+    declared_capabilities = adoption.get("capabilities") if isinstance(adoption, dict) else []
+    capabilities = [
+        str(item.get("name"))
+        for item in declared_capabilities
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    artifact_locators = [
+        str(item.get("path"))
+        for item in result.get("initial_artifacts", [])
+        if isinstance(item, dict)
+        and isinstance(item.get("path"), str)
+        and item.get("path") != ".loom/bootstrap/manifest.json"
+    ]
     return {
-        "schema_version": "loom-bootstrap-manifest/v1",
-        "tool": RUNTIME_SOURCE,
-        "tool_version": TOOL_VERSION,
-        "root_entry": "loom-init",
-        "contract_version": CONTRACT_VERSION,
-        "output": ".loom/bootstrap/init-result.json",
-        "artifacts": result["initial_artifacts"],
+        "schema_version": "loom-bootstrap-manifest/v2",
+        "profile": profile_name,
+        "repository_locator": ".",
+        "companion_locator": ".loom/companion/repo-interface.json",
+        "capabilities": capabilities,
+        "artifact_locators": artifact_locators,
     }
+
+
+HOST_DERIVED_MANIFEST_KEYS = {
+    "schema_version",
+    "profile",
+    "repository_locator",
+    "companion_locator",
+    "capabilities",
+    "artifact_locators",
+}
+HOST_DERIVED_CAPABILITIES = {
+    "bootstrap/root",
+    "formal-templates",
+    "minimal-governance-entry",
+    "pre-execution-existing",
+    "lightweight-retrofit",
+    "deep-existing-repo",
+    "execution-support",
+}
+
+
+def validate_host_derived_manifest(target_root: Path, payload: object) -> list[str]:
+    if not isinstance(payload, dict):
+        return ["host-derived bootstrap manifest must be an object"]
+    if set(payload) != HOST_DERIVED_MANIFEST_KEYS:
+        return [
+            "host-derived bootstrap manifest keys must exactly match "
+            f"{sorted(HOST_DERIVED_MANIFEST_KEYS)}"
+        ]
+    errors: list[str] = []
+    if payload.get("schema_version") != "loom-bootstrap-manifest/v2":
+        errors.append("host-derived bootstrap manifest schema_version must be loom-bootstrap-manifest/v2")
+    if payload.get("profile") not in {"light-governance", "attach-only"}:
+        errors.append("host-derived bootstrap manifest profile must be light-governance or attach-only")
+    if payload.get("repository_locator") != ".":
+        errors.append("host-derived bootstrap manifest repository_locator must be `.`")
+    capabilities = payload.get("capabilities")
+    if not isinstance(capabilities, list) or not all(isinstance(item, str) and item for item in capabilities):
+        errors.append("host-derived bootstrap manifest capabilities must be a list of non-empty strings")
+    elif any(item not in HOST_DERIVED_CAPABILITIES for item in capabilities):
+        errors.append("host-derived bootstrap manifest capabilities contain an unsupported capability")
+    artifact_locators = payload.get("artifact_locators")
+    if not isinstance(artifact_locators, list) or not all(isinstance(item, str) and item for item in artifact_locators):
+        errors.append("host-derived bootstrap manifest artifact_locators must be a list of non-empty strings")
+        artifact_locators = []
+    locator_entries = [("companion_locator", payload.get("companion_locator"), True)]
+    locator_entries.extend(("artifact_locator", locator, True) for locator in artifact_locators)
+    for label, locator, must_exist in locator_entries:
+        resolved, locator_errors = resolve_repo_relative_path(target_root, locator, label=label)  # type: ignore[arg-type]
+        errors.extend(locator_errors)
+        if must_exist and resolved is not None and not resolved.exists():
+            errors.append(f"host-derived bootstrap {label} is missing: {locator}")
+    return errors
 
 
 def scaffold_target(
@@ -3137,7 +3238,7 @@ def scaffold_target(
 
     for path, payload, kind in writes:
         relative = str(path.relative_to(target_root))
-        if relative not in declared_write_paths and path != output_path:
+        if relative not in declared_write_paths:
             continue
         changed = write_json(path, payload, force=force) if kind == "json" else write_text(path, payload, force=force)
         if changed:
@@ -3235,6 +3336,31 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         errors.extend(f"runtime-state: {message}" for message in runtime_state["missing_inputs"])
+
+    manifest_path = target_root / ".loom/bootstrap/manifest.json"
+    if manifest_path.exists():
+        try:
+            bootstrap_manifest = read_json(manifest_path)
+        except json.JSONDecodeError as exc:
+            errors.append(f"invalid bootstrap manifest JSON: {exc.msg}")
+            bootstrap_manifest = {}
+        if bootstrap_manifest.get("schema_version") == "loom-bootstrap-manifest/v2":
+            errors.extend(validate_host_derived_manifest(target_root, bootstrap_manifest))
+            forbidden = (
+                ".loom/bootstrap/init-result.json",
+                ".loom/status/current.md",
+                ".loom/work-items",
+                ".loom/progress",
+                ".loom/reviews",
+                ".loom/specs",
+                ".loom/shadow",
+                ".loom/bin",
+                ".loom/runtime",
+            )
+            for relative in forbidden:
+                if (target_root / relative).exists():
+                    errors.append(f"host-derived profile must not retain committed execution state: {relative}")
+            return errors
 
     current_item_id: str | None = None
     attach_only = False

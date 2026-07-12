@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -43,8 +44,148 @@ from loom_flow import (
     spec_review_gate_payload,
     validate_goal_execution_contract,
 )
+from flow_runtime import git_branch, git_head_sha
+from loom_init import validate_host_derived_manifest
+from authority_contract import parse_typed_locator
+from delivery_control import (
+    pr_body_field_value,
+    pr_body_governance_metadata_fields,
+    work_item_locator_for_metadata,
+)
 
 IDLE_ITEM_ID = "no_active_item"
+
+
+def host_derived_manifest(target_root: Path) -> tuple[dict[str, object] | None, list[str]]:
+    path = target_root / ".loom/bootstrap/manifest.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, []
+    except OSError as exc:
+        return None, [f"bootstrap manifest is unreadable: {exc}"]
+    except json.JSONDecodeError as exc:
+        return None, [f"bootstrap manifest is invalid JSON: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, ["bootstrap manifest must be a JSON object"]
+    if payload.get("schema_version") == "loom-bootstrap-manifest/v1":
+        return None, []
+    if payload.get("schema_version") != "loom-bootstrap-manifest/v2":
+        return None, ["bootstrap manifest schema is unsupported"]
+    return payload, validate_host_derived_manifest(target_root, payload)
+
+
+def host_derived_status_payload(
+    target_root: Path,
+    *,
+    manifest: dict[str, object],
+    runtime_state: dict[str, object],
+    args: argparse.Namespace,
+) -> dict[str, object]:
+    github, github_errors = github_status_payload(
+        target_root,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        owner=args.owner,
+        repo_name=args.repo_name,
+    )
+    branch = git_branch(target_root)
+    head = git_head_sha(target_root)
+    missing_inputs = list(github_errors)
+    parsed_item = parse_typed_locator(args.item, allowed_types={"work_item"}, allow_legacy=False) if args.item else None
+    issue = github.get("issue") if isinstance(github.get("issue"), dict) else None
+    pr = github.get("pr") if isinstance(github.get("pr"), dict) else None
+    if args.item:
+        if parsed_item is None:
+            missing_inputs.append("explicit --item must be a canonical owner/repo/work_item/id locator")
+        elif args.issue is None:
+            missing_inputs.append("explicit --item requires matching --issue host readback")
+        else:
+            detected_owner, detected_repo = detect_github_repo(target_root)
+            if (
+                parsed_item.get("owner") != (args.owner or detected_owner)
+                or parsed_item.get("repo") != (args.repo_name or detected_repo)
+                or parsed_item.get("id") != args.issue
+            ):
+                missing_inputs.append("explicit --item authority does not match the requested GitHub issue")
+            if issue is not None:
+                type_labels = {
+                    str(label).strip().lower().replace("_", "-")
+                    for label in issue.get("labels", [])
+                } & {"work-item", "fr", "phase"}
+                if issue.get("number") != args.issue or type_labels != {"work-item"}:
+                    missing_inputs.append("requested GitHub issue is not uniquely typed as the Work Item")
+                if issue.get("state") != "OPEN":
+                    missing_inputs.append("requested GitHub Work Item is not open")
+            if args.pr is not None and pr is not None:
+                body = pr.get("body")
+                owner = str(parsed_item.get("owner"))
+                repo = str(parsed_item.get("repo"))
+                human_raw = pr_body_field_value(body, "Work Item")
+                human_locator = work_item_locator_for_metadata(
+                    human_raw, None, owner, repo
+                )
+                machine_fields = pr_body_governance_metadata_fields(body)
+                machine_raw = machine_fields.get("work_item_locator")
+                machine_locator = work_item_locator_for_metadata(
+                    machine_raw if isinstance(machine_raw, str) else None,
+                    None,
+                    owner,
+                    repo,
+                )
+                if human_raw is not None and human_locator is None:
+                    missing_inputs.append("requested PR human Work Item locator is invalid or belongs to another repository")
+                if machine_raw is not None and machine_locator is None:
+                    missing_inputs.append("requested PR machine Work Item locator is invalid or belongs to another repository")
+                declared_locators = [locator for locator in (human_locator, machine_locator) if locator is not None]
+                if not declared_locators or any(locator != args.item for locator in declared_locators):
+                    missing_inputs.append("requested PR metadata is not bound to the canonical Work Item locator")
+    github_readback_consumed = bool(args.item and parsed_item and issue is not None and not missing_inputs)
+    return {
+        "command": "status",
+        "result": "block" if missing_inputs else "pass",
+        "summary": (
+            "status was derived from the current Git worktree and requested GitHub host readback."
+            if github_readback_consumed and not missing_inputs
+            else "status was derived from the current Git worktree; no active host item was requested."
+            if not missing_inputs
+            else "host-derived status is readable, but requested GitHub facts could not be read."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": "host-readback" if missing_inputs else None,
+        "runtime_state": runtime_state,
+        "profile": manifest.get("profile"),
+        "item": {
+            "id": args.item or IDLE_ITEM_ID,
+            "source": "github_host_readback" if args.item and github_readback_consumed else "no_active_item" if not args.item else "unresolved",
+        },
+        "worktree": {
+            "repository_locator": ".",
+            "branch": branch,
+            "head_sha": head,
+            "workspace_entry": ".",
+            "source": "git_worktree_readback",
+        },
+        "workstation": {
+            "status": "not_read",
+            "source": None,
+            "committed_state_consumed": False,
+        },
+        "github": github,
+        "provenance": [
+            {
+                "kind": "derived_observation",
+                "authority": "git_and_github_readback" if github_readback_consumed else "git_worktree_readback",
+                "freshness": "current_invocation",
+                "locator": ".loom/bootstrap/manifest.json",
+            }
+        ],
+        "committed_execution_state": {
+            "current_status_consumed": False,
+            "shadow_consumed": False,
+            "init_snapshot_consumed": False,
+        },
+    }
 
 
 def resolve_target_arg(raw_target: str) -> Path:
@@ -571,6 +712,28 @@ def main(argv: list[str]) -> int:
                 "fallback_to": runtime_state["fallback_to"],
                 "runtime_state": runtime_state,
             }
+        )
+
+    derived_manifest, derived_manifest_errors = host_derived_manifest(target_root)
+    if derived_manifest_errors:
+        return emit(
+            {
+                "command": "status",
+                "result": "block",
+                "summary": "status is blocked because the bootstrap manifest is invalid or unreadable.",
+                "missing_inputs": derived_manifest_errors,
+                "fallback_to": "adoption",
+                "runtime_state": runtime_state,
+            }
+        )
+    if derived_manifest is not None:
+        return emit(
+            host_derived_status_payload(
+                target_root,
+                manifest=derived_manifest,
+                runtime_state=runtime_state,
+                args=args,
+            )
         )
 
     fact_report, fact_errors = load_fact_chain_report(target_root, args.output)
