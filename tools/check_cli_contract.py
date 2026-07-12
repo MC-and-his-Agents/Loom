@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 sys.dont_write_bytecode = True
@@ -270,6 +270,32 @@ def run_surface_checks(checks: tuple[SurfaceCheck, ...]) -> int:
         return 1
     print(f"cli contract surfaces passed in {format_duration(total_elapsed)}", file=sys.stderr)
     return 0
+
+
+@contextmanager
+def candidate_global_cli() -> Iterator[None]:
+    """Expose this checkout's CLI without depending on a workstation install."""
+    with tempfile.TemporaryDirectory(prefix="loom-candidate-cli-") as raw_tmp:
+        bin_dir = Path(raw_tmp)
+        command = bin_dir / "loom"
+        command.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            "import subprocess\n"
+            "import sys\n"
+            f"raise SystemExit(subprocess.run([{sys.executable!r}, {str(LOOM)!r}, *sys.argv[1:]], cwd={str(REPO_ROOT)!r}, env=os.environ.copy()).returncode)\n",
+            encoding="utf-8",
+        )
+        command.chmod(0o755)
+        original_path = os.environ.get("PATH")
+        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{original_path or ''}"
+        try:
+            yield
+        finally:
+            if original_path is None:
+                os.environ.pop("PATH", None)
+            else:
+                os.environ["PATH"] = original_path
 
 
 def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[str, str] | None = None) -> tuple[int, dict[str, Any]]:
@@ -17056,7 +17082,8 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"cli contract surface selection failed: {exc}", file=sys.stderr)
         return 2
-    return run_surface_checks(selected)
+    with candidate_global_cli():
+        return run_surface_checks(selected)
 
 
 if __name__ == "__main__":
