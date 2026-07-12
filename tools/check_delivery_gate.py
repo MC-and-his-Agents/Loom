@@ -1024,13 +1024,23 @@ def check_trusted_candidate_harness() -> None:
         env_probe = (
             "import build_distribution\n"
             "import os\n"
+            "import subprocess\n"
+            "import sys\n"
+            "from pathlib import Path\n"
             "assert build_distribution.VALUE == 'candidate-support'\n"
             "for prefix in ('ACTIONS_', 'GITHUB_', 'RUNNER_'):\n"
             "    assert not any(key.startswith(prefix) for key in os.environ), prefix\n"
+            "subprocess.run([sys.executable, str(Path(__file__).parents[1] / 'src/skills/shared/scripts/probe.py')], check=True)\n"
         )
         for tree in (env_trusted, env_candidate):
             (tree / "tools" / "build_distribution.py").write_text(
                 "VALUE = 'candidate-support'\n",
+                encoding="utf-8",
+            )
+            shared = tree / "src" / "skills" / "shared" / "scripts"
+            (shared / "support_module.py").write_text("VALUE = 'shared-support'\n", encoding="utf-8")
+            (shared / "probe.py").write_text(
+                "import support_module\nassert support_module.VALUE == 'shared-support'\n",
                 encoding="utf-8",
             )
             (tree / "tools" / "check_probe.py").write_text(env_probe, encoding="utf-8")
