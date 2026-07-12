@@ -13,6 +13,7 @@ ALLOWED_MAKE_TARGETS = (
     "pr-binding-workflow-check",
     "fr-phase-close-guard-check",
     "host-attestation-check",
+    "distinct-app-gate-workflow-check",
     "authority-contract-check",
     "fr-wi-admission-check",
     "pr-metadata-check",

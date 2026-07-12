@@ -370,7 +370,6 @@ jobs:
 
       - name: Run selected native validation with read-only token
         id: native
-        continue-on-error: true
         shell: bash
         env:
           VALIDATION_TARGETS_JSON: ${{ needs.plan.outputs.validation_targets }}
@@ -393,6 +392,7 @@ jobs:
           set -e
           STATUS=$([ "$EXIT_CODE" -eq 0 ] && echo passed || echo failed)
           printf '{"schema_version":"loom-native-validation-result/v1","status":"%s","exit_code":%s}\n' "$STATUS" "$EXIT_CODE" > "$NATIVE_RESULT_PATH"
+          exit "$EXIT_CODE"
 
       - name: Upload isolated native validation artifact
         if: ${{ always() && needs.plan.outputs.authority_ready == 'true' }}

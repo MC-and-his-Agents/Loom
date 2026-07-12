@@ -146,6 +146,37 @@ workflow outputs，因此该同名 compatibility context 绝不能配置为 requ
 只有 #2063 建立的独立 strong consumer/context 才能放行。当前能力只允许作为 #2046 的
 partial delivery 合入，不满足 #2046 FR closeout 或 #2054 stable release。
 
+## Distinct App attestor
+
+`.github/workflows/loom-delivery-gate-attestor.yml` 是默认分支拥有的 dormant
+`workflow_run` consumer。未配置 `LOOM_DELIVERY_GATE_APP_ID` repository variable 时 job
+直接跳过；它不会把缺失 credential 降级成 strong。启用前必须创建并仅安装到目标仓库的
+GitHub App，最小权限为：Metadata read、Actions read、Contents read、Pull requests read、
+Checks write。配置面为：
+
+- repository variable `LOOM_DELIVERY_GATE_APP_ID`；
+- Actions secret `LOOM_DELIVERY_GATE_APP_PRIVATE_KEY`；
+- branch protection required check：context `loom-delivery-gate-strong`，app id 必须等于上述 App，而不是 GitHub Actions `15368`。
+
+attestor 在源 workflow `requested` 或 `in_progress` 时先以 distinct App identity 把同一 candidate head 的
+`loom-delivery-gate-strong` 置为 `in_progress`，避免同 SHA 的历史 success 在新验证期间被复用；
+`completed` 时再只读源 `loom-delivery-gate` workflow run/path/event/head、可信 workflow blob、
+最新 run/attempt 与唯一 `isolated candidate native validation` job conclusion，并更新同一
+Check Run。它不下载或信任候选可修改的 result
+artifact，也不把 App private key交给执行候选代码的 job。源 native job非 success、run
+未精确绑定一个 PR head、workflow path不匹配或 App token不可用时，strong check缺失或
+失败；不得由同名 GitHub Actions job替代。
+
+切换 required set 必须在一次 bootstrap 管理窗口串行执行：先安装 App并写 variable/secret，
+在测试 PR 上 readback strong check的 `app.id` 与 head，随后把
+`loom-delivery-gate-strong` 加入 required checks，最后才移除同名 same-App compatibility
+context。完成前 #2063、#2046 与 #2054 保持未完成。
+
+App credential 是 required identity 的宿主前置，不能由失效的 credential 自行撤销历史
+success。删除、轮换或检测到 variable/secret/App installation 不健康前，必须先在 branch
+protection 中停用该 required identity；恢复 credential 后先用新 head 完成 requested→completed
+readback，再重新启用。不得在 credential 缺失时保留 required set并声称 fail closed。
+
 `--retained-context` 可重复定义迁移后仍允许的 native 或 release check；默认没有额外保留项，但 `--context` 本身自动保留。`--legacy-context` 可重复提供所有应退役的旧检查。任意 branch-protection 或适用 ruleset 仍要求其中之一时，结果为 `legacy_required_checks_present`，即使新 check 已经出现也不能移除旧治理面。上例中的 `loom-pr-merge-gate` 来自 Lode `main` 的实际适用 ruleset（id `18294167`）。
 
 effective required 集是精确合同：除预期 context 和显式 retained contexts 外，任何其他 context 都返回 `unexpected_required_checks_present` 并阻断。这避免遗漏旧 check 便把 protection/ruleset 视为已替换。已声明 legacy 与未声明 unexpected 同时存在时，legacy verdict 优先，先引导退役已知旧 gate。GitHub ruleset required-status-checks 响应只给 context、不给 app identity；因此预期 check 若只出现在 ruleset 而没有同一 context 的 branch-protection app readback，结果保持 `unknown`，不得把 context-only 规则误报为身份已验证。

@@ -1225,7 +1225,7 @@ def check_workflow_spoof_cases() -> None:
         if case["coordinator_source"] != "base":
             verdict = "blocked"
         elif case["trust_mode"] == "distinct_app_check":
-            verdict = "strong"
+            verdict = "strong" if case.get("required_app_id") != case.get("spoof_app_id") else "blocked"
         else:
             verdict = "limited"
         if verdict != case["expected"]:
