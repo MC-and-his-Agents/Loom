@@ -63,6 +63,7 @@ def snapshot(subject: int, issues: list[dict[str, object]], *, product_acceptanc
         "subject": subject,
         "repository": "o/r",
         "default_branch": "main",
+        "review_policy": {"read_complete": True, "required_approving_review_count": 1},
         "issues": issues,
         "product_acceptance": acceptance(subject) if product_acceptance is None else product_acceptance,
     }
@@ -116,6 +117,14 @@ def main() -> int:
     unapproved = issue(3, "work_item", merged_prs=[{**pr, "review_decision": "CHANGES_REQUESTED"}])
     if module.evaluate_closure({"subject": 1, "default_branch": "main", "issues": [phase, fr, unapproved]}).get("verdict") != "reopen_required":
         raise AssertionError("a merged PR without approval must reopen")
+    zero_approval_policy = snapshot(1, [phase, fr, issue(3, "work_item", merged_prs=[{**pr, "review_decision": None}])])
+    zero_approval_policy["review_policy"] = {"read_complete": True, "required_approving_review_count": 0}
+    if module.evaluate_closure(zero_approval_policy, host_resolved=True).get("verdict") != "allow_completed_close":
+        raise AssertionError("a merged green PR must satisfy a host policy requiring zero approvals")
+    unreadable_review_policy = snapshot(1, [phase, fr, work_item])
+    unreadable_review_policy["review_policy"] = {"read_complete": False}
+    if module.evaluate_closure(unreadable_review_policy, host_resolved=True).get("verdict") != "reopen_required":
+        raise AssertionError("unreadable host review policy must fail closed")
     pending_checks = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "PENDING", "contexts_complete": True, "contexts": pr["check_rollup"]["contexts"]}}])
     if module.evaluate_closure({"subject": 1, "default_branch": "main", "issues": [phase, fr, pending_checks]}).get("verdict") != "reopen_required":
         raise AssertionError("a merged PR without a successful check rollup must reopen")
@@ -163,7 +172,7 @@ def main() -> int:
         bad_work_item = issue(3, "work_item", labels=["review-policy-single-maintainer"], merged_prs=[bad_pr])
         if module.evaluate_closure(snapshot(1, [phase, fr, bad_work_item]), host_resolved=True).get("verdict") != "reopen_required":
             raise AssertionError("single-maintainer policy requires an explicit post-artifact assertion by the authenticated sole maintainer")
-    missing_child = module.evaluate_closure({"subject": 2, "default_branch": "main", "issues": [issue(2, "fr")]})
+    missing_child = module.evaluate_closure(snapshot(2, [issue(2, "fr")]))
     if missing_child.get("verdict") != "reopen_required" or not any(reason.get("code") == "missing_native_child" for reason in missing_child.get("reasons", [])):
         raise AssertionError(f"FR without a Work Item must reopen: {missing_child}")
     deferred = issue(4, "fr", labels=["deferred"], state_reason="NOT_PLANNED")
@@ -195,7 +204,7 @@ def main() -> int:
         comment_bodies=[f"<!-- loom:host-attestation-artifact pr:31 head:{pr['head_sha']} id:7 -->"],
         comments=[{"body": f"<!-- loom:host-attestation-artifact pr:31 head:{pr['head_sha']} id:7 -->", "created_at": "2026-07-11T00:02:00Z", "author_association": "OWNER", "user": {"id": 1, "login": "maintainer"}}],
     )
-    raw_snapshot = {"subject": 1, "repository": "o/r", "default_branch": "main", "host_readable": True, "issues": [locator_phase, fr, locator_work_item]}
+    raw_snapshot = {"subject": 1, "repository": "o/r", "default_branch": "main", "review_policy": {"read_complete": True, "required_approving_review_count": 1}, "host_readable": True, "issues": [locator_phase, fr, locator_work_item]}
     def fake_acceptance(root, locator, artifact_id):
         if root != ROOT or locator != "o/r/issue/1" or artifact_id != 17:
             raise AssertionError("closure acceptance locator drifted")
@@ -208,7 +217,7 @@ def main() -> int:
     if resolved.get("host_facts_resolved") is not True or module.evaluate_closure(resolved, host_resolved=True).get("verdict") != "allow_completed_close":
         raise AssertionError(f"host-resolved product acceptance and single-maintainer attestation must close: {resolved}")
     ambiguous_phase = issue(1, "phase", children=[2], comment_bodies=["<!-- loom:product-acceptance-artifact id:17 -->", "<!-- loom:product-acceptance-artifact id:18 -->"])
-    ambiguous_snapshot = {"subject": 1, "repository": "o/r", "default_branch": "main", "host_readable": True, "issues": [ambiguous_phase, fr, work_item]}
+    ambiguous_snapshot = {"subject": 1, "repository": "o/r", "default_branch": "main", "review_policy": {"read_complete": True, "required_approving_review_count": 1}, "host_readable": True, "issues": [ambiguous_phase, fr, work_item]}
     resolved_ambiguous = module.resolve_host_facts(ambiguous_snapshot, ROOT, acceptance_resolver=fake_acceptance, attestation_reader=fake_attestation)
     if module.evaluate_closure(resolved_ambiguous).get("verdict") != "reopen_required":
         raise AssertionError("ambiguous artifact locators must fail closed")

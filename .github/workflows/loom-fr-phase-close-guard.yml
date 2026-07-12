@@ -135,6 +135,7 @@ jobs:
               repository: `${owner}/${repo}`,
               event_closed_at: context.payload.issue?.closed_at || null,
               default_branch: null,
+              review_policy: { read_complete: false, required_approving_review_count: null },
               host_readable: true,
               issues: [],
             };
@@ -154,6 +155,19 @@ jobs:
                 queue.push(...fetched.issue.children);
               }
               snapshot.issues = [...byNumber.values()];
+              const protection = await github.rest.repos.getBranchProtection({
+                owner,
+                repo,
+                branch: snapshot.default_branch,
+              });
+              const requiredApprovals = protection.data?.required_pull_request_reviews?.required_approving_review_count;
+              if (!Number.isInteger(requiredApprovals) || requiredApprovals < 0) {
+                throw new Error("GitHub required review policy read is incomplete");
+              }
+              snapshot.review_policy = {
+                read_complete: true,
+                required_approving_review_count: requiredApprovals,
+              };
             } catch (error) {
               snapshot.host_readable = false;
               core.warning(`closure guard host read failed: ${error.message}`);
