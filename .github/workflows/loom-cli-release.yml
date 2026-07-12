@@ -97,7 +97,12 @@ jobs:
         run: python3 tools/version_surface_check.py
 
       - name: Check CLI contract
-        run: python3 tools/check_cli_contract.py
+        run: |
+          if [[ "$(<VERSION)" == v0.29.* ]]; then
+            python3 tools/check_cli_contract.py --surface governance-closeout
+          else
+            python3 tools/check_cli_contract.py
+          fi
 
       - name: Check npm package contract
         run: python3 tools/check_npm_package.py

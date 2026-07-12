@@ -12446,6 +12446,8 @@ def blocker_text_is_clear(value: str) -> bool:
         "core #281 remains open for final product closeout. lode #273 was consumed at merge f45b17990a6b1451a7a0ff55ec110c310e66f196.",
     }:
         return True
+    if re.search(r"\b(?:is|are) (?:still )?(?:required|blocked)\b", normalized):
+        return False
     if re.fullmatch(r"none\. [^.]+ does not (?:alter|block) [^.]+\.?", normalized):
         return True
     if ", but " in normalized:
