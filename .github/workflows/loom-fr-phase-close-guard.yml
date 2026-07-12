@@ -49,7 +49,7 @@ jobs:
                     closedByPullRequestsReferences(first:100) {
                       pageInfo { hasNextPage }
                       nodes {
-                        number merged baseRefName headRefOid mergeCommit { oid } reviewDecision
+                        number merged mergedAt baseRefName headRefOid mergeCommit { oid } reviewDecision
                         commits(last:1) {
                           nodes {
                             commit {
@@ -100,6 +100,7 @@ jobs:
                     return {
                       number: entry.number,
                       merged: entry.merged,
+                      merged_at: entry.mergedAt,
                       base_ref: entry.baseRefName,
                       head_sha: entry.headRefOid,
                       merge_commit: entry.mergeCommit?.oid,

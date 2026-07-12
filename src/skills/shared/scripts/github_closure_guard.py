@@ -106,7 +106,8 @@ def _deferred_ready(issue: dict[str, Any]) -> list[dict[str, str]]:
 
 def _successful_check_rollup(pr: dict[str, Any]) -> bool:
     rollup = pr.get("check_rollup")
-    if not isinstance(rollup, dict) or rollup.get("contexts_complete") is not True:
+    merged_at = _parse_time(pr.get("merged_at"))
+    if not isinstance(rollup, dict) or rollup.get("contexts_complete") is not True or merged_at is None:
         return False
     contexts = rollup.get("contexts")
     if not isinstance(contexts, list):
@@ -124,6 +125,8 @@ def _successful_check_rollup(pr: dict[str, Any]) -> bool:
             or _parse_time(context.get("created_at"))
             or datetime.min.replace(tzinfo=timezone.utc)
         )
+        if timestamp > merged_at:
+            continue
         current = latest.get(name)
         if current is None or (timestamp, index) > (current[0], current[1]):
             latest[name] = (timestamp, index, context)
