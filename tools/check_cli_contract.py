@@ -3518,6 +3518,10 @@ def assert_nonblocking_checkpoint_text_contract() -> None:
     blocking_shapes = (
         "Core #270 blocks this implementation slice.",
         "Core #270 does not block documentation, but production validation is blocked.",
+        "None. Security approval is still required and does not alter product scope.",
+        "None. Production is blocked and this does not alter product scope.",
+        "Security review does not block documentation although production validation is blocked.",
+        "Security review does not block documentation.",
         "Waiting for security review.",
     )
     for blockers in blocking_shapes:
