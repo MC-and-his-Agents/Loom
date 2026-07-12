@@ -172,6 +172,21 @@ class ProductAcceptanceTest(unittest.TestCase):
         result = product_acceptance.evaluate_acceptance(record, now=NOW)
         self.assertEqual(result["result"], "pass")
         self.assertEqual(result["product_acceptance"]["verdict"], "waived")
+        self.assertFalse(result["product_acceptance"]["trusted"])
+
+    def test_host_resolved_waiver_and_not_required_are_trusted_but_do_not_consume_evidence(self) -> None:
+        for verdict in ("waived", "not_required"):
+            record = live_record()
+            record.update({"verdict": verdict, "rationale": "host policy explicitly allows this disposition", "evidence": []})
+            read_json, read_bytes = host_reader(record)
+            result = product_acceptance.resolve_acceptance(
+                ROOT, "MC-and-his-Agents/Loom/issue/225", 7, now=NOW, read_json=read_json, read_bytes=read_bytes,
+            )
+            self.assertEqual(result["result"], "pass")
+            self.assertEqual(result["product_acceptance"]["verdict"], verdict)
+            self.assertTrue(result["product_acceptance"]["trusted"])
+            self.assertFalse(result["product_acceptance"]["evidence_consumed"])
+            self.assertTrue(result["rationale"])
 
     def test_stale_or_unsafe_evidence_is_blocked(self) -> None:
         stale = live_record()

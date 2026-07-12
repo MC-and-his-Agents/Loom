@@ -147,7 +147,7 @@ def _result(
 ) -> dict[str, Any]:
     declared = payload.get("verdict")
     acceptance_verdict = "blocked" if errors else declared
-    trusted = host_binding is not None and declared == "passed" and not errors
+    trusted = host_binding is not None and not errors
     cause = primary_cause(
         cause_id="product_acceptance_resolved" if trusted else "product_acceptance_record_valid" if not errors else "product_acceptance_untrusted",
         failure_domain="product_acceptance",
@@ -168,13 +168,14 @@ def _result(
             "verdict": acceptance_verdict,
             "owner": "product_acceptance_adapter",
             "trusted": trusted,
-            "evidence_consumed": trusted,
+            "evidence_consumed": bool(trusted and declared == "passed"),
             "owns_lifecycle_closure": False,
         },
         "authority_verdict": authority_verdict(product_acceptance=acceptance_verdict),
         "story_locator": payload.get("story_locator"),
         "scenario_id": payload.get("scenario_id"),
         "minimum_evidence_class": payload.get("minimum_evidence_class"),
+        "rationale": payload.get("rationale"),
         "host_facts": host_binding,
         "missing_inputs": errors,
         "failure_envelope": failure_envelope(cause),

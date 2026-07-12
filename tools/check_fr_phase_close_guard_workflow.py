@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "loom-fr-phase-close-guard.yml"
+EVALUATOR = ROOT / "src" / "skills" / "shared" / "scripts" / "github_closure_guard.py"
 
 
 def main() -> int:
@@ -16,6 +17,7 @@ def main() -> int:
         "name: loom-fr-phase-close-guard",
         "issues:",
         "types: [closed]",
+        "actions: read",
         "contents: read",
         "issues: write",
         "pull-requests: read",
@@ -28,20 +30,32 @@ def main() -> int:
         "github_closure_guard.py",
         "--snapshot",
         "--output",
+        "--resolve-host-facts",
+        "GH_TOKEN: ${{ github.token }}",
         "Checkout trusted default branch evaluator",
         "ref: ${{ github.event.repository.default_branch }}",
         "github.rest.issues.update",
         "github.rest.issues.get",
         "github.rest.issues.createComment",
+        "github.rest.issues.updateComment",
         "github.rest.issues.getComment",
-        "comment_id: created.id",
+        "comment_id: written.id",
+        "comment.id !== written.id",
+        'String(comment.body || "") !== body',
         "reopen_required",
         "defaultBranchRef",
         "closedByPullRequestsReferences",
         "reviewDecision",
         "statusCheckRollup",
+        "closedAt",
+        "event_closed_at",
+        'current.state !== "closed"',
+        'current.state_reason !== "completed"',
+        "changed after the closure snapshot",
         "comment_bodies",
-        "hasSnapshotMarker",
+        "author_association",
+        "created_at",
+        "markerComments",
         "remediationMarker",
     )
     forbidden = (
@@ -55,8 +69,20 @@ def main() -> int:
     )
     missing = [needle for needle in required if needle not in text]
     present = [needle for needle in forbidden if needle in text]
-    if missing or present:
-        details = [*(f"missing `{needle}`" for needle in missing), *(f"forbidden `{needle}`" for needle in present)]
+    evaluator = EVALUATOR.read_text(encoding="utf-8")
+    evaluator_required = (
+        "resolve_host_facts",
+        "product_acceptance_missing",
+        "product_acceptance_untrusted",
+        "review_policy_single_maintainer",
+        "assertion_verified",
+        "loom:product-acceptance-artifact",
+        "loom:host-attestation-artifact",
+        "failure_envelope",
+    )
+    evaluator_missing = [needle for needle in evaluator_required if needle not in evaluator]
+    if missing or present or evaluator_missing:
+        details = [*(f"missing `{needle}`" for needle in missing), *(f"forbidden `{needle}`" for needle in present), *(f"evaluator missing `{needle}`" for needle in evaluator_missing)]
         raise SystemExit("FR/Phase close guard workflow contract failed: " + "; ".join(details))
     print("FR/Phase close guard workflow contract: OK")
     return 0

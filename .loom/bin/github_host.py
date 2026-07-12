@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,10 @@ HOST_API_NEXT_ACTIONS = {
 }
 SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 HOST_ATTESTATION_WORKFLOW_PATH = ".github/workflows/host-attestation-evidence.yml"
+HOST_ATTESTATION_ASSERTION_RE = re.compile(
+    r"<!--\s*loom:host-attestation-artifact\s+pr:(\d+)\s+head:([0-9a-f]{40})\s+id:(\d+)\s*-->",
+    re.IGNORECASE,
+)
 
 
 def run_process(
@@ -366,6 +371,18 @@ def _github_commit_tree_readback(
 
 def _current_approved_review(reviews: list[dict[str, Any]], head_sha: str) -> tuple[dict[str, Any] | None, list[str]]:
     """Use each reviewer's latest state and bind approval to the current PR head."""
+    current, errors = _current_head_reviews(reviews, head_sha)
+    if errors:
+        return None, errors
+    approved = [row for row in current if str(row.get("state") or "").upper() == "APPROVED"]
+    if not approved:
+        return None, ["no GitHub APPROVED review is bound to the current head"]
+    approved.sort(key=lambda row: int(row.get("id") or 0), reverse=True)
+    return approved[0], []
+
+
+def _current_head_reviews(reviews: list[dict[str, Any]], head_sha: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return every reviewer's latest current-head state and reject objections."""
     latest: dict[str, dict[str, Any]] = {}
     for row in reviews:
         reviewer = row.get("user") if isinstance(row.get("user"), dict) else {}
@@ -377,12 +394,23 @@ def _current_approved_review(reviews: list[dict[str, Any]], head_sha: str) -> tu
             latest[key] = row
     current = [row for row in latest.values() if row.get("commit_id") == head_sha]
     if any(str(row.get("state") or "").upper() == "CHANGES_REQUESTED" for row in current):
-        return None, ["a current-head GitHub review requests changes"]
-    approved = [row for row in current if str(row.get("state") or "").upper() == "APPROVED"]
-    if not approved:
-        return None, ["no GitHub APPROVED review is bound to the current head"]
-    approved.sort(key=lambda row: int(row.get("id") or 0), reverse=True)
-    return approved[0], []
+        return [], ["a current-head GitHub review requests changes"]
+    return current, []
+
+
+def _host_time(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+
+
+def _has_write_access(collaborator: dict[str, Any]) -> bool:
+    permissions = collaborator.get("permissions") if isinstance(collaborator.get("permissions"), dict) else {}
+    return any(permissions.get(name) is True for name in ("admin", "maintain", "push")) or str(collaborator.get("role_name") or "").lower() in {"admin", "maintain", "write"}
 
 
 def github_pr_attestation_readback(
@@ -392,7 +420,9 @@ def github_pr_attestation_readback(
     pr_number: int,
     artifact_id: int,
     *,
+    work_item: int | None = None,
     allow_merged: bool = False,
+    review_policy: str = "approved",
     read_json: Any = gh_rest_authenticated_json,
     read_list: Any = gh_rest_authenticated_list,
 ) -> tuple[dict[str, Any] | None, list[str]]:
@@ -412,12 +442,20 @@ def github_pr_attestation_readback(
         return None, repository_errors or ["GitHub repository read returned no object"]
     if repository.get("default_branch") != base_ref:
         return None, ["GitHub PR base branch is not the repository default branch for trusted workflow attestation"]
+    if review_policy not in {"approved", "single_maintainer"}:
+        return None, ["host attestation review policy is unsupported"]
     reviews, review_errors = read_list(root, f"repos/{owner}/{repo_name}/pulls/{pr_number}/reviews")
     if review_errors:
         return None, review_errors
-    review, approval_errors = _current_approved_review(reviews, head_sha)
-    if approval_errors or review is None:
-        return None, approval_errors
+    if review_policy == "approved":
+        review, approval_errors = _current_approved_review(reviews, head_sha)
+        if approval_errors or review is None:
+            return None, approval_errors
+    else:
+        _current, objection_errors = _current_head_reviews(reviews, head_sha)
+        if objection_errors:
+            return None, objection_errors
+        review = None
     tree, tree_errors = _github_commit_tree_readback(root, owner, repo_name, head_sha, read_json=read_json)
     if tree_errors or tree is None:
         return None, tree_errors
@@ -427,30 +465,112 @@ def github_pr_attestation_readback(
     digest = artifact.get("digest")
     run_info = artifact.get("workflow_run") if isinstance(artifact.get("workflow_run"), dict) else {}
     run_id = run_info.get("id")
-    if artifact.get("expired") is True or not isinstance(digest, str) or SHA256_DIGEST_RE.fullmatch(digest) is None or not isinstance(run_id, int):
-        return None, ["GitHub Actions artifact is expired or lacks a host digest/workflow run"]
+    if artifact.get("expired") is not False or not isinstance(digest, str) or SHA256_DIGEST_RE.fullmatch(digest) is None or not isinstance(run_id, int) or isinstance(run_id, bool):
+        return None, ["GitHub Actions artifact is expired or lacks a host digest/workflow run; re-run the trusted host-attestation workflow_dispatch for the exact PR/head and update the Work Item assertion"]
     run, run_errors = read_json(root, f"repos/{owner}/{repo_name}/actions/runs/{run_id}")
     if run_errors or not isinstance(run, dict):
         return None, run_errors or ["GitHub Actions workflow run read returned no object"]
     pull_requests = run.get("pull_requests")
     run_pr_numbers = {row.get("number") for row in pull_requests if isinstance(row, dict)} if isinstance(pull_requests, list) else set()
+    run_event = run.get("event")
+    pull_target_binding = run_event == "pull_request_target" and run.get("head_sha") == head_sha and pr_number in run_pr_numbers
+    dispatch_binding = (
+        review_policy == "single_maintainer"
+        and run_event == "workflow_dispatch"
+        and not run_pr_numbers
+        and run.get("head_branch") == base_ref
+    )
     if (
-        run.get("head_sha") != head_sha
-        or run.get("event") != "pull_request_target"
+        not (pull_target_binding or dispatch_binding)
         or str(run.get("status") or "").lower() != "completed"
         or str(run.get("conclusion") or "").lower() != "success"
         or run.get("path") != HOST_ATTESTATION_WORKFLOW_PATH
-        or (run_pr_numbers and pr_number not in run_pr_numbers)
     ):
-        return None, ["GitHub Actions workflow run is not the completed successful host-attestation pull_request_target run for this PR head"]
+        return None, ["GitHub Actions workflow run is not a completed trusted host-attestation run bound to this PR head"]
+    policy_facts: dict[str, Any] = {"mode": "approved", "verified": True}
+    if review_policy == "single_maintainer":
+        author = pr.get("user") if isinstance(pr.get("user"), dict) else {}
+        actor = run.get("triggering_actor") if isinstance(run.get("triggering_actor"), dict) else run.get("actor") if isinstance(run.get("actor"), dict) else {}
+        collaborators, collaborator_errors = read_list(root, f"repos/{owner}/{repo_name}/collaborators?affiliation=all&per_page=100")
+        if collaborator_errors:
+            return None, collaborator_errors
+        maintainers = [row for row in collaborators if _has_write_access(row)]
+        author_identity = (author.get("id"), author.get("login"))
+        actor_identity = (actor.get("id"), actor.get("login"))
+        maintainer_identity = (maintainers[0].get("id"), maintainers[0].get("login")) if len(maintainers) == 1 else (None, None)
+        artifact_created = _host_time(artifact.get("created_at"))
+        run_started, run_updated = _host_time(run.get("run_started_at")), _host_time(run.get("updated_at"))
+        if artifact.get("name") != f"loom-host-attestation-{pr_number}":
+            return None, ["single-maintainer attestation artifact name does not bind the target PR"]
+        if (
+            len(maintainers) != 1
+            or not isinstance(author_identity[0], int)
+            or isinstance(author_identity[0], bool)
+            or not isinstance(author_identity[1], str)
+            or author_identity != actor_identity
+            or author_identity != maintainer_identity
+        ):
+            return None, ["single-maintainer attestation requires the sole write maintainer to author and trigger the PR run"]
+        if run_started is None or run_updated is None or artifact_created is None or run_started > artifact_created or artifact_created > run_updated + timedelta(minutes=5):
+            return None, ["single-maintainer attestation lacks a fresh host-bound run and artifact time window"]
+        if not isinstance(work_item, int) or isinstance(work_item, bool) or work_item <= 0:
+            return None, ["single-maintainer attestation requires a typed Work Item host comment locator"]
+        work_item_issue, issue_errors = read_json(root, f"repos/{owner}/{repo_name}/issues/{work_item}")
+        if issue_errors or not isinstance(work_item_issue, dict):
+            return None, issue_errors or ["GitHub Work Item read returned no object"]
+        labels = work_item_issue.get("labels")
+        type_labels = {
+            str(row.get("name") or "").strip().lower().replace("_", "-")
+            for row in labels
+            if isinstance(row, dict)
+        } & {"work-item", "fr", "phase"} if isinstance(labels, list) else set()
+        if type_labels != {"work-item"}:
+            return None, ["single-maintainer attestation assertion issue is not uniquely typed as a work-item"]
+        comments, comment_errors = read_list(root, f"repos/{owner}/{repo_name}/issues/{work_item}/comments?per_page=100")
+        if comment_errors:
+            return None, comment_errors
+        assertions: list[tuple[dict[str, Any], re.Match[str]]] = []
+        for comment in comments:
+            if not isinstance(comment, dict) or not isinstance(comment.get("body"), str):
+                return None, ["single-maintainer attestation comment identity is unreadable"]
+            for match in HOST_ATTESTATION_ASSERTION_RE.finditer(comment["body"]):
+                if int(match.group(1)) == pr_number and match.group(2).lower() == head_sha.lower():
+                    assertions.append((comment, match))
+        if len(assertions) != 1:
+            return None, ["exactly one explicit single-maintainer attestation comment must bind the PR and current head"]
+        assertion, assertion_match = assertions[0]
+        assertion_user = assertion.get("user") if isinstance(assertion.get("user"), dict) else {}
+        assertion_identity = (assertion_user.get("id"), assertion_user.get("login"))
+        assertion_created = _host_time(assertion.get("created_at"))
+        if (
+            int(assertion_match.group(3)) != artifact_id
+            or assertion_identity != maintainer_identity
+            or assertion.get("author_association") not in {"OWNER", "MEMBER", "COLLABORATOR"}
+            or assertion_created is None
+            or assertion_created < artifact_created
+        ):
+            return None, ["single-maintainer attestation comment is not a host-authenticated post-artifact assertion"]
+        policy_facts = {
+            "mode": "single_maintainer",
+            "verified": True,
+            "maintainer_count": 1,
+            "maintainer": {"id": author_identity[0], "login": author_identity[1]},
+            "run_started_at": run.get("run_started_at"),
+            "run_updated_at": run.get("updated_at"),
+            "artifact_created_at": artifact.get("created_at"),
+            "assertion_verified": True,
+            "assertion_created_at": assertion.get("created_at"),
+            "assertion_comment_id": assertion.get("id"),
+        }
     return {
         "source": "github",
         "read_complete": True,
         "pr": {"number": pr_number, "head_sha": head_sha, "base_ref": base_ref, "merged_at": pr.get("merged_at"), "merge_commit_sha": pr.get("merge_commit_sha")},
-        "review": {"id": review.get("id"), "state": review.get("state"), "commit_id": review.get("commit_id")},
+        "review": {"id": review.get("id"), "state": review.get("state"), "commit_id": review.get("commit_id")} if review is not None else {"id": None, "state": "SINGLE_MAINTAINER_ATTESTED", "commit_id": head_sha},
+        "review_policy": policy_facts,
         "semantic_tree": tree,
         "artifact": {"id": artifact_id, "digest": digest, "run_id": run_id, "name": artifact.get("name")},
-        "workflow_run": {"id": run_id, "event": run.get("event"), "status": run.get("status"), "conclusion": run.get("conclusion"), "head_sha": run.get("head_sha"), "workflow_id": run.get("workflow_id"), "path": run.get("path")},
+        "workflow_run": {"id": run_id, "event": run.get("event"), "status": run.get("status"), "conclusion": run.get("conclusion"), "head_sha": run.get("head_sha"), "workflow_id": run.get("workflow_id"), "path": run.get("path"), "binding": "pull_request_target" if pull_target_binding else "workflow_dispatch_reattest"},
     }, []
 
 

@@ -149,5 +149,58 @@ objects.
   `needs_breakdown`; an explicit non-completion exception is left for that
   closure guard to classify.
 
+### Completed FR/Phase formula
+
+A completed FR or Phase remains closed only when all of the following are
+true:
+
+- its native child/dependency tree is complete;
+- each Work Item has a default-branch merged PR and successful host check
+  rollup;
+- review policy is satisfied by either a current-head GitHub `APPROVED`, or a
+  host-resolved single-maintainer attestation;
+- the subject consumes a trusted #2045 resolver verdict: `passed` with
+  consumed evidence, reasoned `not_required`, or reasoned `waived` when the
+  host issue carries `product-acceptance-waiver-allowed`.
+
+`pending`, `blocked`, `failed`, missing, untrusted, or wrong-story acceptance
+always reopens a `completed` closure. Merge, checks, delivery closeout, and
+attestation never synthesize product acceptance. `not planned` and a valid
+deferred recovery contract remain non-completion closures.
+
+The single-maintainer path is not self-approval by repository JSON. The host
+issue must carry `review-policy-single-maintainer`; an artifact locator comment
+must bind `pr`, the exact 40-character `head`, and `id`, but posting it after artifact creation is the maintainer's
+explicit semantic-attestation action. GitHub must read back that comment's
+author, association, and timestamp; they must match the authenticated sole
+maintainer and the comment must not predate the artifact. The resolver itself
+must also read back the assertion issue and prove its only lifecycle type label
+is `work-item`; a plain issue, FR, or Phase comment is not an attestation.
+Authenticated GitHub
+readback must also prove that the PR author,
+workflow triggering actor, and sole write-level collaborator are the same
+identity, with no current-head changes request, and must bind the current PR
+head to a semantic-tree digest, successful trusted workflow run, artifact
+digest, and fresh host timestamps. Any unreadable or conflicting fact falls
+back to `reopen_required`; multi-maintainer repositories continue to require
+the normal approval policy.
+
+The evidence artifact may expire without making a historical Work Item
+permanently unverifiable. The trusted default-branch workflow exposes an
+explicit `workflow_dispatch` re-attestation input for an existing PR. It reads
+the exact PR/head from GitHub and emits a fresh artifact; the sole maintainer
+must then update the same host assertion to the fresh artifact id. The resolver
+accepts that recovery only when the dispatch actor, PR author, sole write
+maintainer, assertion author, PR/head, workflow path, run, timestamps, and
+artifact digest all agree, and the dispatch run is bound to the repository
+default branch. Dispatch artifacts are never accepted by the normal
+multi-maintainer `APPROVED` path. An expired artifact never passes by itself.
+
+The `issues.closed` guard re-reads the issue before mutation and refuses a
+stale snapshot. Reopen/comment recovery is idempotent and exposes one primary
+failure/remediation; when the primary cause changes, it updates the existing
+stable marker comment instead of appending another. Comments cannot provide
+verdict authority outside authenticated resolver readback.
+
 This contract does not create a review ledger, own lifecycle closure, or
 authorize WebEnvoy runtime actions.
