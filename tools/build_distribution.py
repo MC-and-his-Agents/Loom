@@ -58,26 +58,7 @@ def copy_tree(source: Path, target: Path) -> None:
     shutil.copytree(source, target, copy_function=shutil.copy2)
 
 
-def owned_build_output(output: Path) -> bool:
-    manifest = output / "manifest.json"
-    try:
-        payload = json.loads(manifest.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return (
-        isinstance(payload, dict)
-        and set(payload) == {
-            "schema_version", "generator", "canonical_root", "output_root",
-            "aggregate_sha256", "file_count", "files",
-        }
-        and payload.get("schema_version") == "loom-generated-distribution/v1"
-        and payload.get("generator") == GENERATOR
-        and payload.get("canonical_root") == "src/skills"
-        and payload.get("output_root") == "."
-    )
-
-
-def validate_output_path(output: Path, *, allow_missing: bool = True) -> Path:
+def safe_output_path(output: Path, *, allow_missing: bool) -> Path:
     resolved = output.resolve()
     protected = (ROOT.resolve(), CANONICAL_SKILLS.resolve())
     if resolved == Path(resolved.anchor) or any(resolved == path or path.is_relative_to(resolved) for path in protected):
@@ -85,10 +66,18 @@ def validate_output_path(output: Path, *, allow_missing: bool = True) -> Path:
     allowed_roots = ((ROOT / "build").resolve(), Path(tempfile.gettempdir()).resolve())
     if resolved in allowed_roots or not any(resolved.is_relative_to(root) for root in allowed_roots):
         raise RuntimeError(f"distribution output must stay under build/ or the system temporary root: {resolved}")
-    if resolved.exists() and not owned_build_output(resolved):
-        raise RuntimeError(f"refusing to replace non-owned distribution output: {resolved}")
     if not resolved.exists() and not allow_missing:
         raise RuntimeError(f"distribution output does not exist: {resolved}")
+    return resolved
+
+
+def validate_output_path(output: Path, *, allow_missing: bool = True) -> Path:
+    resolved = safe_output_path(output, allow_missing=allow_missing)
+    if resolved.exists():
+        try:
+            validated_distribution(resolved)
+        except RuntimeError as exc:
+            raise RuntimeError(f"refusing to replace non-owned distribution output: {resolved}") from exc
     return resolved
 
 
@@ -169,7 +158,7 @@ def runtime_manifest(manifest: dict[str, object], prefix: str) -> dict[str, obje
 
 
 def validated_distribution(output: Path) -> dict[str, object]:
-    output = validate_output_path(output, allow_missing=False)
+    output = safe_output_path(output, allow_missing=False)
     manifest_path = output / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

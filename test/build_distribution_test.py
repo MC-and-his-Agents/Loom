@@ -28,6 +28,31 @@ class BuildDistributionSafetyTest(unittest.TestCase):
                 build_distribution.build(occupied)
             self.assertEqual((occupied / "user.txt").read_text(encoding="utf-8"), "keep\n")
 
+            forged = Path(tmp) / "forged"
+            forged.mkdir()
+            user_file = forged / "user.txt"
+            user_file.write_text("keep\n", encoding="utf-8")
+            (forged / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "loom-generated-distribution/v1",
+                        "generator": build_distribution.GENERATOR,
+                        "canonical_root": "src/skills",
+                        "output_root": ".",
+                        "aggregate_sha256": "0" * 64,
+                        "file_count": 0,
+                        "files": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(RuntimeError):
+                build_distribution.build(forged)
+            with self.assertRaises(RuntimeError):
+                build_distribution.validate_output_path(forged, allow_missing=False)
+            self.assertEqual(user_file.read_text(encoding="utf-8"), "keep\n")
+
     def test_rejects_symlink_escape_and_manifest_inventory_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
