@@ -41,6 +41,7 @@ PROHIBITED_ACTIONS = frozenset({"login", "captcha_or_risk_bypass", "submit", "pu
 TRUSTED_PERMISSIONS = frozenset({"admin", "maintain", "write"})
 ARTIFACT_NAME = "loom-product-acceptance"
 ARTIFACT_RECORD = "acceptance.json"
+SELF_ARTIFACT_REF = "github-actions:self"
 TRUSTED_WORKFLOW_PATH = ".github/workflows/loom-product-acceptance.yml"
 MAX_ARTIFACT_BYTES = 5 * 1024 * 1024
 MAX_RECORD_BYTES = 1024 * 1024
@@ -115,8 +116,8 @@ def evidence_errors(
     refs = evidence.get("artifact_refs")
     if not valid_string_list(refs):
         errors.append("artifact_refs must contain at least one reference")
-    elif host_binding is not None and refs != [host_binding["artifact_locator"]]:
-        errors.append("artifact_refs must contain only the authenticated host artifact locator")
+    elif host_binding is not None and refs not in ([host_binding["artifact_locator"]], [SELF_ARTIFACT_REF]):
+        errors.append("artifact_refs must contain only the authenticated host artifact locator or `github-actions:self`")
     profile = evidence.get("provider_profile")
     if not isinstance(profile, dict) or not all(isinstance(profile.get(key), str) and profile[key].strip() for key in ("provider", "profile")) or profile.get("redacted") is not True:
         errors.append("provider_profile must be redacted and identify provider/profile")

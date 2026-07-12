@@ -36,6 +36,7 @@ EXACT_NATIVE_SURFACES = {
     ".github/workflows/loom-delivery-gate.yml": ("delivery-gate-check", "workflow-contract-check"),
     ".github/workflows/loom-delivery-gate-attestor.yml": ("distinct-app-gate-workflow-check", "workflow-contract-check"),
     ".github/workflows/loom-fr-phase-close-guard.yml": ("fr-phase-close-guard-check", "workflow-contract-check"),
+    ".github/workflows/loom-product-acceptance.yml": ("product-acceptance-adapter-check", "workflow-contract-check"),
     ".github/workflows/pr-merge-gate.yml": ("pr-binding-workflow-check", "workflow-contract-check"),
     "tools/check_authority_contract.py": ("authority-contract-check", "fr-wi-admission-check"),
     "tools/check_cli_contract.py": ("cli-contract-check",),
@@ -58,6 +59,7 @@ EXACT_NATIVE_SURFACES = {
     "tools/skills_surface.py": ("skills-check",),
     "tools/stamp_plugin_payload_metadata.py": ("npm-package-check",),
     "tools/version_surface_check.py": ("release-surface-check",),
+    "tools/write_product_acceptance.py": ("product-acceptance-adapter-check",),
 }
 SCRIPT_NATIVE_SURFACES = {
     "authority_contract.py": ("authority-contract-check",),
@@ -273,6 +275,15 @@ IDENTITY_CAUSES = {
         "code": "passed",
         "locator": "required_check_identity:passed",
         "summary": "GitHub requires the expected delivery-check context from the expected app identity.",
+        "owner": "loom",
+        "retryable": False,
+        "remediation_command": "none",
+    },
+    "passed_limited": {
+        "failure_domain": "governance_metadata",
+        "code": "passed_limited",
+        "locator": "required_check_identity:passed_limited",
+        "summary": "GitHub requires the expected base-owned delivery check with limited same-app identity assurance.",
         "owner": "loom",
         "retryable": False,
         "remediation_command": "none",
@@ -850,10 +861,14 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
             cause_id = "required_check_identity_unknown"
         else:
             cause_id = "required_check_identity_invalid"
+    elif (
+        len(branch_context_checks) == 1
+        and len(matching_app_ids) == 1
+        and branch_context_checks[0].get("app_id") == required_check["app_id"] == github_actions_app_id
+    ):
+        cause_id = "passed_limited"
     elif not matching_app_ids:
         cause_id = "required_check_identity_unknown"
-    elif required_check["app_id"] in matching_known_app_ids:
-        cause_id = "host_enforcement_unavailable"
     elif matching_app_identity_unavailable:
         cause_id = "required_check_identity_unknown"
     else:
@@ -862,7 +877,7 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
     primary = _identity_cause(cause_id)
     return {
         "schema_version": REQUIRED_CHECK_IDENTITY_READINESS_SCHEMA,
-        "result": "ready" if cause_id == "passed" else "blocked",
+        "result": "ready" if cause_id in {"passed", "passed_limited"} else "blocked",
         "primary_cause": primary,
         "failure_envelope": envelope(primary),
         "identity": {
@@ -877,7 +892,7 @@ def evaluate_required_check_identity(evidence: object) -> dict[str, Any]:
             "retained_contexts": sorted(allowed_contexts),
             "unexpected_required_checks": unexpected_required_checks,
             "trust_mode": trust_mode,
-            "trust_verdict": "strong" if cause_id == "passed" else ("limited" if cause_id == "host_enforcement_unavailable" else "blocked"),
+            "trust_verdict": "strong" if cause_id == "passed" else ("limited" if cause_id == "passed_limited" else "blocked"),
             "expected_workflow_path": expected_workflow_path,
             "required_workflows": required_workflows,
             "workflow_readback": workflow_readback,

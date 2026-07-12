@@ -63,7 +63,7 @@ CAUSE_CONTRACTS = {
     "invalid_input": ("governance_metadata", "invalid", "repository", False, "correct the reported reconciliation inputs, then rerun"),
     "gate_enabler_unverified": ("host_service", "unverified", "github", True, "restore the gate-enabler PR and check readback, then rerun"),
     "host_readback_unavailable": ("host_service", "unavailable", "github", True, "rerun after GitHub host readback is available"),
-    "host_enforcement_unavailable": ("host_service", "host_enforcement_unavailable", "github", False, "complete #2063 with a distinct GitHub App before mutating required checks"),
+    "host_enforcement_unavailable": ("host_service", "host_enforcement_unavailable", "github", False, "configure a supported required-check identity before mutating required checks"),
     "required_set_unreadable": ("host_service", "unreadable", "github", True, "restore readable branch protection, then rerun"),
     "required_check_app_conflict": ("governance_metadata", "conflict", "operator", False, "remove the conflicting required-check app binding"),
     "unexpected_required_checks": ("governance_metadata", "unexpected", "operator", False, "declare each required check as retained or legacy"),
@@ -838,16 +838,28 @@ def reconcile_payload(
         return _response("block", "invalid_input", "branch and context must be non-empty; numeric locators must be positive", operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=None, writes=writes)
     if context in legacy_contexts or set(legacy_contexts) & set(retained_contexts):
         return _response("block", "invalid_input", "expected, legacy, and retained contexts must not conflict", operation=operation, repository=repository, branch=branch, work_item=work_item, next_action=None, writes=writes)
-    if trust_mode != "distinct_app_check" or app_id == 15368:
+    if trust_mode == "distinct_app_check" and app_id == 15368:
         return _response(
             "block",
             "host_enforcement_unavailable",
-            "light migration cannot mutate required checks until a distinct GitHub App identity is configured",
+            "distinct_app_check requires an app identity different from GitHub Actions",
             operation=operation,
             repository=repository,
             branch=branch,
             work_item=work_item,
-            next_action="complete #2063, then rerun with --trust-mode distinct_app_check and the distinct app id",
+            next_action="use the distinct App id or select pull_request_target_same_app with explicit limited assurance",
+            writes=writes,
+        )
+    if trust_mode == "required_workflow":
+        return _response(
+            "block",
+            "host_enforcement_unavailable",
+            "required-workflow migration is not implemented; use the base-owned same-app gate or an optional distinct App",
+            operation=operation,
+            repository=repository,
+            branch=branch,
+            work_item=work_item,
+            next_action="rerun with --trust-mode pull_request_target_same_app or distinct_app_check and the matching app id",
             writes=writes,
         )
 

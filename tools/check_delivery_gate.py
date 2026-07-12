@@ -421,8 +421,12 @@ def check_required_check_identity() -> None:
         observed_at,
     )
     ready = evaluator.evaluate_required_check_identity(valid)
-    if ready["result"] != "blocked" or ready["primary_cause"]["id"] != "host_enforcement_unavailable":
-        raise AssertionError("same-app required context must remain limited because a candidate can spoof its name")
+    if (
+        ready["result"] != "ready"
+        or ready["primary_cause"]["id"] != "passed_limited"
+        or ready["identity"]["trust_verdict"] != "limited"
+    ):
+        raise AssertionError("an exact same-app required context must be usable without claiming strong assurance")
 
     distinct_protection = json.loads((FIXTURES / "required-check-identity-valid.json").read_text(encoding="utf-8"))
     distinct_protection["required_status_checks"]["checks"][0]["app_id"] = 424242
@@ -487,7 +491,7 @@ def check_required_check_identity() -> None:
         )
     )
     if required_workflow["result"] != "blocked" or required_workflow["primary_cause"]["id"] != "host_enforcement_unavailable":
-        raise AssertionError("required workflow proof remains limited until #2063 binds the full host identity")
+        raise AssertionError("required workflow proof remains unsupported until its full host identity can be read")
 
     unknown = evaluator.evaluate_required_check_identity(
         evaluator.build_required_check_identity(
@@ -593,8 +597,8 @@ def check_required_check_identity() -> None:
             observed_at,
         )
     )
-    if retained["result"] != "blocked" or retained["primary_cause"]["id"] != "host_enforcement_unavailable":
-        raise AssertionError("retained checks do not upgrade a spoofable same-app delivery context")
+    if retained["result"] != "ready" or retained["identity"]["trust_verdict"] != "limited":
+        raise AssertionError("declared retained checks must coexist with a usable limited same-app delivery context")
 
     unexpected_branch = evaluator.evaluate_required_check_identity(
         evaluator.build_required_check_identity(
