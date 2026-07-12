@@ -269,7 +269,7 @@ def _valid_single_maintainer_attestation(pr: dict[str, Any]) -> bool:
     )
 
 
-def _approved_green_merged_pr(issue: dict[str, Any], default_branch: str) -> bool:
+def _reviewed_green_merged_pr(issue: dict[str, Any], default_branch: str, review_policy: dict[str, Any]) -> bool:
     prs = issue.get("merged_prs")
     if not isinstance(prs, list):
         return False
@@ -279,7 +279,8 @@ def _approved_green_merged_pr(issue: dict[str, Any], default_branch: str) -> boo
         pr_number, head_sha, merge_commit, commit_sha = pr.get("number"), pr.get("head_sha"), pr.get("merge_commit"), pr.get("commit_sha")
         if not isinstance(pr_number, int) or not all(isinstance(value, str) and value for value in (head_sha, merge_commit, commit_sha)) or commit_sha != head_sha:
             continue
-        review_ready = _text(pr.get("review_decision")) == "approved"
+        required_approvals = review_policy.get("required_approving_review_count")
+        review_ready = required_approvals == 0 or _text(pr.get("review_decision")) == "approved"
         if SINGLE_MAINTAINER_LABEL in _labels(issue):
             review_ready = _valid_single_maintainer_attestation(pr)
         if review_ready and _successful_check_rollup(pr):
@@ -291,6 +292,7 @@ def _validate_completed(
     issue: dict[str, Any],
     issues: dict[int, dict[str, Any]],
     default_branch: str,
+    review_policy: dict[str, Any],
     reasons: list[dict[str, str]],
     visiting: set[int],
 ) -> None:
@@ -317,8 +319,8 @@ def _validate_completed(
             reasons.append(_reason("open_native_blocker", locator, "completed closure cannot retain an open or unreadable native blocker"))
     kind = _type(issue)
     if kind == "work_item":
-        if not _approved_green_merged_pr(issue, default_branch):
-            reasons.append(_reason("missing_approved_merged_pr_or_green_check", locator, "Work Item needs a default-branch merged PR with an approved review and successful host check rollup"))
+        if not _reviewed_green_merged_pr(issue, default_branch, review_policy):
+            reasons.append(_reason("missing_reviewed_merged_pr_or_green_check", locator, "Work Item needs a default-branch merged PR satisfying the host review policy and successful host check rollup"))
         return
     expected = EXPECTED_CHILD_TYPE.get(kind)
     children = issue.get("children")
@@ -334,7 +336,7 @@ def _validate_completed(
         if _type(child) != expected:
             reasons.append(_reason("invalid_native_child_type", f"issue:{child_number}", f"{kind} requires native {expected} children"))
             continue
-        _validate_completed(child, issues, default_branch, reasons, next_visiting)
+        _validate_completed(child, issues, default_branch, review_policy, reasons, next_visiting)
 
 
 def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[str, Any]:
@@ -344,13 +346,19 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
     subject = snapshot.get("subject")
     issue_rows = snapshot.get("issues")
     default_branch = snapshot.get("default_branch")
+    review_policy = snapshot.get("review_policy")
     issues = {
         row.get("number"): row
         for row in issue_rows
         if isinstance(row, dict) and isinstance(row.get("number"), int)
     } if isinstance(issue_rows, list) else {}
     subject_issue = issues.get(subject) if isinstance(subject, int) else None
-    if snapshot.get("host_readable", True) is not True or not isinstance(subject_issue, dict) or not isinstance(default_branch, str) or not default_branch:
+    if (
+        snapshot.get("host_readable", True) is not True
+        or not isinstance(subject_issue, dict)
+        or not isinstance(default_branch, str)
+        or not default_branch
+    ):
         return _payload(int(subject) if isinstance(subject, int) else 0, "reopen_required", "GitHub closure facts are unreadable.", [_reason("host_unreadable", f"issue:{subject or 'unknown'}", "subject, default branch, or native tree read is missing")], completed=False)
     kind = _type(subject_issue)
     labels = _labels(subject_issue)
@@ -371,9 +379,17 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
         return _payload(subject, "allow_non_completion_close", "Explicit non-completion closure is not counted as completed.", [], completed=False)
     if labels.intersection(NON_COMPLETION_LABELS):
         return _payload(subject, "reopen_required", "Non-completion labels must use not planned semantics.", [_reason("non_completion_requires_not_planned", f"issue:{subject}", "non-completion labels cannot use completed semantics")], completed=False)
+    if (
+        not isinstance(review_policy, dict)
+        or review_policy.get("read_complete") is not True
+        or not isinstance(review_policy.get("required_approving_review_count"), int)
+        or isinstance(review_policy.get("required_approving_review_count"), bool)
+        or review_policy["required_approving_review_count"] < 0
+    ):
+        return _payload(subject, "reopen_required", "GitHub review policy is unreadable.", [_reason("host_unreadable", f"issue:{subject}", "required approving review policy read is missing")], completed=False)
     reasons: list[dict[str, str]] = []
     _trusted_product_acceptance(snapshot, subject, labels, reasons, host_resolved=host_resolved)
-    _validate_completed(subject_issue, issues, default_branch, reasons, set())
+    _validate_completed(subject_issue, issues, default_branch, review_policy, reasons, set())
     if reasons:
         return _payload(subject, "reopen_required", "Completed FR/Phase closure is missing required host facts.", reasons, completed=False)
     return _payload(subject, "allow_completed_close", "Trusted product acceptance, native children, dependencies, review policy, and check evidence permit completed closure.", [], completed=True)
