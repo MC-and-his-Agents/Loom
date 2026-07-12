@@ -145,9 +145,10 @@ def source_snapshot_ignore(root: Path):
 
 SOURCE_PROFILE_MARKERS = (
     "src/skills/shared/scripts/loom_check.py",
+    "src/skills/registry.json",
     "tools/loom_check.py",
-    "skills/registry.json",
-    "packages/loom-installer",
+    "tools/loom.py",
+    "package.json",
     "examples/new-project",
 )
 

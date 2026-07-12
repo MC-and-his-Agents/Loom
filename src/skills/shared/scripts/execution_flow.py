@@ -125,6 +125,7 @@ from governance_surface import (
 from execution_attempts import (
     persist_execution_attempt,
 )
+from loom_init import host_derived_manifest
 
 FLOW_ENTRYPOINT = Path(__file__).with_name("loom_flow.py")
 
@@ -2501,7 +2502,7 @@ def render_governance_intensity_metadata_body(
         "work_item_locator": work_item_locator,
         "governance_intensity": governance_intensity,
         "governance_mode": "host-enforced",
-        "governance_assurance": "strong",
+        "governance_assurance": "limited",
         "advisory_risk_label": None,
         "host_enforcement_required": True,
         "change_class": change_class,
@@ -3200,6 +3201,80 @@ def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path)
 
 def lifecycle_intent_for_operation(operation: str) -> str | None:
     return {"build": "build", "pre-review": "pr", "closeout": "closeout"}.get(operation)
+
+
+def host_derived_flow_payload(
+    *,
+    target_root: Path,
+    args: argparse.Namespace,
+    manifest: dict[str, object],
+    runtime_state: dict[str, Any],
+    lifecycle_admission: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Route light-profile flows without reading committed execution state."""
+
+    admission = lifecycle_admission
+    if admission is None:
+        intent = "ship" if args.operation == "merge-ready" else "build"
+        admission = lifecycle_admission_payload(
+            target_root=target_root,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            issue_number=args.issue,
+            fr_number=args.fr,
+            pr_number=args.pr,
+            branch_name=args.branch,
+            intent=intent,
+        )
+    admission_passed = admission.get("result") == "pass"
+    missing_inputs = list(admission.get("missing_inputs", [])) if not admission_passed else []
+    if not admission_passed and not missing_inputs:
+        missing_inputs.append(str(admission.get("summary") or admission.get("admission_state") or "host lifecycle admission blocked"))
+    fallback_to: str | None = admission.get("primary_remediation") if missing_inputs else None
+    result = "pass" if admission_passed else "block"
+    if args.operation in {"review", "spec-review"}:
+        result = "block"
+        missing_inputs.append("current GitHub host attestation artifact")
+        fallback_to = "loom attestation readback --repo <owner/repo> --pr <n> --work-item <n> --artifact-input <file> --json"
+    elif args.operation == "merge-ready" and result == "pass":
+        result = "block"
+        missing_inputs.append("current-head PR gate and merge check host readback")
+        fallback_to = "loom pr gate <pr> --json && loom merge check <pr> --json"
+
+    return {
+        "command": "flow",
+        "operation": args.operation,
+        "result": result,
+        "summary": (
+            "light-profile flow consumed GitHub lifecycle admission and current worktree facts without repository execution carriers."
+            if result == "pass"
+            else "light-profile flow stopped at a missing host fact without falling back to repository execution carriers."
+        ),
+        "profile": manifest.get("profile"),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": fallback_to,
+        "runtime_state": runtime_state,
+        "lifecycle_admission": admission,
+        "worktree": {
+            "repository_locator": ".",
+            "branch": git_branch(target_root),
+            "head_sha": git_head_sha(target_root),
+            "workspace_entry": ".",
+            "source": "git_worktree_readback",
+        },
+        "steps": [
+            {"name": "runtime-state", "result": runtime_state["result"]},
+            {"name": "host-lifecycle-admission", "result": admission.get("result")},
+            {"name": "git-worktree-readback", "result": "pass"},
+        ],
+        "carrier_mutations": False,
+        "repo_execution_carriers_consumed": False,
+        "committed_current_consumed": False,
+        "committed_status_consumed": False,
+        "committed_progress_consumed": False,
+        "committed_review_consumed": False,
+        "committed_shadow_consumed": False,
+    }
 
 def runtime_parity_check(
     name: str,
@@ -4369,6 +4444,32 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     if args.operation == "story":
         return emit(story_flow_payload(target_root=target_root, runtime_state=runtime_state, steps=steps))
+
+    derived_manifest, manifest_errors = host_derived_manifest(target_root)
+    if manifest_errors:
+        return emit(
+            {
+                "command": "flow",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "light-profile manifest is invalid; legacy carriers are not a fallback.",
+                "missing_inputs": manifest_errors,
+                "fallback_to": "adoption",
+                "runtime_state": runtime_state,
+                "carrier_mutations": False,
+                "repo_execution_carriers_consumed": False,
+            }
+        )
+    if derived_manifest is not None:
+        return emit(
+            host_derived_flow_payload(
+                target_root=target_root,
+                args=args,
+                manifest=derived_manifest,
+                runtime_state=runtime_state,
+                lifecycle_admission=lifecycle_admission,
+            )
+        )
 
     context, errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
     if errors:

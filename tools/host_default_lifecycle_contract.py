@@ -136,6 +136,7 @@ def check_executable_host_default_paths() -> None:
         "ship_changed_paths_payload": loom.ship_changed_paths_payload,
         "ship_validation_profile_payload": loom.ship_validation_profile_payload,
         "host_attestation_readback": loom.host_attestation_readback,
+        "infer_github_repo": loom.infer_github_repo,
     }
     emitted: dict[str, object] = {}
     flow_calls: list[list[str]] = []
@@ -181,6 +182,7 @@ def check_executable_host_default_paths() -> None:
     loom.ship_changed_paths_payload = lambda *_args, **_kwargs: {"result": "pass", "paths": ["README.md"], "errors": []}
     loom.ship_validation_profile_payload = lambda *_args, **_kwargs: {"result": "pass", "selected_profile": "light"}
     loom.host_attestation_readback = fake_attestation
+    loom.infer_github_repo = lambda _target: "o/r"
     try:
         with tempfile.TemporaryDirectory() as directory:
             artifact = Path(directory) / "artifact.json"

@@ -77,6 +77,7 @@ from host_attestation import _artifact_id as host_attestation_artifact_id
 from host_attestation import main as host_attestation_main
 from host_attestation import readback as host_attestation_readback
 from product_acceptance import main as product_acceptance_main
+from loom_init import host_derived_manifest
 
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
 LOOM_BOOTSTRAP_END = "<!-- LOOM_BOOTSTRAP_END -->"
@@ -768,8 +769,8 @@ PUBLIC_COMMAND_PROTOCOL_TYPES = {
 HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
         "task": "resume",
-        "summary": "Take over the current Work Item from repository facts.",
-        "first_command": "loom route --target <repo> --item <WI> --json",
+        "summary": "Take over the current Work Item from GitHub and worktree facts.",
+        "first_command": "loom status --target <repo> --issue <work-item> --json",
         "next_step": "Continue with build, review, merge-ready, or closeout based on the derived route.",
     },
     {
@@ -7057,7 +7058,7 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
     change_class = fields.get("change_class")
     release_judgment = fields.get("release_judgment")
     governance_mode = fields.get("governance_mode") or "host-enforced"
-    governance_assurance = fields.get("governance_assurance") or ("low" if governance_mode == "advisory/local-enforced" else "strong")
+    governance_assurance = "low" if governance_mode == "advisory/local-enforced" else "limited"
     advisory_risk_label = fields.get("advisory_risk_label") if governance_mode == "advisory/local-enforced" else None
     triggers = [str(value) for value in fields.get("upgrade_triggers", []) if str(value)]
     lowered = " ".join([str(change_class or ""), *triggers]).lower()
@@ -8835,11 +8836,15 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
 
 
 def ship_host_attestation(args: argparse.Namespace, target: Path, *, closeout: bool) -> dict[str, Any]:
-    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else infer_github_repo(target)
+    detected_repo = infer_github_repo(target)
+    requested_repo = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else None
+    repo_slug = detected_repo
     pr_number = closeout_current_pr_input(args) or getattr(args, "pr", None)
     missing: list[str] = []
-    if not isinstance(repo_slug, str) or repo_slug.count("/") != 1:
+    if not isinstance(detected_repo, str) or detected_repo.count("/") != 1:
         missing.append("target origin GitHub owner/repo")
+    elif requested_repo is not None and requested_repo != detected_repo:
+        missing.append("explicit GitHub owner/repo must match the target origin")
     if args.issue is None:
         missing.append("--issue Work Item number")
     if not isinstance(pr_number, int):
@@ -12609,6 +12614,8 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     parser.add_argument("--status-checks-file")
     parser.add_argument("--branch-protection-file")
     parser.add_argument("--ruleset-file")
+    parser.add_argument("--attestation-artifact-input", type=Path)
+    parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
     parser.add_argument("--skip-gate", action="store_true")
     parser.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
     parser.add_argument("--json", action="store_true")
@@ -12617,6 +12624,25 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     target = resolve_target(args.target)
     if not target.exists():
         return emit(block_target(command, target, "target path does not exist"))
+    derived_manifest, manifest_errors = host_derived_manifest(target)
+    if manifest_errors:
+        return emit(
+            agent_safe_payload(
+                output(
+                    command,
+                    "block",
+                    schema_version=SCENARIO_SCHEMA,
+                    summary="Light-profile manifest is invalid; legacy execution carriers are not a fallback.",
+                    target=str(target),
+                    missing_inputs=manifest_errors,
+                    fallback_to="loom adopt verify --target <repo> --json",
+                    carrier_mutations=False,
+                    repo_execution_carriers_consumed=False,
+                ),
+                target_root=target,
+                full_output=args.full_output,
+            )
+        )
 
     flow_operations = {
         "story": "story",
@@ -12705,6 +12731,18 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         )
 
     if command == "closeout":
+        if derived_manifest is not None:
+            attestation = ship_host_attestation(args, target, closeout=True)
+            attestation["command"] = "closeout"
+            attestation["profile"] = derived_manifest.get("profile")
+            attestation["repo_execution_carriers_consumed"] = False
+            return emit(
+                agent_safe_payload(
+                    attestation,
+                    target_root=target,
+                    full_output=args.full_output,
+                )
+            )
         flow_args = ["closeout", "check", "--target", str(target)]
         for flag, value in (
             ("--item", args.item),

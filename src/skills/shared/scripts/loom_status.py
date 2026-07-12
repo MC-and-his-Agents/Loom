@@ -45,7 +45,7 @@ from loom_flow import (
     validate_goal_execution_contract,
 )
 from flow_runtime import git_branch, git_head_sha
-from loom_init import validate_host_derived_manifest
+from loom_init import host_derived_manifest
 from authority_contract import parse_typed_locator
 from delivery_control import (
     pr_body_field_value,
@@ -54,25 +54,6 @@ from delivery_control import (
 )
 
 IDLE_ITEM_ID = "no_active_item"
-
-
-def host_derived_manifest(target_root: Path) -> tuple[dict[str, object] | None, list[str]]:
-    path = target_root / ".loom/bootstrap/manifest.json"
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None, []
-    except OSError as exc:
-        return None, [f"bootstrap manifest is unreadable: {exc}"]
-    except json.JSONDecodeError as exc:
-        return None, [f"bootstrap manifest is invalid JSON: {exc.msg}"]
-    if not isinstance(payload, dict):
-        return None, ["bootstrap manifest must be a JSON object"]
-    if payload.get("schema_version") == "loom-bootstrap-manifest/v1":
-        return None, []
-    if payload.get("schema_version") != "loom-bootstrap-manifest/v2":
-        return None, ["bootstrap manifest schema is unsupported"]
-    return payload, validate_host_derived_manifest(target_root, payload)
 
 
 def host_derived_status_payload(

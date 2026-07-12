@@ -71,6 +71,9 @@ from runtime_paths import (
     global_runtime_locator_for_path,
     shared_asset,
 )
+from loom_init import host_derived_manifest
+from host_attestation import _artifact_id as host_attestation_artifact_id
+from host_attestation import readback as host_attestation_readback
 
 FLOW_ENTRYPOINT = Path(__file__).with_name("loom_flow.py")
 
@@ -4071,6 +4074,71 @@ def pre_review_readiness_cost_guard_payload(
 
 def handle_review(args: argparse.Namespace) -> int:
     target_root = resolve_target_arg(args.target)
+    derived_manifest, manifest_errors = host_derived_manifest(target_root)
+    if manifest_errors:
+        return emit(
+            {
+                "command": "review",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "light-profile manifest is invalid; repository review carriers are not a fallback.",
+                "missing_inputs": manifest_errors,
+                "fallback_to": "adoption",
+                "carrier_mutations": False,
+                "repo_execution_carriers_consumed": False,
+            }
+        )
+    if derived_manifest is not None:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        requested_owner = getattr(args, "owner", None)
+        requested_repo = getattr(args, "repo_name", None)
+        owner, repo_name = detected_owner, detected_repo
+        missing = []
+        if not detected_owner or not detected_repo:
+            missing.append("target origin GitHub owner/repo")
+        elif (requested_owner and requested_owner != detected_owner) or (requested_repo and requested_repo != detected_repo):
+            missing.append("explicit GitHub owner/repo must match the target origin")
+        if not isinstance(getattr(args, "issue", None), int):
+            missing.append("--issue Work Item number")
+        if not isinstance(getattr(args, "pr", None), int):
+            missing.append("--pr number")
+        if getattr(args, "host_artifact_input", None) is None:
+            missing.append("--host-artifact-input locator")
+        artifact_id = None
+        if not missing:
+            try:
+                artifact_id = host_attestation_artifact_id(args.host_artifact_input)
+            except ValueError as exc:
+                missing.append(str(exc))
+        if not missing:
+            assert owner and repo_name and isinstance(args.issue, int) and isinstance(args.pr, int) and isinstance(artifact_id, int)
+            result = host_attestation_readback(
+                target_root,
+                owner,
+                repo_name,
+                args.pr,
+                args.issue,
+                artifact_id,
+                review_policy=getattr(args, "review_policy", "approved"),
+            )
+            result["command"] = "review"
+            result["operation"] = args.operation
+            result["profile"] = derived_manifest.get("profile")
+            result["repo_execution_carriers_consumed"] = False
+            return emit(result)
+        return emit(
+            {
+                "command": "review",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "light-profile review requires GitHub host attestation; repository review carriers are disabled.",
+                "profile": derived_manifest.get("profile"),
+                "missing_inputs": missing,
+                "fallback_to": "loom review read --target <repo> --issue <work-item> --pr <n> --host-artifact-input <file> --json",
+                "carrier_mutations": False,
+                "repo_execution_carriers_consumed": False,
+            }
+        )
     context, errors = load_context_with_retained_idle_fallback(target_root, args.output, args.item)
     if errors:
         return emit(
