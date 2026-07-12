@@ -621,12 +621,24 @@ def github_pr_closeout_readback(
     work_item: int,
     artifact_id: int,
     *,
+    review_policy: str = "approved",
     read_json: Any = gh_rest_authenticated_json,
     read_list: Any = gh_rest_authenticated_list,
     read_graphql: Any = gh_graphql_authenticated_json,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Read a post-merge closeout from host facts, including default-branch containment."""
-    attestation, errors = github_pr_attestation_readback(root, owner, repo_name, pr_number, artifact_id, allow_merged=True, read_json=read_json, read_list=read_list)
+    attestation, errors = github_pr_attestation_readback(
+        root,
+        owner,
+        repo_name,
+        pr_number,
+        artifact_id,
+        work_item=work_item,
+        allow_merged=True,
+        review_policy=review_policy,
+        read_json=read_json,
+        read_list=read_list,
+    )
     if errors or attestation is None:
         return None, errors
     pr = attestation["pr"]

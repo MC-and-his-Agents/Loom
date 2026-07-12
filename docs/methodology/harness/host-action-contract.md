@@ -1,5 +1,13 @@
 # Host Action Contract
 
+> v0.30 normative override: GitHub host attestation is the default review and
+> ordinary closeout truth. `closeout status|sync` performs reconciliation,
+> closeout-attestation readback and local cleanup only; it does not write repo
+> carriers. `review record`, `carrier closeout-sync`, `closeout run`, and
+> `release closeout-sync` are retired compatibility commands gated by explicit
+> reinforced governance, `reinforced-carrier-compat/v1`, and a future expiry of
+> at most 90 days. The default path never falls back to those commands.
+
 本文件定义 Loom 当前已冻结的宿主动作合同。
 
 本文件当前承接：

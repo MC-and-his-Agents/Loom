@@ -48,7 +48,7 @@ Loom 暴露一个 root entry 和十个 scenario skills：
 主要交付命令：
 
 ```bash
-loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json
+loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --attestation-artifact-input <file> --apply --json
 ```
 
 ## Entry Model

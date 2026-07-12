@@ -1,5 +1,16 @@
 # Closeout Gate
 
+> v0.30 normative override: ordinary closeout is host-derived. The authoritative
+> chain is `host review attestation -> PR gate -> merge -> reconciliation -> host
+> closeout attestation -> local-only retire`. It writes no repo review, current,
+> status, shadow, progress, or terminal closeout carrier and creates no
+> closeout-only/current-retire PR. Release/version source changes use a normal
+> release PR; post-publish closeout is `release readback`. Any carrier modes and
+> carrier commands described later in this historical contract are compatibility
+> behavior only and require `reinforced-carrier-compat/v1` plus an RFC3339 expiry
+> no more than 90 days in the future. Reinforced governance alone is not an
+> implicit compatibility grant.
+
 本文件定义 Loom 当前最小 closeout 执行链路。
 
 宿主动作统一结果词表与 `fallback_to` 纪律见 [host-action-contract.md](./host-action-contract.md)。本文件只承接 closeout 专有的 fail-closed 顺序与同步边界。

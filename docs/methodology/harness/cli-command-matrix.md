@@ -1,5 +1,24 @@
 # Loom CLI Command Matrix
 
+## v0.30 Default Lifecycle Override
+
+The common path is `review run -> attestation readback -> pr gate -> merge
+check/run -> reconciliation sync -> attestation closeout -> local-only retire`.
+It performs zero repo carrier mutations and creates no closeout-only,
+carrier-sync-only, release-closeout, or current-retire PR.
+
+`review record`, `carrier closeout-sync`, `closeout run`, and `release
+closeout-sync`, plus the `closeout-only` and `carrier-sync-only` PR intents, are
+compatibility-only. They require all of:
+
+- `--governance-intensity reinforced`
+- `--compatibility-policy reinforced-carrier-compat/v1`
+- `--compatibility-expires-at <timezone-aware RFC3339 within 90 days>`
+
+No default command may recommend or implicitly invoke this compatibility path.
+Release source changes remain normal reviewed PRs; after publishing, `release
+readback` is the terminal operation.
+
 The `loom` CLI is the primary control plane for the CLI-first operating layer. The current matrix is exposed mechanically through:
 
 ```bash

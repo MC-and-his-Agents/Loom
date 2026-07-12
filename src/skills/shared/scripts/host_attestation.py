@@ -69,9 +69,7 @@ def _artifact_id(path: Path) -> int:
 def readback(root: Path, owner: str, repo: str, number: int, work_item: int, artifact_id: int, *, closeout: bool = False, review_policy: str = "approved") -> dict[str, Any]:
     reader = github_pr_closeout_readback if closeout else github_pr_attestation_readback
     if closeout:
-        if review_policy != "approved":
-            return _result(owner=owner, repo=repo, work_item=work_item, facts=None, errors=["single-maintainer policy is not a delivery closeout shortcut"], closeout=True)
-        facts, errors = reader(root, owner, repo, number, work_item, artifact_id)
+        facts, errors = reader(root, owner, repo, number, work_item, artifact_id, review_policy=review_policy)
     else:
         facts, errors = reader(root, owner, repo, number, artifact_id, work_item=work_item, review_policy=review_policy)
     return _result(owner=owner, repo=repo, work_item=work_item, facts=facts, errors=errors, closeout=closeout)

@@ -55,7 +55,7 @@ Loom exposes one root entry and ten scenario skills:
 Primary delivery command:
 
 ```bash
-loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --head-sha <sha> --apply --json
+loom ship --target <repo> --item <id> --issue <n> --pr <n> --branch <branch> --attestation-artifact-input <file> --apply --json
 ```
 
 ## Entry Model

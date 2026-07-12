@@ -1,5 +1,11 @@
 # Workspace Lifecycle
 
+> v0.30 normative override: `workspace retire` only removes local/workstation
+> execution state after host closeout attestation passes. It never writes a
+> terminal carrier, calls `carrier closeout-sync`, or creates a closeout/current
+> pointer PR. Any later carrier workflow described below is legacy compatibility
+> material and is not part of the ordinary lifecycle.
+
 本文件定义 Loom 当前工作现场生命周期与 `purity-check` 的执行侧合同。
 
 字段归属与读取顺序仍以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
@@ -192,6 +198,18 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 版本化 closeout truth 必须在 merge 前通过 closeout / review 路径进入可审查载体，并在 merge 后由 closeout check / sync 消费。
 post-merge retire 只能说明当前本地现场不再继续执行。
 
+`idle` / `no_active_item` repository state 不由 `workspace retire` 写入版本化 carrier。
+若仓库需要把 host-complete terminal item 收敛为 versioned terminal carrier，必须走独立的 `carrier closeout-sync` 入口；该入口只写版本化 progress carrier，不做 host closeout sync。
+
+HotCP-style stale active closeout 的恢复顺序固定为：
+
+1. 先读取宿主事实：PR 已 merged、merge commit 已进入目标分支、issue / Project 已关闭或已由 host closeout sync 对齐。
+2. 可选执行 `workspace retire`，只产出 `retire_scope = local_only` 证据；它不得修改 `.loom/progress/**`、`.loom/status/current.md` 或 `.loom/bootstrap/init-result.json`。
+3. 执行 `carrier closeout-sync --dry-run`，确认计划只写版本化 carrier 且 `host_mutations = false`。
+4. 执行 `carrier closeout-sync --apply`，写入 terminal closeout metadata，并让 fact-chain 最终读回 `idle` / `no_active_item`。
+
+若第二台机器、后续会话或 post-merge 读回发现 GitHub 已完成但 repo carrier 仍 active，不得通过再次 retire、重开 PR 或伪造 review 来证明完成；必须按上面的 host readback -> carrier sync -> fact-chain readback 顺序收敛。
+
 ### 6.2 成功语义
 
 `retire` 成功后，至少应满足：
@@ -212,6 +230,7 @@ post-merge retire 只能说明当前本地现场不再继续执行。
 - 当前现场与 `workspace_entry` 不匹配
 - 工作区存在未分流残留
 - 当前现场被多个活跃事项共享，明显不再是单一目标
+- active carrier 无法读取、无法分类或真实共享同一 workspace
 
 ### 7.2 报告但暂不硬失败的项
 
@@ -219,6 +238,7 @@ post-merge retire 只能说明当前本地现场不再继续执行。
 
 - branch purity
 - PR purity
+- 与当前事项无关且已 terminal 的 stale active carrier
 
 这些项继续由宿主平台拥有生命周期；Loom 只通过 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md) 与 `merge-ready` / closeout 入口消费其边界结果，不改变生命周期命令的硬失败口径。
 

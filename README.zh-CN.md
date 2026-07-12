@@ -83,7 +83,7 @@ loom ship \
   --issue 123 \
   --pr 456 \
   --branch work/123-example \
-  --head-sha "$(git rev-parse HEAD)" \
+  --attestation-artifact-input /path/to/attestation-artifact.json \
   --apply \
   --json
 ```
@@ -95,22 +95,17 @@ loom ship \
   `missing_inputs` 与 `next_action`，不修改宿主或仓库状态；
 - `--validation-profile auto` 会按 changed paths 选择最小必要 profile，并输出对应的
   `loom_check --source-surface` 命令；显式 `--validation-profile full` 仍会强制完整路径；
-- `--apply` 最多只会在上述只读序列前增加一步确定性的安全 metadata repair，
-  且前提是显式提供 `--issue`、`--branch` 与 `--head-sha`；
-- 这一步自动修复不会替你发明或裁决冲突的 Work Item、branch、head SHA、
-  release 或 closeout 事实；
+- `--apply` 通过 GitHub host attestation 消费语义审查，在当前宿主事实通过后
+  合并，再记录宿主 reconciliation 与 closeout attestation；它不刷新 repo
+  carrier，也不依赖 blocking shadow；
 - `--json` 只保留短诊断输出；若 stdout 超预算，详细步骤会折叠到 artifact
   locator 之后；`--full-output` 只用于显式调试、审计或阻塞分类；
-- closeout policy 决定普通交付是继续走当前共享的 inline/host-only 宿主收尾
-  路径，还是停下并切到显式 batched carrier / full closeout 路径。
+- light、standard 与 reinforced 的普通交付均走仅宿主收尾；release/version
+  源码变更走正常发布 PR 与发布工作流，发布后只做 readback。
 
-轻量和标准强度变更通常应在这一条命令里完成。只有发布、父级或里程碑收尾、多个工作项
-共用一次交付、宿主与仓库事实冲突、强化治理变更，或确实需要版本化终态证据时，Loom
-才升级为批量载体拉取请求或显式完整收尾拉取请求。
-
-当前 `loom ship` 只执行普通 inline/host-only 宿主收尾路径。批量载体写入与
-显式完整收尾拉取请求执行仍由后续 issue 承接；此包装器会显式阻断，并把调用者导向
-对应的显式路径，而不是自行猜测。
+普通变更通常应在这一条命令里完成。reinforced 只提高审查和验证强度，不会隐式恢复
+repo review、current、status、shadow 或 closeout carrier。退役 carrier 命令仅可在
+显式 `reinforced-carrier-compat/v1` 策略和不超过 90 天的 RFC3339 过期时间下使用。
 
 ## 在仓库中试用
 

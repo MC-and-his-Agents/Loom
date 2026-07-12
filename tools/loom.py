@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +68,9 @@ from runtime_paths import global_runtime_path, is_global_runtime_locator
 from authority_contract import parse_typed_locator, typed_locator
 from failure_envelope import public_cli_failure_envelope
 from github_host import github_lifecycle_subject_readback
+from host_attestation import _artifact_id as host_attestation_artifact_id
 from host_attestation import main as host_attestation_main
+from host_attestation import readback as host_attestation_readback
 from product_acceptance import main as product_acceptance_main
 
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
@@ -313,9 +315,9 @@ COMMANDS: list[dict[str, Any]] = [
     {
         "command": "carrier closeout-sync",
         "domain": "harness",
-        "status": "implemented",
+        "status": "compatibility",
         "json": True,
-        "summary": "Explicitly write structured terminal closeout metadata to versioned progress carriers without mutating host state.",
+        "summary": "Retired carrier backend; available only through an explicit reinforced, expiring compatibility exception.",
     },
     {"command": "status", "domain": "harness", "status": "implemented", "json": True},
     {"command": "fact-chain", "domain": "harness", "status": "implemented", "json": True},
@@ -374,12 +376,12 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "scenario",
         "status": "implemented",
         "json": True,
-        "summary": "Plan or apply PR metadata readback, host reconciliation, terminal carrier sync, and cleanup readback.",
+        "summary": "Plan or apply host reconciliation, consume host closeout attestation, and report local cleanup without repository mutations.",
     },
     {
         "command": "closeout run",
         "domain": "host-control",
-        "status": "implemented",
+        "status": "compatibility",
         "json": True,
         "summary": "Plan or apply a single post-merge closeout run across host reconciliation, terminal carrier metadata, recovery status, shadow refresh, and final closeout check.",
     },
@@ -465,9 +467,9 @@ COMMANDS: list[dict[str, Any]] = [
     {
         "command": "release closeout-sync",
         "domain": "delivery",
-        "status": "implemented",
+        "status": "compatibility",
         "json": True,
-        "summary": "Plan or apply repo carrier terminalization after release artifacts have already been published.",
+        "summary": "Retired release carrier backend; stable release aftercare ends at host readback.",
     },
     {"command": "workspace create", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace locate", "domain": "host-control", "status": "implemented", "json": True},
@@ -718,9 +720,9 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
     },
     {
         "task": "review",
-        "summary": "Run the semantic review path for the current Work Item.",
-        "first_command": "loom review --target <repo> --item <WI> --json",
-        "next_step": "Only continue when the review record is bound to the current head or accepted carrier-only drift.",
+        "summary": "Consume the current semantic review from GitHub host attestation.",
+        "first_command": "loom attestation readback --repo <owner/repo> --pr <n> --work-item <n> --artifact-input <file> --json",
+        "next_step": "Only continue when GitHub binds the review, semantic tree, workflow run, artifact digest, and current PR head.",
     },
     {
         "task": "merge-ready",
@@ -730,21 +732,21 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
     },
     {
         "task": "post-merge-closeout",
-        "summary": "Synchronize host completion facts and terminal repo carriers after a PR is merged.",
-        "first_command": "loom closeout run --target <repo> --item <WI> --issue <issue> --pr <merged-pr> --branch <target-branch> --apply --json",
-        "next_step": "Use the emitted next_action; a passing apply ends with terminal carrier state and no extra closeout step.",
+        "summary": "Consume merged PR and Work Item completion from GitHub without repository aftercare carriers.",
+        "first_command": "loom attestation closeout --repo <owner/repo> --pr <merged-pr> --work-item <issue> --artifact-input <file> --json",
+        "next_step": "A passing host readback is terminal; retire only the local workspace and do not create a closeout PR.",
     },
     {
         "task": "release",
         "summary": "Read back release surfaces without publishing or republishing.",
         "first_command": "loom release readback --target <repo> --version <version> --commit <sha> --json",
-        "next_step": "Publish only through the repository release workflow; use closeout-sync after published readback passes.",
+        "next_step": "Publish only through the repository release workflow; a passing host readback is terminal and creates no closeout PR.",
     },
     {
         "task": "release-closeout",
-        "summary": "Terminalize repo carriers after release artifacts are already published.",
-        "first_command": "loom release closeout-sync --target <repo> --version <version> --item <WI> --pr <release-pr> --apply --json",
-        "next_step": "Commit the carrier sync, update PR metadata, then run PR gate and merge check.",
+        "summary": "Read back published release host facts without repository aftercare carriers.",
+        "first_command": "loom release readback --target <repo> --version <version> --commit <sha> --json",
+        "next_step": "Consume the readback in GitHub closeout; do not create a release closeout PR.",
     },
     {
         "task": "runtime-upgrade",
@@ -776,7 +778,9 @@ HELP_COMMAND_TIERS: dict[str, list[str]] = {
         "pr gate",
         "merge check",
         "merge run",
-        "closeout run",
+        "attestation readback",
+        "attestation closeout",
+        "closeout sync",
     ],
     "maintenance_path": [
         "runtime-upgrade status",
@@ -785,12 +789,13 @@ HELP_COMMAND_TIERS: dict[str, list[str]] = {
         "runtime-upgrade check",
         "runtime-upgrade closeout",
         "release readback",
-        "release closeout-sync",
         "host doctor",
         "workstation list",
     ],
     "advanced_debug_path": [
         "carrier closeout-sync",
+        "closeout run",
+        "release closeout-sync",
         "pr metadata-render",
         "pr metadata-readback",
         "pr metadata-update",
@@ -1684,7 +1689,7 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
     parser.add_argument("--item", required=True)
     parser.add_argument("--pr", required=True, help="Merged release PR number used as release evidence.")
     parser.add_argument("--closeout-pr", help="Optional carrier-sync PR number for next-step metadata/gate commands.")
-    parser.add_argument("--issue")
+    parser.add_argument("--issue", type=int)
     parser.add_argument("--branch")
     parser.add_argument("--head-sha")
     parser.add_argument("--target-branch")
@@ -1696,10 +1701,30 @@ def handle_release_closeout_sync(argv: list[str]) -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--full-output", action="store_true")
+    add_legacy_carrier_compatibility_args(parser)
     args = parser.parse_args(argv)
     target = resolve_target(args.target)
     if not target.exists():
         return emit(block_target("release closeout-sync", target, "target path does not exist"))
+    compatibility = legacy_carrier_compatibility(args)
+    if compatibility["result"] != "pass":
+        return emit(
+            agent_safe_payload(
+                output(
+                    "release closeout-sync",
+                    "block",
+                    schema_version="loom-legacy-carrier-command/v1",
+                    summary=compatibility["summary"],
+                    mutates=False,
+                    target=str(target),
+                    compatibility=compatibility,
+                    missing_inputs=compatibility["missing_inputs"],
+                    fallback_to="loom release readback --target <repo> --version <version> --commit <sha> --json",
+                ),
+                target_root=target,
+                full_output=args.full_output,
+            )
+        )
 
     release_readback = release_readback_payload(
         command="release closeout-sync release-readback",
@@ -2571,10 +2596,41 @@ def closeout_current_pr_input(args: argparse.Namespace) -> int | None:
     return getattr(args, "pr", None)
 
 
-def run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+def normalize_subprocess_argv(args: list[object] | tuple[object, ...]) -> list[str]:
+    """Normalize supported CLI argv scalars and reject ambiguous internal values."""
+    normalized: list[str] = []
+    for index, value in enumerate(args):
+        if value is None or isinstance(value, bool):
+            raise TypeError(f"subprocess argv[{index}] must not be {type(value).__name__}")
+        if isinstance(value, str):
+            normalized.append(value)
+            continue
+        if isinstance(value, int):
+            normalized.append(str(value))
+            continue
+        if isinstance(value, os.PathLike):
+            path_value = os.fspath(value)
+            normalized.append(os.fsdecode(path_value) if isinstance(path_value, bytes) else path_value)
+            continue
+        raise TypeError(
+            f"subprocess argv[{index}] has unsupported type {type(value).__name__}; "
+            "expected str, int, or os.PathLike"
+        )
+    return normalized
+
+
+def run_capture(args: list[object] | tuple[object, ...], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    return subprocess.run(args, cwd=cwd, env=env, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.run(
+        normalize_subprocess_argv(args),
+        cwd=cwd,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
 
 def parse_json_or_block(command: str, completed: subprocess.CompletedProcess[str], *, failed_layer: str, fallback_to: list[str]) -> dict[str, Any]:
@@ -5118,7 +5174,7 @@ def handle_runtime_upgrade(argv: list[str]) -> int:
     parser.add_argument("--target", default=".")
     parser.add_argument("--to")
     parser.add_argument("--item")
-    parser.add_argument("--issue")
+    parser.add_argument("--issue", type=int)
     parser.add_argument("--pr")
     parser.add_argument("--branch")
     parser.add_argument("--head-sha")
@@ -6416,8 +6472,9 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--delete-branch", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--closeout-run", action="store_true")
-    parser.add_argument("--closeout-mode", choices=("inline", "host_only", "batched_carrier_pr", "full_closeout_pr"), default="inline")
-    parser.add_argument("--issue")
+    parser.add_argument("--closeout-mode", choices=("host_only", "inline", "batched_carrier_pr", "full_closeout_pr"), default="host_only")
+    add_legacy_carrier_compatibility_args(parser)
+    parser.add_argument("--issue", type=int)
     parser.add_argument("--target-branch")
     parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
     parser.add_argument("--implementation-pr", type=int)
@@ -6432,6 +6489,8 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--comment")
     parser.add_argument("--comment-file")
     parser.add_argument("--goal-completion")
+    parser.add_argument("--attestation-artifact-input", type=Path)
+    parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
     parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"))
     parser.add_argument("--issue-payload-file")
     parser.add_argument("--project-payload-file")
@@ -6450,6 +6509,23 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     command = f"merge {args.action}"
+    if args.closeout_mode != "host_only":
+        compatibility = legacy_carrier_compatibility(args)
+        if compatibility["result"] != "pass":
+            return emit(
+                agent_safe_payload(
+                    output(
+                        command,
+                        "block",
+                        schema_version="loom-legacy-carrier-command/v1",
+                        summary=compatibility["summary"],
+                        mutates=False,
+                        compatibility=compatibility,
+                        missing_inputs=compatibility["missing_inputs"],
+                        fallback_to="use --closeout-mode host_only",
+                    )
+                )
+            )
     target = resolve_target(pr_command_target(args.target))
     flow_args = [
         "controlled-merge",
@@ -6501,7 +6577,7 @@ def merge_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argpar
     return argparse.Namespace(
         item=args.work_item,
         issue=args.issue,
-        pr=str(args.pr),
+        pr=args.pr,
         pr_role=args.pr_role,
         implementation_pr=args.implementation_pr,
         release_pr=args.release_pr,
@@ -6516,6 +6592,8 @@ def merge_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argpar
         comment=args.comment,
         comment_file=args.comment_file,
         goal_completion=args.goal_completion,
+        attestation_artifact_input=args.attestation_artifact_input,
+        review_policy=args.review_policy,
         gate_profile=args.gate_profile,
         issue_payload_file=args.issue_payload_file,
         pr_payload_file=args.pr_payload_file,
@@ -6531,7 +6609,7 @@ def merge_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argpar
 def merge_closeout_policy(args: argparse.Namespace) -> dict[str, Any]:
     mode = getattr(args, "closeout_mode", "inline")
     next_action = {
-        "inline": "run closeout-run immediately after controlled merge passes",
+        "inline": "legacy compatibility: run the retired repo closeout backend after controlled merge",
         "host_only": "run host reconciliation and closeout readback immediately after controlled merge passes",
         "batched_carrier_pr": "queue carrier closeout after merge; do not inline carrier writes in controlled-merge",
         "full_closeout_pr": "use an explicit closeout or release PR path before merging through controlled-merge --closeout-run",
@@ -6541,7 +6619,7 @@ def merge_closeout_policy(args: argparse.Namespace) -> dict[str, Any]:
         "result": "pass",
         "policy": mode,
         "source": "merge-closeout-run",
-        "creates_closeout_pr_by_default": mode == "full_closeout_pr",
+        "creates_closeout_pr_by_default": False,
         "next_action": next_action,
     }
 
@@ -6641,6 +6719,26 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
 
     target = resolve_target(pr_command_target(args.target))
     steps: list[dict[str, Any]] = []
+    if closeout_policy["policy"] == "host_only":
+        premerge_attestation_args = merge_closeout_namespace(args, branch=args.target_branch or "")
+        premerge_attestation = ship_host_attestation(premerge_attestation_args, target, closeout=False)
+        steps.append(
+            merge_closeout_step(
+                "host-review-attestation",
+                premerge_attestation,
+                mutates=False,
+                evidence_locator="GitHub host attestation readback",
+            )
+        )
+        if premerge_attestation.get("result") != "pass":
+            return merge_closeout_block(
+                command,
+                args,
+                summary="merge run stopped before controlled merge because host review attestation did not pass.",
+                missing_inputs=[str(value) for value in premerge_attestation.get("missing_inputs", [])],
+                steps=steps,
+                fallback_to=premerge_attestation.get("fallback_to") or "provide a valid GitHub host attestation artifact",
+            )
     merge_payload = flow_payload(command, forwarded_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])
     steps.append(merge_closeout_step("controlled-merge-apply", merge_payload, mutates=True))
     if merge_payload.get("command") and merge_payload.get("command") != command:
@@ -6697,10 +6795,8 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
         reconciliation = flow_payload(command, reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout --target <repo> --json"])
         steps.append(merge_closeout_step("host-reconciliation-sync", reconciliation, mutates=True, evidence_locator="reconciliation sync payload"))
         if reconciliation.get("result") == "pass":
-            closeout_check_args = ["closeout", "check", "--target", str(target)]
-            add_closeout_check_args(closeout_check_args, closeout_args)
-            closeout = flow_payload(command, closeout_check_args, fallback_to=["loom closeout --target <repo> --json", "manual-reconciliation"])
-            steps.append(merge_closeout_step("host-closeout-check", closeout, mutates=False, evidence_locator="closeout check payload"))
+            closeout = ship_host_attestation(closeout_args, target, closeout=True)
+            steps.append(merge_closeout_step("host-closeout-attestation", closeout, mutates=False, evidence_locator="GitHub host attestation readback"))
         else:
             closeout = reconciliation
     else:
@@ -6767,6 +6863,80 @@ def governance_metadata_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
+LEGACY_CARRIER_COMPATIBILITY_POLICY = "reinforced-carrier-compat/v1"
+LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS = 90
+
+
+def legacy_carrier_compatibility(args: argparse.Namespace) -> dict[str, Any]:
+    expiry_text = str(getattr(args, "compatibility_expires_at", "") or "").strip()
+    expiry: datetime | None = None
+    try:
+        parsed = datetime.fromisoformat(expiry_text.replace("Z", "+00:00"))
+        expiry = parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
+    except ValueError:
+        expiry = None
+    now = datetime.now(timezone.utc)
+    valid = (
+        getattr(args, "governance_intensity", None) == "reinforced"
+        and getattr(args, "compatibility_policy", None) == LEGACY_CARRIER_COMPATIBILITY_POLICY
+        and expiry is not None
+        and now < expiry <= now + timedelta(days=LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS)
+    )
+    return {
+        "schema_version": "loom-legacy-carrier-compatibility/v1",
+        "result": "pass" if valid else "block",
+        "policy": getattr(args, "compatibility_policy", None),
+        "governance_intensity": getattr(args, "governance_intensity", None),
+        "expires_at": expiry_text or None,
+        "max_days": LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS,
+        "summary": (
+            "A reinforced, time-bounded compatibility exception explicitly enables the retired carrier backend."
+            if valid
+            else "The retired carrier backend is disabled outside an explicit reinforced, time-bounded compatibility exception."
+        ),
+        "missing_inputs": [] if valid else [
+            f"set --governance-intensity reinforced --compatibility-policy {LEGACY_CARRIER_COMPATIBILITY_POLICY} "
+            f"--compatibility-expires-at <RFC3339 within {LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS} days>"
+        ],
+        "fallback_to": None if valid else "use host attestation/readback and host-only closeout",
+    }
+
+
+def add_legacy_carrier_compatibility_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--governance-intensity", choices=("reinforced",))
+    parser.add_argument("--compatibility-policy")
+    parser.add_argument("--compatibility-expires-at")
+
+
+def split_legacy_carrier_compatibility_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
+    parser = argparse.ArgumentParser(add_help=False)
+    add_legacy_carrier_compatibility_args(parser)
+    return parser.parse_known_args(argv)
+
+
+def handle_review_command(argv: list[str]) -> int:
+    if not argv or argv[0] != "record":
+        return dispatch("review", argv)
+    compatibility_args, forwarded = split_legacy_carrier_compatibility_args(argv[1:])
+    compatibility = legacy_carrier_compatibility(compatibility_args)
+    if compatibility["result"] != "pass":
+        return emit(
+            agent_safe_payload(
+                output(
+                    "review record",
+                    "block",
+                    schema_version="loom-legacy-carrier-command/v1",
+                    summary=compatibility["summary"],
+                    mutates=False,
+                    compatibility=compatibility,
+                    missing_inputs=compatibility["missing_inputs"],
+                    fallback_to="loom attestation readback --repo <owner/repo> --pr <n> --work-item <n> --artifact-input <file> --json",
+                )
+            )
+        )
+    return dispatch("review", ["record", *forwarded])
+
+
 def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | None = None) -> dict[str, Any]:
     intensity = intensity_override if intensity_override not in {None, "auto"} else fields.get("governance_intensity")
     change_class = fields.get("change_class")
@@ -6778,18 +6948,12 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
     lowered = " ".join([str(change_class or ""), *triggers]).lower()
     upgrade_reasons: list[str] = []
     if release_judgment == "release_required" or change_class == "release" or any(word in lowered for word in ("release", "version")):
-        policy = "full_closeout_pr"
-        upgrade_reasons.append("release_or_version_closeout")
-    elif intensity == "reinforced" or any(word in lowered for word in ("security", "permission", "conflict", "parent", "milestone", "multi")):
-        policy = "full_closeout_pr"
-        upgrade_reasons.append("reinforced_or_high_risk_closeout")
-    elif intensity in {"light", "standard", None}:
-        policy = "host_only"
-    elif any(word in lowered for word in ("carrier", "versioned")):
-        policy = "batched_carrier_pr"
-        upgrade_reasons.append("versioned_carrier_required")
+        policy = "release_manifest"
+        upgrade_reasons.append("release_source_change_requires_release_workflow")
     else:
         policy = "host_only"
+        if intensity == "reinforced" or any(word in lowered for word in ("security", "permission", "conflict", "parent", "milestone", "multi")):
+            upgrade_reasons.append("reinforced_review_without_repo_closeout_carrier")
     return {
         "schema_version": "loom-closeout-policy-decision/v1",
         "result": "pass",
@@ -6802,8 +6966,9 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
         "change_class": change_class,
         "release_judgment": release_judgment,
         "upgrade_reasons": upgrade_reasons,
-        "creates_closeout_pr_by_default": policy == "full_closeout_pr",
-        "next_action": "run loom ship --apply after dry-run blockers are clear" if policy in {"inline", "host_only"} else "queue or run explicit closeout carrier path after merge",
+        "creates_closeout_pr_by_default": False,
+        "legacy_carrier_compatibility_policy": LEGACY_CARRIER_COMPATIBILITY_POLICY,
+        "next_action": "run loom ship --apply after dry-run blockers are clear" if policy == "host_only" else "publish through the release workflow, then use release readback without a closeout PR",
     }
 
 
@@ -7881,6 +8046,7 @@ def handle_pr_intent(argv: list[str], *, default_intent: str | None = None, comm
     parser.add_argument("--recheck-condition")
     parser.add_argument("--scope-proof")
     parser.add_argument("--apply", action="store_true")
+    add_legacy_carrier_compatibility_args(parser)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     profile_id, profile, profile_error = pr_intent_profile(args.intent)
@@ -7901,6 +8067,25 @@ def handle_pr_intent(argv: list[str], *, default_intent: str | None = None, comm
                 supported_intents=sorted(PR_INTENT_PROFILES),
             )
         )
+    if profile_id in PR_INTENT_PRESERVE_SUITE_PROFILES:
+        compatibility = legacy_carrier_compatibility(args)
+        if compatibility["result"] != "pass":
+            return emit(
+                agent_safe_payload(
+                    output(
+                        command_name,
+                        "block",
+                        schema_version="loom-legacy-carrier-command/v1",
+                        summary=compatibility["summary"],
+                        target=str(target),
+                        intent=profile_id,
+                        mutates=False,
+                        compatibility=compatibility,
+                        missing_inputs=compatibility["missing_inputs"],
+                        fallback_to="use a normal implementation/release PR and host-only closeout",
+                    )
+                )
+            )
     if not target.exists():
         return emit(block_target(command_name, target, "target path does not exist"))
     if args.action == "prepare":
@@ -7940,11 +8125,11 @@ def handle_pr_intent(argv: list[str], *, default_intent: str | None = None, comm
 
 
 def ship_validation_profile_for_paths(paths: list[str], closeout_policy: dict[str, Any]) -> tuple[str, list[str]]:
-    if closeout_policy.get("policy") == "full_closeout_pr" and (
+    if closeout_policy.get("policy") == "release_manifest" and (
         closeout_policy.get("release_judgment") == "release_required"
-        or "release_or_version_closeout" in closeout_policy.get("upgrade_reasons", [])
+        or "release_source_change_requires_release_workflow" in closeout_policy.get("upgrade_reasons", [])
     ):
-        return "release", ["closeout_policy_requires_release_validation"]
+        return "release", ["release_manifest_requires_release_validation"]
     if not paths:
         return "standard", ["changed_paths_unavailable_default_standard"]
 
@@ -8424,10 +8609,7 @@ def ship_status_diagnostic(
         blockers.append("checkout_has_uncommitted_changes")
     issue = host.get("issue") if isinstance(host.get("issue"), dict) else None
     if issue and issue.get("state") == "closed" and carrier.get("state") == "active":
-        if adoption_mode in {"light-governance", "attach-only"}:
-            fixed.append("repair_global_current_pointer")
-        else:
-            blockers.append("host_closed_but_carrier_active")
+        fixed.append("legacy_repo_carrier_ignored")
     if release.get("tag", {}).get("exists") or release.get("github_release", {}).get("exists") or release.get("npm", {}).get("exists"):
         blockers.append("target_release_already_exists")
     if host.get("errors") or release.get("errors") or checkout.get("errors"):
@@ -8443,8 +8625,6 @@ def ship_status_diagnostic(
         fixed.append("fast-forward or recreate the issue worktree from origin/main")
     if "checkout_has_uncommitted_changes" in blockers:
         fixed.append("commit, stash, or discard local changes before shipping")
-    if "host_closed_but_carrier_active" in blockers:
-        fixed.append("run loom closeout sync or carrier closeout-sync before continuing")
     if "repair_global_current_pointer" in fixed:
         fixed.append("run loom workstation current --target <repo> --clear --apply --json")
     if "target_release_already_exists" in blockers:
@@ -8539,6 +8719,51 @@ def handle_ship_status(argv: list[str], *, mode: str) -> int:
     return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
+def ship_host_attestation(args: argparse.Namespace, target: Path, *, closeout: bool) -> dict[str, Any]:
+    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else infer_github_repo(target)
+    pr_number = closeout_current_pr_input(args) or getattr(args, "pr", None)
+    missing: list[str] = []
+    if not isinstance(repo_slug, str) or repo_slug.count("/") != 1:
+        missing.append("target origin GitHub owner/repo")
+    if args.issue is None:
+        missing.append("--issue Work Item number")
+    if not isinstance(pr_number, int):
+        missing.append("--pr number")
+    artifact_input = getattr(args, "attestation_artifact_input", None)
+    if artifact_input is None:
+        missing.append("--attestation-artifact-input locator")
+    if missing:
+        return {
+            "command": "attestation closeout" if closeout else "attestation readback",
+            "result": "block",
+            "summary": "Host attestation inputs are incomplete; repository review carriers are not a fallback.",
+            "missing_inputs": missing,
+            "fallback_to": "provide the GitHub host artifact locator and retry the same host attestation readback",
+        }
+    assert isinstance(repo_slug, str) and args.issue is not None and isinstance(pr_number, int) and artifact_input is not None
+    try:
+        artifact_id = host_attestation_artifact_id(artifact_input)
+    except ValueError as exc:
+        return {
+            "command": "attestation closeout" if closeout else "attestation readback",
+            "result": "block",
+            "summary": str(exc),
+            "missing_inputs": [str(exc)],
+            "fallback_to": "replace the locator with JSON containing only a positive GitHub artifact_id",
+        }
+    owner, repo_name = repo_slug.split("/", 1)
+    return host_attestation_readback(
+        target,
+        owner,
+        repo_name,
+        pr_number,
+        args.issue,
+        artifact_id,
+        closeout=closeout,
+        review_policy=getattr(args, "review_policy", "approved"),
+    )
+
+
 def handle_ship(argv: list[str]) -> int:
     if argv and argv[0] in {"status", "preflight"}:
         return handle_ship_status(argv[1:], mode=argv[0])
@@ -8566,6 +8791,8 @@ def handle_ship(argv: list[str]) -> int:
     parser.add_argument("--comment")
     parser.add_argument("--comment-file")
     parser.add_argument("--goal-completion")
+    parser.add_argument("--attestation-artifact-input", type=Path)
+    parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
     parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"))
     parser.add_argument("--issue-payload-file")
     parser.add_argument("--project-payload-file")
@@ -8698,38 +8925,6 @@ def handle_ship(argv: list[str]) -> int:
                     fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --apply --json"],
                 )
 
-        carrier_refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--apply"]
-        carrier_refresh = flow_payload(command, carrier_refresh_args, fallback_to=["loom carrier refresh --target <repo> --item <id> --apply --json"])
-        steps.append(ship_step("carrier-refresh", carrier_refresh, mutates=True))
-        if carrier_refresh.get("result") != "pass":
-            closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
-            return ship_apply_admission_block(
-                command=command,
-                target=target,
-                args=args,
-                steps=steps,
-                closeout_policy=closeout_policy,
-                summary="ship --apply stopped before merge because carrier refresh did not pass.",
-                missing_inputs=[str(value) for value in carrier_refresh.get("missing_inputs", [])],
-                fallback_to=["loom carrier refresh --target <repo> --item <id> --apply --json"],
-            )
-
-        shadow_parity_args = ["shadow-parity", "--target", str(target), "--surface", "all", "--blocking"]
-        shadow_parity = flow_payload(command, shadow_parity_args, fallback_to=["loom shadow-parity --target <repo> --surface all --blocking --json"])
-        steps.append(ship_step("shadow-parity", shadow_parity, mutates=False))
-        if shadow_parity.get("result") != "pass":
-            closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
-            return ship_apply_admission_block(
-                command=command,
-                target=target,
-                args=args,
-                steps=steps,
-                closeout_policy=closeout_policy,
-                summary="ship --apply stopped before merge because shadow parity did not pass.",
-                missing_inputs=[str(value) for value in shadow_parity.get("missing_inputs", [])],
-                fallback_to=["loom shadow-parity --target <repo> --surface all --blocking --json"],
-            )
-
     metadata_args = ["pr-metadata", "preflight", *common, "--surface", "merge_ready", "--pr", str(args.pr), "--item", args.item]
     if args.issue is not None:
         metadata_args.extend(["--issue", str(args.issue)])
@@ -8765,11 +8960,13 @@ def handle_ship(argv: list[str]) -> int:
     closeout_policy = ship_closeout_policy(fields, intensity_override=args.intensity)
     changed_paths = ship_changed_paths_payload(args, target, target_branch=effective_target_branch, head_sha=effective_head_sha)
     validation_profile = ship_validation_profile_payload(args, changed_paths, closeout_policy)
+    review_attestation = ship_host_attestation(args, target, closeout=False)
     steps.extend([
         ship_step("pr-metadata-preflight", metadata),
         ship_step("pr-gate", pr_gate),
         ship_step("controlled-merge-check", merge_check),
         ship_step("validation-profile", validation_profile),
+        ship_step("host-review-attestation", review_attestation),
         ship_step("closeout-policy", closeout_policy),
     ])
     if not args.apply:
@@ -8910,10 +9107,8 @@ def handle_ship(argv: list[str]) -> int:
         reconciliation = flow_payload(command, reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout --target <repo> --json"])
         steps.append(ship_step("host-reconciliation-sync", reconciliation, mutates=True))
         if reconciliation.get("result") == "pass":
-            final_closeout_args = ["closeout", "check", "--target", str(target)]
-            add_closeout_check_args(final_closeout_args, closeout_args)
-            final_closeout = flow_payload(command, final_closeout_args, fallback_to=["loom closeout --target <repo> --json", "manual-reconciliation"])
-            steps.append(ship_step("host-closeout-check", final_closeout, mutates=False))
+            final_closeout = ship_host_attestation(args, target, closeout=True)
+            steps.append(ship_step("host-closeout-attestation", final_closeout, mutates=False))
             if final_closeout.get("result") == "pass":
                 current_payload = workstation_current_payload(
                     target,
@@ -9044,8 +9239,28 @@ def handle_carrier(argv: list[str]) -> int:
     parser.add_argument("--apply", dest="dry_run", action="store_false")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--full-output", action="store_true")
+    add_legacy_carrier_compatibility_args(parser)
     args = parser.parse_args(argv)
     target = resolve_target(args.target)
+    compatibility = legacy_carrier_compatibility(args)
+    if compatibility["result"] != "pass":
+        return emit(
+            agent_safe_payload(
+                output(
+                    f"carrier {args.action}",
+                    "block",
+                    schema_version="loom-legacy-carrier-command/v1",
+                    summary=compatibility["summary"],
+                    mutates=False,
+                    target=str(target),
+                    compatibility=compatibility,
+                    missing_inputs=compatibility["missing_inputs"],
+                    fallback_to=compatibility["fallback_to"],
+                ),
+                target_root=target,
+                full_output=args.full_output,
+            )
+        )
     flow_args = ["carrier", args.action, "--target", str(target)]
     for flag, value in (
         ("--item", args.item),
@@ -9386,7 +9601,7 @@ def closeout_sync_diagnostic(*, operation: str, apply: bool, steps: list[dict[st
     elif cleanup_payload.get("result") == "warn":
         next_action = str(cleanup_payload.get("next_action") or "Run terminal cleanup actions after confirming no user work remains.")
     elif operation == "sync" and not apply:
-        next_action = "Review the dry-run plan, then rerun `loom closeout sync --apply` when host and carrier mutations are acceptable."
+        next_action = "Review the dry-run plan, then rerun `loom closeout sync --apply` when the host reconciliation mutation is acceptable."
     else:
         next_action = "Closeout sync is terminal; proceed to the next dependent Work Item."
     return {
@@ -9419,6 +9634,8 @@ def build_closeout_sync_parser(prog: str) -> argparse.ArgumentParser:
     parser.add_argument("--comment")
     parser.add_argument("--comment-file")
     parser.add_argument("--goal-completion")
+    parser.add_argument("--attestation-artifact-input", type=Path)
+    parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
     parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"), default="auto")
     parser.add_argument("--issue-payload-file")
     parser.add_argument("--pr-payload-file")
@@ -9442,37 +9659,16 @@ def handle_closeout_sync(operation: str, argv: list[str]) -> int:
         parser.error("--pr or one closeout PR role flag is required")
     target = resolve_target(args.target)
     steps: list[dict[str, Any]] = []
+    if operation == "sync":
+        reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
+        add_closeout_host_args(reconciliation_args, args, include_comment=True)
+        reconciliation_args.append("--apply" if args.apply else "--dry-run")
+        reconciliation = flow_payload("closeout sync", reconciliation_args, fallback_to=["manual-reconciliation"])
+        steps.append(closeout_sync_step("host-reconciliation-sync", reconciliation, mutates=args.apply))
 
-    metadata_readback: dict[str, Any] | None = None
-    if args.skip_metadata:
-        metadata_readback = {"command": "closeout metadata-readback", "result": "skipped", "summary": "metadata readback skipped by --skip-metadata", "missing_inputs": [], "fallback_to": None}
-        steps.append(closeout_sync_step("metadata-readback", metadata_readback))
-    else:
-        metadata_readback = closeout_metadata_readback_payload(args, target)
-        steps.append(closeout_sync_step("metadata-readback", metadata_readback))
-        if operation == "sync" and metadata_readback.get("result") == "block":
-            metadata_update = closeout_metadata_update_payload(args, target, apply=args.apply)
-            steps.append(closeout_sync_step("metadata-update", metadata_update, mutates=args.apply))
-            if args.apply and metadata_update.get("result") == "pass":
-                metadata_readback = closeout_metadata_readback_payload(args, target)
-                steps.append(closeout_sync_step("metadata-readback-after-update", metadata_readback))
-                if metadata_readback.get("result") != "block":
-                    for step in steps:
-                        if step.get("name") == "metadata-readback" and step.get("result") == "block":
-                            step["result"] = "fixed"
-                            step["resolved_by"] = "metadata-readback-after-update"
-                            break
-
-    if operation == "status":
-        closeout_args = ["closeout", "check", "--target", str(target)]
-        add_closeout_check_args(closeout_args, args)
-        closeout = flow_payload("closeout status", closeout_args, fallback_to=["loom closeout sync --item <id> --issue <n> --pr <n> --json", "manual-reconciliation"])
-        steps.append(closeout_sync_step("closeout-check", closeout))
-    else:
-        blocker = closeout_sync_blocker(steps)
-        if blocker is None:
-            closeout = run_closeout_payload(args, target)
-            steps.append(closeout_sync_step("closeout-run", closeout, mutates=args.apply))
+    if closeout_sync_blocker(steps) is None:
+        attestation = ship_host_attestation(args, target, closeout=True)
+        steps.append(closeout_sync_step("host-closeout-attestation", attestation))
 
     if not args.skip_cleanup:
         cleanup = closeout_terminal_cleanup_payload(target, args)
@@ -9482,11 +9678,11 @@ def handle_closeout_sync(operation: str, argv: list[str]) -> int:
     result = "pass" if blocker is None else "block"
     diagnostic = closeout_sync_diagnostic(operation=operation, apply=args.apply, steps=steps)
     summary = (
-        "closeout sync applied host/repo closeout readback and terminal carrier repair."
+        "closeout sync applied host reconciliation and consumed host attestation without repository carrier mutation."
         if operation == "sync" and args.apply and result == "pass"
         else "closeout sync dry-run produced a readback and repair plan."
         if operation == "sync"
-        else "closeout status read back closeout, metadata, and cleanup state."
+        else "closeout status read back host attestation and local cleanup state."
     )
     payload = output(
         f"closeout {operation}",
@@ -9500,6 +9696,8 @@ def handle_closeout_sync(operation: str, argv: list[str]) -> int:
         apply=args.apply,
         dry_run=not args.apply,
         mutates=operation == "sync" and args.apply,
+        repo_mutations=False,
+        creates_closeout_pr=False,
         steps=steps,
         diagnostic=diagnostic,
         first_blocker=blocker,
@@ -9943,11 +10141,30 @@ def handle_closeout_run(argv: list[str]) -> int:
     parser.add_argument("--skip-gate", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
+    add_legacy_carrier_compatibility_args(parser)
     args = parser.parse_args(argv)
     if closeout_current_pr_input(args) is None:
         parser.error("--pr or one closeout PR role flag is required")
 
     target = resolve_target(args.target)
+    compatibility = legacy_carrier_compatibility(args)
+    if compatibility["result"] != "pass":
+        return emit(
+            agent_safe_payload(
+                output(
+                    "closeout run",
+                    "block",
+                    schema_version="loom-legacy-carrier-command/v1",
+                    summary=compatibility["summary"],
+                    mutates=False,
+                    target=str(target),
+                    compatibility=compatibility,
+                    missing_inputs=compatibility["missing_inputs"],
+                    fallback_to="loom attestation closeout --repo <owner/repo> --pr <n> --work-item <n> --artifact-input <file> --json",
+                ),
+                target_root=target,
+            )
+        )
     return emit(run_closeout_payload(args, target))
 
 
@@ -15284,6 +15501,8 @@ def main(argv: list[str]) -> int:
         return handle_closeout_queue_status(forwarded)
     if command in {"story", "spec", "plan", "build", "pre-review", "closeout", "handoff", "retire"}:
         return handle_scenario(command, forwarded)
+    if command == "review":
+        return handle_review_command(forwarded)
     if command in COMMAND_ROUTES:
         return dispatch(command, forwarded)
     if command in COMMAND_INDEX:
