@@ -1279,7 +1279,7 @@ def check_workflow_event_matrix() -> None:
     if "\n  push:\n" in delivery or "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}" not in delivery:
         raise AssertionError("delivery gate must enforce direct PR/merge-group events without a duplicate push run")
     release = (ROOT / ".github" / "workflows" / "loom-cli-release.yml").read_text(encoding="utf-8")
-    for protected_path in ("'Makefile'", "'.github/actions/**'", "'.github/workflows/**'", "'tools/check_*.py'", "'tools/fixtures/**'", "'src/skills/**'"):
+    for protected_path in ("'Makefile'", "'.github/actions/**'", "'.github/workflows/**'", "'tools/check_*.py'", "'tools/fixtures/**'", "'src/skills/**'", "'skills/**'", "'plugins/loom/skills/**'"):
         if protected_path not in release:
             raise AssertionError(f"release judgment PR fallback does not cover host-native aggregate input: {protected_path}")
     cli_step = release[release.index("      - name: Check CLI contract") : release.index("      - name: Check npm package contract")]
