@@ -108,10 +108,9 @@ def main() -> int:
         raise AssertionError("host-resolved waiver must retain trusted provenance and rationale")
     if "delivery_gate" in SOURCE.read_text(encoding="utf-8"):
         raise AssertionError("product acceptance adapter must not depend on delivery gate")
-    source = SOURCE.read_bytes()
-    drifted = [str(path.relative_to(ROOT)) for path in GENERATED_COPIES if not path.is_file() or path.read_bytes() != source]
-    if drifted:
-        raise AssertionError("product acceptance generated copy drift: " + ", ".join(drifted))
+    tracked_copies = [str(path.relative_to(ROOT)) for path in GENERATED_COPIES if path.exists()]
+    if tracked_copies:
+        raise AssertionError("product acceptance must remain canonical-source only: " + ", ".join(tracked_copies))
     print("product acceptance adapter checks passed")
     return 0
 

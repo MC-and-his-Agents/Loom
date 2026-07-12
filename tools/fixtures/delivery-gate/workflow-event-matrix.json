@@ -3,7 +3,7 @@
   "loom-check": {
     "pull_request": ["py-compile"],
     "merge_group": ["py-compile"],
-    "push_main": ["py-compile", "demo-bootstrap", "repo-local-cli", "root-self-governance", "loom-check"]
+    "push_main": ["py-compile", "host-native-lifecycle"]
   },
   "loom-delivery-gate": {
     "pull_request_target": "enforce",

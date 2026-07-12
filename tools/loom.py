@@ -2271,7 +2271,9 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
 def emit_imported_main(command: str, handler: Any, argv: list[str]) -> int:
     stream = io.StringIO()
     with contextlib.redirect_stdout(stream):
-        handler(argv)
+        status = handler(argv)
+    if not stream.getvalue():
+        return int(status)
     try:
         payload = json.loads(stream.getvalue())
     except json.JSONDecodeError:

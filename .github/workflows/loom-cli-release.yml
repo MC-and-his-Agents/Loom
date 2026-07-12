@@ -10,12 +10,17 @@ on:
         default: false
   pull_request:
     paths:
+      - 'Makefile'
+      - '.github/actions/**'
+      - '.github/workflows/**'
       - 'VERSION'
       - 'package.json'
       - 'bin/loom.mjs'
       - 'tools/loom.py'
       - 'tools/loom_*.py'
       - 'tools/check_cli_contract.py'
+      - 'tools/check_*.py'
+      - 'tools/fixtures/**'
       - 'tools/check_npm_package.py'
       - 'tools/check_release_surface.py'
       - 'tools/build_distribution.py'
@@ -95,7 +100,14 @@ jobs:
         run: python3 tools/version_surface_check.py
 
       - name: Check CLI contract
+        if: ${{ github.event_name != 'pull_request' }}
         run: python3 tools/check_cli_contract.py
+
+      - name: Check host-native lifecycle contracts
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: make loom-check
 
       - name: Check npm package contract
         run: python3 tools/check_npm_package.py

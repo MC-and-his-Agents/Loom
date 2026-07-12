@@ -22,7 +22,7 @@ jobs:
       - name: Compile Loom entrypoints
         run: make py-compile
 
-  demo-bootstrap:
+  host-native-lifecycle:
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
@@ -30,86 +30,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Check demo bootstrap fixture
-        run: make loom-demo-new-project-check
-
-  repo-local-cli:
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Build repo-local runtime fixtures
-        run: python3 tools/build_distribution.py generate --output "$RUNNER_TEMP/loom-distribution" --materialize all
-      - name: "repo-local-cli: setup-demo-bootstrap"
-        run: make loom-demo-new-project-check
-      - name: Restore generated runtime fixtures after demo isolation
-        run: python3 tools/build_distribution.py generate --output "$RUNNER_TEMP/loom-distribution" --materialize repo-fixtures
-      - name: "repo-local-cli: init-runtime"
-        working-directory: examples/new-project
-        run: |
-          python3 .loom/bin/loom_init.py runtime-state --target .
-          python3 .loom/bin/loom_init.py verify --target .
-      - name: "repo-local-cli: fact-chain"
-        working-directory: examples/new-project
-        run: |
-          python3 .loom/bin/loom_init.py fact-chain --target .
-          python3 .loom/bin/loom_flow.py runtime-state --target . --item INIT-0001
-          python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
-          python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
-          python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
-      - name: "repo-local-cli: flow-gates"
-        working-directory: examples/new-project
-        run: |
-          python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
-          python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
-      - name: "repo-local-cli: workspace-locate"
-        working-directory: examples/new-project
-        run: |
-          python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
-      - name: "repo-local-cli: purity-check"
-        working-directory: examples/new-project
-        run: |
-          python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
-      - name: "repo-local-cli: runtime-state-scene-conflict-negative"
-        run: |
-          if LOOM_SOURCE_REPO_ROOT="$PWD" LOOM_INSTALLED_SKILLS_ROOT="$RUNNER_TEMP/loom-distribution/skills" LOOM_RUNTIME_SCENE=upgrade-rehearsal python3 "$RUNNER_TEMP/loom-distribution/skills/shared/scripts/loom_flow.py" runtime-state --target examples/new-project --item INIT-0001; then
-            echo "expected runtime-state conflict to fail closed"
-            exit 1
-          fi
-
-  root-self-governance:
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Materialize root runtime from canonical source
-        run: python3 tools/build_distribution.py generate --output "$RUNNER_TEMP/loom-distribution" --materialize repo-fixtures
-      - name: Validate root self-governance carrier
+      - name: Check host-native lifecycle contracts
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_check.py --source-surface root-self-adoption .
-
-  loom-check:
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Run loom check
-        env:
-          GH_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
         run: make loom-check

@@ -317,9 +317,13 @@ def check_shared_admission_verdict() -> None:
 def check_entrypoints() -> None:
     sys.path.insert(0, str(SCRIPTS))
     flow = load_module("authority_contract_flow", FLOW)
+    execution_flow = sys.modules[flow.handle_flow.__module__]
+    closeout_flow = sys.modules[flow.handle_closeout.__module__]
     cli = load_module("authority_contract_cli", CLI)
-    original_flow_admission = flow.lifecycle_admission_payload
-    original_flow_emit = flow.emit
+    original_execution_admission = execution_flow.lifecycle_admission_payload
+    original_execution_emit = execution_flow.emit
+    original_closeout_admission = closeout_flow.lifecycle_admission_payload
+    original_closeout_emit = closeout_flow.emit
     original_cli_admission = cli.host_lifecycle_admission_payload
     original_cli_emit = cli.emit
     original_cli_safe = cli.agent_safe_payload
@@ -335,8 +339,10 @@ def check_entrypoints() -> None:
                 "primary_remediation": blocked_admission()["next_action"],
             }
 
-        flow.lifecycle_admission_payload = capture_flow_admission
-        flow.emit = lambda payload: captured.append(payload) or 0
+        execution_flow.lifecycle_admission_payload = capture_flow_admission
+        execution_flow.emit = lambda payload: captured.append(payload) or 0
+        closeout_flow.lifecycle_admission_payload = capture_flow_admission
+        closeout_flow.emit = lambda payload: captured.append(payload) or 0
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
             for operation in ("build", "pre-review"):
@@ -378,8 +384,10 @@ def check_entrypoints() -> None:
                 raise AssertionError(f"ship entrypoints did not infer lifecycle subject from --issue: {cli_subjects}")
 
     finally:
-        flow.lifecycle_admission_payload = original_flow_admission
-        flow.emit = original_flow_emit
+        execution_flow.lifecycle_admission_payload = original_execution_admission
+        execution_flow.emit = original_execution_emit
+        closeout_flow.lifecycle_admission_payload = original_closeout_admission
+        closeout_flow.emit = original_closeout_emit
         cli.host_lifecycle_admission_payload = original_cli_admission
         cli.emit = original_cli_emit
         cli.agent_safe_payload = original_cli_safe
@@ -388,18 +396,19 @@ def check_entrypoints() -> None:
 def check_entrypoint_authority_forwarding() -> None:
     sys.path.insert(0, str(SCRIPTS))
     flow = load_module("authority_contract_flow_forwarding", FLOW)
+    execution_flow = sys.modules[flow.lifecycle_admission_payload.__module__]
     cli = load_module("authority_contract_cli_forwarding", CLI)
     with tempfile.TemporaryDirectory() as directory:
         target = Path(directory)
         flow_calls: list[dict[str, Any]] = []
-        flow.detect_github_repo = lambda _target: ("owner", "repo")
-        flow.github_lifecycle_subject_readback = lambda _target, _owner, _repo, **kwargs: flow_calls.append(kwargs) or {
+        execution_flow.detect_github_repo = lambda _target: ("owner", "repo")
+        execution_flow.github_lifecycle_subject_readback = lambda _target, _owner, _repo, **kwargs: flow_calls.append(kwargs) or {
             "result": "pass", "issue_number": 41, "errors": [],
         }
-        flow.github_fr_wi_admission_payload = lambda **_kwargs: {
+        execution_flow.github_fr_wi_admission_payload = lambda **_kwargs: {
             "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
         }
-        flow_result = flow.lifecycle_admission_payload(
+        flow_result = execution_flow.lifecycle_admission_payload(
             target_root=target,
             owner="owner",
             repo_name="repo",
@@ -419,8 +428,8 @@ def check_entrypoint_authority_forwarding() -> None:
             "target_repo": "repo",
         }]:
             raise AssertionError(f"flow entrypoint did not reconcile every supplied authority: {flow_calls}")
-        flow.detect_github_repo = lambda _target: (None, None)
-        unbound_flow = flow.lifecycle_admission_payload(
+        execution_flow.detect_github_repo = lambda _target: (None, None)
+        unbound_flow = execution_flow.lifecycle_admission_payload(
             target_root=target, owner="owner", repo_name="repo", issue_number=41, intent="build",
         )
         if unbound_flow.get("result") != "block" or "target origin GitHub owner/repo" not in unbound_flow.get("missing_inputs", []):
