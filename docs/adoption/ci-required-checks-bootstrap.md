@@ -11,15 +11,16 @@ Loom 不把 workflow 文件存在解释为宿主强制门禁。强制能力仍�
 - `py-compile`
 - `loom-delivery-gate`
 
-这些名称必须稳定，因为 GitHub required checks 绑定的是 check name。`demo-bootstrap`、
-`repo-local-cli`、root self-governance 与 aggregate `loom-check` 只在 `main` push 运行，
-不再由 feature push、PR 与 merge queue 重复执行；PR/merge queue 的候选验证由
-`loom-delivery-gate` 按 changed paths 与 repository profile 选择最小 native targets。
+这些名称必须稳定，因为 GitHub required checks 绑定的是 check name。`main` push 只追加
+`host-native-lifecycle`，消费 admission、closure guard、host attestation、product
+acceptance、light profile 与 failure envelope 等 targeted contracts。旧的
+`demo-bootstrap`、`repo-local-cli`、root self-governance 与 full `loom-check` carrier
+aggregate 已退出 hot path，也不再提供 repo-local replay aliases。
 
-`repo-local-cli` aggregate 内部的可诊断 command groups 仍可在本地用
-[repo-local gate starter aliases](../methodology/harness/repo-local-gate-starter.md#repo-local-cli-local-validation)
-重放。那些 aliases 只用于诊断 main aggregate，不是 required checks，也不能替代
-当前 head 的 `loom-delivery-gate`。
+PR/merge queue 的候选验证由 `loom-delivery-gate` 按 changed paths 与 repository
+profile 选择最小 native targets；当 protected harness 本身变化时，PR 的
+`release-judgment` 另行执行同一个 `make loom-check` host-native contract aggregate，
+不重复 full CLI aggregate。
 
 ## Read Surface
 

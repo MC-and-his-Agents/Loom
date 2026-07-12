@@ -1,144 +1,33 @@
-# Repo-Local Gate Starter
+# Local Gate Entry
 
-Loom 可以提供 repo-local gate starter aliases，让新仓库在没有宿主控制面之前也能启动一致的本地检查入口。
-
-v0.17.0 之后，这个页面只保留 source-repo regression、历史 fixture 和迁移诊断语境。下游仓库的当前支持路径是 metadata-only adoption + 全局 `loom` CLI + Codex 用户级 plugin；不得把本页的 `.loom/bin` 示例当作 repo-local runtime/plugin/skills 安装说明。
-
-这些 aliases 是 Loom source/runtime 的可执行启动器，不是 GitHub、CI、branch protection 或 merge queue 的替代物。
-
-## Stable Aliases
-
-| Alias | Runtime entry | Purpose |
-| --- | --- | --- |
-| `verify` | `python3 .loom/bin/loom_init.py verify --target .` | 读取 bootstrap 与事实链是否完整。 |
-| `status` | `python3 .loom/bin/loom_status.py --target . --item <current-item>` | 汇总当前 Work Item、review、merge checkpoint 与 host 读面。 |
-| `merge-ready` | `python3 .loom/bin/loom_flow.py flow merge-ready --target . --item <current-item>` | 编排本地 merge-ready 检查。 |
-| `closeout-check` | `python3 .loom/bin/loom_flow.py closeout check --target .` | 检查 closeout 是否能消费本地 carrier 与可读 host 输入。 |
-| `reconciliation-audit` | `python3 .loom/bin/loom_flow.py reconciliation audit --target .` | 审计 issue / PR / project / branch drift，不写宿主状态。 |
-
-## Repo-Local CLI Local Validation
-
-Loom source repo 的 `repo-local-cli` 本地 aliases 只用于重放 GitHub Actions `repo-local-cli` job 内部的稳定 command groups。它们不创建新的 hosted required check name，也不替代 `repo-local-cli`、`loom-check`、PR gate、merge-ready 或 controlled merge。
-
-Fast validation 表示复现一个失败的 frozen group：
+Loom source repo 的默认本地聚合入口是：
 
 ```bash
-make repo-local-cli-fast GROUP=<group>
+make loom-check
 ```
 
-`GROUP` 必须是下表中的 frozen group name。也可以直接运行对应 `make repo-local-cli-<group>` target。
+它只运行 host-native lifecycle contracts：PR binding、FR/Phase closure guard、字段权威、host attestation、product acceptance、failure envelope、light profile、delivery gate 与 composite action contract。它不读取或生成 committed current、progress、review、shadow、closeout carrier，也不物化 repo-local runtime。
 
-Full local replay 表示按 CI 内部顺序运行全部 frozen groups：
+GitHub `main` push 使用同一个 aggregate；feature PR 只运行 `py-compile`、targeted `loom-delivery-gate`，以及 release workflow 中的短 host-native aggregate。full CLI contract 只在 `main`/release 收敛时运行，不在同一 feature head 重复。
 
-```bash
-make repo-local-cli-full
-```
+## Retired aliases
 
-Full local replay 是本地诊断证据，不是 merge-ready 放行证据。merge-ready 仍必须消费当前 PR head、review、fact-chain、CI/hosted checks、PR metadata、release/no-release 判断和 scheduler-owned gates。
+以下入口已退出产品与 CI surface，不得作为当前验证建议：
 
-## Daily Execution CLI Local Validation
+- `make repo-local-cli-fast GROUP=<group>`
+- `make repo-local-cli-full`
+- `make repo-local-cli-*`
+- `.loom/bin/loom_init.py` / `.loom/bin/loom_flow.py` lifecycle replay
 
-Loom source repo 也暴露 daily-execution-cli bucket 的显式 fast / full 入口：
+历史 evidence 中的同名命令只描述当时的验证，不构成当前入口。旧 `daily-execution-cli-*`、`loom-check-runtime-regression` 与 `tools/loom_check.py` surface 仅保留到 compatibility removal boundary，必须显式调用，且不得作为默认 merge-ready 或产品完成证明。
 
-```bash
-make daily-execution-cli-fast
-make daily-execution-cli-full
-```
+## Authority boundary
 
-它们分别包装：
+本地通过只能证明候选 contract 在当前 checkout 中成立。它不能证明：
 
-```bash
-python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .
-python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .
-```
+- GitHub workflow 已运行；
+- required checks 已配置并强制；
+- branch protection/ruleset 已启用；
+- PR head、review、merge 与 release host facts 一致。
 
-`daily-execution-cli-fast` 只运行常用 `runtime-smoke` 子集：runtime-state、fact-chain、state-check、pre-review、admission、workspace locate 和 purity-check。它用于本地迭代和 focused proof。
-
-`daily-execution-cli-full` 运行 daily-execution-cli bucket 的完整命令 set、fact-chain/provenance 负向 fixture、authoring fixture 和 merge-ready 相关检查。既有 `--source-surface merge-gate`、`--source-surface source-self-fixture` 和默认 `--source-surface full` 继续消费 full daily-execution-cli coverage。
-
-Fast daily CLI proof 不替代 full validation、hosted `repo-local-cli` / `loom-check` checks、current-head review、PR gate、merge-ready、controlled merge、release/no-release 判断或 closeout。
-
-Expected evidence:
-
-| Entry | Evidence to record | Merge-ready role | Closeout role |
-| --- | --- | --- | --- |
-| `make daily-execution-cli-fast` | command, `daily-execution-cli-fast` selector, result, elapsed time, current head, and focused failure summary | focused local proof only; may explain why a touched runtime smoke path is ready for review | advisory troubleshooting input only, unless the owning closeout scope explicitly requires no broader daily CLI coverage |
-| `make daily-execution-cli-full` | command, `daily-execution-cli-full` selector, result, elapsed time, current head, and failed child scenario or fixture group when blocked | authoritative daily-execution-cli bucket input, still alongside review, fact-chain, hosted checks, PR metadata, release/no-release, and scheduler-owned gates | retained validation input that closeout can backlink to PR head, merge commit, target branch, and no_release evidence |
-
-Troubleshooting signals:
-
-- Fast passes while full fails: keep the PR out of merge-ready and classify the
-  full bucket child failure; the fast run only narrows the unaffected runtime
-  smoke path.
-- Full passes while hosted checks fail: classify hosted check freshness,
-  command group, branch protection, or CI environment separately; do not rewrite
-  local evidence as hosted proof.
-- PR metadata, review, fact-chain, release/no-release, or scheduler-owned gate
-  failures: keep those findings separate from daily-execution-cli failures and
-  repair the owning carrier or gate input.
-- Closeout evidence missing the full run: link the retained full validation or
-  record the explicit scope rationale and remaining risk. A fast-only locator is
-  not enough for default merge-ready or no_release closeout.
-
-| Order | Frozen group name | CI step name | Local alias | Execution surface |
-| --- | --- | --- | --- | --- |
-| 0 | `setup-demo-bootstrap` | `repo-local-cli: setup-demo-bootstrap` | `make repo-local-cli-fast GROUP=setup-demo-bootstrap` or `make repo-local-cli-setup-demo-bootstrap` | `make loom-demo-new-project-check` from repo root. |
-| 1 | `init-runtime` | `repo-local-cli: init-runtime` | `make repo-local-cli-fast GROUP=init-runtime` or `make repo-local-cli-init-runtime` | `python3 .loom/bin/loom_init.py runtime-state --target .`; `python3 .loom/bin/loom_init.py verify --target .` from `examples/new-project`. |
-| 2 | `fact-chain` | `repo-local-cli: fact-chain` | `make repo-local-cli-fast GROUP=fact-chain` or `make repo-local-cli-fact-chain` | `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py runtime-state --target . --item INIT-0001`; `python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001`; `python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001`; `python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001` from `examples/new-project`. |
-| 3 | `flow-gates` | `repo-local-cli: flow-gates` | `make repo-local-cli-fast GROUP=flow-gates` or `make repo-local-cli-flow-gates` | `python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001`; `python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001` from `examples/new-project`. |
-| 4 | `workspace-locate` | `repo-local-cli: workspace-locate` | `make repo-local-cli-fast GROUP=workspace-locate` or `make repo-local-cli-workspace-locate` | `python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001` from `examples/new-project`. |
-| 5 | `purity-check` | `repo-local-cli: purity-check` | `make repo-local-cli-fast GROUP=purity-check` or `make repo-local-cli-purity-check` | `python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001` from `examples/new-project`. |
-| 6 | `runtime-state-scene-conflict-negative` | `repo-local-cli: runtime-state-scene-conflict-negative` | `make repo-local-cli-fast GROUP=runtime-state-scene-conflict-negative` or `make repo-local-cli-runtime-state-scene-conflict-negative` | `LOOM_SOURCE_REPO_ROOT="$PWD" LOOM_INSTALLED_SKILLS_ROOT="$PWD/skills" LOOM_RUNTIME_SCENE=upgrade-rehearsal python3 skills/shared/scripts/loom_flow.py runtime-state --target examples/new-project --item INIT-0001` from repo root; the alias fails if this command succeeds. |
-
-The group names and order are intentionally identical to the frozen `repo-local-cli` CI command groups. Do not rename these local group labels or move the runtime-state scene conflict negative check into a positive group; that check must remain fail-closed.
-
-The `setup-demo-bootstrap` group consumes the aggregate demo bootstrap fixture
-check. When a PR needs focused diagnosis, the same bucket exposes these local
-aliases without changing the hosted group name:
-
-| Named surface | Local alias | Script selector |
-| --- | --- | --- |
-| `demo-bootstrap-generation` | `make loom-demo-new-project-generation-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface generation` |
-| `demo-bootstrap-canonicalization` | `make loom-demo-new-project-canonicalization-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface canonicalization` |
-| `demo-bootstrap-fixture-drift` | `make loom-demo-new-project-fixture-drift-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface fixture-drift` |
-| `demo-bootstrap-examples-cleanliness` | `make loom-demo-new-project-cleanliness-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface cleanliness` |
-| `demo-bootstrap-fixture` | `make loom-demo-new-project-check` | `python3 tools/check_demo_bootstrap_fixture.py --surface aggregate` |
-
-Closeout evidence for the demo bootstrap split must link the focused surface
-proofs and the aggregate `setup-demo-bootstrap` proof. Targeted checks can
-diagnose a surface; they do not rename or replace the hosted
-`repo-local-cli: setup-demo-bootstrap` group.
-
-## Machine Contract
-
-`governance_surface.gate_starter` 与 `governance_control_plane.gate_starter` 必须使用：
-
-- `schema_version: loom-gate-starter/v1`
-- `authority: local`
-- `enforcement: advisory`
-- `host_enforcement: false`
-- `host_enforcement_status: not_host_enforced`
-
-每个 alias 必须声明：
-
-- `surface`
-- `entrypoint`
-- `command`
-- `authority`
-- `enforcement`
-- `host_enforcement`
-- `summary`
-
-## Failure Semantics
-
-本地 alias 的存在只能证明 Loom starter 已定义或 repo-local runtime 可读。
-
-它不能证明：
-
-- GitHub Actions workflow 已安装。
-- required checks 已配置为 blocking。
-- branch protection 或 ruleset 已强制。
-- PR merge path 已受控。
-- merge queue、squash policy 或 host merge button 已由 Loom 接管。
-
-若 repo-local runtime 尚未安装，`missing_entrypoints` 可以列出缺失入口；但 alias 合同本身仍保持 advisory。升级到 `strong` 必须由 host enforcement 读面单独证明。
+这些事实必须由 GitHub live readback 与 hosted checks 证明。Loom 不从本地 aggregate、CI green 或 PR merged 推导 product acceptance。

@@ -98,6 +98,10 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         run: python3 tools/check_cli_contract.py
 
+      - name: Check host-native lifecycle contracts
+        if: ${{ github.event_name == 'pull_request' }}
+        run: make loom-check
+
       - name: Check npm package contract
         run: python3 tools/check_npm_package.py
 

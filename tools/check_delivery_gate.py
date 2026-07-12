@@ -1280,7 +1280,12 @@ def check_workflow_event_matrix() -> None:
         raise AssertionError("delivery gate must enforce direct PR/merge-group events without a duplicate push run")
     release = (ROOT / ".github" / "workflows" / "loom-cli-release.yml").read_text(encoding="utf-8")
     cli_step = release[release.index("      - name: Check CLI contract") : release.index("      - name: Check npm package contract")]
-    if "if: ${{ github.event_name != 'pull_request' }}" not in cli_step:
+    if (
+        "if: ${{ github.event_name != 'pull_request' }}" not in cli_step
+        or "name: Check host-native lifecycle contracts" not in cli_step
+        or "if: ${{ github.event_name == 'pull_request' }}" not in cli_step
+        or "run: make loom-check" not in cli_step
+    ):
         raise AssertionError("feature pull requests must not repeat the full CLI aggregate in release judgment")
     for workflow in (ROOT / ".github" / "workflows").glob("*.yml"):
         workflow_text = workflow.read_text(encoding="utf-8")

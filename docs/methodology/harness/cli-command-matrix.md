@@ -177,9 +177,9 @@ python3 tools/check_loom_check_runtime_regressions.py --surface temp-dir-cleanup
 python3 tools/check_loom_check_runtime_regressions.py --surface demo-fixture-cleanliness
 ```
 
-`python3 tools/check_loom_check_runtime_regressions.py`,
-`make loom-check-runtime-regression`, and `make loom-check` remain the aggregate
-runtime regression validation path. The checker has no `--surface aggregate`
+`python3 tools/check_loom_check_runtime_regressions.py` and
+`make loom-check-runtime-regression` remain the explicit compatibility runtime
+regression path; default `make loom-check` consumes host-native lifecycle contracts instead. The checker has no `--surface aggregate`
 selector; evidence summaries must cite the no-filter command or Make target for
 aggregate proof.
 
