@@ -52,7 +52,7 @@ profile 选择最小 native targets；当 protected harness 本身变化时，PR
 
 ## Delivery Gate Enforcement 与身份 readback
 
-`loom-delivery-gate` 的 base-owned direct `pull_request_target` 与默认分支 `merge_group` 固定以 `enforce` 运行。当前 partial delivery 只在 coordinator 的 run/path/event/head 与 trusted finalizer digest readback 不完整时让 terminal check 失败；读回完整时 compatibility check 成功，但机器结果固定为 `limited` / `host_enforcement_unavailable`，不能作为产品放行。gate 仍从 candidate tree 的 `loom-installed-state/v2` 读取 repository adoption profile；既有 execution-control 仓库可由 `loom-repo-interface/v2` companion 兼容识别。light adoption 无需在 direct-event facts 中手工声明 `profile`。candidate native 结果仅上传为带 `untrusted-` 前缀的诊断 artifact，不参与 terminal verdict；#2063 建立 strong host identity 后，forbidden carrier、profile mismatch 与 native validation 才能进入强制放行语义。
+`loom-delivery-gate` 的 base-owned direct `pull_request_target` 与默认分支 `merge_group` 固定以 `enforce` 运行。coordinator 的 run/path/event/head 或 trusted finalizer digest readback 不完整时 terminal check 失败；enforce 模式下 GitHub 原生 `needs.native-validation.result` 非 success 时也必须失败。reusable `advisory` 只记录同一 verdict而不阻断 job。candidate native artifact 只用于诊断，不作为信任输入。gate 仍从 candidate tree 的 `loom-installed-state/v2` 读取 repository adoption profile；既有 execution-control 仓库可由 `loom-repo-interface/v2` companion 兼容识别。light adoption 无需在 direct-event facts 中手工声明 `profile`。同 App identity 的 assurance 明确为 `limited`，但这不允许 enforce 模式把 forbidden carrier、profile mismatch、command missing 或 native validation failure 降级为成功。
 
 reusable caller 必须显式声明 `host_facts`、与 `uses@SHA` 相同的 `loom_ref`、
 `profile`、`enforcement: advisory|enforce` 与目标仓自己的 `validation_command`。
@@ -129,26 +129,24 @@ branch rules 与 Actions workflow id/path/state。后者由 GitHub 按目标 bra
   ruleset enforcement 的完整绑定，#2063 完成专用 host adapter 前不得返回 `strong`；
 - `distinct_app_check`：required check 绑定到不同于 GitHub Actions（app id
   `15368`）的专用 GitHub App，才是 `strong`；
-- `pull_request_target_same_app`：base-owned coordinator 是受限防线，但同一
-  GitHub Actions app 下仍可产生同名 check，因此 verdict 固定为 `limited`，以
-  `host_enforcement_unavailable` 返回 `blocked`。
+- `pull_request_target_same_app`：base-owned coordinator 的 identity assurance 为
+  `limited`；identity reader 以 `host_enforcement_unavailable` 表示“未达到 strong”，
+  不等于 delivery check 可以忽略 native failure。
 
 当前 Loom repo rulesets 为空，org rulesets API 返回“Upgrade to GitHub Team”，且
-repo-level REST rules surface 不提供 required-workflow rule。因此现有计划没有可配置
-的 repo-level required-workflow payload，也没有 distinct App；#2054 必须把此限制
-记录为 blocked，不能把 same-app required context 表述为 stable/strong。输出是一次
-host readback evidence，不是应提交进仓库的 registry。
+repo-level REST rules surface 不提供 required-workflow rule。因此 v0.30 明确采用
+same-App limited identity，不把它表述为 strong。identity reader 的输出是一次 host
+readback evidence，不是应提交进仓库的 registry。
 
-当前 `pull_request_target` compatibility check 的 conclusion 可以成功，但机器输出固定为
-`assurance: limited`、`trust_verdict: limited` 与
-`host_enforcement: host_enforcement_unavailable`。GitHub branch protection 不消费这些
-workflow outputs，因此该同名 compatibility context 绝不能配置为 required product gate；
-只有 #2063 建立的独立 strong consumer/context 才能放行。当前能力只允许作为 #2046 的
-partial delivery 合入，不满足 #2046 FR closeout 或 #2054 stable release。
+当前 `pull_request_target` check 在 host readback 与 selected native validation 都通过时
+输出 `result: passed`、`assurance: limited`、`trust_verdict: limited`；任一 delivery 条件
+失败则 conclusion 为 failure。v0.30 允许把这一 context 配置为 required delivery gate，
+但不得宣称其 check identity 不可伪造。是否要求 strong 由仓库风险策略决定，不是普通
+light-governance 或 v0.30 发布的默认前置。
 
 ## Distinct App attestor
 
-`.github/workflows/loom-delivery-gate-attestor.yml` 是默认分支拥有的 dormant
+`.github/workflows/loom-delivery-gate-attestor.yml` 是可选 hardened mode 的 dormant
 `workflow_run` consumer。未配置 `LOOM_DELIVERY_GATE_APP_ID` repository variable 时 job
 直接跳过；它不会把缺失 credential 降级成 strong。启用前必须创建并仅安装到目标仓库的
 GitHub App，最小权限为：Metadata read、Actions read、Contents read、Pull requests read、
@@ -170,7 +168,7 @@ artifact，也不把 App private key交给执行候选代码的 job。源 native
 切换 required set 必须在一次 bootstrap 管理窗口串行执行：先安装 App并写 variable/secret，
 在测试 PR 上 readback strong check的 `app.id` 与 head，随后把
 `loom-delivery-gate-strong` 加入 required checks，最后才移除同名 same-App compatibility
-context。完成前 #2063、#2046 与 #2054 保持未完成。
+context。该激活不阻塞 #2046、#1986、#2054 或 v0.30。
 
 App credential 是 required identity 的宿主前置，不能由失效的 credential 自行撤销历史
 success。删除、轮换或检测到 variable/secret/App installation 不健康前，必须先在 branch
