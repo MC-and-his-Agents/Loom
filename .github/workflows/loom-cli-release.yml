@@ -10,12 +10,17 @@ on:
         default: false
   pull_request:
     paths:
+      - 'Makefile'
+      - '.github/actions/**'
+      - '.github/workflows/**'
       - 'VERSION'
       - 'package.json'
       - 'bin/loom.mjs'
       - 'tools/loom.py'
       - 'tools/loom_*.py'
       - 'tools/check_cli_contract.py'
+      - 'tools/check_*.py'
+      - 'tools/fixtures/**'
       - 'tools/check_npm_package.py'
       - 'tools/check_release_surface.py'
       - 'tools/build_distribution.py'
