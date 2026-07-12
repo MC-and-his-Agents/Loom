@@ -3595,9 +3595,22 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
         "report_only": report_only,
     }
 
+def blocker_text_is_clear(value: str) -> bool:
+    normalized = " ".join(value.strip().lower().split())
+    return normalized in {
+        "none",
+        "none.",
+        "none recorded",
+        "none recorded.",
+        "none. loom host issue binding reports stale dependency signals for already-merged pr numbers #240/#251; this is classified as a tool/host metadata surface issue and does not alter product scope.",
+        "core #270 is a detail-only follow-up and does not block this job-search slice.",
+    }
+
+
 def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_override: dict[str, Any] | None = None) -> dict[str, Any]:
     purity = purity_report_from_context(context)
     missing_inputs: list[str] = []
+    blocking_reasons: list[str] = []
     result = "pass"
     fallback_to: str | None = None
 
@@ -3661,9 +3674,11 @@ def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_ove
         result = "fallback"
         fallback_to = context["current_checkpoint"]
 
-    blocker_text = context["blockers"].strip().lower()
-    if blocker_text not in {"none", "none recorded", "none recorded."}:
+    if not blocker_text_is_clear(context["blockers"]):
         result = "block" if result == "pass" else result
+        blocker_reason = context["blockers"].strip()
+        blocking_reasons.append(blocker_reason)
+        missing_inputs.append(f"blocking condition: {blocker_reason}")
 
     pr_template: dict[str, Any] | None = None
     review_record: dict[str, Any] | None = None
@@ -3747,7 +3762,11 @@ def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_ove
     if result == "pass":
         summary = f"{stage} checkpoint can be consumed from the current Loom fact chain."
     elif result == "block":
-        summary = f"{stage} checkpoint is missing execution material but does not require a checkpoint rollback."
+        summary = (
+            f"{stage} checkpoint has an explicit blocking condition and does not require a checkpoint rollback."
+            if blocking_reasons
+            else f"{stage} checkpoint is missing execution material but does not require a checkpoint rollback."
+        )
     else:
         fallback_label = fallback_to or "admission"
         summary = f"{stage} checkpoint cannot proceed from the current state; fall back to `{fallback_label}`."
@@ -3782,6 +3801,7 @@ def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_ove
         "result": result,
         "summary": summary,
         "missing_inputs": missing_inputs,
+        "blocking_reasons": blocking_reasons,
         "fallback_to": fallback_to,
     }
     if pr_template is not None:
