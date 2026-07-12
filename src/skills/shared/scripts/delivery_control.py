@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 import argparse
-import ast
 import hashlib
 import json
 import os
@@ -3598,14 +3597,16 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
 
 def blocker_text_is_clear(value: str) -> bool:
     normalized = " ".join(value.strip().lower().split())
-    return normalized in {
+    clear = {
         "none",
         "none.",
         "none recorded",
         "none recorded.",
-        "none. loom host issue binding reports stale dependency signals for already-merged pr numbers #240/#251; this is classified as a tool/host metadata surface issue and does not alter product scope.",
-        "core #270 is a detail-only follow-up and does not block this job-search slice.",
     }
+    if normalized in clear:
+        return True
+    prefix, separator, note = normalized.partition(" | note:")
+    return bool(separator and note.strip() and prefix in clear)
 
 
 def checkpoint_payload(stage: str, context: dict[str, Any], suite_validation_override: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -5365,33 +5366,34 @@ def gate_freeze_command_surface(context: dict[str, Any]) -> dict[str, Any]:
     required = {"gate freeze check", "gate freeze write"}
     errors: list[str] = []
     for loom_cli in suite_validate_command_candidates(context):
-        try:
-            tree = ast.parse(loom_cli.read_text(encoding="utf-8"), filename=str(loom_cli))
-            command_entries = next(
-                ast.literal_eval(node.value)
-                for node in tree.body
-                if isinstance(node, ast.AnnAssign)
-                and isinstance(node.target, ast.Name)
-                and node.target.id == "COMMANDS"
+        observed: set[str] = set()
+        for operation in ("check", "write"):
+            completed = subprocess.run(
+                [sys.executable, str(loom_cli), "gate", "freeze", operation, "--target", "/__loom_capability_probe_missing__", "--json"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env={**os.environ, "LOOM_AGENT_SAFE_STDOUT_BUDGET_BYTES": "1048576"},
             )
-        except (OSError, SyntaxError, ValueError, StopIteration) as exc:
-            errors.append(f"{loom_cli}: hidden command inventory is unreadable: {exc}")
-            continue
-        implemented = {
-            str(entry.get("command"))
-            for entry in command_entries
-            if isinstance(entry, dict) and entry.get("status") == "implemented"
-        }
-        missing = sorted(required - implemented)
-        if not missing:
+            try:
+                payload = json.loads(completed.stdout)
+            except json.JSONDecodeError:
+                errors.append(f"{loom_cli}: gate freeze {operation} did not emit JSON")
+                continue
+            command = str(payload.get("command"))
+            if command == f"gate freeze {operation}" and payload.get("result") == "block":
+                observed.add(command)
+            else:
+                errors.append(f"{loom_cli}: gate freeze {operation} dispatch readback was invalid")
+        if observed == required:
             return {
                 "result": "pass",
-                "summary": "hidden gate freeze compatibility commands are executable.",
+                "summary": "hidden gate freeze compatibility commands passed executable dispatch readback.",
                 "source_locator": str(loom_cli),
                 "required_commands": sorted(required),
                 "missing_inputs": [],
             }
-        errors.append(f"{loom_cli}: unavailable hidden compatibility commands: {', '.join(missing)}")
+        errors.append(f"{loom_cli}: unavailable hidden compatibility commands: {', '.join(sorted(required - observed))}")
     return {
         "result": "block",
         "summary": "hidden gate freeze compatibility commands are unavailable.",

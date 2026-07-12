@@ -767,14 +767,14 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
         "task": "resume",
         "summary": "Take over the current Work Item from repository facts.",
-        "first_command": "loom resume --target <repo> --item <WI> --json",
-        "next_step": "Continue with build, review, merge-ready, or closeout based on the resume checkpoint.",
+        "first_command": "loom route --target <repo> --item <WI> --json",
+        "next_step": "Continue with build, review, merge-ready, or closeout based on the derived route.",
     },
     {
         "task": "prepare-pr",
         "summary": "Prepare or verify a known PR intent carrier set before review/gate.",
-        "first_command": "loom pr-intent prepare --intent <intent> --target <repo> --item <WI> --apply --json",
-        "next_step": "Run pr-intent check after the PR body metadata is updated and read back.",
+        "first_command": "loom build --target <repo> --item <WI> --json",
+        "next_step": "Continue to pre-review only after build returns a passing delivery verdict.",
     },
     {
         "task": "review",
@@ -809,28 +809,28 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
         "task": "runtime-upgrade",
         "summary": "Update one repository's Loom workflow pin through a maintenance PR.",
-        "first_command": "loom runtime-upgrade status --target <repo> --json",
-        "next_step": "Use prepare/check/closeout; do not mix repo workflow mutation with user plugin cache mutation.",
+        "first_command": "loom upgrade --target <repo> --json",
+        "next_step": "Apply the reported migration plan through the repository's normal maintenance PR.",
     },
     {
         "task": "host-plugin-doctor",
         "summary": "Diagnose local Codex plugin/cache freshness.",
-        "first_command": "loom host doctor --host codex --scope user --json",
-        "next_step": "Run host install/register with --apply only when refreshing the user workstation surface is intended.",
+        "first_command": "loom doctor --target <repo> --json",
+        "next_step": "Use the reported remediation only when refreshing the user workstation surface is intended.",
     },
     {
         "task": "workstation-registry",
         "summary": "List or update the machine-local Loom repository registry.",
-        "first_command": "loom workstation list --json",
-        "next_step": "Use register/unregister to update ~/.loom/repositories.json; each repo still owns adoption truth.",
+        "first_command": "loom workspace check --target <repo> --json",
+        "next_step": "Use workspace create or retire to manage the explicit repository worktree binding.",
     },
 ]
 
 HELP_COMMAND_TIERS: dict[str, list[str]] = {
     "common_path": [
-        "resume",
-        "pr-intent prepare",
-        "pr-intent check",
+        "route",
+        "build",
+        "pre-review",
         "review",
         "merge-ready",
         "pr gate",
@@ -838,29 +838,19 @@ HELP_COMMAND_TIERS: dict[str, list[str]] = {
         "merge run",
         "attestation readback",
         "attestation closeout",
-        "closeout sync",
+        "closeout",
     ],
     "maintenance_path": [
-        "runtime-upgrade status",
-        "runtime-upgrade prepare",
-        "runtime-upgrade pr",
-        "runtime-upgrade check",
-        "runtime-upgrade closeout",
+        "detect",
+        "doctor",
+        "repair plan",
+        "install",
+        "upgrade",
+        "verify",
         "release readback",
-        "host doctor",
-        "workstation list",
-    ],
-    "advanced_debug_path": [
-        "carrier closeout-sync",
-        "closeout run",
-        "release closeout-sync",
-        "pr metadata-render",
-        "pr metadata-readback",
-        "pr metadata-update",
-        "pr metadata-preflight",
-        "suite validate",
-        "suite evidence validate",
-        "suite carrier validate",
+        "workspace create",
+        "workspace check",
+        "workspace retire",
     ],
 }
 
@@ -2252,6 +2242,9 @@ def version_freshness_action(freshness: dict[str, Any]) -> dict[str, Any]:
 
 
 def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
+    command = payload.get("command")
+    if command in PUBLIC_COMMAND_NAMES:
+        payload["protocol_type"] = PUBLIC_COMMAND_PROTOCOL_TYPES[command]
     failure_envelope = public_cli_failure_envelope(payload)
     if failure_envelope is not None:
         payload["failure_envelope"] = failure_envelope
@@ -12579,6 +12572,29 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         "retire": "handoff",
     }
     if command in flow_operations:
+        if command in {"build", "pre-review"}:
+            lifecycle_admission = host_lifecycle_admission_payload(
+                target=target,
+                issue=args.issue,
+                fr=args.fr,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                intent="pr" if command == "pre-review" else command,
+                pr=args.pr,
+                branch=args.branch,
+            )
+            if lifecycle_admission["result"] != "pass":
+                return emit(
+                    output(
+                        command,
+                        "block",
+                        schema=SCENARIO_SCHEMA,
+                        summary="Host lifecycle admission blocked before repository carrier reads.",
+                        lifecycle_admission=lifecycle_admission,
+                        missing_inputs=lifecycle_admission.get("missing_inputs", []),
+                        fallback_to=lifecycle_admission.get("primary_remediation"),
+                    )
+                )
         flow_args = ["flow", flow_operations[command], "--target", str(target)]
         for flag, value in (
             ("--item", args.item),

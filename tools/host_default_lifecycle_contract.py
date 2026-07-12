@@ -84,11 +84,10 @@ def main() -> int:
     assert "carrier closeout-sync" not in sync
 
     tiers = loom.HELP_COMMAND_TIERS
-    for command in ("attestation readback", "attestation closeout", "closeout sync"):
+    for command in ("attestation readback", "attestation closeout", "closeout"):
         assert command in tiers["common_path"]
     for command in ("carrier closeout-sync", "closeout run", "release closeout-sync"):
-        assert command not in tiers["common_path"]
-        assert command in tiers["advanced_debug_path"]
+        assert all(command not in tier for tier in tiers.values())
         assert loom.COMMAND_INDEX[command]["status"] == "compatibility"
 
     skill_files = (

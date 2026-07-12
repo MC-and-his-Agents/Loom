@@ -3516,8 +3516,8 @@ def internal_cli_matrix() -> dict[str, dict[str, Any]]:
 def assert_nonblocking_checkpoint_text_contract() -> None:
     loom_flow = load_loom_flow_module()
     clear_shapes = (
-        "None. Loom host issue binding reports stale dependency signals for already-merged PR numbers #240/#251; this is classified as a tool/host metadata surface issue and does not alter product scope.",
-        "Core #270 is a detail-only follow-up and does not block this job-search slice.",
+        "None | note: host metadata is stale but advisory.",
+        "None recorded | note: a detail-only follow-up remains.",
         "None recorded.",
     )
     for blockers in clear_shapes:
@@ -3525,6 +3525,8 @@ def assert_nonblocking_checkpoint_text_contract() -> None:
             raise AssertionError(f"explicit non-blocking checkpoint text was rejected: {blockers}")
 
     blocking_shapes = (
+        "None. Loom host issue binding reports stale dependency signals for already-merged PR numbers #240/#251; this is classified as a tool/host metadata surface issue and does not alter product scope.",
+        "Core #270 is a detail-only follow-up and does not block this job-search slice.",
         "Core #270 blocks this implementation slice.",
         "Core #270 does not block documentation, but production validation is blocked.",
         "None. Security approval is still required and does not alter product scope.",
@@ -13137,11 +13139,16 @@ def assert_governance_closeout_help_contract() -> None:
     for task in ("resume", "prepare-pr", "review", "merge-ready", "release", "release-closeout", "runtime-upgrade", "host-plugin-doctor"):
         if task not in routes or not routes[task].get("first_command") or not routes[task].get("next_step"):
             raise AssertionError(f"help task route missing first command or next step: {task}")
-    if "pr-intent check" not in tiers.get("common_path", []) or "release readback" not in tiers.get("maintenance_path", []):
+    public_commands = {entry["command"] for entry in help_payload.get("commands", [])}
+    if "build" not in tiers.get("common_path", []) or "release readback" not in tiers.get("maintenance_path", []):
         raise AssertionError("help command tiers must keep host-default delivery separate from maintenance")
-    for command in ("carrier closeout-sync", "closeout run", "release closeout-sync"):
-        if command not in tiers.get("advanced_debug_path", []):
-            raise AssertionError(f"{command} must remain outside the default lifecycle")
+    for commands in tiers.values():
+        if not set(commands).issubset(public_commands):
+            raise AssertionError("help command tiers must only recommend public commands")
+    for route in routes.values():
+        recommendation = route["first_command"].removeprefix("loom ")
+        if not any(recommendation == command or recommendation.startswith(command + " ") for command in public_commands):
+            raise AssertionError(f"help route recommends hidden command: {recommendation}")
 
 
 def assert_closeout_checkpoint_normalization_contract() -> None:
@@ -14805,6 +14812,12 @@ def run_aggregate_cli_contract() -> None:
     public_matrix = {entry["command"]: entry for entry in help_payload["commands"]}
     if len(public_matrix) != 30 or help_payload.get("protocol_type_count") != 12:
         raise AssertionError("public CLI surface must expose 30 commands and 12 protocol owner types")
+    if help_payload.get("protocol_type") != public_matrix["help"]["protocol_type"]:
+        raise AssertionError("help payload must carry its declared protocol owner type")
+    for argv, command in ((["version", "--json"], "version"), (["detect", "--target", str(REPO_ROOT), "--json"], "detect")):
+        _, payload = run_json(argv, expect=0)
+        if payload.get("protocol_type") != public_matrix[command]["protocol_type"]:
+            raise AssertionError(f"{command} payload must carry its declared protocol owner type")
     matrix = internal_cli_matrix()
     commands = set(matrix)
     missing = sorted(REQUIRED_COMMANDS - commands)
@@ -16221,7 +16234,7 @@ def run_aggregate_cli_contract() -> None:
             if status == 0 or scenario_payload["schema"] != "loom-scenario-control/v1" or not scenario_payload.get("fallback_to"):
                 raise AssertionError(f"{command_name} did not fail closed with a structured locator payload")
         status, missing_subject_build = run_json(
-            ["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json", "--full-output"]
+            ["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--branch", "work/fixture-unbound", "--json", "--full-output"]
         )
         missing_subject_build = runtime_payload_from_agent_safe_output(missing_subject_build)
         lifecycle_admission = missing_subject_build.get("lifecycle_admission", {})
