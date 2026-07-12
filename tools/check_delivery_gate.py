@@ -722,7 +722,8 @@ def check_workflow() -> None:
         "github.rest.actions.getWorkflowRun",
         "github.rest.actions.getWorkflow",
         'workflow.path !== ".github/workflows/loom-delivery-gate.yml"',
-        '"source":"untrusted_raw_artifact_not_consumed"',
+        'NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}',
+        '"source":"base_owned_job_conclusion"',
         "name: untrusted-loom-native-validation-${{ github.run_id }}",
         "files.length >= 3000",
         "comparisonFiles.length >= 300",
@@ -740,13 +741,15 @@ def check_workflow() -> None:
         'failure_domain: "host_service"',
         "failure_envelope:",
         'core.setOutput("assurance", "limited")',
-        "host_enforcement=host_enforcement_unavailable",
+        "result=${result}",
         "core.setOutput(\"failure_envelope\", JSON.stringify(failureEnvelope))",
         "remediation=${failureEnvelope.primary_cause?.remediation_command || \"unavailable\"}",
         "Publish terminal delivery result",
-        'const result = authenticated ? "limited" : "blocked"',
-        'core.setOutput("compatibility_check_success", authenticated ? "true" : "false")',
-        'core.setOutput("trust_verdict", authenticated ? "limited" : "blocked")',
+        'const validationPassed = authenticated && primaryCause.id === "passed" && payload?.native_validation?.status === "passed"',
+        'const terminalSucceeded = advisory || validationPassed',
+        'const result = advisory ? "advisory" : validationPassed ? "passed" : "blocked"',
+        'core.setOutput("compatibility_check_success", validationPassed ? "true" : "false")',
+        'core.setOutput("trust_verdict", terminalSucceeded ? "limited" : "blocked")',
         "core.setFailed(`loom-delivery-gate blocked: ${cause}`)",
         "continue-on-error: true",
         "group: loom-delivery-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}",
@@ -810,7 +813,8 @@ def check_workflow() -> None:
         raise AssertionError("candidate validation must run in a dependent job through the trusted harness")
     if (
         "needs: [plan, native-validation]" not in final_job
-        or '"status":"command_missing","source":"untrusted_raw_artifact_not_consumed"' not in final_job
+        or 'NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}' not in final_job
+        or '"source":"base_owned_job_conclusion"' not in final_job
         or "actions/download-artifact@v4" in final_job
         or "listWorkflowRunArtifacts" in final_job
         or "listJobsForWorkflowRun" in final_job
@@ -1232,6 +1236,32 @@ def check_workflow_spoof_cases() -> None:
             raise AssertionError(f"workflow spoof case drifted: {case['name']}: {verdict}")
 
 
+def check_terminal_verdict_cases() -> None:
+    catalog = json.loads(
+        (ROOT / "tools" / "fixtures" / "delivery-gate" / "terminal-verdict-cases.json").read_text(encoding="utf-8")
+    )
+    if catalog.get("schema_version") != "loom-delivery-terminal-verdict-cases/v1":
+        raise AssertionError("delivery terminal verdict fixture schema drifted")
+    for case in catalog.get("cases", []):
+        validation_passed = (
+            case.get("authenticated") is True
+            and case.get("primary_cause") == "passed"
+            and case.get("native_status") == "passed"
+        )
+        advisory = case.get("authenticated") is True and case.get("enforcement") == "advisory"
+        terminal_succeeded = advisory or validation_passed
+        result = "advisory" if advisory else "passed" if validation_passed else "blocked"
+        if (
+            result != case.get("expected_result")
+            or terminal_succeeded is not case.get("expected_terminal_success")
+            or validation_passed is not case.get("expected_compatibility_success")
+        ):
+            raise AssertionError(
+                f"delivery terminal verdict fixture drifted: {case.get('name')}: "
+                f"{result}/{terminal_succeeded}/{validation_passed}"
+            )
+
+
 def check_workflow_event_matrix() -> None:
     matrix = json.loads(WORKFLOW_MATRIX.read_text(encoding="utf-8"))
     expected = {
@@ -1310,6 +1340,7 @@ def main() -> int:
     check_reusable_host_authority_cases()
     check_host_authority_failure_cases()
     check_workflow_spoof_cases()
+    check_terminal_verdict_cases()
     check_workflow_event_matrix()
     print("delivery gate contract: OK")
     return 0

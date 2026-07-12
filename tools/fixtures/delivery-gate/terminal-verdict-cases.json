@@ -1,0 +1,11 @@
+{
+  "schema_version": "loom-delivery-terminal-verdict-cases/v1",
+  "cases": [
+    {"name": "authenticated-native-pass", "authenticated": true, "enforcement": "enforce", "primary_cause": "passed", "native_status": "passed", "expected_result": "passed", "expected_terminal_success": true, "expected_compatibility_success": true},
+    {"name": "native-failure-blocks-limited-gate", "authenticated": true, "enforcement": "enforce", "primary_cause": "native_validation_failed", "native_status": "failed", "expected_result": "blocked", "expected_terminal_success": false, "expected_compatibility_success": false},
+    {"name": "missing-native-result-blocks-limited-gate", "authenticated": true, "enforcement": "enforce", "primary_cause": "validation_command_missing", "native_status": "command_missing", "expected_result": "blocked", "expected_terminal_success": false, "expected_compatibility_success": false},
+    {"name": "host-readback-failure-blocks", "authenticated": false, "enforcement": "enforce", "primary_cause": "passed", "native_status": "passed", "expected_result": "blocked", "expected_terminal_success": false, "expected_compatibility_success": false},
+    {"name": "advisory-pass-records-without-blocking", "authenticated": true, "enforcement": "advisory", "primary_cause": "passed", "native_status": "passed", "expected_result": "advisory", "expected_terminal_success": true, "expected_compatibility_success": true},
+    {"name": "advisory-failure-records-without-blocking", "authenticated": true, "enforcement": "advisory", "primary_cause": "native_validation_failed", "native_status": "failed", "expected_result": "advisory", "expected_terminal_success": true, "expected_compatibility_success": false}
+  ]
+}

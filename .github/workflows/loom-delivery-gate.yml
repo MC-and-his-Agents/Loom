@@ -27,7 +27,7 @@ on:
         type: string
     outputs:
       result:
-        description: Limited compatibility or blocked delivery-gate terminal result.
+        description: Passed, advisory, or blocked delivery-gate terminal result.
         value: ${{ jobs.loom-delivery-gate.outputs.result }}
       enforcement:
         description: Effective delivery-gate enforcement mode.
@@ -42,10 +42,10 @@ on:
         description: Host enforcement assurance; same-app GitHub Actions coordinators remain limited.
         value: ${{ jobs.loom-delivery-gate.outputs.assurance }}
       compatibility_check_success:
-        description: Whether the base-owned compatibility coordinator completed authenticated readback.
+        description: Whether the base-owned coordinator authenticated and selected native validation passed.
         value: ${{ jobs.loom-delivery-gate.outputs.compatibility_check_success }}
       trust_verdict:
-        description: Machine trust verdict; product consumers must require strong.
+        description: Machine identity verdict; limited is the default and strong is an optional hardened mode.
         value: ${{ jobs.loom-delivery-gate.outputs.trust_verdict }}
 
 concurrency:
@@ -466,10 +466,12 @@ jobs:
           CANDIDATE_PATH: candidate
           DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}
           HOST_FACTS_BASE64: ${{ needs.plan.outputs.host_facts_base64 }}
+          NATIVE_JOB_RESULT: ${{ needs.native-validation.result }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           set -u
-          printf '{"schema_version":"loom-native-validation-result/v1","status":"command_missing","source":"untrusted_raw_artifact_not_consumed"}\n' > "$VALIDATION_RESULT_PATH"
+          STATUS=$([ "$NATIVE_JOB_RESULT" = "success" ] && echo passed || echo failed)
+          printf '{"schema_version":"loom-native-validation-result/v1","status":"%s","source":"base_owned_job_conclusion"}\n' "$STATUS" > "$VALIDATION_RESULT_PATH"
           python3 - "$HOST_FACTS_PATH" <<'PY'
           import base64
           import os
@@ -568,37 +570,30 @@ jobs:
               consequence_of: [],
               remediation_command: "restore complete GitHub event/API readback and rerun loom-delivery-gate",
             };
-            const limitedCause = {
-              id: "host_enforcement_unavailable",
-              failure_domain: "host_service",
-              code: "host_enforcement_unavailable",
-              locator: "required_check_identity:host_enforcement_unavailable",
-              summary: "The compatibility coordinator completed, but this same-app workflow cannot prove strong host enforcement.",
-              owner: "github",
-              retryable: false,
-              cause_class: "host_identity",
-              transient: false,
-              details: {},
-              consequence_of: [],
-              remediation_command: "complete #2063 with a distinct GitHub App or fully bound required-workflow host adapter",
-            };
-            const primaryCause = authenticated ? limitedCause : fallbackCause;
+            const primaryCause = authenticated
+              ? payload?.failure_envelope?.primary_cause || fallbackCause
+              : fallbackCause;
             const cause = primaryCause.id;
-            const failureEnvelope = { schema_version: "loom-failure-envelope/v1", primary_cause: primaryCause, consequences: [], suppressed_diagnostics: [], secondary_causes: [] };
+            const failureEnvelope = authenticated
+              ? payload?.failure_envelope || { schema_version: "loom-failure-envelope/v1", primary_cause: primaryCause, consequences: [], suppressed_diagnostics: [], secondary_causes: [] }
+              : { schema_version: "loom-failure-envelope/v1", primary_cause: primaryCause, consequences: [], suppressed_diagnostics: [], secondary_causes: [] };
             const enforcement = payload?.enforcement || process.env.DELIVERY_GATE_ENFORCEMENT || "advisory";
-            const result = authenticated ? "limited" : "blocked";
+            const validationPassed = authenticated && primaryCause.id === "passed" && payload?.native_validation?.status === "passed";
+            const advisory = authenticated && enforcement === "advisory";
+            const terminalSucceeded = advisory || validationPassed;
+            const result = advisory ? "advisory" : validationPassed ? "passed" : "blocked";
             core.setOutput("result", result);
             core.setOutput("enforcement", enforcement);
             core.setOutput("primary_cause", cause);
             core.setOutput("failure_envelope", JSON.stringify(failureEnvelope));
             core.setOutput("assurance", "limited");
-            core.setOutput("compatibility_check_success", authenticated ? "true" : "false");
-            core.setOutput("trust_verdict", authenticated ? "limited" : "blocked");
-            core.notice(`loom-delivery-gate enforcement=${enforcement} assurance=limited host_enforcement=host_enforcement_unavailable profile=${profile}; primary cause=${cause}; remediation=${failureEnvelope.primary_cause?.remediation_command || "unavailable"}`);
+            core.setOutput("compatibility_check_success", validationPassed ? "true" : "false");
+            core.setOutput("trust_verdict", terminalSucceeded ? "limited" : "blocked");
+            core.notice(`loom-delivery-gate enforcement=${enforcement} assurance=limited profile=${profile}; result=${result}; primary cause=${cause}; remediation=${failureEnvelope.primary_cause?.remediation_command || "unavailable"}`);
             await core.summary
               .addHeading("Loom delivery gate")
-              .addRaw(`Enforcement: ${enforcement}\n\nResult: ${result}\n\nAssurance: limited\n\nHost enforcement: host_enforcement_unavailable\n\nProfile: ${profile}\n\nPrimary cause: ${cause}\n\nFailure envelope:\n\n\`\`\`json\n${JSON.stringify(failureEnvelope, null, 2)}\n\`\`\`\n\nProduct acceptance: not_evaluated.`)
+              .addRaw(`Enforcement: ${enforcement}\n\nResult: ${result}\n\nIdentity assurance: limited\n\nProfile: ${profile}\n\nPrimary cause: ${cause}\n\nFailure envelope:\n\n\`\`\`json\n${JSON.stringify(failureEnvelope, null, 2)}\n\`\`\`\n\nProduct acceptance: not_evaluated.`)
               .write();
-            if (!authenticated) {
+            if (!terminalSucceeded) {
               core.setFailed(`loom-delivery-gate blocked: ${cause}`);
             }
