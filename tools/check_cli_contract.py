@@ -640,7 +640,8 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
         if f"fields.{host_owned_field}" not in hosted_missing:
             raise AssertionError(f"PR metadata accepted authored GitHub host field `{host_owned_field}`")
     calls: list[list[str]] = []
-    original_gh_json = loom_flow.gh_json
+    delivery_control = loom_flow._delivery_control
+    original_gh_json = delivery_control.gh_json
     original_source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
 
     def fake_gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
@@ -649,7 +650,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             return {"statusCheckRollup": [{"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"}]}, []
         return original_gh_json(root, args)
 
-    loom_flow.gh_json = fake_gh_json
+    delivery_control.gh_json = fake_gh_json
     os.environ["LOOM_SOURCE_REPO_ROOT"] = str(REPO_ROOT)
     try:
         payload = loom_flow.controlled_merge_payload(
@@ -672,7 +673,7 @@ def assert_merge_metadata_only_target_readback_contract(tmp: Path) -> None:
             merge_gate_result_file=None,
         )
     finally:
-        loom_flow.gh_json = original_gh_json
+        delivery_control.gh_json = original_gh_json
         if original_source_repo_root is None:
             os.environ.pop("LOOM_SOURCE_REPO_ROOT", None)
         else:
@@ -3528,24 +3529,25 @@ def write_host_planning_taxonomy_companion(
 
 @contextmanager
 def patched_github_intake_readbacks(module: Any, issue_payload: dict[str, Any]):
-    original_issue_payload = module.github_issue_payload
-    original_dependencies = module.github_issue_dependencies_payload
-    original_binding = module.host_binding_inspection_payload
-    original_project_drift = module.project_drift_payload
-    module.github_issue_payload = lambda *args, **kwargs: (issue_payload, [])
-    module.github_issue_dependencies_payload = lambda *args, **kwargs: {
+    host_profile = module._host_profile
+    original_issue_payload = host_profile.github_issue_payload
+    original_dependencies = host_profile.github_issue_dependencies_payload
+    original_binding = host_profile.host_binding_inspection_payload
+    original_project_drift = host_profile.project_drift_payload
+    host_profile.github_issue_payload = lambda *args, **kwargs: (issue_payload, [])
+    host_profile.github_issue_dependencies_payload = lambda *args, **kwargs: {
         "availability": "present",
         "capability": {"status": "supported"},
         "native_edges": [],
         "checks": [],
     }
-    module.host_binding_inspection_payload = lambda *args, **kwargs: {
+    host_profile.host_binding_inspection_payload = lambda *args, **kwargs: {
         "schema_version": "loom-host-binding-inspection/v1",
         "result": "pass",
         "missing_inputs": [],
         "findings": [],
     }
-    module.project_drift_payload = lambda *args, **kwargs: {
+    host_profile.project_drift_payload = lambda *args, **kwargs: {
         "schema_version": "loom-project-drift/v1",
         "result": "pass",
         "missing_inputs": [],
@@ -3554,10 +3556,10 @@ def patched_github_intake_readbacks(module: Any, issue_payload: dict[str, Any]):
     try:
         yield
     finally:
-        module.github_issue_payload = original_issue_payload
-        module.github_issue_dependencies_payload = original_dependencies
-        module.host_binding_inspection_payload = original_binding
-        module.project_drift_payload = original_project_drift
+        host_profile.github_issue_payload = original_issue_payload
+        host_profile.github_issue_dependencies_payload = original_dependencies
+        host_profile.host_binding_inspection_payload = original_binding
+        host_profile.project_drift_payload = original_project_drift
 
 
 def run_github_intake_taxonomy_payload(
@@ -3809,6 +3811,7 @@ def assert_issue_dependency_machine_block_contract() -> None:
 
 def assert_reconciliation_sync_apply_native_dependency_contract(tmp: Path) -> None:
     loom_flow = load_loom_flow_module()
+    closeout_flow = loom_flow._closeout_flow
     target = tmp / "reconciliation-native-dependency-apply"
     target.mkdir()
     calls: list[tuple[int, int, str]] = []
@@ -3851,14 +3854,14 @@ def assert_reconciliation_sync_apply_native_dependency_contract(tmp: Path) -> No
         calls.append((issue_number, blocking_issue_number, mutation))
         return []
 
-    original_emit = loom_flow.emit
-    original_runtime_state = loom_flow.runtime_state_payload
-    original_audit = loom_flow.reconciliation_audit_payload
-    original_set_native_dependency = loom_flow.set_native_dependency
-    loom_flow.emit = fake_emit
-    loom_flow.runtime_state_payload = lambda _target_root: {"result": "pass"}
-    loom_flow.reconciliation_audit_payload = fake_audit
-    loom_flow.set_native_dependency = fake_set_native_dependency
+    original_emit = closeout_flow.emit
+    original_runtime_state = closeout_flow.runtime_state_payload
+    original_audit = closeout_flow.reconciliation_audit_payload
+    original_set_native_dependency = closeout_flow.set_native_dependency
+    closeout_flow.emit = fake_emit
+    closeout_flow.runtime_state_payload = lambda _target_root: {"result": "pass"}
+    closeout_flow.reconciliation_audit_payload = fake_audit
+    closeout_flow.set_native_dependency = fake_set_native_dependency
     try:
         status = loom_flow.handle_reconciliation(
             argparse.Namespace(
@@ -3888,10 +3891,10 @@ def assert_reconciliation_sync_apply_native_dependency_contract(tmp: Path) -> No
             )
         )
     finally:
-        loom_flow.emit = original_emit
-        loom_flow.runtime_state_payload = original_runtime_state
-        loom_flow.reconciliation_audit_payload = original_audit
-        loom_flow.set_native_dependency = original_set_native_dependency
+        closeout_flow.emit = original_emit
+        closeout_flow.runtime_state_payload = original_runtime_state
+        closeout_flow.reconciliation_audit_payload = original_audit
+        closeout_flow.set_native_dependency = original_set_native_dependency
     if status != 0 or emitted.get("result") != "pass":
         raise AssertionError(f"reconciliation sync apply did not pass after native dependency removal: {emitted}")
     if calls != [(100, 99, "removeBlockedBy")]:
@@ -3902,6 +3905,7 @@ def assert_reconciliation_sync_apply_native_dependency_contract(tmp: Path) -> No
 
 def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
     loom_flow = load_loom_flow_module()
+    delivery_control = loom_flow._delivery_control
     target = tmp / "docs-contract-suite-not-applicable"
     (target / ".loom/specs/WI-docs").mkdir(parents=True)
     (target / ".loom/reviews").mkdir(parents=True)
@@ -3922,12 +3926,12 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         "current_checkpoint": "merge",
         "associated_artifacts": [],
     }
-    original_spec_suite_validation_payload = loom_flow.spec_suite_validation_payload
-    original_git_head_sha = loom_flow.git_head_sha
-    original_suite_gate_validation_payload = loom_flow.suite_gate_validation_payload
+    original_spec_suite_validation_payload = delivery_control.spec_suite_validation_payload
+    original_git_head_sha = delivery_control.git_head_sha
+    original_suite_gate_validation_payload = delivery_control.suite_gate_validation_payload
     try:
-        loom_flow.git_head_sha = lambda _target_root: "current-head"
-        loom_flow.spec_suite_validation_payload = lambda _context: {
+        delivery_control.git_head_sha = lambda _target_root: "current-head"
+        delivery_control.spec_suite_validation_payload = lambda _context: {
             "schema_version": "loom-suite-validation-consumption/v1",
             "command": "suite validate",
             "result": "not_applicable",
@@ -3968,7 +3972,7 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         def unexpected_suite_gate_validation(_context: dict[str, Any], *, surface: str) -> dict[str, Any]:
             raise AssertionError(f"docs-only suite not_applicable must not call suite gate validators for {surface}")
 
-        loom_flow.suite_gate_validation_payload = unexpected_suite_gate_validation
+        delivery_control.suite_gate_validation_payload = unexpected_suite_gate_validation
         review_suite_gate = loom_flow.suite_gate_payload_for_surface(context, surface="review")
         merge_ready_suite_gate = loom_flow.suite_gate_payload_for_surface(context, surface="merge_ready")
         if review_suite_gate.get("result") != "not_applicable" or merge_ready_suite_gate.get("result") != "not_applicable":
@@ -3976,7 +3980,7 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         for gate in (review_suite_gate, merge_ready_suite_gate):
             if gate.get("missing_inputs") or gate.get("fallback_to") is not None:
                 raise AssertionError("suite not_applicable gate must not require evidence/carrier fallback inputs")
-        loom_flow.suite_gate_validation_payload = original_suite_gate_validation_payload
+        delivery_control.suite_gate_validation_payload = original_suite_gate_validation_payload
 
         minimal_target = tmp / "minimal-suite-spec-review"
         (minimal_target / ".loom/specs/WI-minimal").mkdir(parents=True)
@@ -4025,7 +4029,7 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
             "current_checkpoint": "merge",
             "associated_artifacts": [],
         }
-        loom_flow.spec_suite_validation_payload = lambda _context: {
+        delivery_control.spec_suite_validation_payload = lambda _context: {
             "schema_version": "loom-suite-validation-consumption/v1",
             "command": "suite validate",
             "result": "pass",
@@ -4047,7 +4051,7 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         ):
             raise AssertionError(f"minimal suite spec review gate blocked full-only artifact absence: {minimal_spec_gate}")
 
-        loom_flow.spec_suite_validation_payload = lambda _context: {
+        delivery_control.spec_suite_validation_payload = lambda _context: {
             "schema_version": "loom-suite-validation-consumption/v1",
             "command": "suite validate",
             "result": "block",
@@ -4076,9 +4080,9 @@ def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
         if loom_flow.spec_review_gate_ready_for_implementation_review(blocked_spec_gate):
             raise AssertionError("blocked suite validation must not allow implementation review recording")
     finally:
-        loom_flow.spec_suite_validation_payload = original_spec_suite_validation_payload
-        loom_flow.suite_gate_validation_payload = original_suite_gate_validation_payload
-        loom_flow.git_head_sha = original_git_head_sha
+        delivery_control.spec_suite_validation_payload = original_spec_suite_validation_payload
+        delivery_control.suite_gate_validation_payload = original_suite_gate_validation_payload
+        delivery_control.git_head_sha = original_git_head_sha
 
 
 SNAPSHOT_RUNTIME_ARTIFACT_PREFIXES = (".loom/tmp",)
@@ -10683,7 +10687,7 @@ def assert_gate_repair_pr_evidence_contract(tmp: Path) -> None:
     if blocked_validate.get("result") != "block" or "result must be `pass`" not in blocked_validate.get("missing_inputs", []):
         raise AssertionError("gate repair-pr validate mode accepted a saved block repair record")
 
-    source = (REPO_ROOT / "skills" / "shared" / "scripts" / "loom_flow.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "skills" / "shared" / "scripts" / "delivery_control.py").read_text(encoding="utf-8")
     start = source.index("def gate_repair_pr_payload")
     end = source.index("def handle_gate_repair_pr", start)
     repair_source = source[start:end]
@@ -14342,6 +14346,7 @@ def run_host_planning_taxonomy_surface() -> None:
 
 def run_fr_wi_admission_surface() -> None:
     module = load_loom_flow_module()
+    host_profile = module._host_profile
     with tempfile.TemporaryDirectory(prefix="loom-fr-wi-admission-") as raw_tmp:
         target = Path(raw_tmp)
         sentinel = target / "sentinel.txt"
@@ -14434,20 +14439,20 @@ def run_fr_wi_admission_surface() -> None:
             state["dependency"] = True
             return []
 
-        original_issue = module.github_issue_payload
-        original_tree = module.issue_tree_payload
-        original_graphql = module.gh_graphql_json
-        original_create = module.gh_rest_write_json
-        original_dependencies = module.github_issue_dependencies_payload
-        original_set_dependency = module.set_native_dependency
-        original_surface = module.build_governance_surface
-        module.github_issue_payload = fake_issue
-        module.issue_tree_payload = fake_tree
-        module.gh_graphql_json = fake_graphql
-        module.gh_rest_write_json = fake_create
-        module.github_issue_dependencies_payload = fake_dependencies
-        module.set_native_dependency = fake_set_dependency
-        module.build_governance_surface = lambda _root: {"repo_interface": None}
+        original_issue = host_profile.github_issue_payload
+        original_tree = host_profile.issue_tree_payload
+        original_graphql = host_profile.gh_graphql_json
+        original_create = host_profile.gh_rest_write_json
+        original_dependencies = host_profile.github_issue_dependencies_payload
+        original_set_dependency = host_profile.set_native_dependency
+        original_surface = host_profile.build_governance_surface
+        host_profile.github_issue_payload = fake_issue
+        host_profile.issue_tree_payload = fake_tree
+        host_profile.gh_graphql_json = fake_graphql
+        host_profile.gh_rest_write_json = fake_create
+        host_profile.github_issue_dependencies_payload = fake_dependencies
+        host_profile.set_native_dependency = fake_set_dependency
+        host_profile.build_governance_surface = lambda _root: {"repo_interface": None}
         try:
             planning = module.github_fr_wi_admission_payload(
                 target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
@@ -14495,13 +14500,13 @@ def run_fr_wi_admission_surface() -> None:
             if recovered.get("result") != "pass" or state["create_calls"] != 1:
                 raise AssertionError(f"partial admission recovery must reuse the existing Work Item without duplication: {recovered}")
         finally:
-            module.github_issue_payload = original_issue
-            module.issue_tree_payload = original_tree
-            module.gh_graphql_json = original_graphql
-            module.gh_rest_write_json = original_create
-            module.github_issue_dependencies_payload = original_dependencies
-            module.set_native_dependency = original_set_dependency
-            module.build_governance_surface = original_surface
+            host_profile.github_issue_payload = original_issue
+            host_profile.issue_tree_payload = original_tree
+            host_profile.gh_graphql_json = original_graphql
+            host_profile.gh_rest_write_json = original_create
+            host_profile.github_issue_dependencies_payload = original_dependencies
+            host_profile.set_native_dependency = original_set_dependency
+            host_profile.build_governance_surface = original_surface
 
         captured: dict[str, Any] = {}
 

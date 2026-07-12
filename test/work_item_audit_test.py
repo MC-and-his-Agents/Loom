@@ -18,22 +18,24 @@ assert spec is not None
 loom_flow = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(loom_flow)
+execution_flow = loom_flow._execution_flow
+delivery_control = loom_flow._delivery_control
 
 
 class WorkItemAuditTest(unittest.TestCase):
     def test_metadata_only_global_cli_refresh_skips_only_intentionally_absent_manifest(self) -> None:
-        original_runtime_state = loom_flow.runtime_state_payload
-        original_load_context = loom_flow.load_context
-        original_shadow = loom_flow.refresh_shadow_evidence_actions
+        original_runtime_state = delivery_control.runtime_state_payload
+        original_load_context = delivery_control.load_context
+        original_shadow = delivery_control.refresh_shadow_evidence_actions
         try:
-            loom_flow.runtime_state_payload = lambda _target: {
+            delivery_control.runtime_state_payload = lambda _target: {
                 "result": "pass",
                 "summary": "runtime ok",
                 "missing_inputs": [],
                 "fallback_to": None,
             }
-            loom_flow.load_context = lambda _target, _output, _item: (None, [loom_flow.IDLE_FACT_CHAIN_ERROR])
-            loom_flow.refresh_shadow_evidence_actions = lambda _target: []
+            delivery_control.load_context = lambda _target, _output, _item: (None, [loom_flow.IDLE_FACT_CHAIN_ERROR])
+            delivery_control.refresh_shadow_evidence_actions = lambda _target: []
 
             with tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
@@ -86,25 +88,25 @@ class WorkItemAuditTest(unittest.TestCase):
             self.assertTrue(repo_local["missing_inputs"])
             self.assertTrue(unsupported_schema["missing_inputs"])
         finally:
-            loom_flow.runtime_state_payload = original_runtime_state
-            loom_flow.load_context = original_load_context
-            loom_flow.refresh_shadow_evidence_actions = original_shadow
+            delivery_control.runtime_state_payload = original_runtime_state
+            delivery_control.load_context = original_load_context
+            delivery_control.refresh_shadow_evidence_actions = original_shadow
 
     def test_carrier_refresh_apply_recomputes_remaining_after_readback(self) -> None:
-        original_runtime_state = loom_flow.runtime_state_payload
-        original_load_context = loom_flow.load_context
-        original_runtime_updates = loom_flow.runtime_artifact_updates
-        original_apply_runtime_updates = loom_flow.apply_runtime_artifact_updates
-        original_shadow = loom_flow.refresh_shadow_evidence_actions
-        original_apply_shadow = loom_flow.apply_shadow_evidence_actions
+        original_runtime_state = delivery_control.runtime_state_payload
+        original_load_context = delivery_control.load_context
+        original_runtime_updates = delivery_control.runtime_artifact_updates
+        original_apply_runtime_updates = delivery_control.apply_runtime_artifact_updates
+        original_shadow = delivery_control.refresh_shadow_evidence_actions
+        original_apply_shadow = delivery_control.apply_shadow_evidence_actions
         try:
-            loom_flow.runtime_state_payload = lambda _target: {
+            delivery_control.runtime_state_payload = lambda _target: {
                 "result": "pass",
                 "summary": "runtime ok",
                 "missing_inputs": [],
                 "fallback_to": None,
             }
-            loom_flow.load_context = lambda _target, _output, _item: (None, [loom_flow.IDLE_FACT_CHAIN_ERROR])
+            delivery_control.load_context = lambda _target, _output, _item: (None, [loom_flow.IDLE_FACT_CHAIN_ERROR])
             phase = {"refreshed": False}
 
             def fake_runtime_artifact_updates(
@@ -132,10 +134,10 @@ class WorkItemAuditTest(unittest.TestCase):
                 if any(action.get("source") == source and action.get("status") == "refresh-needed" for action in actions):
                     phase["refreshed"] = True
 
-            loom_flow.runtime_artifact_updates = fake_runtime_artifact_updates
-            loom_flow.apply_runtime_artifact_updates = fake_apply_runtime_artifact_updates
-            loom_flow.refresh_shadow_evidence_actions = lambda _target: []
-            loom_flow.apply_shadow_evidence_actions = lambda _target, _actions: None
+            delivery_control.runtime_artifact_updates = fake_runtime_artifact_updates
+            delivery_control.apply_runtime_artifact_updates = fake_apply_runtime_artifact_updates
+            delivery_control.refresh_shadow_evidence_actions = lambda _target: []
+            delivery_control.apply_shadow_evidence_actions = lambda _target, _actions: None
 
             with tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
@@ -169,12 +171,12 @@ class WorkItemAuditTest(unittest.TestCase):
                 "carrier refresh completed and readback found no remaining updates.",
             )
         finally:
-            loom_flow.runtime_state_payload = original_runtime_state
-            loom_flow.load_context = original_load_context
-            loom_flow.runtime_artifact_updates = original_runtime_updates
-            loom_flow.apply_runtime_artifact_updates = original_apply_runtime_updates
-            loom_flow.refresh_shadow_evidence_actions = original_shadow
-            loom_flow.apply_shadow_evidence_actions = original_apply_shadow
+            delivery_control.runtime_state_payload = original_runtime_state
+            delivery_control.load_context = original_load_context
+            delivery_control.runtime_artifact_updates = original_runtime_updates
+            delivery_control.apply_runtime_artifact_updates = original_apply_runtime_updates
+            delivery_control.refresh_shadow_evidence_actions = original_shadow
+            delivery_control.apply_shadow_evidence_actions = original_apply_shadow
 
     def test_host_complete_diagnostic_blocks_startup(self) -> None:
         finding = loom_flow.work_item_audit_finding_from_diagnostic(
@@ -214,13 +216,13 @@ class WorkItemAuditTest(unittest.TestCase):
         self.assertEqual(finding["classifier"], "stale_carrier")
 
     def test_payload_compacts_nonblocking_findings_and_reports_shadow_drift(self) -> None:
-        original_runtime_state = loom_flow.runtime_state_payload
-        original_load_context = loom_flow.load_context
-        original_purity = loom_flow.purity_report_from_context
-        original_shadow = loom_flow.refresh_shadow_evidence_actions
+        original_runtime_state = execution_flow.runtime_state_payload
+        original_load_context = execution_flow.load_context
+        original_purity = execution_flow.purity_report_from_context
+        original_shadow = execution_flow.refresh_shadow_evidence_actions
         try:
-            loom_flow.runtime_state_payload = lambda _target: {"result": "pass", "summary": "runtime ok", "missing_inputs": [], "fallback_to": None}
-            loom_flow.load_context = lambda _target, _output, _item: (
+            execution_flow.runtime_state_payload = lambda _target: {"result": "pass", "summary": "runtime ok", "missing_inputs": [], "fallback_to": None}
+            execution_flow.load_context = lambda _target, _output, _item: (
                 {
                     "target_root": Path("/fixture"),
                     "workspace_path": Path("/fixture"),
@@ -230,7 +232,7 @@ class WorkItemAuditTest(unittest.TestCase):
                 },
                 [],
             )
-            loom_flow.purity_report_from_context = lambda _context: {
+            execution_flow.purity_report_from_context = lambda _context: {
                 "state": "clean",
                 "hard_failures": [],
                 "report_only": [],
@@ -255,7 +257,7 @@ class WorkItemAuditTest(unittest.TestCase):
                     },
                 ],
             }
-            loom_flow.refresh_shadow_evidence_actions = lambda _target: [
+            execution_flow.refresh_shadow_evidence_actions = lambda _target: [
                 {
                     "path": ".loom/shadow/merge-ready-loom.json",
                     "kind": "shadow-evidence",
@@ -277,10 +279,10 @@ class WorkItemAuditTest(unittest.TestCase):
             self.assertEqual(payload["findings"][1]["classifier"], "shadow_stale")
             self.assertNotIn("purity", payload)
         finally:
-            loom_flow.runtime_state_payload = original_runtime_state
-            loom_flow.load_context = original_load_context
-            loom_flow.purity_report_from_context = original_purity
-            loom_flow.refresh_shadow_evidence_actions = original_shadow
+            execution_flow.runtime_state_payload = original_runtime_state
+            execution_flow.load_context = original_load_context
+            execution_flow.purity_report_from_context = original_purity
+            execution_flow.refresh_shadow_evidence_actions = original_shadow
 
 
 if __name__ == "__main__":

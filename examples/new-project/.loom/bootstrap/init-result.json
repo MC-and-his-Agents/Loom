@@ -212,6 +212,46 @@
         "owner": "loom-runtime"
       },
       {
+        "path": ".loom/bin/flow_runtime.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
+        "path": ".loom/bin/companion_contract.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
+        "path": ".loom/bin/live_smoke.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
+        "path": ".loom/bin/delivery_control.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
+        "path": ".loom/bin/host_profile.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
+        "path": ".loom/bin/review_flow.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
+        "path": ".loom/bin/closeout_flow.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
+        "path": ".loom/bin/execution_flow.py",
+        "kind": "loom-tool-support",
+        "owner": "loom-runtime"
+      },
+      {
         "path": ".loom/bin/loom_init.py",
         "kind": "loom-tool",
         "owner": "loom-runtime"
@@ -483,10 +523,58 @@
       "sha256": "b30db4b57bc385531694fa28d1ce3a7ea75530ace30fb92a038c474e01389d37"
     },
     {
+      "path": ".loom/bin/flow_runtime.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/flow_runtime.py",
+      "sha256": "d3146b8b85b6d86cd4878a34a29e7f32213ad295001f011dd260f372fa9fa2ff"
+    },
+    {
+      "path": ".loom/bin/companion_contract.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/companion_contract.py",
+      "sha256": "d79472959ad93a96a0e616a21bfd3838f5d7bed6d2b0abae733fdfe18e49c608"
+    },
+    {
+      "path": ".loom/bin/live_smoke.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/live_smoke.py",
+      "sha256": "2ed916119ac18005d96bef63c5a81f4bcfda3e9e05b1d11772589e69ea1aef3a"
+    },
+    {
+      "path": ".loom/bin/delivery_control.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/delivery_control.py",
+      "sha256": "39ae23325e41cd1557dd7cffeae5e207fdf03d09d28839d91439b96e7c093204"
+    },
+    {
+      "path": ".loom/bin/host_profile.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/host_profile.py",
+      "sha256": "667ad11d09e77af84dda0260baaa2f6629ad502071b82280d5d4fc2524260294"
+    },
+    {
+      "path": ".loom/bin/review_flow.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/review_flow.py",
+      "sha256": "e57c3760e6f224b6c10b3614861fcfde869438d09fe844c115acf121c95f8fcf"
+    },
+    {
+      "path": ".loom/bin/closeout_flow.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/closeout_flow.py",
+      "sha256": "bd774edcadf4f867f98804d0db7dc8b1d099eafc3d850023b67c52dff7881cb2"
+    },
+    {
+      "path": ".loom/bin/execution_flow.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/execution_flow.py",
+      "sha256": "7076daf897004bad2df1f89b0f5a100d12083ea8d03417b38a5492550787fba1"
+    },
+    {
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "743acb39abcc65b9a845c8a9a806b63ebe4e4f0419bada08f8e43b21d8f0e059"
+      "sha256": "0ede362efedb346f14d5a13e2590d91ff6bb436b1d3faaf998ac2403905a777f"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -516,7 +604,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "9478ac368e39f74c9ab9aeeb9e58046e50a93081ceab80ac9fb014a8bcb930f1"
+      "sha256": "7b14751b1074f721530993654dfb79fc8a557a1f419046988cec9b164a44efd4"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -2246,6 +2334,54 @@
       "requires_intent": null
     },
     {
+      "path": ".loom/bin/flow_runtime.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/companion_contract.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/live_smoke.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/delivery_control.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/host_profile.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/review_flow.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/closeout_flow.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/execution_flow.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "owner": "loom-runtime",
@@ -2509,6 +2645,46 @@
       "owner": "loom-runtime"
     },
     {
+      "path": ".loom/bin/flow_runtime.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
+      "path": ".loom/bin/companion_contract.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
+      "path": ".loom/bin/live_smoke.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
+      "path": ".loom/bin/delivery_control.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
+      "path": ".loom/bin/host_profile.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
+      "path": ".loom/bin/review_flow.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
+      "path": ".loom/bin/closeout_flow.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
+      "path": ".loom/bin/execution_flow.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime"
+    },
+    {
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "owner": "loom-runtime"
@@ -2711,6 +2887,14 @@
             ".loom/bin/product_acceptance.py",
             ".loom/bin/host_attestation.py",
             ".loom/bin/execution_attempts.py",
+            ".loom/bin/flow_runtime.py",
+            ".loom/bin/companion_contract.py",
+            ".loom/bin/live_smoke.py",
+            ".loom/bin/delivery_control.py",
+            ".loom/bin/host_profile.py",
+            ".loom/bin/review_flow.py",
+            ".loom/bin/closeout_flow.py",
+            ".loom/bin/execution_flow.py",
             ".loom/bin/loom_init.py",
             ".loom/bin/fact_chain_support.py",
             ".loom/bin/governance_surface.py",
@@ -2809,6 +2993,14 @@
       ".loom/bin/product_acceptance.py",
       ".loom/bin/host_attestation.py",
       ".loom/bin/execution_attempts.py",
+      ".loom/bin/flow_runtime.py",
+      ".loom/bin/companion_contract.py",
+      ".loom/bin/live_smoke.py",
+      ".loom/bin/delivery_control.py",
+      ".loom/bin/host_profile.py",
+      ".loom/bin/review_flow.py",
+      ".loom/bin/closeout_flow.py",
+      ".loom/bin/execution_flow.py",
       ".loom/bin/loom_init.py",
       ".loom/bin/fact_chain_support.py",
       ".loom/bin/governance_surface.py",
@@ -2967,6 +3159,14 @@
           ".loom/bin/product_acceptance.py",
           ".loom/bin/host_attestation.py",
           ".loom/bin/execution_attempts.py",
+          ".loom/bin/flow_runtime.py",
+          ".loom/bin/companion_contract.py",
+          ".loom/bin/live_smoke.py",
+          ".loom/bin/delivery_control.py",
+          ".loom/bin/host_profile.py",
+          ".loom/bin/review_flow.py",
+          ".loom/bin/closeout_flow.py",
+          ".loom/bin/execution_flow.py",
           ".loom/bin/loom_init.py",
           ".loom/bin/fact_chain_support.py",
           ".loom/bin/governance_surface.py",

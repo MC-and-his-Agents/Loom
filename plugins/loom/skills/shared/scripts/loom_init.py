@@ -40,6 +40,14 @@ FAILURE_ENVELOPE_RUNTIME_SOURCE = "skills/shared/scripts/failure_envelope.py"
 PRODUCT_ACCEPTANCE_RUNTIME_SOURCE = "skills/shared/scripts/product_acceptance.py"
 HOST_ATTESTATION_RUNTIME_SOURCE = "skills/shared/scripts/host_attestation.py"
 EXECUTION_ATTEMPTS_RUNTIME_SOURCE = "skills/shared/scripts/execution_attempts.py"
+FLOW_RUNTIME_SUPPORT_SOURCE = "skills/shared/scripts/flow_runtime.py"
+COMPANION_CONTRACT_RUNTIME_SOURCE = "skills/shared/scripts/companion_contract.py"
+LIVE_SMOKE_RUNTIME_SOURCE = "skills/shared/scripts/live_smoke.py"
+DELIVERY_CONTROL_RUNTIME_SOURCE = "skills/shared/scripts/delivery_control.py"
+HOST_PROFILE_RUNTIME_SOURCE = "skills/shared/scripts/host_profile.py"
+REVIEW_FLOW_RUNTIME_SOURCE = "skills/shared/scripts/review_flow.py"
+CLOSEOUT_FLOW_RUNTIME_SOURCE = "skills/shared/scripts/closeout_flow.py"
+EXECUTION_FLOW_RUNTIME_SOURCE = "skills/shared/scripts/execution_flow.py"
 FACT_CHAIN_RUNTIME_SOURCE = "skills/shared/scripts/fact_chain_support.py"
 GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
 ADMISSION_RUNTIME_SOURCE = "skills/shared/scripts/github_admission.py"
@@ -152,6 +160,14 @@ RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/product_acceptance.py": PRODUCT_ACCEPTANCE_RUNTIME_SOURCE,
     ".loom/bin/host_attestation.py": HOST_ATTESTATION_RUNTIME_SOURCE,
     ".loom/bin/execution_attempts.py": EXECUTION_ATTEMPTS_RUNTIME_SOURCE,
+    ".loom/bin/flow_runtime.py": FLOW_RUNTIME_SUPPORT_SOURCE,
+    ".loom/bin/companion_contract.py": COMPANION_CONTRACT_RUNTIME_SOURCE,
+    ".loom/bin/live_smoke.py": LIVE_SMOKE_RUNTIME_SOURCE,
+    ".loom/bin/delivery_control.py": DELIVERY_CONTROL_RUNTIME_SOURCE,
+    ".loom/bin/host_profile.py": HOST_PROFILE_RUNTIME_SOURCE,
+    ".loom/bin/review_flow.py": REVIEW_FLOW_RUNTIME_SOURCE,
+    ".loom/bin/closeout_flow.py": CLOSEOUT_FLOW_RUNTIME_SOURCE,
+    ".loom/bin/execution_flow.py": EXECUTION_FLOW_RUNTIME_SOURCE,
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
     ".loom/bin/fact_chain_support.py": FACT_CHAIN_RUNTIME_SOURCE,
     ".loom/bin/governance_surface.py": GOVERNANCE_RUNTIME_SOURCE,
@@ -1620,6 +1636,14 @@ def profile_common_artifacts(global_cli_metadata_only: bool = False) -> list[dic
             runtime_artifact(".loom/bin/product_acceptance.py", "loom-tool-support", PRODUCT_ACCEPTANCE_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/host_attestation.py", "loom-tool-support", HOST_ATTESTATION_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/execution_attempts.py", "loom-tool-support", EXECUTION_ATTEMPTS_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/flow_runtime.py", "loom-tool-support", FLOW_RUNTIME_SUPPORT_SOURCE),
+            runtime_artifact(".loom/bin/companion_contract.py", "loom-tool-support", COMPANION_CONTRACT_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/live_smoke.py", "loom-tool-support", LIVE_SMOKE_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/delivery_control.py", "loom-tool-support", DELIVERY_CONTROL_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/host_profile.py", "loom-tool-support", HOST_PROFILE_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/review_flow.py", "loom-tool-support", REVIEW_FLOW_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/closeout_flow.py", "loom-tool-support", CLOSEOUT_FLOW_RUNTIME_SOURCE),
+            runtime_artifact(".loom/bin/execution_flow.py", "loom-tool-support", EXECUTION_FLOW_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
             runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
@@ -1704,6 +1728,14 @@ def attach_only_artifact_paths(target_root: Path, install_pr_template: bool, glo
                 ".loom/bin/product_acceptance.py",
                 ".loom/bin/host_attestation.py",
                 ".loom/bin/execution_attempts.py",
+                ".loom/bin/flow_runtime.py",
+                ".loom/bin/companion_contract.py",
+                ".loom/bin/live_smoke.py",
+                ".loom/bin/delivery_control.py",
+                ".loom/bin/host_profile.py",
+                ".loom/bin/review_flow.py",
+                ".loom/bin/closeout_flow.py",
+                ".loom/bin/execution_flow.py",
                 ".loom/bin/loom_init.py",
                 ".loom/bin/fact_chain_support.py",
                 ".loom/bin/governance_surface.py",
@@ -1752,7 +1784,20 @@ def initial_work_items(
     artifacts = [
         path
         for path in artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile, global_cli_metadata_only))
-        if path not in {".loom/bin/authority_contract.py", ".loom/bin/github_admission.py", ".loom/bin/github_host.py", ".loom/bin/host_attestation.py"}
+        if path not in {
+            ".loom/bin/authority_contract.py",
+            ".loom/bin/github_admission.py",
+            ".loom/bin/github_host.py",
+            ".loom/bin/host_attestation.py",
+            ".loom/bin/companion_contract.py",
+            ".loom/bin/flow_runtime.py",
+            ".loom/bin/live_smoke.py",
+            ".loom/bin/delivery_control.py",
+            ".loom/bin/host_profile.py",
+            ".loom/bin/review_flow.py",
+            ".loom/bin/closeout_flow.py",
+            ".loom/bin/execution_flow.py",
+        }
     ]
     if profile == "light-governance":
         return [
@@ -2985,6 +3030,14 @@ def runtime_artifact(path: str, kind: str, source: str) -> dict[str, str]:
         ".loom/bin/product_acceptance.py": Path(__file__).with_name("product_acceptance.py"),
         ".loom/bin/host_attestation.py": Path(__file__).with_name("host_attestation.py"),
         ".loom/bin/execution_attempts.py": Path(__file__).with_name("execution_attempts.py"),
+        ".loom/bin/flow_runtime.py": Path(__file__).with_name("flow_runtime.py"),
+        ".loom/bin/companion_contract.py": Path(__file__).with_name("companion_contract.py"),
+        ".loom/bin/live_smoke.py": Path(__file__).with_name("live_smoke.py"),
+        ".loom/bin/delivery_control.py": Path(__file__).with_name("delivery_control.py"),
+        ".loom/bin/host_profile.py": Path(__file__).with_name("host_profile.py"),
+        ".loom/bin/review_flow.py": Path(__file__).with_name("review_flow.py"),
+        ".loom/bin/closeout_flow.py": Path(__file__).with_name("closeout_flow.py"),
+        ".loom/bin/execution_flow.py": Path(__file__).with_name("execution_flow.py"),
         ".loom/bin/loom_init.py": Path(__file__),
         ".loom/bin/fact_chain_support.py": Path(__file__).with_name("fact_chain_support.py"),
         ".loom/bin/governance_surface.py": Path(__file__).with_name("governance_surface.py"),
@@ -3119,6 +3172,14 @@ def scaffold_target(
             (Path(__file__).with_name("product_acceptance.py"), target_root / ".loom/bin/product_acceptance.py"),
             (Path(__file__).with_name("host_attestation.py"), target_root / ".loom/bin/host_attestation.py"),
             (Path(__file__).with_name("execution_attempts.py"), target_root / ".loom/bin/execution_attempts.py"),
+            (Path(__file__).with_name("flow_runtime.py"), target_root / ".loom/bin/flow_runtime.py"),
+            (Path(__file__).with_name("companion_contract.py"), target_root / ".loom/bin/companion_contract.py"),
+            (Path(__file__).with_name("live_smoke.py"), target_root / ".loom/bin/live_smoke.py"),
+            (Path(__file__).with_name("delivery_control.py"), target_root / ".loom/bin/delivery_control.py"),
+            (Path(__file__).with_name("host_profile.py"), target_root / ".loom/bin/host_profile.py"),
+            (Path(__file__).with_name("review_flow.py"), target_root / ".loom/bin/review_flow.py"),
+            (Path(__file__).with_name("closeout_flow.py"), target_root / ".loom/bin/closeout_flow.py"),
+            (Path(__file__).with_name("execution_flow.py"), target_root / ".loom/bin/execution_flow.py"),
             (Path(__file__), target_root / ".loom/bin/loom_init.py"),
             (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),
             (Path(__file__).with_name("governance_surface.py"), target_root / ".loom/bin/governance_surface.py"),
