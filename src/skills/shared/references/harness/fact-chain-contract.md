@@ -1,5 +1,12 @@
 # Fact Chain Contract
 
+> v0.30 normative override: GitHub owns PR head/check/merge facts; host
+> attestation owns review and delivery-closeout verdicts; workstation state owns
+> the non-authoritative current pointer. Repo review/current/status/shadow and
+> terminal progress carriers are not inputs to the ordinary fact chain. Stale
+> legacy carriers are ignored by default and can only be touched through an
+> explicit, expiring reinforced compatibility exception.
+
 本文件定义 Loom 当前完整执行内核的单一事实链合同。
 
 本文件当前承接：
@@ -146,6 +153,72 @@ Loom 的执行真相只允许沿一条事实链流动：
   - `truth | mirror | evidence | locator | summary`
 
 若同一字段同时出现在 authored truth 与 mirror / retained result / derived surface 中，读取方必须以 authored truth 为准，并把其他值作为 provenance 或 drift evidence。若非 authored 层展示了不同值且无法证明只是过期镜像，结果必须阻断。
+
+## 2.6 `active` / `terminal` / `idle` taxonomy
+
+事实链当前冻结三类 repository execution state：
+
+- `active`
+  - 存在当前活跃 `Work Item`，且 `init-result.fact_chain.entry_points` 指向可读的 `work_item`、`recovery_entry` 与 `status_surface`
+- `terminal`
+  - 某个历史 `Work Item` 已进入该事项自己的 terminal checkpoint；它仍可作为 retained authored truth 或 closeout basis 被读取，但不再是当前活跃事项
+- `idle`
+  - 仓库当前不存在活跃 `Work Item`；Loom 允许读者明确得到 `no_active_item`，而不是伪造 `INIT-0001` 或其他 active locator
+
+约束：
+
+- `terminal` 描述历史事项状态，不等于 repository 当前 execution state
+- repository 当前 execution state 只能是 `active` 或 `idle`
+- `idle` 不表示 closeout 已完成、host truth 已同步，或历史 carrier 可以忽略；它只表示“当前无 active item”
+- `workspace retire` 不是进入 `idle` 的版本化写入口；它仍只产生 local-only evidence
+- `carrier closeout-sync` 是版本化 terminal metadata 写入口；它不改变 host state，也不替代 closeout check / reconciliation sync
+
+## 2.7 idle schema
+
+当仓库处于 `idle` 时，`.loom/bootstrap/init-result.json` 的 `fact_chain` 必须显式表达 idle，而不是留空后让读取方猜测。
+
+最小合同：
+
+- `fact_chain.mode`
+  - 允许值扩展为 `active | idle`
+- `fact_chain.read_entry`
+  - 继续保留统一读取入口 locator；idle 不改变读取命令族
+- `fact_chain.entry_points.current_item_id`
+  - 固定为 `no_active_item`
+- `fact_chain.entry_points.work_item`
+  - 固定为 `not_applicable`
+- `fact_chain.entry_points.recovery_entry`
+  - 固定为 `not_applicable`
+- `fact_chain.entry_points.status_surface`
+  - 固定为 `.loom/status/current.md`
+
+idle 下的 `not_applicable` 是稳定字面值，不是字段缺失，也不是空字符串。
+
+Backward compatibility:
+
+- 现有 `active` payload 不变
+- 读取方在未实现 idle 消费前，必须把 `mode = idle` 视为“合同已声明但当前 consumer 未升级”，而不是把 idle 仓库误判成 active drift
+- #1229 只冻结 schema 与消费边界；terminal metadata 与明确 carrier sync 命令由 #1230/#1231 承接
+
+## 2.8 terminal closeout metadata
+
+Progress carriers may include an optional `## Terminal Closeout Metadata` section:
+
+```text
+## Terminal Closeout Metadata
+
+- Terminal State: closed_out | absorbed | merged | retired | deferred | not_applicable
+- Issue: <issue locator or not_applicable>
+- PR: <PR locator or not_applicable>
+- Merge Commit: <merge commit SHA or not_applicable>
+- Target Branch: <target branch or not_applicable>
+- Closed At: <timestamp or not_applicable>
+- Evidence Locator: <repo or host closeout evidence locator>
+```
+
+The section is optional for legacy carriers. When absent, consumers may still read legacy `Current Checkpoint` values such as `retired`, `merged`, `closed`, or `done`, but terminal closeout should prefer the structured fields when present.
+
+Only `carrier closeout-sync` writes this section. Host closeout sync and workspace retire must not author it.
 
 ## 3. 派生读面
 

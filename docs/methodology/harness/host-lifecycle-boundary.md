@@ -1,5 +1,10 @@
 # Host Lifecycle Boundary
 
+> v0.30 normative override: review and closeout truth live in exact GitHub host
+> attestations bound to repo, PR, head, Work Item, run, artifact digest and
+> verifier. Workspace retirement is local-only. Stale repo carriers are legacy
+> residue, not a closeout blocker and not a reason to create a follow-up PR.
+
 本文件定义 Loom 与宿主平台在 `workspace`、branch、PR、git worktree 之间的生命周期边界。
 
 宿主动作入口、结果词表与 `fallback_to` 纪律的统一主落点见 [host-action-contract.md](./host-action-contract.md)。

@@ -86,7 +86,7 @@ harder to lose, misread, or merge prematurely.
 After Loom is installed and a Work Item has a PR, the default delivery command is
 `loom ship`. It is the product path for ordinary work: check PR metadata, confirm
 the gate inputs, merge through the host control plane when `--apply` is present,
-then complete inline or host-only closeout without opening a second closeout PR.
+then complete host-only closeout without opening a second closeout PR.
 
 ```bash
 loom ship \
@@ -95,7 +95,7 @@ loom ship \
   --issue 123 \
   --pr 456 \
   --branch work/123-example \
-  --head-sha "$(git rev-parse HEAD)" \
+  --attestation-artifact-input /path/to/attestation-artifact.json \
   --apply \
   --json
 ```
@@ -109,29 +109,25 @@ The wrapper contract stays narrow and ordered:
 - `--validation-profile auto` uses changed paths to pick the smallest useful
   profile and reports the matching `loom_check --source-surface` command;
   explicit `--validation-profile full` still forces the full path;
-- `--apply` may add one deterministic safe metadata repair step before that
-  read-only sequence, but only when `--issue`, `--branch`, and `--head-sha` are
-  explicit;
+- `--apply` consumes the semantic review through a GitHub host attestation,
+  merges only after current host facts pass, then records host reconciliation
+  and closeout attestation; it never refreshes repo carriers or blocking shadow
+  state;
 - that safe repair boundary never invents or resolves conflicting Work Item,
   branch, head SHA, release, or closeout facts on its own;
 - `--json` stays on short wrapper diagnostics and may collapse detailed steps
   behind an artifact locator when stdout would be too large, while
   `--full-output` is only for explicit debugging, audit, or blocker
   classification;
-- closeout policy decides whether ordinary delivery can continue through the
-  shared inline/host-only host closeout path or must stop and hand off to an
-  explicit batched carrier / full closeout path.
+- ordinary light, standard, and reinforced work all use `host_only`; release
+  and version source changes use a normal release PR and the release workflow,
+  followed by readback rather than an aftercare PR.
 
-Light and standard changes should normally finish in that one command. Loom only
-upgrades to a batched carrier PR or an explicit full closeout PR when the work is
-a release, parent or milestone closeout, multi-Work-Item delivery, host/repo
-conflict, reinforced-governance change, or another case that needs versioned
-terminal evidence.
-
-Today `loom ship` only executes the ordinary inline/host-only host closeout
-path. Batched carrier writes and explicit full closeout PR execution stay in
-follow-up issue scope; this wrapper blocks and points callers at the explicit
-path instead of guessing.
+Ordinary work should finish in that one command. Reinforced governance increases
+review and verification strength; it does not implicitly restore repo review,
+current, status, shadow, or closeout carriers. Retired carrier commands are
+available only through the explicit `reinforced-carrier-compat/v1` policy with
+an RFC3339 expiry no more than 90 days in the future.
 
 ## Try It In A Repository
 
@@ -211,35 +207,28 @@ loom runtime-upgrade closeout --target . --item <maintenance-work-item> --issue 
 ```
 
 This flow is workflow-only maintenance scaffolding. It still requires a real
-maintenance Work Item, PR metadata readback, semantic review, hosted checks,
-head binding, PR gate, and carrier closeout sync. The closeout lane reads the
-host issue/PR state for `closedAt`, merge commit, target branch, and hosted run
-URL; carrier-only review evidence covers only terminal carrier metadata drift,
-not product implementation approval.
+maintenance Work Item, host-attested semantic review, hosted checks, head
+binding, and PR gate. After merge it performs host readback and local cleanup;
+it does not create a carrier-closeout PR.
 
-After a release is already published and read back, use the release closeout
-sync wrapper to terminalize repo carriers without republishing:
+After a release is published, verify the exact tag, package and GitHub Release:
 
 ```bash
-loom release closeout-sync --target . --version <version> --item <work-item> --pr <release-pr> --apply --json
+loom release readback --target . --version <version> --commit <release-merge-commit> --json
 ```
 
-It only writes repo carrier surfaces under `--apply`: progress terminal
-metadata, status sync, closeout/merge-ready shadow refresh, and post-commit PR
-metadata/gate next commands. It does not create tags, publish npm, edit the
-GitHub Release, or merge the closeout PR.
+Release readback is terminal for release aftercare. It does not write progress,
+status, shadow, current, review, or closeout carriers.
 
 For ordinary post-merge closeout, use the common runner instead of hand-chaining
 host reconciliation, carrier sync, status writeback, shadow refresh, and final
 checks:
 
 ```bash
-loom closeout run --target . --item <work-item> --issue <issue> --pr <merged-pr> --branch <target-branch> --apply --json
+loom closeout sync --target . --item <work-item> --issue <issue> --pr <merged-pr> --branch <target-branch> --attestation-artifact-input /path/to/attestation-artifact.json --apply --json
 ```
 
-If release readback is run from a later closeout carrier PR head, pass the
-published release PR merge commit with `--commit <release-merge-commit>`; Loom
-will also suggest that exact command when it detects this closeout-head drift.
+There is no later closeout carrier PR head in the default lifecycle.
 
 `runtime-upgrade status|prepare|check` also reports the local Codex
 plugin/cache freshness and points to `loom host doctor --host codex --scope user
@@ -263,11 +252,11 @@ command:
 | Resume work | `loom resume --target . --item <WI> --json` |
 | Prepare a PR carrier set | `loom pr-intent prepare --intent <intent> --target . --item <WI> --apply --json` |
 | Check PR readiness | `loom pr-intent check --intent <intent> --target . --item <WI> --pr <pr> --head-sha <sha> --json` |
-| Review | `loom review --target . --item <WI> --json` |
+| Review | `loom review run --target . --item <WI> --json`, then `loom attestation readback ...` |
 | Merge-ready | `loom merge-ready --target . --item <WI> --json` |
-| Post-merge closeout | `loom closeout run --target . --item <WI> --issue <issue> --pr <merged-pr> --branch <branch> --apply --json` |
+| Post-merge closeout | `loom closeout sync --target . --item <WI> --issue <issue> --pr <merged-pr> --branch <branch> --attestation-artifact-input <file> --apply --json` |
 | Release readback | `loom release readback --target . --version <version> --commit <sha> --json` |
-| Release closeout | `loom release closeout-sync --target . --version <version> --item <WI> --pr <release-pr> --apply --json` |
+| Release closeout | `loom release readback --target . --version <version> --commit <sha> --json` |
 | Runtime upgrade | `loom runtime-upgrade status --target . --json` |
 | Codex plugin/cache | `loom host doctor --host codex --scope user --json` |
 

@@ -1,5 +1,11 @@
 # Workspace Lifecycle
 
+> v0.30 normative override: `workspace retire` only removes local/workstation
+> execution state after host closeout attestation passes. It never writes a
+> terminal carrier, calls `carrier closeout-sync`, or creates a closeout/current
+> pointer PR. Any later carrier workflow described below is legacy compatibility
+> material and is not part of the ordinary lifecycle.
+
 本文件定义 Loom 当前工作现场生命周期与 `purity-check` 的执行侧合同。
 
 字段归属与读取顺序仍以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。

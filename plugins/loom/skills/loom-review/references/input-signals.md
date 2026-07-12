@@ -11,5 +11,6 @@
 最小输入：
 
 - 目标仓库
-- 当前事项编号，或允许从事实链定位活跃事项
+- GitHub Work Item、PR 与 artifact locator
 - review 意图与关注面（例如正确性、回归风险、合同一致性）
+- review policy：`approved` 或明确允许的 `single_maintainer`

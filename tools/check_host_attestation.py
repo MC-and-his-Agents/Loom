@@ -163,6 +163,21 @@ pr, mapping = facts(merged=True)
 closeout, errors = github_host.github_pr_closeout_readback(ROOT, "o", "r", 1, 2025, 7, read_json=reader(pr, mapping), read_list=reviews, read_graphql=closing_relation)
 assert not errors and closeout and closeout["closeout"]["base_contains_merge"] is True
 assert closeout["closeout"]["work_item_locator"] == "o/r/work_item/2025"
+single_closeout, errors = github_host.github_pr_closeout_readback(
+    ROOT,
+    "o",
+    "r",
+    1,
+    2025,
+    7,
+    review_policy="single_maintainer",
+    read_json=reader(pr, mapping),
+    read_list=single_maintainer_reads,
+    read_graphql=closing_relation,
+)
+assert not errors and single_closeout
+assert single_closeout["review_policy"]["mode"] == "single_maintainer"
+assert single_closeout["review_policy"]["assertion_verified"] is True
 pr, mapping = facts(merged=True, issue_completed=False)
 assert github_host.github_pr_closeout_readback(ROOT, "o", "r", 1, 2025, 7, read_json=reader(pr, mapping), read_list=reviews, read_graphql=closing_relation)[1]
 

@@ -10,7 +10,7 @@
 最小输入：
 
 - 目标仓库
-- 当前事项编号，或允许从事实链定位活跃事项
+- GitHub Work Item、PR 与 host artifact locator
 - suite path decision：full path 的 reviewed suite/evidence/consistency locators，或
   minimal path 的 `not_applicable` rationale、consumer boundary、recheck condition
-- PR locator、head SHA、reviewed head 与 validation freshness 证据
+- PR locator；current head 与 reviewed head 必须由 GitHub host readback

@@ -1,5 +1,12 @@
 # Fact Chain Contract
 
+> v0.30 normative override: GitHub owns PR head/check/merge facts; host
+> attestation owns review and delivery-closeout verdicts; workstation state owns
+> the non-authoritative current pointer. Repo review/current/status/shadow and
+> terminal progress carriers are not inputs to the ordinary fact chain. Stale
+> legacy carriers are ignored by default and can only be touched through an
+> explicit, expiring reinforced compatibility exception.
+
 本文件定义 Loom 当前完整执行内核的单一事实链合同。
 
 本文件当前承接：
