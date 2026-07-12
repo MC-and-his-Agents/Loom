@@ -126,12 +126,13 @@ branch rules 与 Actions workflow id/path/state。后者由 GitHub 按目标 bra
 
 - `required_workflow`：当前只能收集诊断，固定为 `limited`；仅有 workflow path、
   repository/ref/ruleset id 与 workflow id/path/state 仍不能证明当前 run、目标分支和
-  ruleset enforcement 的完整绑定，#2063 完成专用 host adapter 前不得返回 `strong`；
+  ruleset enforcement 的完整绑定，因此当前返回 blocked 且不得宣称 `strong`；
 - `distinct_app_check`：required check 绑定到不同于 GitHub Actions（app id
   `15368`）的专用 GitHub App，才是 `strong`；
 - `pull_request_target_same_app`：base-owned coordinator 的 identity assurance 为
-  `limited`；identity reader 以 `host_enforcement_unavailable` 表示“未达到 strong”，
-  不等于 delivery check 可以忽略 native failure。
+  `limited`；当 branch protection 恰好一次绑定预期 context 与 GitHub Actions app id
+  时，identity reader 返回 `ready`、`passed_limited`。这只证明 required set 已准确
+  配置，不表示 context 不可被同 App 冒充，也不允许 delivery check 忽略 native failure。
 
 当前 Loom repo rulesets 为空，org rulesets API 返回“Upgrade to GitHub Team”，且
 repo-level REST rules surface 不提供 required-workflow rule。因此 v0.30 明确采用

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import importlib.util
+import io
 import json
 import subprocess
 import sys
@@ -17,6 +20,18 @@ sys.path.insert(0, str(RUNTIME))
 
 import loom_init
 import loom_status
+import execution_flow
+import review_flow
+
+
+def load_global_cli():
+    sys.path.insert(0, str(ROOT / "tools"))
+    spec = importlib.util.spec_from_file_location("loom_global_cli_derived_state", ROOT / "tools/loom.py")
+    if spec is None or spec.loader is None:
+        raise AssertionError("global CLI is not importable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def string_values(value: object) -> list[str]:
@@ -28,6 +43,159 @@ def string_values(value: object) -> list[str]:
 
 
 class DerivedStateBootstrapTest(unittest.TestCase):
+    def test_light_review_and_closeout_consume_host_attestation(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            companion = root / ".loom/companion"
+            companion.mkdir(parents=True)
+            (companion / "repo-interface.json").write_text("{}\n", encoding="utf-8")
+            bootstrap = root / ".loom/bootstrap"
+            bootstrap.mkdir(parents=True)
+            (bootstrap / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "loom-bootstrap-manifest/v2",
+                        "profile": "light-governance",
+                        "repository_locator": ".",
+                        "companion_locator": ".loom/companion/repo-interface.json",
+                        "capabilities": [],
+                        "artifact_locators": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            artifact = root / "artifact.json"
+            artifact.write_text('{"artifact_id":7}\n', encoding="utf-8")
+            host_pass = {
+                "result": "pass",
+                "summary": "host attestation passed",
+                "missing_inputs": [],
+                "attestation": {"carrier_mutations": False},
+            }
+
+            original_detect = review_flow.detect_github_repo
+            original_review = review_flow.host_attestation_readback
+            try:
+                review_flow.detect_github_repo = lambda _root: ("owner", "repo")
+                review_flow.host_attestation_readback = lambda *_args, **_kwargs: dict(host_pass)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = review_flow.handle_review(
+                        argparse.Namespace(
+                            target=str(root),
+                            operation="read",
+                            output=".loom/bootstrap/init-result.json",
+                            item=None,
+                            owner=None,
+                            repo_name=None,
+                            issue=42,
+                            pr=7,
+                            host_artifact_input=artifact,
+                            review_policy="single_maintainer",
+                        )
+                    )
+                review = json.loads(output.getvalue())
+                self.assertEqual(code, 0)
+                self.assertEqual(review["result"], "pass")
+                self.assertFalse(review["repo_execution_carriers_consumed"])
+
+                review_flow.host_attestation_readback = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    AssertionError("cross-repository review must block before host readback")
+                )
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = review_flow.handle_review(
+                        argparse.Namespace(
+                            target=str(root), operation="read", output=".loom/bootstrap/init-result.json",
+                            item=None, owner="other", repo_name="repo", issue=42, pr=7,
+                            host_artifact_input=artifact, review_policy="single_maintainer",
+                        )
+                    )
+                mismatch = json.loads(output.getvalue())
+                self.assertNotEqual(code, 0)
+                self.assertEqual(mismatch["result"], "block")
+                self.assertIn("must match the target origin", " ".join(mismatch["missing_inputs"]))
+            finally:
+                review_flow.detect_github_repo = original_detect
+                review_flow.host_attestation_readback = original_review
+
+            cli = load_global_cli()
+            original_closeout = cli.ship_host_attestation
+            original_infer = cli.infer_github_repo
+            try:
+                cli.infer_github_repo = lambda _target: "owner/repo"
+                cli.ship_host_attestation = lambda *_args, **_kwargs: dict(host_pass)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = cli.handle_scenario(
+                        "closeout",
+                        [
+                            "--target", str(root),
+                            "--owner", "owner",
+                            "--repo", "repo",
+                            "--issue", "42",
+                            "--pr", "7",
+                            "--attestation-artifact-input", str(artifact),
+                            "--json",
+                        ],
+                    )
+                closeout = json.loads(output.getvalue())
+                self.assertEqual(code, 0)
+                self.assertEqual(closeout["result"], "pass")
+                self.assertFalse(closeout["repo_execution_carriers_consumed"])
+
+                mismatch = original_closeout(
+                    argparse.Namespace(
+                        owner="other", repo_name="repo", issue=42, pr=7,
+                        pr_role=None, implementation_pr=None, release_pr=None,
+                        carrier_sync_pr=None, final_closeout_pr=None,
+                        attestation_artifact_input=artifact, review_policy="single_maintainer",
+                    ),
+                    root,
+                    closeout=True,
+                )
+                self.assertEqual(mismatch["result"], "block")
+                self.assertIn("must match the target origin", " ".join(mismatch["missing_inputs"]))
+            finally:
+                cli.ship_host_attestation = original_closeout
+                cli.infer_github_repo = original_infer
+
+    def test_light_flow_never_reads_stale_execution_carriers(self) -> None:
+        args = argparse.Namespace(
+            operation="resume",
+            owner="MC-and-his-Agents",
+            repo_name="Loom",
+            issue=2054,
+            fr=None,
+            pr=None,
+            branch="work/2054-v030-acceptance-release",
+        )
+        payload = execution_flow.host_derived_flow_payload(
+            target_root=ROOT,
+            args=args,
+            manifest={"profile": "light-governance"},
+            runtime_state={"result": "pass"},
+            lifecycle_admission={"result": "pass", "missing_inputs": [], "carrier_mutations": False},
+        )
+
+        self.assertEqual(payload["result"], "pass", payload)
+        self.assertFalse(payload["repo_execution_carriers_consumed"])
+        self.assertFalse(payload["committed_current_consumed"])
+        self.assertFalse(payload["committed_progress_consumed"])
+        self.assertFalse(payload["committed_review_consumed"])
+        self.assertFalse(payload["committed_shadow_consumed"])
+        self.assertNotIn("fact-chain", json.dumps(payload))
+
+        blocked = execution_flow.host_derived_flow_payload(
+            target_root=ROOT,
+            args=args,
+            manifest={"profile": "light-governance"},
+            runtime_state={"result": "pass"},
+            lifecycle_admission={"result": "block", "admission_state": "needs_breakdown"},
+        )
+        self.assertEqual(blocked["result"], "block", blocked)
+        self.assertIn("needs_breakdown", blocked["missing_inputs"])
+
     def test_unrequested_full_bootstrap_uses_host_derived_light_profile(self) -> None:
         self.assertEqual(
             loom_init.scaffold_profile_key("full-bootstrap", {}),

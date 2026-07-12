@@ -8824,6 +8824,7 @@ def governance_capability_profile_payload(
         host_enforcement.get("branch_protection_readable") is True
         or host_enforcement.get("ruleset_readable") is True
     )
+    host_trust_verdict = host_enforcement.get("trust_verdict")
 
     if mode == "host-enforced":
         if not host_required:
@@ -8834,13 +8835,13 @@ def governance_capability_profile_payload(
             "schema_version": GOVERNANCE_CAPABILITY_PROFILE_SCHEMA,
             "mode": "host-enforced",
             "result": "pass" if not missing_inputs else "block",
-            "assurance": "strong",
+            "assurance": "strong" if host_trust_verdict == "strong" else "limited",
             "risk_label": None,
             "host_enforcement_status": "host_enforced" if not missing_inputs else "unverified",
             "explicit_opt_in": False,
             "change_class": normalized_change_class or None,
             "summary": (
-                "host-enforced governance is proven by host required checks."
+                "host-enforced governance is proven by host required checks; identity assurance remains limited unless trusted host readback proves a distinct identity."
                 if not missing_inputs
                 else "host-enforced governance cannot be proven from host readback."
             ),

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
 try:
@@ -552,6 +553,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
     review.add_argument("--review-file", help="Optional review artifact path relative to the target root")
+    review.add_argument("--owner", help="GitHub owner for light-profile host attestation")
+    review.add_argument("--repo", dest="repo_name", help="GitHub repository for light-profile host attestation")
+    review.add_argument("--issue", type=int, help="GitHub Work Item issue for light-profile host attestation")
+    review.add_argument("--pr", type=int, help="GitHub PR for light-profile host attestation")
+    review.add_argument("--host-artifact-input", type=Path, help="JSON containing only the GitHub Actions artifact_id")
+    review.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
     review.add_argument("--decision", choices=tuple(sorted(REVIEW_DECISIONS)))
     review.add_argument("--kind", choices=tuple(sorted(REVIEW_KINDS)))
     review.add_argument("--summary", help="Stable review conclusion summary")

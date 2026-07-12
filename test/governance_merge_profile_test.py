@@ -46,6 +46,34 @@ class GovernanceMergeProfileTest(unittest.TestCase):
         self.assertEqual(payload["result"], "block")
         self.assertIn("loom-pr-merge-gate", payload["missing_inputs"][0])
 
+    def test_host_enforced_defaults_to_limited_without_distinct_identity_readback(self) -> None:
+        limited = loom_flow.governance_capability_profile_payload(
+            mode="host-enforced",
+            host_enforcement={
+                "required": True,
+                "branch_protection_readable": True,
+                "ruleset_readable": True,
+            },
+            allow_advisory=False,
+            allow_high_risk_advisory=False,
+            change_class=None,
+        )
+        strong = loom_flow.governance_capability_profile_payload(
+            mode="host-enforced",
+            host_enforcement={
+                "required": True,
+                "branch_protection_readable": True,
+                "trust_verdict": "strong",
+            },
+            allow_advisory=False,
+            allow_high_risk_advisory=False,
+            change_class=None,
+        )
+
+        self.assertEqual(limited["result"], "pass")
+        self.assertEqual(limited["assurance"], "limited")
+        self.assertEqual(strong["assurance"], "strong")
+
     def test_advisory_requires_explicit_opt_in_and_remains_low_assurance(self) -> None:
         blocked = loom_flow.governance_capability_profile_payload(
             mode="advisory/local-enforced",
@@ -127,7 +155,7 @@ class GovernanceMergeProfileTest(unittest.TestCase):
         self.assertEqual(missing, [])
         fields = envelope["fields"]
         self.assertEqual(fields["governance_mode"], "host-enforced")
-        self.assertEqual(fields["governance_assurance"], "strong")
+        self.assertEqual(fields["governance_assurance"], "limited")
         self.assertTrue(fields["host_enforcement_required"])
         self.assertIn("governance_mode", body)
 
@@ -147,6 +175,21 @@ class GovernanceMergeProfileTest(unittest.TestCase):
         self.assertEqual(policy["governance_mode"], "advisory/local-enforced")
         self.assertEqual(policy["advisory_risk_label"], "low_assurance")
         self.assertFalse(policy["host_enforced"])
+
+    def test_closeout_policy_does_not_trust_authored_strong_assurance(self) -> None:
+        policy = loom_cli.ship_closeout_policy(
+            {
+                "governance_intensity": "standard",
+                "governance_mode": "host-enforced",
+                "governance_assurance": "strong",
+                "change_class": "metadata_schema",
+                "release_judgment": "no_release",
+                "upgrade_triggers": [],
+            }
+        )
+
+        self.assertEqual(policy["governance_assurance"], "limited")
+        self.assertTrue(policy["host_enforced"])
 
 
 if __name__ == "__main__":

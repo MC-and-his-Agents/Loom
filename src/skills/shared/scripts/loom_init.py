@@ -3290,6 +3290,27 @@ def validate_host_derived_manifest(target_root: Path, payload: object) -> list[s
     return errors
 
 
+def host_derived_manifest(target_root: Path) -> tuple[dict[str, object] | None, list[str]]:
+    """Read the light-profile manifest without falling back to execution carriers."""
+
+    path = target_root / ".loom/bootstrap/manifest.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, []
+    except OSError as exc:
+        return None, [f"bootstrap manifest is unreadable: {exc}"]
+    except json.JSONDecodeError as exc:
+        return None, [f"bootstrap manifest is invalid JSON: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, ["bootstrap manifest must be a JSON object"]
+    if payload.get("schema_version") == "loom-bootstrap-manifest/v1":
+        return None, []
+    if payload.get("schema_version") != "loom-bootstrap-manifest/v2":
+        return None, ["bootstrap manifest schema is unsupported"]
+    return payload, validate_host_derived_manifest(target_root, payload)
+
+
 def scaffold_target(
     target_root: Path,
     result: dict[str, object],
