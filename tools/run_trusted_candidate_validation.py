@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.util
 import json
 import os
@@ -35,14 +34,6 @@ PROTECTED_HARNESS_FILES = (
     "test/npm-package-smoke.test.mjs",
     *tuple(f"tools/{name}" for name in TRUSTED_TOOL_FILES),
 )
-CONTRACT_TRANSITION_CHECKER = "tools/check_cli_contract.py"
-CONTRACT_TRANSITION_SURFACE = "legacy-command-eol"
-CONTRACT_TRANSITION_TARGETS = ("py-compile", "cli-contract-check")
-CONTRACT_TRANSITION_ORIGIN = "https://github.com/MC-and-his-Agents/Loom.git"
-CONTRACT_TRANSITION_TRUSTED_SHA256 = "9570ae1384a389725cd140b954ccac79e29cbbc03e31851bf02e90154d5628b5"
-CONTRACT_TRANSITION_CANDIDATE_SHA256 = "cd72e575a8042252dd103f73a8d6b58393547ece85dfe4496b6fa709eef708e5"
-
-
 def ensure_contained_path(root: Path, destination: Path) -> None:
     lexical_root = root.absolute()
     try:
@@ -107,66 +98,6 @@ def protected_harness_drift(trusted_root: Path, candidate_root: Path) -> list[st
     )
 
 
-def tracked_tree_snapshot(root: Path, *, excluded: set[str]) -> tuple[tuple[str, str, object], ...]:
-    indexed = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-s", "-z"],
-        check=False,
-        capture_output=True,
-    )
-    if indexed.returncode != 0:
-        raise ValueError(f"could not read tracked tree: {root}")
-    snapshot: list[tuple[str, str, object]] = []
-    for entry in indexed.stdout.split(b"\0"):
-        if not entry:
-            continue
-        metadata, raw_path = entry.split(b"\t", 1)
-        mode = os.fsdecode(metadata.split(b" ", 1)[0])
-        relative = os.fsdecode(raw_path)
-        if relative in excluded:
-            continue
-        snapshot.append((relative, mode, path_snapshot(root / relative)))
-    return tuple(snapshot)
-
-
-def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def contract_transition_allowed(
-    trusted_root: Path,
-    candidate_root: Path,
-    drift: list[str],
-    targets: list[str],
-    runner_root: Path,
-) -> bool:
-    if (
-        runner_root != trusted_root
-        or drift != [CONTRACT_TRANSITION_CHECKER]
-        or len(targets) != len(CONTRACT_TRANSITION_TARGETS)
-        or set(targets) != set(CONTRACT_TRANSITION_TARGETS)
-    ):
-        return False
-    trusted_checker = trusted_root / CONTRACT_TRANSITION_CHECKER
-    checker = candidate_root / CONTRACT_TRANSITION_CHECKER
-    if (
-        not trusted_checker.is_file()
-        or trusted_checker.is_symlink()
-        or not checker.is_file()
-        or checker.is_symlink()
-        or file_sha256(trusted_checker) != CONTRACT_TRANSITION_TRUSTED_SHA256
-        or file_sha256(checker) != CONTRACT_TRANSITION_CANDIDATE_SHA256
-    ):
-        return False
-    excluded = {CONTRACT_TRANSITION_CHECKER}
-    if tracked_tree_snapshot(trusted_root, excluded=excluded) != tracked_tree_snapshot(candidate_root, excluded=excluded):
-        return False
-    try:
-        compile(checker.read_text(encoding="utf-8"), str(checker), "exec")
-    except (OSError, SyntaxError, UnicodeError):
-        return False
-    return True
-
-
 def candidate_symlinks(candidate_root: Path, policy: str) -> list[Path]:
     symlinks: set[Path] = set()
     indexed = subprocess.run(
@@ -217,21 +148,12 @@ def trusted_overlay(
     candidate_root: Path,
     output_root: Path,
     symlink_policy: str,
-    targets: list[str],
-    runner_root: Path,
-) -> bool:
+) -> None:
     unsafe = candidate_symlinks(candidate_root, symlink_policy)
     if unsafe:
         raise ValueError("candidate tree contains symlinks: " + ", ".join(str(path) for path in unsafe))
     drift = protected_harness_drift(trusted_root, candidate_root)
-    contract_transition = bool(drift) and contract_transition_allowed(
-        trusted_root,
-        candidate_root,
-        drift,
-        targets,
-        runner_root,
-    )
-    if drift and not contract_transition:
+    if drift:
         raise ValueError("protected validation harness drift requires a base-trusted bootstrap: " + ", ".join(drift))
     shutil.copytree(candidate_root, output_root, symlinks=symlink_policy != "reject")
     replace_path(trusted_root / "Makefile", output_root / "Makefile", output_root)
@@ -247,90 +169,6 @@ def trusted_overlay(
     package_test = trusted_root / "test" / "npm-package-smoke.test.mjs"
     if package_test.is_file():
         replace_path(package_test, output_root / "test" / package_test.name, output_root)
-    return contract_transition
-
-
-def initialize_contract_transition_git_snapshot(transition_root: Path, environment: dict[str, str]) -> None:
-    git_commands = (
-        ("git", "init", "-b", "main"),
-        ("git", "remote", "add", "origin", CONTRACT_TRANSITION_ORIGIN),
-        ("git", "add", "--all"),
-        (
-            "git",
-            "-c",
-            "user.name=Loom Contract Transition",
-            "-c",
-            "user.email=loom-transition@invalid.local",
-            "-c",
-            "commit.gpgSign=false",
-            "commit",
-            "-m",
-            "contract transition snapshot",
-        ),
-    )
-    for command in git_commands:
-        completed = subprocess.run(
-            command,
-            cwd=transition_root,
-            env=environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if completed.returncode != 0:
-            raise ValueError(f"could not initialize isolated contract transition Git snapshot: {command[1]}")
-
-
-def run_contract_transition_check(
-    candidate_root: Path,
-    temporary_root: Path,
-    safe_environment: dict[str, str],
-) -> int:
-    transition_root = temporary_root / "contract-transition"
-    isolated_home = temporary_root / "contract-transition-home"
-    transition_root.mkdir()
-    for relative, _mode, snapshot in tracked_tree_snapshot(candidate_root, excluded=set()):
-        if not isinstance(snapshot, tuple) or not snapshot or snapshot[0] != "file":
-            raise ValueError(f"contract transition requires regular tracked files: {relative}")
-        source = candidate_root / relative
-        destination = transition_root / relative
-        ensure_contained_path(transition_root, destination)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-    isolated_home.mkdir()
-    environment = {key: value for key, value in safe_environment.items() if not key.startswith("GIT_")}
-    environment.update(
-        {
-            "GIT_CONFIG_GLOBAL": str(isolated_home / ".gitconfig"),
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_TERMINAL_PROMPT": "0",
-            "HOME": str(isolated_home),
-            "LOOM_CONTRACT_TRANSITION": "1",
-            "PYTHONPATH": os.pathsep.join(
-                (
-                    str(transition_root / "src" / "skills" / "shared" / "scripts"),
-                    str(transition_root / "tools"),
-                )
-            ),
-        }
-    )
-    initialize_contract_transition_git_snapshot(transition_root, environment)
-    checker = str(transition_root / CONTRACT_TRANSITION_CHECKER)
-    targeted = subprocess.run(
-        [sys.executable, checker, "--surface", CONTRACT_TRANSITION_SURFACE],
-        cwd=transition_root,
-        env=environment,
-        check=False,
-    )
-    if targeted.returncode != 0:
-        return targeted.returncode
-    aggregate = subprocess.run(
-        [sys.executable, checker],
-        cwd=transition_root,
-        env=environment,
-        check=False,
-    )
-    return aggregate.returncode
 
 
 def main() -> int:
@@ -368,13 +206,11 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="loom-candidate-validation-") as temporary:
         validation_root = Path(temporary) / "candidate"
         try:
-            contract_transition = trusted_overlay(
+            trusted_overlay(
                 trusted_root,
                 candidate_root,
                 validation_root,
                 args.symlink_policy,
-                targets,
-                runner_root,
             )
             safe_environment = {
                 key: value
@@ -393,14 +229,6 @@ def main() -> int:
                     ),
                 }
             )
-            if contract_transition:
-                # Tree equality covers every candidate file except the exact-hash checker,
-                # which this isolated path compiles before running targeted + aggregate.
-                return run_contract_transition_check(
-                    candidate_root,
-                    Path(temporary),
-                    safe_environment,
-                )
             completed = subprocess.run(
                 ["make", "-f", str(validation_root / "Makefile"), "--", *targets],
                 cwd=validation_root,

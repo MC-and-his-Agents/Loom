@@ -46,7 +46,7 @@ def main() -> int:
     errors.extend(require_contains(MATRIX, ("loom-init", "plugins/loom/skills", "fail closed")))
     errors.extend(require_contains(MATRIX, ("gh api", "host_api_unreadable", "permission", "CODEX_EXPORT_GH_TOKEN=1")))
     errors.extend(require_contains(UNIFIED, ("root CLI", "native", "plugins/loom/skills", "metadata-only", "loom-init")))
-    for args, expected in ((["help", "--json"], "help"), (["host", "list", "--json"], "host list")):
+    for args, expected in ((["help", "--json"], "help"),):
         env = os.environ.copy()
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         completed = subprocess.run(
@@ -70,16 +70,31 @@ def main() -> int:
         if expected == "help" and (
             payload.get("protocol_type_count") != 12
             or len(payload.get("protocol_types", [])) != 12
-            or payload.get("legacy_surface_remove_by") != "v0.31.0"
+            or payload.get("hidden_compatibility_count") != 0
         ):
-            errors.append("public machine protocol must expose 12 owner types and a v0.31.0 legacy expiry")
+            errors.append("public machine protocol must expose 12 owner types and zero hidden compatibility commands")
         if expected == "help" and any(
             command.get("protocol_type") not in payload.get("protocol_types", [])
             for command in payload.get("commands", [])
         ):
             errors.append("every public command must map to one public protocol owner type")
-        if expected == "host list" and [host.get("id") for host in payload.get("hosts", [])] != ["codex"]:
-            errors.append("public host adapter surface must contain only the real Codex provider")
+    retired = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "loom.py"), "host", "list", "--target", "/loom-must-not-read-target", "--json"],
+        cwd=ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    try:
+        retired_payload = json.loads(retired.stdout)
+    except json.JSONDecodeError:
+        errors.append("retired loom host list did not emit JSON")
+    else:
+        primary = retired_payload.get("failure_envelope", {}).get("primary_cause", {})
+        if retired.returncode == 0 or primary.get("id") != "unsupported_command_surface" or retired_payload.get("mutates") is not False:
+            errors.append("retired loom host list did not fail closed before target or host access")
     if errors:
         print("host adapter check failed:", file=sys.stderr)
         for error in errors:
