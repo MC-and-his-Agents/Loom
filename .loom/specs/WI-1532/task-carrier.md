@@ -1,5 +1,0 @@
-# WI-1532 Task Carrier
-
-| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1532 | Issue OPEN / branch work/1532-closeout-freeze-admission / local closeout freeze admission implementation | in_progress | primary | .loom/work-items/WI-1532.md | .loom/specs/WI-1532/plan.md#implementation-steps | .loom/specs/WI-1532/spec.md#acceptance-scenarios | .loom/specs/WI-1532/plan.md#validation | .loom/specs/WI-1532/evidence-map.md | GitHub issue #1532; milestone/12 closeout profile implementation lane; local branch work/1532-closeout-freeze-admission | Recheck PR body/head, current review, targeted fixture validation, runtime parity, target branch, merge commit, and closeout evidence before merge-ready or milestone closeout. |

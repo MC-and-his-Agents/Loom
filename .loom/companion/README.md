@@ -1,16 +1,14 @@
 # Repo Companion
 
-This companion entry attaches Loom to the existing repository governance surface.
+This repository uses Loom's host-derived lifecycle. GitHub owns issue, PR,
+head, check, merge, and historical delivery facts; the current worktree owns
+only session-local execution state.
 
-## Preserved Ownership
+The retained repository-specific inputs are:
 
-- Root rules remain in the repository's existing boundary docs.
-- Retained host actions stay host-owned.
-- Repo-native carriers remain the source of truth until a later Loom interop slice stabilizes.
+- `.loom/companion/repo-interface.json` for PR metadata and issue taxonomy;
+- `.loom/review-profiles.json` for the repository-owned review policy.
 
-## Loom Entry Surfaces
-
-- Review surface: `.loom/companion/review.md`
-- Merge-ready surface: `.loom/companion/merge-ready.md`
-- Closeout surface: `.loom/companion/closeout.md`
-- Checkpoints surface: `.loom/companion/checkpoints.md`
+There are no repository execution carriers, shadow parity files, or declared
+external result sources. Runtime output stays in ignored workstation state or
+GitHub Actions artifacts.

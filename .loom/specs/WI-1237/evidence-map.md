@@ -1,9 +1,0 @@
-# WI-1237 Evidence Map
-
-| Evidence ID | Evidence Type | Source Locator | Consumes | Binding | Freshness | Consumer Boundary | Remediation Direction |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EV-001 | behavior_evidence | `README.md`; `docs/methodology/harness/cli-command-matrix.md`; `docs/methodology/harness/workspace-lifecycle.md`; `docs/methodology/harness/closeout-gate.md`; `docs/methodology/harness/host-lifecycle-boundary.md` | `.loom/specs/WI-1237/spec.md` S1 S2 | WI-1237 / branch work/1237-docs-help-closeout / idle closeout recovery docs | present | review / merge-ready / release-no-release closeout | Re-read docs after any closeout lifecycle wording change. |
-| EV-002 | behavior_evidence | `tools/loom.py` | `.loom/specs/WI-1237/spec.md` S3 | WI-1237 / CLI help command summaries | present | review / merge-ready / PR gate / release readiness | Re-run `python3 tools/loom.py help --json` after help matrix changes. |
-| EV-003 | test_evidence | `tools/check_release_surface.py` | `.loom/specs/WI-1237/spec.md` S4 | WI-1237 / release-doc-contract checker coverage | present | review / merge-ready / release-no-release closeout | Re-run `python3 tools/check_release_surface.py --surface release-doc-contract` and aggregate release surface after checker/doc changes. |
-| EV-004 | fresh_verification_input | `.loom/progress/WI-1237.md` | EV-001 EV-002 EV-003 | WI-1237 / latest local validation summary / branch work/1237-docs-help-closeout | present | review / merge-ready / closeout | Refresh after validation, PR creation/update, hosted checks readback, merge, or closeout. |
-| EV-005 | structural_evidence | `.loom/status/current.md` | WI-1237 active fact-chain/status carrier | WI-1237 / current branch | present | build / review / merge-ready / closeout | Refresh carrier/shadow after status or init-result changes. |

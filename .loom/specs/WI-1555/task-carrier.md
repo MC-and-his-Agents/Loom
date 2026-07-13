@@ -1,5 +1,0 @@
-# WI-1555 Task Carrier
-
-| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1555 | Issue OPEN / branch work/1555-one-shot-closeout-run / one-shot post-merge closeout run CLI-runtime facade | in_progress | primary | .loom/work-items/WI-1555.md | .loom/specs/WI-1555/plan.md#implementation-steps | .loom/specs/WI-1555/spec.md#acceptance | .loom/specs/WI-1555/plan.md#validation | .loom/specs/WI-1555/evidence-map.md | GitHub issue #1555; milestone/12 Wave 2 closeout product chain; PR #1585 | Recheck PR body/head, closeout-wrapper fixture, evidence map, fact-chain, status, review, shadow, local PR gate, hosted checks, target branch, merge commit, and closeout evidence before merge-ready or milestone closeout. |

@@ -1,5 +1,0 @@
-# WI-1740 Task Carrier
-
-| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1740 | Issue #1740 open under milestone #17 / parent FR #1734; branch work/1740-review-freshness; PR pending | in_progress | primary | .loom/work-items/WI-1740.md | .loom/specs/WI-1740/implementation-contract.md#implementation-scope | .loom/specs/WI-1740/spec.md#scenarios | .loom/specs/WI-1740/plan.md#implementation | .loom/specs/WI-1740/evidence-map.md | Milestone #17 child issue under FR #1734; branch work/1740-review-freshness; worktree /Users/mc/dev/Loom-WI-1740-review-freshness. | Recheck current head SHA, PR metadata, suite evidence, hosted checks, no_release judgment, and merge gate before merge-ready consumption. |

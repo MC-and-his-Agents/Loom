@@ -1,5 +1,0 @@
-# WI-1319 Task Carrier
-
-| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1319 | Issue closed / PR #1346 merged / closeout carrier pending main merge | done | primary | .loom/work-items/WI-1319.md | #1319 docs-governance lite checklist | .loom/specs/WI-1319/spec.md | Formal suite plan bypass is covered by .loom/specs/WI-1319/spec.md | git diff --check; docs/static checks; suite decision validation via .loom/specs/WI-1319/spec.md; fact-chain; review; PR gate; hosted checks; no-release evidence; closeout sync | issue #1319; PR #1346; branch closeout/1319-post-merge-consumed; target-local workspace `.`; carrier is tracking-only and does not replace Work Item or recovery truth | Recheck issue, PR, branch, head SHA, checks, no-release judgment, merge commit, target branch, and carrier terminalization before merge-ready and closeout. |

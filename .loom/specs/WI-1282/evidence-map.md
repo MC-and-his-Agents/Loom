@@ -1,7 +1,0 @@
-# Evidence Map
-
-| evidence_id | evidence_type | source_locator | consumes | binding | freshness | consumer_boundary | remediation_direction |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EV-001 | behavior_evidence | .loom/progress/WI-1282.md | Command group contract map/order and grouping rationale for issue #1282 | WI-1282 / repo-local-cli command group identity / downstream #1283 #1284 consumption | present | review / PR metadata / hosted CI / merge-ready / status | Refresh if command group names, order, grouping rationale, or downstream-consumed labels change. |
-| EV-002 | test_evidence | .loom/progress/WI-1282.md | Validation strategy: `git diff --check`, YAML/readback command preservation, `make loom-demo-new-project-check`, local split group execution, suite/status checks, PR metadata readback, hosted checks | WI-1282 / current branch and head / workflow split validation | present | review / merge-ready / PR gate / hosted CI / status | Refresh after validation completes, PR creation/update, head changes, hosted check status changes, or same-class command preservation findings. |
-| EV-003 | fresh_verification_input | .loom/progress/WI-1282.md | EV-001 EV-002 plus current HEAD, branch, base, PR metadata, and hosted check readback | WI-1282 / current verification object / scheduler-owned gate pending | present | merge-ready / scheduler gate / status | Refresh after every workflow or carrier edit, PR body update, new commit, hosted run, or scheduler correction. |

@@ -146,6 +146,28 @@ def verify_base_owned_files(frozen: dict[str, object], validation_root: Path) ->
         raise ValueError("candidate execution modified base-owned validation files: " + ", ".join(drift))
 
 
+def candidate_environment(validation_root: Path) -> dict[str, str]:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key in {"HOME", "LANG", "LC_ALL", "PATH", "SHELL", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR"}
+    }
+    environment.update(
+        {
+            "LOOM_CANDIDATE_VALIDATION": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONSAFEPATH": "1",
+            "PYTHONPATH": os.pathsep.join(
+                (
+                    str(validation_root / "src" / "skills" / "shared" / "scripts"),
+                    str(validation_root / "tools"),
+                )
+            ),
+        }
+    )
+    return environment
+
+
 def candidate_symlinks(candidate_root: Path, policy: str) -> list[Path]:
     symlinks: set[Path] = set()
     indexed = subprocess.run(
@@ -265,23 +287,7 @@ def main() -> int:
                     args.symlink_policy,
                     frozen_base_owned,
                 )
-                safe_environment = {
-                    key: value
-                    for key, value in os.environ.items()
-                    if key in {"HOME", "LANG", "LC_ALL", "PATH", "SHELL", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR"}
-                }
-                safe_environment.update(
-                    {
-                        "LOOM_CANDIDATE_VALIDATION": "1",
-                        "PYTHONSAFEPATH": "1",
-                        "PYTHONPATH": os.pathsep.join(
-                            (
-                                str(validation_root / "src" / "skills" / "shared" / "scripts"),
-                                str(validation_root / "tools"),
-                            )
-                        ),
-                    }
-                )
+                safe_environment = candidate_environment(validation_root)
                 security_contract = validation_root / "test" / "trusted_candidate_validation_test.py"
                 if validate_security_contract:
                     security = subprocess.run(

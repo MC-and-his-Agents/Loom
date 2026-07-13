@@ -1,8 +1,0 @@
-# Evidence Map
-
-| evidence_id | evidence_type | source_locator | consumes | binding | freshness | consumer_boundary | remediation_direction |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EV-001 | behavior_evidence | src/skills/shared/scripts/loom_flow.py | .loom/specs/WI-1322/spec.md S1 S2 S3 / AC-1 AC-2 AC-3 AC-4 | WI-1322 / docs-governance lite gate behavior | present | review / merge-ready / PR gate / closeout / status | Re-run targeted CLI contract and local gate checks after gate behavior changes. |
-| EV-002 | test_evidence | tools/check_cli_contract.py | .loom/specs/WI-1322/plan.md validation mapping | WI-1322 / targeted parser suite pr-gate fixtures | present | review / merge-ready / PR gate / closeout / status | Re-run `python3 tools/check_cli_contract.py --surface aggregate` after fixture or parser changes. |
-| EV-003 | test_evidence | skills/shared/scripts/loom_flow.py | generated/runtime copy parity | WI-1322 / generated skill runtime copies and repo-local runtime | present | review / merge-ready / hosted checks / closeout / status | Re-run `python3 tools/skills_surface.py check` and targeted py compile after runtime copy sync. |
-| EV-004 | fresh_verification_input | .loom/progress/WI-1322.md | EV-001 EV-002 EV-003 plus git diff, fact-chain, suite validate, py compile, skills surface, PR metadata, PR gate, hosted checks, controlled merge, and closeout evidence | WI-1322 / latest validation summary / PR pending | present | merge-ready / closeout / status | Refresh progress summary after validation, PR creation, head changes, hosted checks, merge, or closeout. |
