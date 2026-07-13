@@ -352,13 +352,28 @@ def github_fr_wi_admission_payload(
     if exception:
         return respond("pass", "not_planned", "The FR has an explicit non-completion exception and is not treated as product completion.", evidence={"exception": exception, "type_inference": inference})
 
+    if (
+        not lifecycle_only
+        and requested_task is None
+        and (intent != "planning" or apply or blocked_by or work_item_number is not None)
+    ):
+        return respond(
+            "block",
+            "invalid_proposal",
+            "FR execution or reconciliation requires one explicit bounded Work Item proposal.",
+            missing_inputs=["bounded Work Item task"],
+            failed_layer="admission-input",
+        )
+
     task: str | None = None
     plan_key: str | None = None
     resume = f"loom route --target . --issue {issue_number} --task '<bounded Work Item scope>' --intent {intent} --apply --json"
-    if not lifecycle_only:
-        task, task_errors = _task(requested_task or str(fr.get("title") or ""))
+
+    def prepare_proposal(raw_task: str) -> list[str]:
+        nonlocal task, plan_key, proposal_payload, resume
+        task, task_errors = _task(raw_task)
         if task_errors or task is None:
-            return respond("block", "invalid_proposal", "FR-to-WI admission requires one bounded Work Item proposal.", missing_inputs=task_errors, failed_layer="admission-input")
+            return task_errors
         plan_key = _plan_key(owner, repo, issue_number, task)
         proposal_payload = {
             "schema_version": SCHEMA,
@@ -369,6 +384,12 @@ def github_fr_wi_admission_payload(
         command.extend(f"--blocked-by {number}" for number in blockers)
         command.extend(("--apply", "--json"))
         resume = " ".join(command)
+        return []
+
+    if not lifecycle_only and requested_task is not None:
+        task_errors = prepare_proposal(requested_task)
+        if task_errors:
+            return respond("block", "invalid_proposal", "FR-to-WI admission requires one bounded Work Item proposal.", missing_inputs=task_errors, failed_layer="admission-input")
 
     tree, tree_errors = host.issue_tree_payload(target_root, owner, repo, issue_number)
     if tree_errors or tree is None:
@@ -376,12 +397,38 @@ def github_fr_wi_admission_payload(
     children, children_errors = _subissues(tree)
     if children_errors:
         return respond("block", "host_unreadable", "FR-to-WI admission cannot treat an incomplete native sub-issue tree as empty.", missing_inputs=children_errors, next_action=resume, failed_layer="host-readback")
+    work_items = [
+        child
+        for child in children
+        if host.github_intake_object_type(child, repo_interface=repo_interface)[0] == "work_item"
+    ]
+    work_item_locators = sorted(
+        typed_locator(owner, repo, "work_item", number)
+        for child in work_items
+        if isinstance((number := child.get("number")), int) and number > 0
+    )
+    if (
+        not lifecycle_only
+        and requested_task is None
+        and intent == "planning"
+        and not apply
+        and work_item_number is None
+        and not blockers
+        and work_items
+    ):
+        return respond(
+            "pass",
+            "planning",
+            "The FR already has a host-native Work Item breakdown; planning does not propose a duplicate Work Item.",
+            proposal=None,
+            next_action="select an existing native Work Item before entering execution",
+            evidence={
+                "type_inference": inference,
+                "native_subissue_count": len(children),
+                "native_work_item_locators": work_item_locators,
+            },
+        )
     if lifecycle_only:
-        work_items = [
-            child
-            for child in children
-            if host.github_intake_object_type(child, repo_interface=repo_interface)[0] == "work_item"
-        ]
         if intent == "closeout" and work_items:
             return respond(
                 "pass",
@@ -392,11 +439,7 @@ def github_fr_wi_admission_payload(
                     "type_inference": inference,
                     "issue_state": fr.get("state"),
                     "native_subissue_count": len(children),
-                    "native_work_item_locators": [
-                        typed_locator(owner, repo, "work_item", number)
-                        for child in work_items
-                        if isinstance((number := child.get("number")), int) and number > 0
-                    ],
+                    "native_work_item_locators": work_item_locators,
                 },
             )
         if work_items:
@@ -410,11 +453,7 @@ def github_fr_wi_admission_payload(
                 evidence={
                     "type_inference": inference,
                     "native_subissue_count": len(children),
-                    "native_work_item_locators": [
-                        typed_locator(owner, repo, "work_item", number)
-                        for child in work_items
-                        if isinstance((number := child.get("number")), int) and number > 0
-                    ],
+                    "native_work_item_locators": work_item_locators,
                 },
             )
         return respond(
@@ -426,6 +465,10 @@ def github_fr_wi_admission_payload(
             failed_layer="fr-wi-admission",
             evidence={"type_inference": inference, "native_subissue_count": len(children)},
         )
+    if task is None:
+        task_errors = prepare_proposal(str(fr.get("title") or ""))
+        if task_errors:
+            return respond("block", "invalid_proposal", "FR-to-WI admission requires one bounded Work Item proposal.", missing_inputs=task_errors, failed_layer="admission-input")
     candidates, candidate_errors = (
         _requested_candidate(host, target_root, owner, repo, work_item_number, plan_key)
         if work_item_number is not None

@@ -142,11 +142,8 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "detect",
     "doctor",
     "verify",
-    "fact-chain",
     "status",
-    "shadow-parity",
     "story",
-    "workstation current",
 ]
 
 
@@ -2745,6 +2742,7 @@ def flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str]) 
 def host_lifecycle_admission_payload(
     *,
     target: Path,
+    item: str | None = None,
     issue: int | None,
     fr: int | None = None,
     owner: str | None,
@@ -2755,11 +2753,18 @@ def host_lifecycle_admission_payload(
 ) -> dict[str, Any]:
     """Use the shared host admission evaluator before a lifecycle entrypoint."""
 
+    parsed_item = parse_typed_locator(item, allowed_types={"work_item"}, allow_legacy=False) if item else None
+    if item and parsed_item is None:
+        return {
+            "result": "block",
+            "lifecycle_state": "missing_subject",
+            "primary_remediation": "provide --issue <work-item> or --item <owner/repo/work_item/id>",
+            "carrier_mutations": False,
+            "missing_inputs": ["canonical Work Item locator"],
+        }
     target_repo_slug = infer_github_repo(target)
     target_owner, target_repo = target_repo_slug.split("/", 1) if target_repo_slug and "/" in target_repo_slug else (None, None)
-    effective_owner = owner or target_owner
-    effective_repo = repo_name or target_repo
-    if not target_owner or not target_repo or not effective_owner or not effective_repo:
+    if not target_owner or not target_repo:
         return {
             "result": "block",
             "lifecycle_state": "missing_subject",
@@ -2767,6 +2772,35 @@ def host_lifecycle_admission_payload(
             "carrier_mutations": False,
             "missing_inputs": ["target origin GitHub owner/repo"],
         }
+    identities = [
+        ("item owner", parsed_item.get("owner") if parsed_item else None, target_owner),
+        ("item repo", parsed_item.get("repo") if parsed_item else None, target_repo),
+        ("explicit owner", owner, target_owner),
+        ("explicit repo", repo_name, target_repo),
+    ]
+    conflicts = [label for label, supplied, expected in identities if supplied is not None and supplied.casefold() != expected.casefold()]
+    if conflicts:
+        return {
+            "result": "block",
+            "lifecycle_state": "subject_conflict",
+            "primary_remediation": "make --item, --owner/--repo, and the target origin identify the same repository",
+            "carrier_mutations": False,
+            "missing_inputs": [f"consistent {label}" for label in conflicts],
+        }
+    if parsed_item is not None:
+        item_issue = int(parsed_item["id"])
+        if issue is not None and issue != item_issue:
+            return {
+                "result": "block",
+                "lifecycle_state": "subject_conflict",
+                "primary_remediation": "make --issue and --item identify the same Work Item",
+                "carrier_mutations": False,
+                "missing_inputs": ["consistent Work Item subject"],
+            }
+        issue = item_issue
+
+    effective_owner = owner or target_owner
+    effective_repo = repo_name or target_repo
     subject_readback = github_lifecycle_subject_readback(
         target,
         effective_owner,
@@ -12358,49 +12392,62 @@ def handle_adopt(argv: list[str]) -> int:
 
 
 def handle_route(argv: list[str]) -> int:
-    if "--issue" in argv or any(arg.startswith("--issue=") for arg in argv):
-        parser = argparse.ArgumentParser(prog="loom route")
-        parser.add_argument("--target", required=True, help="Target repository root")
-        parser.add_argument("--issue", type=int, required=True, help="GitHub FR or Work Item issue number")
-        parser.add_argument("--task", required=True, help="Bounded Work Item proposal text")
-        parser.add_argument(
-            "--intent",
-            choices=("planning", "branch", "build", "pr", "ship", "closeout", "completed"),
-            default="planning",
-            help="Lifecycle intent that requires admission",
-        )
-        parser.add_argument("--blocked-by", type=int, action="append", default=[], help="Native blocking issue number; may be repeated")
-        parser.add_argument("--work-item", type=int, help="Existing Work Item number for a partial admission recovery")
-        parser.add_argument("--apply", action="store_true", help="Apply host-native Work Item reconciliation")
-        parser.add_argument("--json", action="store_true")
-        parser.add_argument("--full-output", action="store_true")
-        args = parser.parse_args(argv)
-        flow_args = [
-            "github-intake",
-            "admission",
-            "--target",
-            args.target,
-            "--issue",
-            str(args.issue),
-            "--task",
-            args.task,
-            "--intent",
-            args.intent,
-        ]
-        for blocker in args.blocked_by:
-            flow_args.extend(["--blocked-by", str(blocker)])
-        if args.work_item is not None:
-            flow_args.extend(["--work-item", str(args.work_item)])
-        if args.apply:
-            flow_args.append("--apply")
-        if args.full_output:
-            flow_args.append("--full-output")
-        return emit_flow(
-            "route",
-            flow_args,
-            fallback_to=["loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json"],
-        )
-    return emit_delegated("route", "loom_init.py", ["route", *strip_json_flag(argv)], failed_layer="loom-route", fallback_to=["loom route --target <repo> --task <task> --json", "loom init verify --target <repo> --json"])
+    parser = argparse.ArgumentParser(prog="loom route")
+    parser.add_argument("--target", required=True, help="Target repository root")
+    parser.add_argument("--item", help="Canonical owner/repo/work_item/id locator")
+    parser.add_argument("--issue", type=int, help="GitHub FR or Work Item issue number")
+    parser.add_argument("--task", help="Bounded Work Item proposal text")
+    parser.add_argument(
+        "--intent",
+        choices=("planning", "branch", "build", "pr", "ship", "closeout", "completed"),
+        default="planning",
+        help="Lifecycle intent that requires admission",
+    )
+    parser.add_argument("--blocked-by", type=int, action="append", default=[], help="Native blocking issue number; may be repeated")
+    parser.add_argument("--work-item", type=int, help="Existing Work Item number for a partial admission recovery")
+    parser.add_argument("--apply", action="store_true", help="Apply host-native Work Item reconciliation")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    parsed_item = parse_typed_locator(args.item, allowed_types={"work_item"}, allow_legacy=False) if args.item else None
+    if args.item and parsed_item is None:
+        return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route requires a canonical host Work Item subject.", missing_inputs=["canonical Work Item locator"], fallback_to="provide --issue <issue> or --item <owner/repo/work_item/id>"))
+    if parsed_item is not None:
+        target_repo_slug = infer_github_repo(target)
+        target_owner, target_repo = target_repo_slug.split("/", 1) if target_repo_slug and "/" in target_repo_slug else (None, None)
+        if not target_owner or not target_repo:
+            return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route requires a readable target origin GitHub repository.", missing_inputs=["target origin GitHub owner/repo"], fallback_to="restore the target origin before routing a typed Work Item"))
+        if parsed_item["owner"].casefold() != target_owner.casefold() or parsed_item["repo"].casefold() != target_repo.casefold():
+            return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route typed Work Item does not belong to the target repository.", missing_inputs=["typed Work Item matching target origin"], fallback_to="make --item and --target identify the same repository"))
+    issue = args.issue or (int(parsed_item["id"]) if parsed_item else None)
+    if issue is None:
+        return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route requires one host subject.", missing_inputs=["host subject"], fallback_to="loom route --target <repo> --issue <issue> --json"))
+    if args.issue is not None and parsed_item is not None and args.issue != parsed_item["id"]:
+        return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route host subjects conflict.", missing_inputs=["consistent Work Item subject"], fallback_to="make --issue and --item identify the same Work Item"))
+    flow_args = [
+        "github-intake",
+        "admission",
+        "--target",
+        args.target,
+        "--issue",
+        str(issue),
+        "--intent",
+        args.intent,
+    ]
+    if args.task:
+        flow_args.extend(["--task", args.task])
+    if parsed_item is not None:
+        flow_args.extend(["--owner", str(parsed_item["owner"]), "--repo", str(parsed_item["repo"])])
+    for blocker in args.blocked_by:
+        flow_args.extend(["--blocked-by", str(blocker)])
+    if args.work_item is not None:
+        flow_args.extend(["--work-item", str(args.work_item)])
+    if args.apply:
+        flow_args.append("--apply")
+    if args.full_output:
+        flow_args.append("--full-output")
+    return emit_flow("route", flow_args, fallback_to=["loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json"])
 
 
 def handle_status(argv: list[str]) -> int:
@@ -12655,6 +12702,7 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         if command in {"build", "pre-review"}:
             lifecycle_admission = host_lifecycle_admission_payload(
                 target=target,
+                item=args.item,
                 issue=args.issue,
                 fr=args.fr,
                 owner=args.owner,
