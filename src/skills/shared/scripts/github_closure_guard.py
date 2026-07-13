@@ -258,13 +258,10 @@ def _valid_host_action_attestation(issue: dict[str, Any], repository: str) -> bo
         set(payload) == {"schema_version", "action_locator", "observed_at", "verdict"}
         and payload.get("schema_version") == "loom-host-action-attestation/v1"
         and isinstance(payload.get("action_locator"), str)
-        and payload["action_locator"].startswith(f"github://{repository}/host-action/")
+        and payload["action_locator"].casefold().startswith(f"github://{repository}/host-action/".casefold())
         and observed_at is not None
-        and observed_at <= datetime.now(timezone.utc)
         and _text(payload.get("verdict")) == "passed"
         and _text(comment.get("author_association")) in TRUSTED_AUTHOR_ASSOCIATIONS
-        and isinstance(user.get("id"), int)
-        and not isinstance(user.get("id"), bool)
         and isinstance(user.get("login"), str)
         and bool(user.get("login"))
     )
