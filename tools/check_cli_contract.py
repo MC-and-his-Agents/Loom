@@ -3355,7 +3355,11 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
 def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
     suite_validation = payload.get("suite_validation")
     if not isinstance(suite_validation, dict):
-        raise AssertionError("build did not expose suite validation")
+        raise AssertionError(
+            "build did not expose suite validation: "
+            f"result={payload.get('result')!r} fallback_to={payload.get('fallback_to')!r} "
+            f"missing_inputs={payload.get('missing_inputs')!r} keys={sorted(payload)}"
+        )
     validator_mode = suite_validation.get("validator_mode")
     cli_json_consumed = (
         suite_validation.get("command") == "suite validate"
@@ -8720,6 +8724,7 @@ def governance_metadata_body(
     include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
     surface: str = "merge_ready",
+    issue: int | None = None,
 ) -> str:
     fields: dict[str, Any] = {
         "work_item_locator": typed_work_item_locator(item, owner, repo),
@@ -8748,11 +8753,11 @@ def governance_metadata_body(
         "source": {"rendered_hash": "sha256:fixture"},
         "parser_version": "loom-pr-metadata-parser/v2",
     }
-    legacy_binding = (
-        f"Work Item: {typed_work_item_locator(item, owner, repo)}\n\n"
-        if include_legacy_bindings
-        else ""
-    )
+    legacy_binding = ""
+    if include_legacy_bindings:
+        legacy_binding = f"Work Item: {typed_work_item_locator(item, owner, repo)}\n\n"
+        if issue is not None:
+            legacy_binding += f"Issue: #{issue}\n\n"
     return legacy_binding + "<!-- loom:repo-pr-metadata\n" + f"{json.dumps(envelope, indent=2)}\n" + "-->\n"
 
 
@@ -15147,6 +15152,7 @@ def run_aggregate_cli_contract() -> None:
     carrier_drift_body = runtime_pr_dir / "cli-contract-carrier-drift.md"
     try:
         freeze_item = active_work_item_id()
+        freeze_issue = typed_work_item_locator(freeze_item).rsplit("/", 1)[1]
         branch = "work/cli-contract-fixture"
         body = governance_metadata_body(
             item=freeze_item,
@@ -15154,6 +15160,7 @@ def run_aggregate_cli_contract() -> None:
             repo="Loom",
             branch=branch,
             head_sha=head_sha,
+            issue=int(freeze_issue),
         )
         rendered_pr_body.write_text(body, encoding="utf-8")
         readback_pr_body.write_text(body, encoding="utf-8")
@@ -15166,6 +15173,12 @@ def run_aggregate_cli_contract() -> None:
                 str(REPO_ROOT),
                 "--item",
                 freeze_item,
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--issue",
+                freeze_issue,
                 "--head-sha",
                 head_sha,
                 "--branch",
@@ -15214,6 +15227,7 @@ def run_aggregate_cli_contract() -> None:
                 fields_override={
                     "work_item_locator": f"MC-and-his-Agents/Loom/work_item/{int(typed_work_item_locator(freeze_item).rsplit('/', 1)[1]) + 1}"
                 },
+                issue=int(freeze_issue),
             ),
             encoding="utf-8",
         )
@@ -15226,6 +15240,12 @@ def run_aggregate_cli_contract() -> None:
                 str(REPO_ROOT),
                 "--item",
                 freeze_item,
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--issue",
+                freeze_issue,
                 "--head-sha",
                 head_sha,
                 "--branch",
@@ -15363,7 +15383,7 @@ def run_aggregate_cli_contract() -> None:
                 "--surface",
                 "closeout",
                 "--item",
-                "work_item:1541",
+                "MC-and-his-Agents/Loom/work_item/1541",
                 "--branch",
                 "work/1541-pr-metadata-update-v2",
                 "--head-sha",
