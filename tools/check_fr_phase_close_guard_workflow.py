@@ -78,8 +78,10 @@ def main() -> int:
         "product_acceptance_missing",
         "product_acceptance_untrusted",
         "loom:product-acceptance-artifact",
+        "loom:host-action-attestation",
+        "host_only_delivery",
         "failure_envelope",
-        "missing_merged_pr_or_green_check",
+        "missing_delivery_attestation",
     )
     evaluator_missing = [needle for needle in evaluator_required if needle not in evaluator]
     if missing or present or evaluator_missing:

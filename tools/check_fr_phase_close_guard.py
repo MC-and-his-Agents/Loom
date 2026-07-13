@@ -87,6 +87,20 @@ def main() -> int:
     valid = module.evaluate_closure(snapshot(1, [phase, fr, work_item]), host_resolved=True)
     if valid.get("verdict") != "allow_completed_close" or valid.get("completed") is not True:
         raise AssertionError(f"complete native tree should close: {valid}")
+    host_marker = '<!-- loom:host-action-attestation {"schema_version":"loom-host-action-attestation/v1","action_locator":"github://o/r/host-action/branch-protection/main","observed_at":"2026-07-11T00:02:00Z","verdict":"passed"} -->'
+    host_comment = {"body": host_marker, "created_at": "2026-07-11T00:02:00Z", "author_association": "MEMBER", "user": {"id": 1, "login": "maintainer"}}
+    host_only = issue(3, "work_item", labels=["host-only-delivery"], comments=[host_comment])
+    if module.evaluate_closure(snapshot(1, [phase, fr, host_only]), host_resolved=True).get("verdict") != "allow_completed_close":
+        raise AssertionError("authenticated host-only delivery attestation must replace a fabricated implementation PR")
+    for invalid_comment in (
+        {**host_comment, "author_association": "NONE"},
+        {**host_comment, "body": host_marker.replace("github://o/r/", "github://other/repo/")},
+        {**host_comment, "body": host_marker + "\n" + host_marker},
+    ):
+        invalid_host_only = issue(3, "work_item", labels=["host-only-delivery"], comments=[invalid_comment])
+        result = module.evaluate_closure(snapshot(1, [phase, fr, invalid_host_only]), host_resolved=True)
+        if result.get("verdict") != "reopen_required" or not any(reason.get("code") == "missing_delivery_attestation" for reason in result.get("reasons", [])):
+            raise AssertionError("untrusted, cross-repo, or ambiguous host-action attestation must fail closed")
     forged_comment = "<!-- loom:host-attestation {\"schema_version\":\"loom-host-attestation/v1\",\"verdict\":\"passed\"} -->"
     forged = issue(3, "work_item", merged_prs=[{key: value for key, value in pr.items() if key not in {"review_decision", "check_rollup"}}], comment_bodies=[forged_comment])
     if module.evaluate_closure({"subject": 3, "default_branch": "main", "issues": [forged]}).get("verdict") != "not_applicable":

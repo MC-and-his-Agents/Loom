@@ -25,6 +25,9 @@ DEFERRED_LABEL = "deferred"
 EXPECTED_CHILD_TYPE = {"phase": "fr", "fr": "work_item"}
 WAIVER_POLICY_LABEL = "product_acceptance_waiver_allowed"
 PRODUCT_ARTIFACT_RE = re.compile(r"<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->", re.IGNORECASE)
+HOST_ACTION_ARTIFACT_RE = re.compile(r"<!--\s*loom:host-action-attestation\s+(\{.*?\})\s*-->", re.IGNORECASE | re.DOTALL)
+HOST_ONLY_DELIVERY_LABEL = "host_only_delivery"
+TRUSTED_AUTHOR_ASSOCIATIONS = {"owner", "member", "collaborator"}
 DELIVERY_CHECK_CONTEXTS = frozenset({"py-compile", "loom-delivery-gate", "loom-pr-merge-gate"})
 
 
@@ -161,7 +164,7 @@ def resolve_host_facts(
     acceptance_resolver: Any = resolve_acceptance,
 ) -> dict[str, Any]:
     """Resolve artifact locators through authenticated host readers before evaluation."""
-    repository = snapshot.get("repository")
+    repository = str(snapshot.get("repository") or "")
     subject = snapshot.get("subject")
     issues = snapshot.get("issues")
     if not isinstance(repository, str) or repository.count("/") != 1 or not isinstance(subject, int) or not isinstance(issues, list):
@@ -231,9 +234,46 @@ def _green_merged_pr(issue: dict[str, Any], default_branch: str) -> bool:
     return False
 
 
+def _valid_host_action_attestation(issue: dict[str, Any], repository: str) -> bool:
+    comments = issue.get("comments")
+    if issue.get("comments_complete") is not True or not isinstance(comments, list):
+        return False
+    matches: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for comment in comments:
+        if not isinstance(comment, dict) or not isinstance(comment.get("body"), str):
+            return False
+        for match in HOST_ACTION_ARTIFACT_RE.finditer(comment["body"]):
+            try:
+                payload = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return False
+            if isinstance(payload, dict):
+                matches.append((comment, payload))
+    if len(matches) != 1:
+        return False
+    comment, payload = matches[0]
+    user = comment.get("user") if isinstance(comment.get("user"), dict) else {}
+    observed_at = _parse_time(payload.get("observed_at"))
+    return (
+        set(payload) == {"schema_version", "action_locator", "observed_at", "verdict"}
+        and payload.get("schema_version") == "loom-host-action-attestation/v1"
+        and isinstance(payload.get("action_locator"), str)
+        and payload["action_locator"].startswith(f"github://{repository}/host-action/")
+        and observed_at is not None
+        and observed_at <= datetime.now(timezone.utc)
+        and _text(payload.get("verdict")) == "passed"
+        and _text(comment.get("author_association")) in TRUSTED_AUTHOR_ASSOCIATIONS
+        and isinstance(user.get("id"), int)
+        and not isinstance(user.get("id"), bool)
+        and isinstance(user.get("login"), str)
+        and bool(user.get("login"))
+    )
+
+
 def _validate_completed(
     issue: dict[str, Any],
     issues: dict[int, dict[str, Any]],
+    repository: str,
     default_branch: str,
     reasons: list[dict[str, str]],
     visiting: set[int],
@@ -261,8 +301,11 @@ def _validate_completed(
             reasons.append(_reason("open_native_blocker", locator, "completed closure cannot retain an open or unreadable native blocker"))
     kind = _type(issue)
     if kind == "work_item":
-        if not _green_merged_pr(issue, default_branch):
-            reasons.append(_reason("missing_merged_pr_or_green_check", locator, "Work Item needs a default-branch merged PR with successful merge-time delivery checks"))
+        if _green_merged_pr(issue, default_branch):
+            return
+        if HOST_ONLY_DELIVERY_LABEL in _labels(issue) and _valid_host_action_attestation(issue, repository):
+            return
+        reasons.append(_reason("missing_delivery_attestation", locator, "Work Item needs merged delivery checks, or an authenticated host-action attestation when explicitly labeled host-only-delivery"))
         return
     expected = EXPECTED_CHILD_TYPE.get(kind)
     children = issue.get("children")
@@ -278,7 +321,7 @@ def _validate_completed(
         if _type(child) != expected:
             reasons.append(_reason("invalid_native_child_type", f"issue:{child_number}", f"{kind} requires native {expected} children"))
             continue
-        _validate_completed(child, issues, default_branch, reasons, next_visiting)
+        _validate_completed(child, issues, repository, default_branch, reasons, next_visiting)
 
 
 def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[str, Any]:
@@ -287,6 +330,7 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
         return _payload(0, "reopen_required", "GitHub closure snapshot is unreadable.", [_reason("host_unreadable", "issue:unknown", "closure snapshot must be an object")], completed=False)
     subject = snapshot.get("subject")
     issue_rows = snapshot.get("issues")
+    repository = snapshot.get("repository")
     default_branch = snapshot.get("default_branch")
     issues = {
         row.get("number"): row
@@ -322,7 +366,7 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
         return _payload(subject, "reopen_required", "Non-completion labels must use not planned semantics.", [_reason("non_completion_requires_not_planned", f"issue:{subject}", "non-completion labels cannot use completed semantics")], completed=False)
     reasons: list[dict[str, str]] = []
     _trusted_product_acceptance(snapshot, subject, labels, reasons, host_resolved=host_resolved)
-    _validate_completed(subject_issue, issues, default_branch, reasons, set())
+    _validate_completed(subject_issue, issues, repository, default_branch, reasons, set())
     if reasons:
         return _payload(subject, "reopen_required", "Completed FR/Phase closure is missing required host facts.", reasons, completed=False)
     return _payload(subject, "allow_completed_close", "Trusted product acceptance, native children, dependencies, merged delivery, and check evidence permit completed closure.", [], completed=True)
