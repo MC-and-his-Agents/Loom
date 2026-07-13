@@ -201,8 +201,43 @@ def public_cli_failure_envelope(payload: dict[str, Any]) -> dict[str, Any] | Non
         return None
     command = str(payload.get("command") or "loom")
     failed_layer = str(payload.get("failed_layer") or "public-cli")
+    diagnostic_text = " ".join(
+        str(value)
+        for value in (
+            payload.get("summary"),
+            payload.get("fail_closed_reason"),
+            payload.get("missing_inputs"),
+            payload.get("actionable_findings"),
+        )
+        if value
+    ).lower()
+    scoped_code: str | None = None
+    scoped_owner: str | None = None
+    scoped_remediation: str | None = None
+    scoped_retryable: bool | None = None
+    if command == "build" and any(token in diagnostic_text for token in ("current item mismatch", ".loom/status/current", "stale current")):
+        scoped_code = "legacy_current_pointer_dependency"
+        scoped_owner = "loom"
+        scoped_remediation = "loom build --target <repo> --issue <work-item> --branch <branch> --json"
+        scoped_retryable = False
+    elif command == "build" and "eligible pull requests; exactly one" in diagnostic_text:
+        scoped_code = "pre_pr_build_admission_cycle"
+        scoped_owner = "loom"
+        scoped_remediation = "loom build --target <repo> --issue <work-item> --branch <branch> --json"
+        scoped_retryable = False
+    elif any(token in diagnostic_text for token in ("github control plane", "gh: not found", "github api")):
+        scoped_code = "github_host_readback_failure"
+        scoped_owner = "github"
+        scoped_remediation = "verify the GitHub repository locator and retry the same read-only command"
+        scoped_retryable = True
     requested_domain = payload.get("failure_domain")
-    if requested_domain in FAILURE_DOMAINS:
+    if scoped_code == "legacy_current_pointer_dependency":
+        domain = "carrier"
+    elif scoped_code == "pre_pr_build_admission_cycle":
+        domain = "toolchain"
+    elif scoped_code == "github_host_readback_failure":
+        domain = "host_service"
+    elif requested_domain in FAILURE_DOMAINS:
         domain = str(requested_domain)
     elif command.startswith("acceptance") or "product_acceptance" in payload:
         domain = "product_acceptance"
@@ -216,21 +251,21 @@ def public_cli_failure_envelope(payload: dict[str, Any]) -> dict[str, Any] | Non
         domain = "environment"
     else:
         domain = "governance_metadata"
-    cause_class = str(payload.get("cause_class") or f"{domain}_failure")
+    cause_class = str(scoped_code or payload.get("cause_class") or f"{domain}_failure")
     summary = str(payload.get("summary") or payload.get("fail_closed_reason") or f"{command} failed")
-    owner = payload.get("failure_owner")
+    owner = scoped_owner or payload.get("failure_owner")
     owner = str(owner) if owner in OWNERS else "operator"
-    remediation = payload.get("remediation_command") or payload.get("fallback_to") or "loom help --json"
+    remediation = scoped_remediation or payload.get("remediation_command") or payload.get("fallback_to") or "loom help --json"
     if isinstance(remediation, list):
         remediation = remediation[0] if remediation else "loom help --json"
     primary = primary_cause(
-        cause_id=str(payload.get("primary_error_code") or f"{command.replace(' ', '_')}_{cause_class}"),
+        cause_id=str(scoped_code or payload.get("primary_error_code") or f"{command.replace(' ', '_')}_{cause_class}"),
         failure_domain=domain,
-        code=str(payload.get("primary_error_code") or cause_class),
+        code=str(scoped_code or payload.get("primary_error_code") or cause_class),
         locator=str(payload.get("failure_locator") or f"cli:{command.replace(' ', '-')}"),
         summary=summary,
         owner=owner,
-        retryable=bool(payload.get("retryable", False)),
+        retryable=scoped_retryable if scoped_retryable is not None else bool(payload.get("retryable", False)),
         transient=bool(payload.get("transient", False)),
         cause_class=cause_class,
         details={

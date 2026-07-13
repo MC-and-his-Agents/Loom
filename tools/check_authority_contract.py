@@ -370,17 +370,16 @@ def check_entrypoints() -> None:
             cli.host_lifecycle_admission_payload = capture_cli_admission
             cli.emit = lambda payload: captured.append(payload) or 0
             cli.agent_safe_payload = lambda payload, **_kwargs: payload
-            status = cli.handle_ship(["--target", str(target), "--item", "WI-101", "--issue", "100", "--pr", "101"])
+            status = cli.handle_ship(["--target", str(target), "--item", "owner/repo/work_item/100", "--issue", "100", "--pr", "101"])
             if status != 0 or captured[-1].get("command") != "ship":
                 raise AssertionError("ship did not stop at host-native lifecycle admission")
-            status = cli.handle_ship_status(["--target", str(target), "--issue", "100"], mode="preflight")
-            if status != 0 or captured[-1].get("command") != "ship preflight":
-                raise AssertionError("ship preflight did not stop at host-native lifecycle admission")
+            if hasattr(cli, "handle_ship_status"):
+                raise AssertionError("removed ship status/preflight compatibility handler must not be restored")
             if any(target.iterdir()):
                 raise AssertionError("lifecycle admission fixture must not write repository carriers")
             if flow_subjects != [100, 100, 100]:
                 raise AssertionError(f"flow entrypoints did not infer lifecycle subject from --issue: {flow_subjects}")
-            if cli_subjects != [100, 100]:
+            if cli_subjects != [100]:
                 raise AssertionError(f"ship entrypoints did not infer lifecycle subject from --issue: {cli_subjects}")
 
     finally:
@@ -440,7 +439,7 @@ def check_entrypoint_authority_forwarding() -> None:
         cli.github_lifecycle_subject_readback = lambda _target, _owner, _repo, **kwargs: cli_calls.append(kwargs) or {
             "result": "pass", "issue_number": 41, "errors": [],
         }
-        cli.flow_payload = lambda _command, _args, *, fallback_to: {
+        cli.github_fr_wi_admission_payload = lambda **_kwargs: {
             "lifecycle_verdict": {"result": "pass", "lifecycle_state": "not_applicable", "carrier_mutations": False},
         }
         cli_result = cli.host_lifecycle_admission_payload(

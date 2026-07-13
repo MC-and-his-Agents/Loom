@@ -34,24 +34,20 @@ Loom 把 review 分成四层：
 - fresh verification evidence
   - 检查 behavior evidence / test evidence 是否绑定当前 `reviewed_head` 与当前验证摘要
 
-## 2. 唯一 review 载体
+## 2. 唯一 review 证明
 
-正式 review 结论必须落在唯一 `review_entry` 指向的 review record。
+正式 review 结论由 GitHub host attestation 拥有，不写 repo review record。
 
-默认入口：
-
-- `loom review --target <repo> [--item <id>] --json`
-- `loom review run --target <repo> [--item <id>]`
-- `loom review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
+默认入口是 `loom review --target <repo> --item <owner>/<repo>/work_item/<issue>
+--issue <issue> --pr <pr> --attestation-artifact-input <locator> --json`。
 
 其中：
 
-- `flow review` 固定保持只读，不触发 engine，也不产生副作用
-- `review run` 只负责选择安全的 authoritative adapter、落盘 evidence、生成 normalized findings，并显式 fail-closed
-- `review record` 仍只写入单一 `review_entry` 指向的 JSON
-- 结构化审查结论可通过 `--findings-file <path>` 写入同一 review record
-- `--blocking-issue` / `--follow-up` 只保留兼容 authored 入口，不得与 `--findings-file` 混用
-- 默认输出只传递 agent-safe summary、事实载体 locator 和 artifact locator；完整 raw output 只作为 runtime evidence/artifact，不得内联进 review truth
+- GitHub review、当前 PR head、semantic tree、workflow run 与 artifact digest 共同形成证明；
+- `loom review` 只做当前 head 的宿主回读和绑定校验，不启动另一个 review engine；
+- findings 的原始输出留在 Actions artifact，CLI 默认只返回 agent-safe 摘要和 locator；
+- repo current、progress、review、shadow 或 closeout carrier 均不是 fallback；
+- 旧 `flow review`、`review run` 和 `review record` 命令已移除，不能由 profile 恢复。
 
 默认 engine 按宿主 proof 选择：
 

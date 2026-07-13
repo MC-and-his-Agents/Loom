@@ -34,3 +34,7 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: make loom-check
+      - name: Check the complete public CLI aggregate
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 tools/check_cli_contract.py --surface aggregate

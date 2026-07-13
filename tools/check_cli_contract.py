@@ -105,7 +105,9 @@ PUBLIC_PROTOCOL_TYPES = (
 )
 
 REMOVED_PUBLIC_AGGREGATE_SURFACES = (
+    "adoption-host-metadata",
     "runtime-paths",
+    "public-default-path",
     "merge-wrapper",
     "ship-wrapper",
     "closeout-wrapper",
@@ -2289,52 +2291,49 @@ def assert_ship_docs_entry_contract() -> None:
             "## Daily Delivery Path",
             "loom ship \\",
             "host-only closeout",
-            "reinforced-carrier-compat/v1",
             "The wrapper contract stays narrow and ordered",
-            "validation profile -> closeout policy",
+            "hosted delivery gate -> controlled merge check -> validation profile ->",
             "--validation-profile auto",
             "short wrapper diagnostics",
             "Release readback is terminal for release aftercare",
+            "Retired carrier commands are removed",
         ],
         "README.zh-CN.md": [
             "## 日常交付路径",
             "loom ship \\",
             "仅宿主收尾",
-            "reinforced-carrier-compat/v1",
             "这个包装器的合同保持收敛且有固定顺序",
-            "validation profile -> closeout policy",
+            "hosted delivery gate -> controlled merge check -> validation profile -> closeout policy",
             "--validation-profile auto",
             "短诊断输出",
-            "不超过 90 天",
+            "退役命令已删除",
         ],
         "docs/methodology/harness/cli-command-matrix.md": [
             "loom ship",
-            "Its main-path contract is",
-            "validation profile -> closeout policy",
-            "--validation-profile",
-            "blocker classification stays step-scoped",
-            "remain follow-up issue scope; `loom ship` must block",
+            "The ordinary lifecycle is:",
+            "changed-path validation profile",
+            "host-only closeout policy",
+            "Every failed public command exposes exactly one primary cause",
         ],
         "src/skills/README.md": [
-            "For ordinary delivery after a Work Item has a PR, use `loom ship`",
-            "--attestation-artifact-input <file>",
+            "30-command public CLI",
+            "zero repo current, status, progress, review",
         ],
         "src/skills/README.zh-CN.md": [
-            "普通交付默认使用 `loom ship`",
-            "额外创建后续收尾拉取请求",
-            "--attestation-artifact-input <file>",
+            "30 个公共 CLI 命令",
+            "普通执行对 repo current、status、progress、review",
         ],
         "src/skills/route-matrix.md": [
-            "普通交付 / ship",
-            "`loom ship --target <repo>",
+            "Deliver a PR",
+            "`loom ship` or `loom merge run --apply`",
         ],
         "src/skills/loom-merge-ready/SKILL.md": [
-            "普通交付主路径仍是 `loom ship`",
-            "普通 merge-ready 产生 0 个 repo mutation",
+            "Use `loom merge-ready`",
+            "It performs zero mutations",
         ],
         "src/skills/loom-retire/SKILL.md": [
-            "普通交付后的合并与收尾默认由 `loom ship` 完成",
-            "host-only closeout attestation",
+            "loom workspace retire",
+            "Retirement is local-only",
         ],
     }
     for relative_path, snippets in required_snippets.items():
@@ -2343,36 +2342,65 @@ def assert_ship_docs_entry_contract() -> None:
             if snippet not in text:
                 raise AssertionError(f"{relative_path} missing ship entry snippet `{snippet}`")
 
-    generated_pairs = [
-        ("src/skills/README.md", "skills/README.md"),
-        ("src/skills/README.zh-CN.md", "skills/README.zh-CN.md"),
-        ("src/skills/route-matrix.md", "skills/route-matrix.md"),
-        ("src/skills/loom-merge-ready/SKILL.md", "skills/loom-merge-ready/SKILL.md"),
-        ("src/skills/loom-retire/SKILL.md", "skills/loom-retire/SKILL.md"),
-    ]
-    for source_path, generated_path in generated_pairs:
-        source_text = (REPO_ROOT / source_path).read_text(encoding="utf-8")
-        generated_text = (REPO_ROOT / generated_path).read_text(encoding="utf-8")
-        if source_text != generated_text:
-            raise AssertionError(f"{generated_path} drifted from {source_path}")
+    # Canonical docs are checked here. Distribution parity is verified after the
+    # generator runs, so this targeted surface never requires hand-edited copies.
 
 
 def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
     target = tmp / "controlled-merge-triggered-check-rollup"
     target.mkdir()
-    fixture = write_semantic_review_pr_gate_fixture(target)
-    pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
-    if pass_payload.get("result") != "pass":
-        raise AssertionError("controlled-merge triggered check fixture could not produce a pr-gate pass")
-
-    fixture_dir = target / ".loom" / "fixtures" / fixture["item"]
+    head_sha = init_git_fixture(target)
+    item = "owner/repo/work_item/1287"
+    branch = "work/1287-host-attestation"
+    fixture_dir = target / ".loom" / "fixtures" / item
+    fixture_dir.mkdir(parents=True)
+    pr_file = fixture_dir / "pr.json"
+    pr_file.write_text(
+        json.dumps(
+            {
+                "number": 1288,
+                "state": "OPEN",
+                "isDraft": False,
+                "headRefName": branch,
+                "baseRefName": "main",
+                "headRefOid": head_sha,
+                "mergeStateStatus": "CLEAN",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    retained_gate_file = fixture_dir / "pr-gate-host-pass.json"
+    retained_gate_file.write_text(
+        json.dumps(
+            {
+                "command": "pr gate",
+                "schema_version": "loom-delivery-gate-readback/v1",
+                "result": "pass",
+                "assurance": "limited",
+                "pr": {"number": 1288, "head_sha": head_sha},
+                "work_item": {"locator": item},
+                "hosted_check": {"name": "loom-delivery-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                "review_attestation": {
+                    "schema_version": "loom-host-attestation/v1",
+                    "result": "pass",
+                    "work_item_locator": item,
+                    "host_facts": {"pr": {"number": 1288, "head_sha": head_sha}},
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     checks_file = fixture_dir / "checks.json"
     branch_protection_file = fixture_dir / "branch-protection.json"
     ruleset_file = fixture_dir / "ruleset.json"
     checks_file.write_text(
         json.dumps(
             [
-                {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+                {"name": "loom-delivery-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
                 {"name": "non-required-failed", "conclusion": "FAILURE", "status": "COMPLETED"},
                 {"name": "non-required-pending", "status": "IN_PROGRESS"},
             ],
@@ -2382,7 +2410,7 @@ def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
         encoding="utf-8",
     )
     branch_protection_file.write_text(
-        json.dumps({"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}}, indent=2) + "\n",
+        json.dumps({"required_status_checks": {"contexts": ["loom-delivery-gate"]}}, indent=2) + "\n",
         encoding="utf-8",
     )
     ruleset_file.write_text(json.dumps([], indent=2) + "\n", encoding="utf-8")
@@ -2394,19 +2422,21 @@ def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
             "--target",
             str(target),
             "--item",
-            fixture["item"],
+            item,
             "--pr",
             "1288",
             "--head-sha",
-            fixture["head_sha"],
+            head_sha,
             "--pr-payload-file",
-            fixture["pr_file"],
+            f".loom/fixtures/{item}/pr.json",
             "--status-checks-file",
-            f".loom/fixtures/{fixture['item']}/checks.json",
+            f".loom/fixtures/{item}/checks.json",
             "--branch-protection-file",
-            f".loom/fixtures/{fixture['item']}/branch-protection.json",
+            f".loom/fixtures/{item}/branch-protection.json",
             "--ruleset-file",
-            f".loom/fixtures/{fixture['item']}/ruleset.json",
+            f".loom/fixtures/{item}/ruleset.json",
+            "--pr-gate-result-file",
+            f".loom/fixtures/{item}/pr-gate-host-pass.json",
         ]
     )
     required_checks = payload.get("required_checks", {})
@@ -5785,6 +5815,14 @@ def assert_cache_absent_gate_contract(tmp: Path) -> None:
         if doctor_payload.get("result") != "pass":
             raise AssertionError("doctor must not depend on repo-local .loom/runtime or .loom/tmp")
 
+        if legacy_surface_state() == "removed":
+            _, detect_payload = run_json(["detect", "--target", str(target), "--json"], expect=0)
+            if detect_payload.get("result") != "pass":
+                raise AssertionError("public detect must not depend on repo-local .loom/runtime or .loom/tmp")
+            if (target / ".loom" / "runtime").exists() or (target / ".loom" / "tmp").exists():
+                raise AssertionError("removed-state public diagnostics recreated repo-local runtime cache directories")
+            return
+
         _, resume_payload = run_json(["resume", "--target", str(target), "--item", fixture["item"], "--json"], expect=0)
         if resume_payload.get("result") != "pass":
             raise AssertionError("resume must not depend on repo-local .loom/runtime or .loom/tmp")
@@ -5835,17 +5873,28 @@ def valid_state(target: Path) -> dict[str, Any]:
     return global_cli_state(target)
 
 
-GLOBAL_CLI_REQUIRED_COMMANDS = [
-    "installed-state validate",
-    "detect",
-    "doctor",
-    "verify",
-    "fact-chain",
-    "status",
-    "shadow-parity",
-    "story",
-    "workstation current",
-]
+GLOBAL_CLI_REQUIRED_COMMANDS = (
+    [
+        "installed-state validate",
+        "detect",
+        "doctor",
+        "verify",
+        "status",
+        "story",
+    ]
+    if legacy_surface_state() == "removed"
+    else [
+        "installed-state validate",
+        "detect",
+        "doctor",
+        "verify",
+        "fact-chain",
+        "status",
+        "shadow-parity",
+        "story",
+        "workstation current",
+    ]
+)
 
 
 def global_cli_state(target: Path) -> dict[str, Any]:
@@ -13409,6 +13458,28 @@ def run_governance_closeout_contract() -> None:
 def run_adoption_host_metadata_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-adoption-host-metadata-") as raw_tmp:
         tmp = Path(raw_tmp)
+        if legacy_surface_state() == "removed":
+            target = tmp / "public-metadata-only-adoption"
+            target.mkdir()
+            _, installed = run_json(["install", "--target", str(target), "--apply", "--json"], expect=0)
+            if set(installed.get("managed_writes", [])) != {".loom/installed-state.json", "AGENTS.md"}:
+                raise AssertionError("public install wrote outside the metadata-only adoption boundary")
+            for args in (
+                ["installed-state", "validate", "--target", str(target), "--json"],
+                ["detect", "--target", str(target), "--json"],
+                ["doctor", "--target", str(target), "--json"],
+                ["repair", "plan", "--target", str(target), "--json"],
+                ["verify", "--target", str(target), "--json"],
+                ["upgrade", "--target", str(target), "--apply", "--json"],
+            ):
+                _, payload = run_json(args, expect=0)
+                if args[:2] == ["repair", "plan"] and payload.get("repo_execution_carriers_consumed") is not False:
+                    raise AssertionError("public repair plan consumed repository execution carriers")
+            for removed_carrier in ("status", "progress", "reviews", "shadow", "work-items", "runtime"):
+                if (target / ".loom" / removed_carrier).exists():
+                    raise AssertionError(f"public adoption created removed carrier directory: {removed_carrier}")
+            print("adoption host metadata surface checks passed")
+            return
         assert_codex_payload_readback_contract(tmp)
         assert_version_freshness_contract(tmp)
         assert_metadata_only_adoption_contract(tmp)
@@ -13545,6 +13616,138 @@ def run_runtime_paths_surface() -> None:
         assert_global_runtime_path_resolver_contract(tmp)
         assert_cache_absent_gate_contract(tmp)
     print("runtime path resolver checks passed")
+
+
+def run_public_default_path_surface() -> None:
+    module = load_loom_cli_module()
+    if module.COMMAND_ROUTES:
+        raise AssertionError(f"public scenarios still expose legacy delegated routes: {module.COMMAND_ROUTES}")
+    loom_check_workflow = (REPO_ROOT / ".github/workflows/loom-check.yml").read_text(encoding="utf-8")
+    release_workflow = (REPO_ROOT / ".github/workflows/loom-cli-release.yml").read_text(encoding="utf-8")
+    if "if: ${{ github.event_name == 'push' }}" not in loom_check_workflow or "python3 tools/check_cli_contract.py --surface aggregate" not in loom_check_workflow:
+        raise AssertionError("main aggregate must remain owned by loom-check push")
+    if "name: Check CLI contract" in release_workflow or "run: python3 tools/check_cli_contract.py" in release_workflow:
+        raise AssertionError("release workflow must not duplicate the aggregate already owned by loom-check")
+    originals = {
+        "emit": module.emit,
+        "flow_payload": module.flow_payload,
+        "host_derived_manifest": module.host_derived_manifest,
+        "host_lifecycle_admission_payload": module.host_lifecycle_admission_payload,
+        "public_pr_stage_binding": module.public_pr_stage_binding,
+        "ship_host_attestation": module.ship_host_attestation,
+        "git_branch_for_target": module.git_branch_for_target,
+        "github_default_branch_for_target": module.github_default_branch_for_target,
+        "infer_github_repo": module.infer_github_repo,
+        "controlled_merge_payload": module.delivery_control_module.controlled_merge_payload,
+    }
+    emitted: dict[str, Any] = {}
+    flow_calls: list[list[str]] = []
+
+    def fake_emit(payload: dict[str, Any], **_kwargs: Any) -> int:
+        emitted.clear()
+        emitted.update(payload)
+        return 0 if payload.get("result") == "pass" else 1
+
+    def controlled_only(command: str, args: list[str], *, fallback_to: list[str]) -> dict[str, Any]:
+        flow_calls.append(list(args))
+        if args[:2] != ["controlled-merge", "check"]:
+            raise AssertionError(f"public default path reached legacy flow: {args}")
+        return {"command": command, "result": "pass", "summary": "hosted gate and merge check passed", "missing_inputs": []}
+
+    module.emit = fake_emit
+    module.flow_payload = controlled_only
+    module.host_derived_manifest = lambda _target: ({"profile": "light"}, [])
+    branch_state = {"value": "work/2103-public-default"}
+    module.git_branch_for_target = lambda _target: branch_state["value"]
+    module.github_default_branch_for_target = lambda _target: ("main", None)
+    module.infer_github_repo = lambda _target: "owner/repo"
+    module.host_lifecycle_admission_payload = lambda **_kwargs: {
+        "result": "pass",
+        "subject_readback": {"result": "pass", "issue_number": 2103, "pr_number": None if _kwargs.get("intent") == "build" else 7, "pre_pr": _kwargs.get("intent") == "build", "errors": []},
+        "missing_inputs": [],
+    }
+    module.public_pr_stage_binding = lambda **_kwargs: {
+        "result": "pass",
+        "summary": "bound",
+        "missing_inputs": [],
+        "repository": "owner/repo",
+        "pr": {"number": 7, "headRefOid": "a" * 40},
+        "repo_execution_carriers_consumed": False,
+        "carrier_mutations": False,
+        "mutates": False,
+    }
+    module.ship_host_attestation = lambda *_args, **_kwargs: {"command": "attestation readback", "schema_version": "loom-host-attestation/v1", "result": "pass", "summary": "attested", "work_item_locator": "owner/repo/work_item/2103", "host_facts": {"pr": {"number": 7, "head_sha": "a" * 40}}, "missing_inputs": []}
+    module.delivery_control_module.controlled_merge_payload = lambda **_kwargs: {"command": "controlled-merge", "result": "pass", "summary": "hosted gate and merge check passed", "missing_inputs": []}
+    try:
+        common = [
+            "--target", str(REPO_ROOT),
+            "--item", "owner/repo/work_item/2103",
+            "--issue", "2103",
+            "--branch", "work/2103-public-default",
+            "--json",
+        ]
+        if module.handle_scenario("build", common) != 0 or emitted.get("pre_pr") is not True:
+            raise AssertionError(f"public build did not admit pre-PR execution: {emitted}")
+        if flow_calls:
+            raise AssertionError(f"public build invoked legacy flow: {flow_calls}")
+        branch_state["value"] = "main"
+        if module.handle_scenario("build", ["--target", str(REPO_ROOT), "--item", "owner/repo/work_item/2103", "--issue", "2103", "--json"]) == 0:
+            raise AssertionError("public build admitted the repository default branch")
+        branch_state["value"] = "work/999-wrong-item"
+        if module.handle_scenario("build", ["--target", str(REPO_ROOT), "--item", "owner/repo/work_item/2103", "--issue", "2103", "--json"]) == 0:
+            raise AssertionError("public build admitted a branch scoped to a different Work Item")
+        branch_state["value"] = None
+        if module.handle_scenario("build", ["--target", str(REPO_ROOT), "--item", "owner/repo/work_item/2103", "--issue", "2103", "--json"]) == 0:
+            raise AssertionError("public build admitted a detached worktree")
+        branch_state["value"] = "work/2103-public-default"
+        pr_common = [*common[:-1], "--pr", "7", "--json"]
+        if module.handle_scenario("pre-review", pr_common) != 0:
+            raise AssertionError(f"public pre-review did not use host binding only: {emitted}")
+        if module.handle_scenario("review", [*pr_common[:-1], "--attestation-artifact-input", "artifact.json", "--json"]) != 0:
+            raise AssertionError(f"public review did not consume host attestation: {emitted}")
+        if module.handle_scenario(
+            "merge-ready",
+            [*pr_common[:-1], "--attestation-artifact-input", "artifact.json", "--pr-gate-result-file", "gate.json", "--json"],
+        ) != 0:
+            raise AssertionError(f"public merge-ready did not consume host facts: {emitted}")
+        if flow_calls != [[
+            "controlled-merge", "check", "--target", str(REPO_ROOT), "--pr", "7",
+            "--item", "owner/repo/work_item/2103", "--issue", "2103", "--head-sha", "a" * 40,
+            "--owner", "owner", "--repo", "repo", "--pr-gate-result-file", "gate.json",
+        ]]:
+            raise AssertionError(f"merge-ready reached an unexpected flow: {flow_calls}")
+        with tempfile.TemporaryDirectory(prefix="loom-public-pr-gate-") as raw_tmp:
+            fixture_root = Path(raw_tmp)
+            pr_fixture = fixture_root / "pr.json"
+            checks_fixture = fixture_root / "checks.json"
+            pr_fixture.write_text(json.dumps({"number": 7, "state": "OPEN", "isDraft": False, "headRefOid": "a" * 40, "headRefName": "work/2103-public-default"}), encoding="utf-8")
+            checks_fixture.write_text(json.dumps([{"name": "loom-delivery-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}]), encoding="utf-8")
+            previous_fixture_flag = os.environ.get("LOOM_ALLOW_TEST_FIXTURES")
+            os.environ["LOOM_ALLOW_TEST_FIXTURES"] = "1"
+            try:
+                if module.handle_public_pr_gate([
+                    "7", "--target", str(REPO_ROOT), "--work-item", "owner/repo/work_item/2103",
+                    "--head-sha", "a" * 40, "--pr-payload-file", str(pr_fixture),
+                    "--status-checks-file", str(checks_fixture), "--attestation-artifact-input", "artifact.json", "--json",
+                ]) != 0:
+                    raise AssertionError(f"public PR gate did not consume the hosted gate result: {emitted}")
+            finally:
+                if previous_fixture_flag is None:
+                    os.environ.pop("LOOM_ALLOW_TEST_FIXTURES", None)
+                else:
+                    os.environ["LOOM_ALLOW_TEST_FIXTURES"] = previous_fixture_flag
+            if emitted.get("assurance") != "limited" or emitted.get("repo_execution_carriers_consumed") is not False:
+                raise AssertionError("public PR gate did not freeze limited host assurance and zero-carrier consumption")
+        for command in ("build", "pre-review", "review", "merge-ready"):
+            if emitted.get("repo_execution_carriers_consumed") is not False or emitted.get("carrier_mutations") is not False:
+                raise AssertionError(f"{command} did not freeze the zero-carrier invariant")
+    finally:
+        module.delivery_control_module.controlled_merge_payload = originals["controlled_merge_payload"]
+        for name, value in originals.items():
+            if name == "controlled_merge_payload":
+                continue
+            setattr(module, name, value)
+    print("public default path checks passed")
 
 
 def assert_subprocess_argv_boundary_contract() -> None:
@@ -14090,8 +14293,7 @@ def run_pr_gate_target_readback_surface() -> None:
 def run_controlled_merge_surface() -> None:
     with tempfile.TemporaryDirectory(prefix="loom-controlled-merge-") as raw_tmp:
         tmp = Path(raw_tmp)
-        assert_controlled_merge_ruleset_trigger_fixture(tmp)
-        assert_merge_metadata_only_target_readback_contract(tmp)
+        assert_controlled_merge_triggered_check_rollup_contract(tmp)
 
     print("controlled merge surface checks passed")
 
@@ -14833,19 +15035,67 @@ def run_fr_wi_admission_surface() -> None:
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     forwarded: dict[str, Any] = {}
+    original_admission_payload = cli.github_fr_wi_admission_payload
+    original_emit = cli.emit
+    original_infer_repo = cli.infer_github_repo
+    cli.infer_github_repo = lambda _target: "owner/repo"
+    cli.emit = lambda payload, **_kwargs: forwarded.update(payload) or 0
 
-    def fake_emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
-        forwarded.update({"command": command, "flow_args": flow_args, "fallback_to": fallback_to})
-        return 0
+    def fake_route_admission(**kwargs: Any) -> dict[str, Any]:
+        forwarded["admission_kwargs"] = kwargs
+        return {"command": "github-intake", "result": "pass", "admission_state": "admitted", "missing_inputs": []}
 
-    original_emit_flow = cli.emit_flow
-    cli.emit_flow = fake_emit_flow
+    cli.github_fr_wi_admission_payload = fake_route_admission
     try:
         status = cli.handle_route(["--target", ".", "--issue", "100", "--task", "Narrow child", "--intent", "build", "--blocked-by", "99", "--apply", "--json"])
     finally:
-        cli.emit_flow = original_emit_flow
-    if status != 0 or forwarded.get("command") != "route" or forwarded.get("flow_args", [])[:2] != ["github-intake", "admission"]:
-        raise AssertionError(f"loom route --issue did not delegate to the shared admission evaluator: {forwarded}")
+        cli.github_fr_wi_admission_payload = original_admission_payload
+        cli.emit = original_emit
+        cli.infer_github_repo = original_infer_repo
+    admission_kwargs = forwarded.get("admission_kwargs", {})
+    if status != 0 or forwarded.get("command") != "route" or admission_kwargs.get("issue_number") != 100 or admission_kwargs.get("apply") is not True:
+        raise AssertionError(f"loom route --issue did not call the host-native admission evaluator directly: {forwarded}")
+
+    emitted: dict[str, Any] = {}
+    original_emit = cli.emit
+    original_flow_payload = cli.flow_payload
+    original_infer_repo = cli.infer_github_repo
+    original_lifecycle = cli.host_lifecycle_admission_payload
+    original_branch = cli.git_branch_for_target
+    original_default_branch = cli.github_default_branch_for_target
+    cli.emit = lambda payload, **_kwargs: emitted.update(payload) or (0 if payload.get("result") == "pass" else 1)
+    cli.infer_github_repo = lambda _target: "owner/repo"
+    cli.git_branch_for_target = lambda _target: "work/200-pre-pr-build"
+    cli.github_default_branch_for_target = lambda _target: ("main", None)
+    cli.host_lifecycle_admission_payload = lambda **_kwargs: {
+        "result": "pass",
+        "subject_readback": {"result": "pass", "issue_number": 200, "pr_number": None, "branch": "work/200-pre-pr-build", "pre_pr": True, "errors": []},
+        "missing_inputs": [],
+    }
+
+    def fail_legacy_flow(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("pre-PR build reached legacy loom_flow")
+
+    cli.flow_payload = fail_legacy_flow
+    try:
+        build_status = cli.handle_scenario(
+            "build",
+            ["--target", str(REPO_ROOT), "--issue", "200", "--branch", "work/200-pre-pr-build", "--json"],
+        )
+    finally:
+        cli.emit = original_emit
+        cli.flow_payload = original_flow_payload
+        cli.infer_github_repo = original_infer_repo
+        cli.host_lifecycle_admission_payload = original_lifecycle
+        cli.git_branch_for_target = original_branch
+        cli.github_default_branch_for_target = original_default_branch
+    if (
+        build_status != 0
+        or emitted.get("result") != "pass"
+        or emitted.get("pre_pr") is not True
+        or emitted.get("repo_execution_carriers_consumed") is not False
+    ):
+        raise AssertionError(f"pre-PR build must admit an explicit Work Item without a PR or carrier: {emitted}")
     print("fr-wi-admission surface checks passed")
 
 
@@ -14878,6 +15128,28 @@ def run_failure_envelope_surface() -> None:
         raise AssertionError("public CLI must not invent additional top-level causes")
     if envelope.get("suppressed_diagnostics") != [] or envelope.get("secondary_causes") != []:
         raise AssertionError("empty public CLI diagnostics must preserve the v1 compatibility fields")
+
+    scoped_failures = (
+        (
+            module.output("build", "block", summary="current item mismatch: expected issue 2103, got stale current WI-2012"),
+            ("legacy_current_pointer_dependency", "carrier", "loom"),
+        ),
+        (
+            module.output("build", "block", summary="branch resolves to 0 eligible pull requests; exactly one authenticated result is required"),
+            ("pre_pr_build_admission_cycle", "toolchain", "loom"),
+        ),
+        (
+            module.output("status", "block", summary="github control plane: gh: Not Found (HTTP 404)"),
+            ("github_host_readback_failure", "host_service", "github"),
+        ),
+    )
+    for failure_payload, expected in scoped_failures:
+        stream = io.StringIO()
+        module.emit(failure_payload, stream=stream)
+        scoped = json.loads(stream.getvalue())["failure_envelope"]["primary_cause"]
+        observed = (scoped.get("code"), scoped.get("failure_domain"), scoped.get("owner"))
+        if observed != expected or scoped.get("remediation_command") == "loom help --json":
+            raise AssertionError(f"release-critical failure was not classified precisely: {scoped}")
 
     stream = io.StringIO()
     module.emit(
@@ -14979,7 +15251,9 @@ def run_failure_envelope_surface() -> None:
 def run_aggregate_cli_contract() -> None:
     if legacy_surface_state() == "removed":
         removed_public_runners = {
+            "adoption-host-metadata": run_adoption_host_metadata_surface,
             "runtime-paths": run_runtime_paths_surface,
+            "public-default-path": run_public_default_path_surface,
             "merge-wrapper": run_merge_wrapper_surface,
             "ship-wrapper": run_ship_wrapper_surface,
             "closeout-wrapper": run_closeout_wrapper_surface,
@@ -16227,10 +16501,11 @@ def run_aggregate_cli_contract() -> None:
                 or command_mismatch_check.get("missing_commands") != ["loom imaginary"]
             ):
                 raise AssertionError("global-cli provider command mismatch did not fail closed with stable diagnostics")
-        _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json", "--full-output"], expect=0)
-        read_entry = global_fact_chain.get("report", {}).get("fact_chain", {}).get("read_entry")
-        if not isinstance(read_entry, str) or ".loom/bin" in read_entry or not read_entry.startswith("loom fact-chain "):
-            raise AssertionError(f"global-cli fact-chain read_entry was not a global loom command: {read_entry}")
+        if legacy_surface_state() == "transition":
+            _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json", "--full-output"], expect=0)
+            read_entry = global_fact_chain.get("report", {}).get("fact_chain", {}).get("read_entry")
+            if not isinstance(read_entry, str) or ".loom/bin" in read_entry or not read_entry.startswith("loom fact-chain "):
+                raise AssertionError(f"global-cli fact-chain read_entry was not a global loom command: {read_entry}")
         _, global_status = run_json(["status", "--target", str(global_cli_target), "--json", "--full-output"])
         if ".loom/bin" in str(global_status.get("current_runtime_entrypoint", "")) or not str(global_status.get("status_entrypoint", "")).startswith("loom status "):
             raise AssertionError("global-cli status did not report global loom entrypoint")
@@ -16262,7 +16537,7 @@ def run_aggregate_cli_contract() -> None:
         _, stale_repair = run_json(["repair", "plan", "--target", str(stale_bin_target), "--json"], expect=0)
         if stale_repair.get("mutates") is not False or not stale_repair.get("actions"):
             raise AssertionError("global-cli stale .loom/bin did not produce non-mutating legacy guidance")
-        _, stale_upgrade = run_json(["upgrade-plan", "--target", str(stale_bin_target), "--json"], expect=0)
+        _, stale_upgrade = run_json(["upgrade", "--target", str(stale_bin_target), "--json"], expect=0)
         if not stale_upgrade.get("actions"):
             raise AssertionError("global-cli stale .loom/bin upgrade-plan did not expose legacy guidance")
         blocked_bin_target = tmp / "global-cli-stale-bin-blocked"
@@ -16271,7 +16546,7 @@ def run_aggregate_cli_contract() -> None:
         _, blocked_repair = run_json(["repair", "plan", "--target", str(blocked_bin_target), "--json"], expect=0)
         if blocked_repair.get("mutates") is not False or not blocked_repair.get("actions"):
             raise AssertionError("global-cli blocked stale .loom/bin did not fail closed with non-mutating legacy guidance")
-        _, blocked_upgrade = run_json(["upgrade-plan", "--target", str(blocked_bin_target), "--json"], expect=0)
+        _, blocked_upgrade = run_json(["upgrade", "--target", str(blocked_bin_target), "--json"], expect=0)
         if not blocked_upgrade.get("actions"):
             raise AssertionError("global-cli blocked stale .loom/bin upgrade-plan did not preserve legacy guidance")
         malformed_target = tmp / "global-cli-malformed"
@@ -17267,6 +17542,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="runtime-paths",
             fixture_group="runtime-paths",
             run=run_runtime_paths_surface,
+        ),
+        SurfaceCheck(
+            name="public-default-path",
+            fixture_group="public-default-path",
+            run=run_public_default_path_surface,
         ),
         SurfaceCheck(
             name="merge-wrapper",

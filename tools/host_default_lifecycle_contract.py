@@ -3,13 +3,11 @@
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import json
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -18,16 +16,6 @@ SPEC = importlib.util.spec_from_file_location("loom_cli", ROOT / "tools" / "loom
 loom = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(loom)
-
-
-def compatibility(*, intensity: str | None, policy: str | None, expiry: str | None):
-    return loom.legacy_carrier_compatibility(
-        argparse.Namespace(
-            governance_intensity=intensity,
-            compatibility_policy=policy,
-            compatibility_expires_at=expiry,
-        )
-    )
 
 
 def main() -> int:
@@ -54,41 +42,25 @@ def main() -> int:
     assert release["creates_closeout_pr_by_default"] is False
     assert loom.ship_validation_profile_for_paths([], release)[0] == "release"
 
-    now = datetime.now(timezone.utc)
-    valid = compatibility(
-        intensity="reinforced",
-        policy=loom.LEGACY_CARRIER_COMPATIBILITY_POLICY,
-        expiry=(now + timedelta(days=30)).isoformat(),
-    )
-    assert valid["result"] == "pass"
-    invalid = (
-        compatibility(intensity=None, policy=None, expiry=None),
-        compatibility(intensity="standard", policy=loom.LEGACY_CARRIER_COMPATIBILITY_POLICY, expiry=(now + timedelta(days=30)).isoformat()),
-        compatibility(intensity="reinforced", policy="wrong", expiry=(now + timedelta(days=30)).isoformat()),
-        compatibility(intensity="reinforced", policy=loom.LEGACY_CARRIER_COMPATIBILITY_POLICY, expiry=(now - timedelta(seconds=1)).isoformat()),
-        compatibility(intensity="reinforced", policy=loom.LEGACY_CARRIER_COMPATIBILITY_POLICY, expiry=(now + timedelta(days=91)).isoformat()),
-        compatibility(intensity="reinforced", policy=loom.LEGACY_CARRIER_COMPATIBILITY_POLICY, expiry=(now + timedelta(days=1)).replace(tzinfo=None).isoformat()),
-    )
-    assert all(row["result"] == "block" for row in invalid)
-
     source = (ROOT / "tools" / "loom.py").read_text(encoding="utf-8")
-    ship = source[source.index("def handle_ship("):source.index("def closeout_run_step(")]
-    assert "carrier refresh" not in ship
-    assert "shadow-parity" not in ship
-    assert "host-review-attestation" in ship
-    assert "host-closeout-attestation" in ship
-    sync = source[source.index("def handle_closeout_sync("):source.index("def closeout_run_payload(")]
-    assert "host-closeout-attestation" in sync
-    assert "repo_mutations=False" in sync
-    assert "creates_closeout_pr=False" in sync
-    assert "carrier closeout-sync" not in sync
+    assert loom.LEGACY_SURFACE_STATE == "removed"
+    assert len(loom.COMMANDS) == len(loom.PUBLIC_COMMAND_NAMES) == 30
+    assert set(loom.COMMAND_INDEX) == loom.PUBLIC_COMMAND_NAMES
+    for retired in (
+        "LEGACY_CARRIER_COMPATIBILITY_POLICY",
+        "legacy_carrier_compatibility",
+        "reinforced-carrier-compat/v1",
+        "loom-legacy-carrier-command/v1",
+        "loom-legacy-carrier-compatibility/v1",
+    ):
+        assert retired not in source
 
     tiers = loom.HELP_COMMAND_TIERS
     for command in ("attestation readback", "attestation closeout", "closeout"):
         assert command in tiers["common_path"]
     for command in ("carrier closeout-sync", "closeout run", "release closeout-sync"):
         assert all(command not in tier for tier in tiers.values())
-        assert loom.COMMAND_INDEX[command]["status"] == "compatibility"
+        assert command not in loom.COMMAND_INDEX
 
     skill_files = (
         ROOT / "src/skills/loom-review/SKILL.md",
@@ -97,7 +69,7 @@ def main() -> int:
         ROOT / "src/skills/route-matrix.md",
     )
     combined = "\n".join(path.read_text(encoding="utf-8") for path in skill_files)
-    for required in ("host attestation", "local-only", "不创建 closeout-only"):
+    for required in ("host attestation", "local-only", "Removed carrier backends"):
         assert required in combined
     for forbidden in (
         "loom carrier closeout-sync --target",
@@ -107,9 +79,30 @@ def main() -> int:
         assert forbidden not in combined
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "reinforced-carrier-compat/v1" in readme
+    assert "reinforced-carrier-compat/v1" not in readme
+    assert "retired carrier commands are removed" in readme.lower()
     assert "Release readback is terminal for release aftercare" in readme
     assert "creates no closeout-only" in (ROOT / "docs/methodology/harness/cli-command-matrix.md").read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as directory:
+        target = Path(directory)
+        (target / ".loom/bootstrap").mkdir(parents=True)
+        (target / ".loom/companion").mkdir(parents=True)
+        (target / ".loom/status").mkdir(parents=True)
+        (target / ".loom/companion/repo-interface.json").write_text("{}\n", encoding="utf-8")
+        (target / ".loom/status/current.md").write_text("stale\n", encoding="utf-8")
+        (target / ".loom/bootstrap/manifest.json").write_text(
+            json.dumps({
+                "schema_version": "loom-bootstrap-manifest/v2",
+                "profile": "light-governance",
+                "repository_locator": ".",
+                "companion_locator": ".loom/companion/repo-interface.json",
+                "capabilities": [],
+                "artifact_locators": [".loom/status/current.md"],
+            }),
+            encoding="utf-8",
+        )
+        _, manifest_errors = loom.host_derived_manifest(target)
+        assert any("removed execution carrier" in error for error in manifest_errors)
     check_executable_host_default_paths()
     print("host-default lifecycle checks passed")
     return 0
@@ -131,12 +124,14 @@ def check_executable_host_default_paths() -> None:
     originals = {
         "emit": loom.emit,
         "flow_payload": loom.flow_payload,
+        "host_derived_manifest": loom.host_derived_manifest,
         "host_lifecycle_admission_payload": loom.host_lifecycle_admission_payload,
         "ship_binding_inference_payload": loom.ship_binding_inference_payload,
         "ship_changed_paths_payload": loom.ship_changed_paths_payload,
         "ship_validation_profile_payload": loom.ship_validation_profile_payload,
         "host_attestation_readback": loom.host_attestation_readback,
         "infer_github_repo": loom.infer_github_repo,
+        "controlled_merge_payload": loom.delivery_control_module.controlled_merge_payload,
     }
     emitted: dict[str, object] = {}
     flow_calls: list[list[str]] = []
@@ -172,6 +167,7 @@ def check_executable_host_default_paths() -> None:
 
     loom.emit = fake_emit
     loom.flow_payload = fake_flow
+    loom.host_derived_manifest = lambda _target: ({"profile": "light"}, [])
     loom.host_lifecycle_admission_payload = lambda **_kwargs: {"command": "lifecycle admission", "result": "pass", "summary": "admitted"}
     loom.ship_binding_inference_payload = lambda _args, _target: {
         "command": "ship binding inference",
@@ -183,16 +179,20 @@ def check_executable_host_default_paths() -> None:
     loom.ship_validation_profile_payload = lambda *_args, **_kwargs: {"result": "pass", "selected_profile": "light"}
     loom.host_attestation_readback = fake_attestation
     loom.infer_github_repo = lambda _target: "o/r"
+    loom.delivery_control_module.controlled_merge_payload = lambda **_kwargs: {"command": "controlled-merge", "result": "pass", "summary": "hosted gate passed", "missing_inputs": [], "pr": {"baseRefName": "main"}}
     try:
         with tempfile.TemporaryDirectory() as directory:
             artifact = Path(directory) / "artifact.json"
             artifact.write_text(json.dumps({"artifact_id": 7}), encoding="utf-8")
+            gate_result = Path(directory) / "gate.json"
+            gate_result.write_text(json.dumps({"schema_version": "loom-delivery-gate-readback/v1", "result": "pass"}), encoding="utf-8")
 
             status = loom.handle_ship(
                 [
-                    "--target", str(ROOT), "--item", "WI-2042", "--issue", "2042", "--pr", "1",
+                    "--target", str(ROOT), "--item", "o/r/work_item/2042", "--issue", "2042", "--pr", "1",
                     "--owner", "o", "--repo", "r", "--branch", "work/2042-host-default",
-                    "--attestation-artifact-input", str(artifact), "--review-policy", "single_maintainer", "--json",
+                    "--attestation-artifact-input", str(artifact), "--pr-gate-result-file", str(gate_result),
+                    "--review-policy", "single_maintainer", "--json",
                 ]
             )
             assert status == 0 and emitted.get("result") == "pass"
@@ -201,16 +201,18 @@ def check_executable_host_default_paths() -> None:
             emitted.clear()
             attestation_calls.clear()
             flow_calls.clear()
-            status = loom.handle_closeout_sync(
-                "status",
+            status = loom.handle_scenario(
+                "closeout",
                 [
-                    "--target", str(ROOT), "--item", "WI-2042", "--issue", "2042", "--pr", "1",
+                    "--target", str(ROOT), "--item", "o/r/work_item/2042", "--issue", "2042", "--pr", "1",
                     "--owner", "o", "--repo", "r", "--attestation-artifact-input", str(artifact),
-                    "--review-policy", "single_maintainer", "--skip-cleanup", "--json",
+                    "--review-policy", "single_maintainer", "--json",
                 ],
             )
-            assert status == 0 and emitted.get("repo_mutations") is False
-            assert [step.get("name") for step in emitted.get("steps", [])] == ["host-closeout-attestation"]
+            assert status == 0 and emitted.get("result") == "pass"
+            assert emitted.get("repo_execution_carriers_consumed") is False
+            assert emitted.get("profile") == "light"
+            assert any(call["closeout"] is True and call["artifact_id"] == 7 for call in attestation_calls)
             assert not flow_calls
 
             emitted.clear()
@@ -219,9 +221,10 @@ def check_executable_host_default_paths() -> None:
             events.clear()
             status = loom.handle_merge(
                 [
-                    "run", "1", "--target", str(ROOT), "--work-item", "WI-2042", "--issue", "2042",
+                    "run", "1", "--target", str(ROOT), "--work-item", "o/r/work_item/2042", "--issue", "2042",
                     "--target-branch", "main", "--owner", "o", "--repo", "r", "--apply", "--closeout-run",
                     "--closeout-mode", "host_only", "--attestation-artifact-input", str(artifact),
+                    "--pr-gate-result-file", str(gate_result),
                     "--review-policy", "single_maintainer", "--json",
                 ]
             )
@@ -237,15 +240,30 @@ def check_executable_host_default_paths() -> None:
             events.clear()
             status = loom.handle_merge(
                 [
-                    "run", "1", "--target", str(ROOT), "--work-item", "WI-2042", "--issue", "2042",
+                    "run", "1", "--target", str(ROOT), "--work-item", "o/r/work_item/2042", "--issue", "2042",
                     "--target-branch", "main", "--owner", "o", "--repo", "r", "--apply", "--closeout-run",
-                    "--closeout-mode", "host_only", "--json",
+                    "--closeout-mode", "host_only", "--pr-gate-result-file", str(gate_result), "--json",
                 ]
             )
             assert status == 1 and emitted.get("result") == "block"
             assert not flow_calls and not attestation_calls
+
+            emitted.clear()
+            flow_calls.clear()
+            status = loom.handle_merge(
+                [
+                    "run", "1", "--target", str(ROOT), "--work-item", "o/r/work_item/2042", "--issue", "2042",
+                    "--owner", "o", "--repo", "r", "--apply", "--pr-gate-result-file", str(gate_result), "--json",
+                ]
+            )
+            assert status == 1 and emitted.get("result") == "block"
+            assert "live current-head GitHub review attestation" in str(emitted.get("summary"))
+            assert not flow_calls
     finally:
+        loom.delivery_control_module.controlled_merge_payload = originals["controlled_merge_payload"]
         for name, value in originals.items():
+            if name == "controlled_merge_payload":
+                continue
             setattr(loom, name, value)
 
 

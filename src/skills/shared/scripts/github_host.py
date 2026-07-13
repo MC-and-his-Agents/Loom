@@ -825,8 +825,9 @@ def github_lifecycle_subject_readback(
     explicit_subject = issue if issue is not None else fr
 
     execution_intent = intent in {"branch", "build", "pr", "pre-review", "ship", "implementation"}
+    pr_required_intent = intent in {"pr", "pre-review", "ship", "closeout"}
     branch_pr: int | None = None
-    if branch_name and pr_number is None:
+    if branch_name and pr_number is None and (explicit_subject is None or pr_required_intent):
         pulls, branch_errors = gh_rest_authenticated_list(
             root,
             f"repos/{quote(owner, safe='')}/{quote(repo_name, safe='')}/pulls?state=all&head={quote(f'{owner}:{branch_name}', safe='')}&per_page=100",
@@ -911,6 +912,7 @@ def github_lifecycle_subject_readback(
         "pr_state": pull_request.get("state") if pull_request else None,
         "branch": pull_request.get("headRefName") if pull_request else branch_name,
         "source": "+".join(sources),
+        "pre_pr": effective_pr is None,
         "errors": [],
     }
 

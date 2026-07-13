@@ -3280,6 +3280,18 @@ def validate_host_derived_manifest(target_root: Path, payload: object) -> list[s
     if not isinstance(artifact_locators, list) or not all(isinstance(item, str) and item for item in artifact_locators):
         errors.append("host-derived bootstrap manifest artifact_locators must be a list of non-empty strings")
         artifact_locators = []
+    forbidden_execution_locator_prefixes = (
+        ".loom/status/",
+        ".loom/progress/",
+        ".loom/reviews/",
+        ".loom/shadow/",
+        ".loom/work-items/",
+        ".loom/runtime/",
+    )
+    for locator in artifact_locators:
+        normalized_locator = locator.replace("\\", "/").lstrip("./")
+        if any(normalized_locator.startswith(prefix.lstrip("./")) for prefix in forbidden_execution_locator_prefixes):
+            errors.append(f"host-derived bootstrap artifact_locator references a removed execution carrier: {locator}")
     locator_entries = [("companion_locator", payload.get("companion_locator"), True)]
     locator_entries.extend(("artifact_locator", locator, True) for locator in artifact_locators)
     for label, locator, must_exist in locator_entries:

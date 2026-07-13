@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""CLI-first Loom control-plane entry.
+"""CLI-first Loom control-plane entry for the frozen public product surface.
 
-The command surface is intentionally broader than the implementation surface.
-Commands that are not implemented in this phase fail closed with a structured
-JSON block instead of silently falling back to legacy wrappers.
+The 30 public commands are implemented here. Removed compatibility commands
+fail before target, host, or mutation access with one structured failure.
 """
 
 from __future__ import annotations
@@ -72,6 +71,11 @@ for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
 from runtime_paths import global_runtime_path, is_global_runtime_locator
 from authority_contract import parse_typed_locator, typed_locator
 from failure_envelope import public_cli_failure_envelope
+import github_host as github_host_module
+import delivery_control as delivery_control_module
+import governance_surface as governance_surface_module
+import host_profile as host_profile_module
+from github_admission import github_fr_wi_admission_payload
 from github_host import github_lifecycle_subject_readback
 from host_attestation import _artifact_id as host_attestation_artifact_id
 from host_attestation import main as host_attestation_main
@@ -79,24 +83,49 @@ from host_attestation import readback as host_attestation_readback
 from product_acceptance import main as product_acceptance_main
 from loom_init import host_derived_manifest
 
+
+class _GitHubAdmissionHost:
+    """Narrow function facade consumed by the host-native admission module."""
+
+    detect_github_repo = staticmethod(governance_surface_module.detect_github_repo)
+    build_governance_surface = staticmethod(governance_surface_module.build_governance_surface)
+    github_intake_taxonomy_mapping = staticmethod(host_profile_module.github_intake_taxonomy_mapping)
+    github_intake_object_type = staticmethod(host_profile_module.github_intake_object_type)
+    normalize_taxonomy_match_text = staticmethod(host_profile_module.normalize_taxonomy_match_text)
+    normalized_issue_labels = staticmethod(host_profile_module.normalized_issue_labels)
+    issue_tree_payload = staticmethod(host_profile_module.issue_tree_payload)
+    github_issue_payload = staticmethod(github_host_module.github_issue_payload)
+    gh_graphql_json = staticmethod(github_host_module.gh_graphql_json)
+    gh_rest_write_json = staticmethod(github_host_module.gh_rest_write_json)
+    normalize_rest_issue = staticmethod(github_host_module.normalize_rest_issue)
+
+
+GITHUB_ADMISSION_HOST = _GitHubAdmissionHost()
+
 LOOM_BOOTSTRAP_START = "<!-- LOOM_BOOTSTRAP_START -->"
 LOOM_BOOTSTRAP_END = "<!-- LOOM_BOOTSTRAP_END -->"
 LOOM_BOOTSTRAP_BLOCK = f"""{LOOM_BOOTSTRAP_START}
 ## Loom Execution
 
-本仓库使用 Loom 管理 Work Item、admission/spec、build、review、merge-ready 和 closeout。Loom 是执行控制面，不替代仓库自身业务事实源。
+本仓库使用 Loom 编排 Work Item、build、review、merge-ready 与 host closeout。Loom
+消费 GitHub 与工作现场事实，不用 repo current、progress、review、shadow 或 closeout
+carrier 替代宿主真相。
 
 开始改文件前：
 
-1. 先用 `loom route --target . --task "<request>" --json` 判断入口；接手已有事项时先用 `loom resume --target . --json`。
-2. 一次只推进一个明确 Work Item；不要把无关修复、后续想法或新范围塞进同一 PR。
-3. 命中 formal spec path 时，缺 `spec.md`、`plan.md` 或 `spec_review approved` 不得进入实现。
-4. 按 Loom 返回的 `next_action` / `fallback_to` 执行；`block` 表示回退修前序事实，不表示绕过门禁。
-5. 验证证据必须写清命令、结果、时间或 head sha；不要只把结论留在会话里。
-6. 改了代码、PR body、review 输入或 carrier 后，重新确认 review/gate evidence 是否仍 fresh。
-7. merge 后不等于完成；按 Loom closeout 同步 issue、PR、主干和事实载体状态。
+1. 用 `loom route --target . --issue <issue> --json` 判断规划或执行入口。
+2. 实现必须显式绑定 Work Item 与 issue-scoped branch；PR 创建前可直接运行
+   `loom build --target . --issue <work-item> --branch <branch> --json`。
+3. 一次只推进一个有界目标；不要创建空提交、空 PR 或治理载体来满足 admission。
+4. PR 存在后再运行 `loom pre-review`、`loom review`、`loom merge-ready` 或 `loom ship`；
+   这些入口从 GitHub readback 取得 branch、head、review、checks 与 merge 状态。
+5. 验证证据记录命令、结果、时间或 head/run id；变更代码或 PR review 输入后重新确认
+   current-head attestation 与 gate freshness。
+6. merge 不等于产品完成；用 `loom attestation closeout` 消费宿主 closeout，用
+   `loom release readback` 消费发布事实，不创建 closeout/current-retire PR。
 
-环境或插件问题交给 `loom doctor --target . --json` 的输出处理。
+环境或 provider 问题由 `loom doctor --target . --json` 分类；退役命令返回
+`unsupported_command_surface`，不得通过 compatibility flag 恢复。
 {LOOM_BOOTSTRAP_END}
 """
 
@@ -119,19 +148,13 @@ WORKSTATION_CONTROL_SCHEMA = "loom-workstation-control/v1"
 WORKSTATION_REPOSITORIES_SCHEMA = "loom-workstation-repositories/v1"
 WORKSTATION_CURRENT_SCHEMA = "loom-workstation-current/v1"
 WORKSTATION_UPGRADE_PLAN_SCHEMA = "loom-workstation-upgrade-plan/v1"
-GLOBAL_CACHE_MIGRATION_SCHEMA = "loom-global-cache-migration/v1"
-SKILLS_SCHEMA = "loom-skills-surface/v1"
 SCENARIO_SCHEMA = "loom-scenario-control/v1"
-PROFILE_SCHEMA = "loom-governance-profile-control/v1"
-GATE_SCHEMA = "loom-gate-control/v1"
+PROFILE_SCHEMA = "loom-profile/v1"
 DELIVERY_SCHEMA = "loom-delivery-control/v1"
 RELEASE_READBACK_SCHEMA = "loom-release-readback/v1"
-RUNTIME_UPGRADE_SCHEMA = "loom-runtime-upgrade/v1"
 CLOSEOUT_PR_ROLES = (
     "implementation_pr",
     "release_pr",
-    "carrier_sync_pr",
-    "final_closeout_pr",
 )
 
 RUNTIME_PROVIDER_GLOBAL_CLI = "global-cli"
@@ -145,568 +168,128 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "status",
     "story",
 ]
+REMOVED_PROVIDER_COMMAND_REPLACEMENTS = {
+    "fact-chain": "status",
+    "shadow-parity": "verify",
+    "workstation current": "status",
+}
 
 
-COMMANDS: list[dict[str, Any]] = [
-    {
-        "command": "version",
-        "domain": "core",
-        "status": "implemented",
-        "json": True,
-        "summary": "Show Loom CLI and distribution version context.",
-    },
-    {
-        "command": "help",
-        "domain": "core",
-        "status": "implemented",
-        "json": True,
-        "summary": "Show task-oriented guidance plus the frozen CLI command matrix.",
-    },
-    {
-        "command": "acceptance validate",
-        "domain": "acceptance",
-        "status": "implemented",
-        "json": True,
-        "summary": "Structurally validate a product acceptance record without authorizing a trusted passed verdict.",
-    },
-    {
-        "command": "acceptance resolve",
-        "domain": "acceptance",
-        "status": "implemented",
-        "json": True,
-        "summary": "Resolve a trusted product acceptance verdict from authenticated GitHub host facts.",
-    },
-    {
-        "command": "attestation readback",
-        "domain": "host-attestation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read an approved PR review, semantic tree, and workflow artifact from GitHub only.",
-    },
-    {
-        "command": "attestation closeout",
-        "domain": "host-attestation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read a host-native Work Item closeout without creating repository carriers.",
-    },
-    {
-        "command": "installed-state show",
-        "domain": "installation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read the target repository loom-installed-state/v2 object.",
-    },
-    {
-        "command": "installed-state validate",
-        "domain": "installation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Validate installed-state schema, layers, graph, runtime-provider declarations, and fail-closed metadata.",
-    },
-    {
-        "command": "installed-state export",
-        "domain": "installation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Export installed-state plus its installation graph for upgrade consumers.",
-    },
-    {
-        "command": "detect",
-        "domain": "diagnostics",
-        "status": "implemented",
-        "json": True,
-        "summary": "Detect installed Loom surfaces, legacy layouts, symlinks, and mixed installations.",
-    },
-    {
-        "command": "doctor",
-        "domain": "diagnostics",
-        "status": "implemented",
-        "json": True,
-        "summary": "Diagnose metadata-only adoption, global CLI provider, user-level plugin provider, and unsupported legacy residue.",
-    },
-    {
-        "command": "repair plan",
-        "domain": "repair",
-        "status": "implemented",
-        "json": True,
-        "summary": "Emit a non-mutating repair plan for legacy, drifted, runtime-provider, or host-complete active carrier surfaces; it does not mutate host state.",
-    },
-    {
-        "command": "repair apply",
-        "domain": "repair",
-        "status": "implemented",
-        "json": True,
-        "summary": "Apply explicit safe repo carrier closeout repairs for host-complete active carriers; fail closed for installed-surface repair actions and do not close host objects.",
-    },
-    {
-        "command": "install",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Install metadata-only repository adoption; does not write runtime, plugin, or skills payload into the repository.",
-    },
-    {
-        "command": "upgrade-plan",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan non-mutating upgrades across installed-state, legacy surfaces, and runtime-provider carriers.",
-    },
-    {
-        "command": "runtime-upgrade status",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Inspect a single repository Loom runtime workflow pin and current upgrade context.",
-    },
-    {
-        "command": "runtime-upgrade prepare",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan or explicitly apply a single repository Loom runtime workflow pin update with maintenance PR guidance.",
-    },
-    {
-        "command": "runtime-upgrade check",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Fail-closed readback for single repository Loom runtime upgrade maintenance PR readiness.",
-    },
-    {
-        "command": "runtime-upgrade pr",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Render, create, update, and read back a single repository Loom runtime upgrade maintenance PR.",
-    },
-    {
-        "command": "runtime-upgrade closeout",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read merged runtime upgrade PR/issue facts and orchestrate carrier-only closeout sync.",
-    },
-    {
-        "command": "migrate-global-cache plan",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan explicit migration of legacy repo-local Loom cache/residue to workstation global cache.",
-    },
-    {
-        "command": "migrate-global-cache apply",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Move ignored repo-local Loom runtime/tmp cache to workstation global cache and register the repository.",
-    },
-    {"command": "upgrade", "domain": "delivery", "status": "implemented", "json": True},
-    {"command": "rollback", "domain": "delivery", "status": "implemented", "json": True},
-    {
-        "command": "verify",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Verify the same readiness boundary as doctor for metadata-only adoption and global providers.",
-    },
-    {"command": "init", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "adopt", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "adopt adversarial-test", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "route", "domain": "scenario", "status": "implemented", "json": True},
-    {
-        "command": "carrier closeout-sync",
-        "domain": "harness",
-        "status": "compatibility",
-        "json": True,
-        "summary": "Retired carrier backend; available only through an explicit reinforced, expiring compatibility exception.",
-    },
-    {"command": "status", "domain": "harness", "status": "implemented", "json": True},
-    {"command": "fact-chain", "domain": "harness", "status": "implemented", "json": True},
-    {
-        "command": "shadow-parity",
-        "domain": "harness",
-        "status": "implemented",
-        "json": True,
-        "summary": "Compare Loom and repo-native parity surfaces through the global CLI agent-safe output boundary.",
-    },
-    {"command": "profile status", "domain": "profile", "status": "implemented", "json": True},
-    {"command": "profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
-    {"command": "profile upgrade", "domain": "profile", "status": "implemented", "json": True},
-    {
-        "command": "profile light-migration-plan",
-        "domain": "profile",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read the light-profile carrier invariant and emit a non-mutating profile-migration plan.",
-    },
-    {
-        "command": "profile light-migration-reconcile",
-        "domain": "profile",
-        "status": "implemented",
-        "json": True,
-        "summary": "Reconcile light-profile GitHub required checks and verify the migrated main tree through host readback.",
-    },
-    {"command": "governance-profile status", "domain": "profile", "status": "implemented", "json": True},
-    {"command": "governance-profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
-    {"command": "governance-profile upgrade", "domain": "profile", "status": "implemented", "json": True},
-    {"command": "governance-profile binding", "domain": "profile", "status": "implemented", "json": True},
-    {"command": "story", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "spec", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "plan", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "build", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "pre-review", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "spec-review", "domain": "scenario", "status": "delegated", "json": True},
-    {"command": "review", "domain": "scenario", "status": "delegated", "json": True},
-    {"command": "merge-ready", "domain": "scenario", "status": "delegated", "json": True},
-    {
-        "command": "closeout",
-        "domain": "scenario",
-        "status": "implemented",
-        "json": True,
-        "summary": "Check closeout readiness; bare `loom closeout` remains a compatibility alias for closeout check.",
-    },
-    {
-        "command": "closeout status",
-        "domain": "scenario",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read closeout metadata, host reconciliation, carrier terminal state, and cleanup status with a short diagnostic.",
-    },
-    {
-        "command": "closeout sync",
-        "domain": "scenario",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan or apply host reconciliation, consume host closeout attestation, and report local cleanup without repository mutations.",
-    },
-    {
-        "command": "closeout run",
-        "domain": "host-control",
-        "status": "compatibility",
-        "json": True,
-        "summary": "Plan or apply a single post-merge closeout run across host reconciliation, terminal carrier metadata, recovery status, shadow refresh, and final closeout check.",
-    },
-    {
-        "command": "closeout batch",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan or apply host-only batch issue closeout comments for a merged implementation PR without writing repo carrier state or creating a closeout PR.",
-    },
-    {
-        "command": "closeout queue status",
-        "domain": "scenario",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read retained post-merge closeout residue queue status and suggest the next read-only command.",
-    },
-    {"command": "resume", "domain": "scenario", "status": "delegated", "json": True},
-    {"command": "handoff", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "retire", "domain": "scenario", "status": "implemented", "json": True},
-    {"command": "checkpoint admission", "domain": "gate", "status": "implemented", "json": True},
-    {"command": "checkpoint build", "domain": "gate", "status": "implemented", "json": True},
-    {"command": "checkpoint merge", "domain": "gate", "status": "implemented", "json": True},
-    {"command": "gate pre-review", "domain": "gate", "status": "implemented", "json": True},
-    {"command": "gate spec-review", "domain": "gate", "status": "implemented", "json": True},
-    {"command": "gate review", "domain": "gate", "status": "implemented", "json": True},
-    {
-        "command": "gate pr",
-        "domain": "gate",
-        "status": "implemented",
-        "json": True,
-        "summary": "Alias for pr-gate check; proves the current PR head has authored Loom semantic review approval.",
-    },
-    {
-        "command": "gate merge",
-        "domain": "gate",
-        "status": "implemented",
-        "json": True,
-        "summary": "Alias for controlled-merge check; reads host merge readiness without executing a merge.",
-    },
-    {
-        "command": "gate freeze check",
-        "domain": "gate",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read-only validation of hosted loom-gate-freeze/v1 or closeout loom-closeout-freeze/v1 admission snapshots.",
-    },
-    {
-        "command": "gate freeze write",
-        "domain": "gate",
-        "status": "implemented",
-        "json": True,
-        "summary": "Write a repo-local hosted or closeout freeze snapshot under .loom/runtime/gate-freeze without mutating host truth.",
-    },
-    {
-        "command": "gate closeout",
-        "domain": "gate",
-        "status": "implemented",
-        "json": True,
-        "summary": "Run the closeout gate over host readback, release/no-release evidence, and repo carrier consistency without performing host writes.",
-    },
-    {
-        "command": "gate repair-pr",
-        "domain": "gate",
-        "status": "implemented",
-        "json": True,
-        "summary": "Record and validate audited repair PR evidence under .loom/companion without mutating GitHub rulesets or replacing semantic review.",
-    },
-    {
-        "command": "release readback",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read target package surface, tag, GitHub Release, npm, workflow, and carrier terminal state into a publish/missing/drifted/blocked verdict without publishing.",
-    },
-    {
-        "command": "release resume",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Classify release recovery state from readback evidence without triggering publish or closeout.",
-    },
-    {
-        "command": "release closeout-sync",
-        "domain": "delivery",
-        "status": "compatibility",
-        "json": True,
-        "summary": "Retired release carrier backend; stable release aftercare ends at host readback.",
-    },
-    {"command": "workspace create", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "workspace locate", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "workspace check", "domain": "host-control", "status": "implemented", "json": True},
-    {
-        "command": "workspace audit",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read active carrier drift before starting a Work Item; does not mutate host state or repo carriers.",
-    },
-    {
-        "command": "workspace retire",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Emit local-only worksite retirement evidence; does not close host objects or write versioned terminal carriers.",
-    },
-    {"command": "issue inspect", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "issue bind", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "issue reconcile", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "project status", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "project reconcile", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "pr inspect", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "pr metadata-render", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "pr metadata-readback", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "pr metadata-update", "domain": "host-control", "status": "implemented", "json": True},
-    {"command": "pr metadata-preflight", "domain": "host-control", "status": "implemented", "json": True},
-    {
-        "command": "pr-intent prepare",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Prepare the minimal carrier set for a declared PR intent profile without replacing review or gate truth.",
-    },
-    {
-        "command": "pr-intent check",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Check suite, metadata, head binding, scope proof, and carrier-set consistency for a declared PR intent profile.",
-    },
-    {
-        "command": "docs-pr prepare",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Shortcut for `pr-intent prepare --intent docs-governance-only`.",
-    },
-    {
-        "command": "docs-pr check",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Shortcut for `pr-intent check --intent docs-governance-only`.",
-    },
-    {
-        "command": "pr gate",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Check `loom pr gate <pr> --head-sha <sha> --work-item <WI> --json` before merge; CI/checks cannot replace the authored review record.",
-    },
-    {
-        "command": "merge check",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read-only controlled merge preflight; consumes PR gate, required checks, triggered checks, host enforcement, and mergeability.",
-    },
-    {
-        "command": "merge run",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Execute host merge only with `--apply` after `merge check` passes for the same PR head and Work Item.",
-    },
-    {
-        "command": "ship",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Dry-run the delivery path across PR metadata, PR gate, controlled merge, changed-path validation profile, and closeout policy.",
-    },
-    {
-        "command": "ship status",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read the ship control-plane status across host issue, release, checkout, and carrier surfaces without mutating state.",
-    },
-    {
-        "command": "ship preflight",
-        "domain": "delivery",
-        "status": "implemented",
-        "json": True,
-        "summary": "Alias for ship status; emits the short blocked/fixed/next_action diagnostic before delivery work starts.",
-    },
-    {
-        "command": "reconcile",
-        "domain": "host-control",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read or align host closeout control-plane state; repo carrier closeout-sync remains a separate versioned-carrier write.",
-    },
-    {"command": "host list", "domain": "host", "status": "implemented", "json": True},
-    {"command": "host doctor", "domain": "host", "status": "implemented", "json": True},
-    {"command": "host install", "domain": "host", "status": "implemented", "json": True},
-    {"command": "host verify", "domain": "host", "status": "implemented", "json": True},
-    {
-        "command": "host register",
-        "domain": "host",
-        "status": "implemented",
-        "json": True,
-        "summary": "Inspect or explicitly register a Codex Loom plugin provider with the local workstation.",
-    },
-    {"command": "host upgrade", "domain": "host", "status": "implemented", "json": True},
-    {"command": "host remove", "domain": "host", "status": "implemented", "json": True},
-    {
-        "command": "workstation register",
-        "domain": "workstation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Register the target repository in ~/.loom/repositories.json without mutating the repository.",
-    },
-    {
-        "command": "workstation list",
-        "domain": "workstation",
-        "status": "implemented",
-        "json": True,
-        "summary": "List machine-local Loom repository registry entries.",
-    },
-    {
-        "command": "workstation unregister",
-        "domain": "workstation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Remove or opt out a target repository entry from ~/.loom/repositories.json.",
-    },
-    {
-        "command": "workstation upgrade",
-        "domain": "workstation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan a machine-level Loom CLI/plugin refresh plus per-repository adoption classifications without mutating state.",
-    },
-    {
-        "command": "workstation current",
-        "domain": "workstation",
-        "status": "implemented",
-        "json": True,
-        "summary": "Read or update ~/.loom/repos/<repo-id>/current.json without mutating the repository.",
-    },
-    {
-        "command": "skills list",
-        "domain": "skills",
-        "status": "implemented",
-        "json": True,
-        "summary": "List the Loom source skills registry used to generate the Codex plugin payload.",
-    },
-    {
-        "command": "skills generate",
-        "domain": "skills",
-        "status": "implemented",
-        "json": True,
-        "summary": "Regenerate the Loom source repository skills mirror and Codex plugin payload; source repo only.",
-    },
-    {
-        "command": "skills check",
-        "domain": "skills",
-        "status": "implemented",
-        "json": True,
-        "summary": "Verify source plugin payload parity or metadata-only target repository adoption.",
-    },
-    {"command": "skills doctor", "domain": "skills", "status": "implemented", "json": True},
-    {"command": "skills package", "domain": "skills", "status": "implemented", "json": True},
-    {"command": "skills release-check", "domain": "skills", "status": "implemented", "json": True},
-    {
-        "command": "suite inspect",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Inspect suite path decision and repo-relative artifact inventory.",
-    },
-    {
-        "command": "suite scaffold",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan or explicitly apply repo-local minimal or full spec suite scaffold writes.",
-    },
-    {
-        "command": "suite validate",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Validate the current suite path decision and core readiness envelope without mutating files.",
-    },
-    {
-        "command": "suite evidence inspect",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Inspect evidence-map locator, rows, freshness, and repo-local evidence bindings.",
-    },
-    {
-        "command": "suite evidence scaffold",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Plan or explicitly apply repo-local evidence-map scaffold writes without marking evidence present.",
-    },
-    {
-        "command": "suite evidence validate",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Validate behavior, test, and fresh verification evidence-map freshness without mutating files.",
-    },
-    {
-        "command": "suite carrier inspect",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Inspect task-carrier locators, normalized status, relationships, and Work Item backlinks.",
-    },
-    {
-        "command": "suite carrier validate",
-        "domain": "suite",
-        "status": "implemented",
-        "json": True,
-        "summary": "Validate task-carrier locator/status/backlink consistency without promoting carrier truth.",
-    },
-]
+COMMANDS: list[dict[str, Any]] = [{'command': 'version',
+  'domain': 'core',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Show Loom CLI and distribution version context.'},
+ {'command': 'help',
+  'domain': 'core',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Show task-oriented guidance plus the frozen CLI command matrix.'},
+ {'command': 'acceptance resolve',
+  'domain': 'acceptance',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Resolve a trusted product acceptance verdict from authenticated GitHub host facts.'},
+ {'command': 'attestation readback',
+  'domain': 'host-attestation',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Read an approved PR review, semantic tree, and workflow artifact from GitHub only.'},
+ {'command': 'attestation closeout',
+  'domain': 'host-attestation',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Read a host-native Work Item closeout without creating repository carriers.'},
+ {'command': 'installed-state validate',
+  'domain': 'installation',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Validate installed-state schema, layers, graph, runtime-provider declarations, and fail-closed '
+             'metadata.'},
+ {'command': 'detect',
+  'domain': 'diagnostics',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Detect installed Loom surfaces, legacy layouts, symlinks, and mixed installations.'},
+ {'command': 'doctor',
+  'domain': 'diagnostics',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Diagnose metadata-only adoption, global CLI provider, user-level plugin provider, and unsupported legacy '
+             'residue.'},
+ {'command': 'repair plan',
+  'domain': 'repair',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Emit a non-mutating repair plan for metadata-only adoption, legacy layouts, or provider drift.'},
+ {'command': 'install',
+  'domain': 'delivery',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Install metadata-only repository adoption; does not write runtime, plugin, or skills payload into the '
+             'repository.'},
+ {'command': 'upgrade', 'domain': 'delivery', 'status': 'implemented', 'json': True},
+ {'command': 'verify',
+  'domain': 'delivery',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Verify the same readiness boundary as doctor for metadata-only adoption and global providers.'},
+ {'command': 'route', 'domain': 'scenario', 'status': 'implemented', 'json': True},
+ {'command': 'status', 'domain': 'harness', 'status': 'implemented', 'json': True},
+ {'command': 'profile status', 'domain': 'profile', 'status': 'implemented', 'json': True},
+ {'command': 'profile light-migration-reconcile',
+  'domain': 'profile',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Reconcile light-profile GitHub required checks and verify the migrated main tree through host readback.'},
+ {'command': 'story', 'domain': 'scenario', 'status': 'implemented', 'json': True},
+ {'command': 'build', 'domain': 'scenario', 'status': 'implemented', 'json': True},
+ {'command': 'pre-review', 'domain': 'scenario', 'status': 'implemented', 'json': True},
+ {'command': 'review', 'domain': 'scenario', 'status': 'implemented', 'json': True,
+  'summary': 'Authenticate current-head semantic review through GitHub host attestation.'},
+ {'command': 'merge-ready', 'domain': 'scenario', 'status': 'implemented', 'json': True,
+  'summary': 'Check current-head attestation, hosted delivery gate, required checks, and mergeability.'},
+ {'command': 'closeout',
+  'domain': 'scenario',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Read host-native closeout readiness without repository execution carriers.'},
+ {'command': 'release readback',
+  'domain': 'delivery',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Read target package surface, tag, GitHub Release, npm, workflow, and host release state into a '
+             'publish/missing/drifted/blocked verdict without publishing.'},
+ {'command': 'workspace create', 'domain': 'host-control', 'status': 'implemented', 'json': True},
+ {'command': 'workspace check', 'domain': 'host-control', 'status': 'implemented', 'json': True},
+ {'command': 'workspace retire',
+  'domain': 'host-control',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Emit local-only worksite retirement evidence; does not close host objects or write versioned terminal '
+             'carriers.'},
+ {'command': 'pr gate',
+  'domain': 'host-control',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Read the hosted delivery-gate result for an explicit PR head and typed Work Item.'},
+ {'command': 'merge check',
+  'domain': 'delivery',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Read-only controlled merge preflight; consumes PR gate, required checks, triggered checks, host '
+             'enforcement, and mergeability.'},
+ {'command': 'merge run',
+  'domain': 'delivery',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Execute host merge only with `--apply` after `merge check` passes for the same PR head and Work Item.'},
+ {'command': 'ship',
+  'domain': 'delivery',
+  'status': 'implemented',
+  'json': True,
+  'summary': 'Dry-run the host-native delivery path across attestation, hosted gate readback, controlled merge, '
+             'changed-path validation, and closeout policy.'}]
 
 PUBLIC_COMMAND_NAMES = {
     "version", "help", "acceptance resolve", "attestation readback", "attestation closeout",
@@ -729,7 +312,30 @@ PUBLIC_PROTOCOL_TYPES = (
     "release_judgment",
     "readback",
 )
-LEGACY_SURFACE_REMOVE_BY = "v0.31.0"
+LEGACY_SURFACE_STATE = "removed"
+LEGACY_COMMAND_INVENTORY = (
+    "acceptance validate",
+    "upgrade-plan",
+    "runtime-upgrade status", "runtime-upgrade prepare", "runtime-upgrade check", "runtime-upgrade pr", "runtime-upgrade closeout",
+    "migrate-global-cache plan", "migrate-global-cache apply", "rollback", "release resume", "release closeout-sync", "ship status", "ship preflight",
+    "checkpoint admission", "checkpoint build", "checkpoint merge", "gate pre-review", "gate spec-review", "gate review", "gate pr", "gate merge",
+    "gate freeze check", "gate freeze write", "gate closeout", "gate repair-pr",
+    "carrier closeout-sync", "fact-chain", "shadow-parity",
+    "host list", "host doctor", "host install", "host verify", "host register", "host upgrade", "host remove",
+    "closeout run", "closeout batch", "workspace locate", "workspace audit", "issue inspect", "issue bind", "issue reconcile",
+    "project status", "project reconcile", "pr inspect", "pr metadata-render", "pr metadata-readback", "pr metadata-update", "pr metadata-preflight",
+    "pr-intent prepare", "pr-intent check", "docs-pr prepare", "docs-pr check", "reconcile",
+    "installed-state show", "installed-state export",
+    "profile upgrade-plan", "profile upgrade", "profile light-migration-plan", "governance-profile status", "governance-profile upgrade-plan",
+    "governance-profile upgrade", "governance-profile binding", "repair apply",
+    "init", "adopt", "adopt adversarial-test", "spec", "plan", "spec-review", "closeout status", "closeout sync", "closeout queue status",
+    "resume", "handoff", "retire",
+    "skills list", "skills generate", "skills check", "skills doctor", "skills package", "skills release-check",
+    "suite inspect", "suite scaffold", "suite validate", "suite evidence inspect", "suite evidence scaffold", "suite evidence validate",
+    "suite carrier inspect", "suite carrier validate",
+    "workstation register", "workstation list", "workstation unregister", "workstation upgrade", "workstation current",
+)
+
 PUBLIC_COMMAND_PROTOCOL_TYPES = {
     "version": "manifest",
     "help": "manifest",
@@ -868,20 +474,7 @@ SUITE_SUPPORT_MARKERS = {
     "full-spec-suite-cli-surface",
 }
 
-COMMAND_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
-    "acceptance": ("product_acceptance.py", ()),
-    "init": ("loom_init.py", ()),
-    "adopt": ("loom_flow.py", ("adopt",)),
-    "route": ("loom_init.py", ("route",)),
-    "flow": ("loom_flow.py", ()),
-    "resume": ("loom_flow.py", ("flow", "resume")),
-    "merge-ready": ("loom_flow.py", ("flow", "merge-ready")),
-    "spec-review": ("loom_flow.py", ("flow", "spec-review")),
-    "review": ("loom_flow.py", ("review",)),
-    "check": ("loom_check.py", ()),
-    "status": ("loom_status.py", ()),
-    "fact-chain": ("loom_init.py", ("fact-chain",)),
-}
+COMMAND_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {}
 
 STATE_FILENAMES = (
     ".loom/installed-state.json",
@@ -1172,19 +765,6 @@ def release_package_surface_readback(target: Path, *, context: dict[str, Any]) -
         "gaps": gaps,
         "errors": errors,
         "source": "VERSION + package.json",
-    }
-
-
-def release_carrier_status_readback(target: Path) -> dict[str, Any]:
-    status = ship_status_surface(target)
-    return {
-        "kind": "carrier_status",
-        "path": status.get("path"),
-        "state": status.get("state"),
-        "current_checkpoint": status.get("current_checkpoint"),
-        "current_stop": status.get("current_stop"),
-        "next_step": status.get("next_step"),
-        "blockers": status.get("blockers"),
     }
 
 
@@ -1507,7 +1087,6 @@ def release_readback_payload(
             "npm_package": npm_package_readback(target, package_name=context["npm_package"], npm_version=context["npm_version"]),
             "workflow_run": workflow_run_readback(target, repo=resolved_repo, workflow=workflow, target_commit=target_commit),
             "package_surface": release_package_surface_readback(target, context=context),
-            "carrier": release_carrier_status_readback(target),
         }
 
     errors = release_read_errors(readbacks)
@@ -1592,8 +1171,6 @@ def release_closeout_readback_allows_sync(readback: dict[str, Any]) -> tuple[boo
     gaps = {str(gap) for gap in classification.get("gaps", []) if gap}
     if verdict == "published":
         return True, "release readback is already published; closeout-sync is idempotent."
-    if verdict == "blocked" and gaps == {"carrier_not_terminal"}:
-        return True, "release artifacts are published; repo carrier terminalization is the only remaining gap."
     return False, f"release readback verdict `{verdict or 'unknown'}` is not eligible for closeout-sync"
 
 
@@ -1724,240 +1301,6 @@ def release_closeout_issue(args: argparse.Namespace) -> str:
         return str(args.issue)
     match = re.search(r"\d+", str(args.item))
     return match.group(0) if match else "not_applicable"
-
-
-def handle_release_closeout_sync(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom release closeout-sync")
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--version")
-    parser.add_argument("--package", dest="package_name")
-    parser.add_argument("--repo")
-    parser.add_argument("--commit")
-    parser.add_argument("--workflow", default="loom-cli-release.yml")
-    parser.add_argument("--item", required=True)
-    parser.add_argument("--pr", required=True, help="Merged release PR number used as release evidence.")
-    parser.add_argument("--closeout-pr", help="Optional carrier-sync PR number for next-step metadata/gate commands.")
-    parser.add_argument("--issue", type=int)
-    parser.add_argument("--branch")
-    parser.add_argument("--head-sha")
-    parser.add_argument("--target-branch")
-    parser.add_argument("--closed-at")
-    parser.add_argument("--evidence-locator")
-    parser.add_argument("--pr-payload-file")
-    parser.add_argument("--fixture-file")
-    parser.add_argument("--fixture")
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--full-output", action="store_true")
-    add_legacy_carrier_compatibility_args(parser)
-    args = parser.parse_args(argv)
-    target = resolve_target(args.target)
-    if not target.exists():
-        return emit(block_target("release closeout-sync", target, "target path does not exist"))
-    compatibility = legacy_carrier_compatibility(args)
-    if compatibility["result"] != "pass":
-        return emit(
-            agent_safe_payload(
-                output(
-                    "release closeout-sync",
-                    "block",
-                    schema_version="loom-legacy-carrier-command/v1",
-                    summary=compatibility["summary"],
-                    mutates=False,
-                    target=str(target),
-                    compatibility=compatibility,
-                    missing_inputs=compatibility["missing_inputs"],
-                    fallback_to="loom release readback --target <repo> --version <version> --commit <sha> --json",
-                ),
-                target_root=target,
-                full_output=args.full_output,
-            )
-        )
-
-    release_readback = release_readback_payload(
-        command="release closeout-sync release-readback",
-        target=target,
-        release_judgment="release_required",
-        version=args.version,
-        package_name=args.package_name,
-        repo=args.repo,
-        commit=args.commit,
-        workflow=args.workflow,
-        fixture_file=Path(args.fixture_file).resolve() if args.fixture_file else None,
-        fixture_name=args.fixture,
-    )
-    steps = [release_closeout_step("release-readback", release_readback)]
-    allowed, reason = release_closeout_readback_allows_sync(release_readback)
-    if not allowed:
-        payload = output(
-            "release closeout-sync",
-            "block",
-            schema_version="loom-release-closeout-sync/v1",
-            summary="release closeout-sync stopped before carrier writes.",
-            target=str(target),
-            item={"id": args.item},
-            release_pr={"number": args.pr},
-            apply=args.apply,
-            dry_run=not args.apply,
-            steps=steps,
-            missing_inputs=[reason],
-            readiness=readiness_payload(
-                ready=False,
-                reasons=["release_readback_mismatch"],
-                next_command="loom release readback --target <repo> --json",
-            ),
-            fallback_to=["loom release readback --target <repo> --json"],
-            next_action="Resolve release readback drift/missing artifacts before carrier terminalization.",
-        )
-        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
-
-    release_target = release_readback.get("release_target") if isinstance(release_readback.get("release_target"), dict) else {}
-    readbacks = release_readback.get("readbacks") if isinstance(release_readback.get("readbacks"), dict) else {}
-    github_release = readbacks.get("github_release") if isinstance(readbacks.get("github_release"), dict) else {}
-    resolved_repo = args.repo or release_target.get("repo") or infer_github_repo(target)
-    target_commit = args.commit or release_target.get("target_commit")
-    pr_readback = release_closeout_pr_readback_payload(
-        target=target,
-        pr_number=args.pr,
-        repo=str(resolved_repo) if resolved_repo else None,
-        target_commit=str(target_commit) if target_commit else None,
-        pr_payload_file=args.pr_payload_file,
-    )
-    steps.append(release_closeout_step("release-pr-readback", pr_readback))
-    if pr_readback.get("result") != "pass":
-        payload = output(
-            "release closeout-sync",
-            "block",
-            schema_version="loom-release-closeout-sync/v1",
-            summary="release closeout-sync stopped before carrier writes.",
-            target=str(target),
-            item={"id": args.item},
-            release_pr={"number": args.pr},
-            apply=args.apply,
-            dry_run=not args.apply,
-            steps=steps,
-            missing_inputs=pr_readback.get("missing_inputs", []),
-            readiness=readiness_payload(
-                ready=False,
-                reasons=readiness_reasons_from_text(pr_readback.get("missing_inputs", [])) or ["release_readback_mismatch"],
-                next_command="loom pr inspect <pr> --json --full-output",
-            ),
-            fallback_to=pr_readback.get("fallback_to"),
-            next_action="Bind --pr to the merged release PR before carrier terminalization.",
-        )
-        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
-
-    pr = pr_readback.get("pr") if isinstance(pr_readback.get("pr"), dict) else {}
-    merge_commit = pr.get("mergeCommit") if isinstance(pr.get("mergeCommit"), dict) else {}
-    merge_sha = str(merge_commit.get("oid") or target_commit or "not_applicable")
-    target_branch = str(args.target_branch or pr.get("baseRefName") or "main")
-    closed_at = str(args.closed_at or pr.get("mergedAt") or now_iso())
-    evidence_locator = str(args.evidence_locator or ";".join(str(value) for value in (github_release.get("url"), pr.get("url")) if value) or "release-readback")
-    issue_number = release_closeout_issue(args)
-
-    carrier_args = [
-        "carrier",
-        "closeout-sync",
-        "--target",
-        str(target),
-        "--item",
-        args.item,
-        "--terminal-state",
-        "closed_out",
-        "--issue",
-        issue_number,
-        "--pr",
-        str(args.pr),
-        "--merge-commit",
-        merge_sha,
-        "--target-branch",
-        target_branch,
-        "--closed-at",
-        closed_at,
-        "--evidence-locator",
-        evidence_locator,
-        "--apply" if args.apply else "--dry-run",
-    ]
-    carrier = flow_payload("release closeout-sync", carrier_args, fallback_to=["loom carrier closeout-sync --target <repo> --item <item> --apply --json"])
-    steps.append(release_closeout_step("carrier-closeout-sync", carrier, mutates=args.apply))
-
-    if args.apply and carrier.get("result") == "pass":
-        stop = (
-            f"{args.item} release closeout synced for {release_target.get('version') or args.version}: "
-            f"release PR #{args.pr} merged at {merge_sha}; published release readback consumed into terminal repo carrier state."
-        )
-        recovery_args = [
-            "recovery",
-            "writeback",
-            "--target",
-            str(target),
-            "--item",
-            args.item,
-            "--current-checkpoint",
-            "closed_out",
-            "--current-stop",
-            stop,
-            "--next-step",
-            "None.",
-            "--blockers",
-            "None recorded.",
-            "--current-lane",
-            "release-closeout-sync",
-        ]
-        recovery = flow_payload("release closeout-sync", recovery_args, fallback_to=["loom recovery writeback --target <repo> --item <item>"])
-        steps.append(release_closeout_step("recovery-writeback", recovery, mutates=True))
-        if recovery.get("result") == "pass":
-            for surface in ("closeout", "merge_ready"):
-                refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--surface", surface, "--write"]
-                refresh = flow_payload("release closeout-sync", refresh_args, fallback_to=["loom carrier refresh --target <repo> --write"])
-                steps.append(release_closeout_step(f"carrier-refresh-{surface}", refresh, mutates=True))
-
-    blocker = next((step for step in steps if step.get("result") == "block"), None)
-    result = "block" if blocker else "pass"
-    next_commands = release_closeout_next_commands(args, target, args.head_sha)
-    payload = output(
-        "release closeout-sync",
-        result,
-        schema_version="loom-release-closeout-sync/v1",
-        summary="release closeout-sync applied terminal carrier updates." if args.apply and result == "pass" else "release closeout-sync produced a terminal carrier plan." if result == "pass" else "release closeout-sync stopped at a blocking step.",
-        target=str(target),
-        item={"id": args.item},
-        release_pr={"number": args.pr},
-        release_target=release_target,
-        terminal_metadata={
-            "terminal_state": "closed_out",
-            "issue": issue_number,
-            "pr": str(args.pr),
-            "merge_commit": merge_sha,
-            "target_branch": target_branch,
-            "closed_at": closed_at,
-            "evidence_locator": evidence_locator,
-        },
-        apply=args.apply,
-        dry_run=not args.apply,
-        mutates=args.apply,
-        host_mutations=False,
-        carrier_mutations=args.apply,
-        steps=steps,
-        first_blocker=blocker,
-        missing_inputs=blocker.get("missing_inputs", []) if blocker else [],
-        readiness=readiness_payload(
-            ready=False,
-            reasons=readiness_reasons_from_text(blocker.get("missing_inputs", []) if blocker else []) if blocker else [],
-            next_command=next_commands["metadata_update"] if args.apply and result == "pass" else "loom release closeout-sync --target <repo> --item <item> --pr <release-pr> --apply --json",
-            summary=(
-                "Release carrier sync is written; update/read back the closeout PR metadata before hosted gate."
-                if args.apply and result == "pass"
-                else "Review the release closeout-sync dry-run before applying carrier writes."
-                if result == "pass"
-                else "Release closeout-sync stopped before hosted gate readiness."
-            ),
-        ),
-        fallback_to=blocker.get("fallback_to") if blocker else None,
-        next_commands=next_commands,
-        next_action=next_commands["metadata_update"] if args.apply and result == "pass" else "Review the dry-run plan, then rerun with --apply.",
-    )
-    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_release(argv: list[str]) -> int:
@@ -2640,8 +1983,6 @@ def add_closeout_pr_role_args(flow_args: list[str], args: argparse.Namespace) ->
         ("--pr-role", getattr(args, "pr_role", None)),
         ("--implementation-pr", getattr(args, "implementation_pr", None)),
         ("--release-pr", getattr(args, "release_pr", None)),
-        ("--carrier-sync-pr", getattr(args, "carrier_sync_pr", None)),
-        ("--final-closeout-pr", getattr(args, "final_closeout_pr", None)),
     ):
         if value is not None:
             flow_args.extend([flag, str(value)])
@@ -2661,7 +2002,7 @@ def closeout_current_pr_input(args: argparse.Namespace) -> int | None:
     role_numbers = closeout_pr_role_numbers_from_args(args)
     if requested_role is not None:
         return role_numbers.get(requested_role, getattr(args, "pr", None))
-    for role in ("final_closeout_pr", "carrier_sync_pr", "release_pr", "implementation_pr"):
+    for role in ("release_pr", "implementation_pr"):
         if role in role_numbers:
             return role_numbers[role]
     return getattr(args, "pr", None)
@@ -2826,12 +2167,18 @@ def host_lifecycle_admission_payload(
             "subject_readback": subject_readback,
             "missing_inputs": list(subject_readback.get("errors") or ["host lifecycle subject"]),
         }
-    flow_args = ["github-intake", "admission", "--target", str(target), "--issue", str(issue), "--intent", intent, "--lifecycle-only"]
-    flow_args.extend(["--owner", effective_owner, "--repo", effective_repo])
-    payload = flow_payload(
-        "host-lifecycle-admission",
-        flow_args,
-        fallback_to=["loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json"],
+    payload = github_fr_wi_admission_payload(
+        host=GITHUB_ADMISSION_HOST,
+        target_root=target,
+        owner=effective_owner,
+        repo_name=effective_repo,
+        issue_number=issue,
+        intent=intent,
+        task=None,
+        blocked_by=[],
+        work_item_number=None,
+        apply=False,
+        lifecycle_only=True,
     )
     verdict = payload.get("lifecycle_verdict")
     if isinstance(verdict, dict):
@@ -3270,7 +2617,6 @@ def handle_help(argv: list[str]) -> int:
         hidden_compatibility_count=len(COMMANDS) - len(PUBLIC_COMMAND_NAMES),
         protocol_type_count=len(PUBLIC_PROTOCOL_TYPES),
         protocol_types=list(PUBLIC_PROTOCOL_TYPES),
-        legacy_surface_remove_by=LEGACY_SURFACE_REMOVE_BY,
         task_routes=HELP_TASK_ROUTES,
         command_tiers=HELP_COMMAND_TIERS,
         commands=command_matrix(),
@@ -3534,10 +2880,20 @@ def global_cli_provider_check(state: Any) -> dict[str, Any]:
         }
     command_names = {entry["command"] for entry in COMMANDS if entry.get("status") == "implemented"}
     required_commands = requirement.get("required_commands") if isinstance(requirement, dict) else None
+    declared_commands = required_commands if isinstance(required_commands, list) else GLOBAL_CLI_REQUIRED_COMMANDS
+    normalized_commands = [
+        REMOVED_PROVIDER_COMMAND_REPLACEMENTS.get(command, command) if isinstance(command, str) else command
+        for command in declared_commands
+    ]
     missing_commands = [
-        command
-        for command in (required_commands if isinstance(required_commands, list) else GLOBAL_CLI_REQUIRED_COMMANDS)
-        if not isinstance(command, str) or command not in command_names
+        declared
+        for declared, normalized in zip(declared_commands, normalized_commands, strict=True)
+        if not isinstance(normalized, str) or normalized not in command_names
+    ]
+    migrated_requirements = [
+        {"declared": declared, "replacement": normalized}
+        for declared, normalized in zip(declared_commands, normalized_commands, strict=True)
+        if declared != normalized
     ]
     return {
         "name": "global-cli-runtime-provider",
@@ -3550,7 +2906,9 @@ def global_cli_provider_check(state: Any) -> dict[str, Any]:
         "required": True,
         "authority": "workstation",
         "runtime_provider": RUNTIME_PROVIDER_GLOBAL_CLI,
-        "required_commands": required_commands if isinstance(required_commands, list) else GLOBAL_CLI_REQUIRED_COMMANDS,
+        "required_commands": declared_commands,
+        "normalized_required_commands": normalized_commands,
+        "migrated_requirements": migrated_requirements,
         "missing_commands": missing_commands,
         "failed_layer": None if not missing_commands else "global-cli-runtime-provider",
         "fallback_to": None if not missing_commands else ["loom help --json", "loom installed-state validate --target <repo> --json"],
@@ -4062,7 +3420,32 @@ def repair_actions(target: Path, detection: dict[str, Any], installed_errors: li
 
 
 def repair_plan_payload(target: Path) -> dict[str, Any]:
-    return repair_plan_payload_with_carrier(target, item=None, issue=None, output_relative=".loom/bootstrap/init-result.json")
+    detection = detect_payload(target)
+    state_path, state, installed_error = load_installed_state(target)
+    installed_errors = [{"path": "installed-state", "reason": installed_error["fail_closed_reason"]}] if installed_error else validate_installed_state(state)
+    actions = repair_actions(target, detection, installed_errors, state_path)
+    migration_action = downstream_top_level_skills_migration_action(target)
+    if migration_action:
+        actions.append(migration_action)
+    registration_action = workstation_registration_action(target)
+    if registration_action:
+        actions.append(registration_action)
+    result = "pass" if detection["surface_count"] or actions else "block"
+    return output(
+        "repair plan",
+        result,
+        schema=REPAIR_PLAN_SCHEMA,
+        summary="Repair plan generated without reading or mutating repository execution carriers." if result == "pass" else "No installed surface exists to repair.",
+        target=str(target),
+        mutates=False,
+        detection=detection,
+        repo_execution_carriers_consumed=False,
+        carrier_mutations=False,
+        actions=actions,
+        failed_layer=None if result == "pass" else "installed-surface",
+        fail_closed_reason=None if result == "pass" else "target has no detectable Loom surface",
+        fallback_to=None if result == "pass" else ["loom install"],
+    )
 
 
 def carrier_repair_flow_payload(
@@ -4160,14 +3543,14 @@ def handle_repair(argv: list[str]) -> int:
     target = resolve_target(args.target)
     if not target.exists():
         return emit(block_target(f"repair {args.action}", target, "target path does not exist"))
+    if args.action == "plan":
+        return emit(repair_plan_payload(target))
     plan = repair_plan_payload_with_carrier(
         target,
         item=args.item,
         issue=args.issue,
         output_relative=args.output,
     )
-    if args.action == "plan":
-        return emit(plan)
     non_carrier_actions = [
         action
         for action in plan.get("actions", [])
@@ -4891,127 +4274,12 @@ def extract_loom_package_specs(line: str) -> list[str]:
         start = index + len(marker)
 
 
-def runtime_upgrade_workflow_pins(target: Path) -> dict[str, Any]:
-    pins: list[dict[str, Any]] = []
-    direct_specs: list[dict[str, Any]] = []
-    for path in workflow_files(target):
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except UnicodeDecodeError:
-            continue
-        for index, line in enumerate(lines, start=1):
-            version_match = re.match(r"^(\s*LOOM_VERSION\s*:\s*)(.+?)\s*$", line)
-            if version_match:
-                pins.append(
-                    {
-                        "locator": f"{relative_to_target(path, target)}:{index}",
-                        "file": relative_to_target(path, target),
-                        "line": index,
-                        "version": normalize_workflow_version_value(version_match.group(2)),
-                        "source": "LOOM_VERSION",
-                        "updatable": True,
-                    }
-                )
-            for package_spec in extract_loom_package_specs(line):
-                direct_specs.append(
-                    {
-                        "locator": f"{relative_to_target(path, target)}:{index}",
-                        "file": relative_to_target(path, target),
-                        "line": index,
-                        "version": package_spec,
-                        "source": "npm_package_spec",
-                        "updatable": False,
-                    }
-                )
-    versions = sorted({pin["version"] for pin in pins})
-    return {
-        "workflow_files": [relative_to_target(path, target) for path in workflow_files(target)],
-        "pins": pins,
-        "direct_package_specs": direct_specs,
-        "versions": versions,
-        "pin_count": len(pins),
-        "updatable_pin_count": sum(1 for pin in pins if pin.get("updatable")),
-    }
-
-
-def runtime_upgrade_apply_workflow_pin_update(target: Path, target_version: str) -> list[dict[str, Any]]:
-    writes: list[dict[str, Any]] = []
-    for path in workflow_files(target):
-        try:
-            raw = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        changed = False
-        updated_lines: list[str] = []
-        for line in raw.splitlines(keepends=True):
-            newline = "\n" if line.endswith("\n") else ""
-            body = line[:-1] if newline else line
-            match = re.match(r"^(\s*LOOM_VERSION\s*:\s*)(.+?)(\s*(#.*)?)$", body)
-            if match:
-                suffix = match.group(3)
-                body = f"{match.group(1)}{target_version}{suffix}"
-                changed = True
-            updated_lines.append(f"{body}{newline}")
-        if changed:
-            path.write_text("".join(updated_lines), encoding="utf-8")
-            writes.append({"file": relative_to_target(path, target), "version": target_version})
-    return writes
-
-
-def runtime_upgrade_artifact_path(target: Path, item: str | None, suffix: str) -> str:
-    safe_item = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(item or "runtime-upgrade")).strip("-") or "runtime-upgrade"
-    if not suffix.endswith(".md"):
-        suffix = f"{suffix}.md"
-    return f".loom/runtime/pr/{safe_item}-{suffix}"
-
-
 def runtime_upgrade_effective_branch(args: argparse.Namespace, target: Path) -> str | None:
     return args.branch or git_branch_for_target(target)
 
 
 def runtime_upgrade_effective_head(args: argparse.Namespace, target: Path) -> str | None:
     return args.head_sha or git_head_sha_for_target(target)
-
-
-def runtime_upgrade_version_label(version: str | None) -> str:
-    return str(version or "<version>")
-
-
-def runtime_upgrade_github_work_item_locator(args: argparse.Namespace) -> str | None:
-    issue = str(args.issue or "").strip()
-    if re.fullmatch(r"[1-9][0-9]*", issue):
-        return f"work_item:{issue}"
-    item = str(args.item or "").strip()
-    if re.fullmatch(r"work_item:[1-9][0-9]*", item):
-        return item
-    return None
-
-
-def runtime_upgrade_pr_metadata_command(args: argparse.Namespace) -> str | None:
-    if not args.item:
-        return None
-    parts = [
-        "loom pr metadata-render",
-        "--surface merge_ready",
-        f"--item {args.item}",
-        "--change-class runtime_upgrade",
-        "--suite-path not_applicable",
-        "--review-requirement current_head_review_required",
-        "--release-judgment no_release",
-        "--upgrade-trigger runtime_upgrade",
-        "--suite-na-rationale workflow-only Loom runtime version pin maintenance",
-        "--suite-na-consumer-boundary CI workflow installs the pinned @mc-and-his-agents/loom runtime",
-        "--suite-na-recheck-condition workflow pin, PR metadata, head SHA, hosted checks, and carrier closeout change",
-        "--suite-na-scope-proof only Loom runtime workflow pin and maintenance carrier surfaces changed",
-        "--suite-na-review-requirement current_head_review_required",
-    ]
-    if args.issue:
-        parts.append(f"--issue {args.issue}")
-    if args.branch:
-        parts.append(f"--branch {args.branch}")
-    if args.head_sha:
-        parts.append(f"--head-sha {args.head_sha}")
-    return " ".join(parts)
 
 
 def runtime_upgrade_pr_metadata_flow_args(
@@ -5075,734 +4343,6 @@ def runtime_upgrade_pr_metadata_flow_args(
     return flow_args
 
 
-def runtime_upgrade_parse_pr_url(raw: str) -> tuple[str | None, str | None]:
-    match = re.search(r"https://github\.com/[^/\s]+/[^/\s]+/pull/(\d+)", raw)
-    if match:
-        return match.group(1), match.group(0)
-    return None, raw.strip() or None
-
-
-def runtime_upgrade_create_pr_payload(args: argparse.Namespace, target: Path, *, body_file: str) -> dict[str, Any]:
-    branch = runtime_upgrade_effective_branch(args, target)
-    if not branch:
-        return output(
-            "runtime-upgrade pr create",
-            "block",
-            summary="runtime-upgrade pr create requires a branch binding.",
-            missing_inputs=["missing branch"],
-            fallback_to=["pass --branch <branch> or run from the upgrade branch"],
-        )
-    title = args.title or f"chore(runtime): upgrade Loom runtime to {runtime_upgrade_version_label(args.to)}"
-    command = [
-        "gh",
-        "pr",
-        "create",
-        "--base",
-        args.base or "main",
-        "--head",
-        branch,
-        "--title",
-        title,
-        "--body-file",
-        str(target / body_file),
-    ]
-    completed = run_capture(command, cwd=target)
-    if completed.returncode != 0:
-        return output(
-            "runtime-upgrade pr create",
-            "block",
-            summary="gh pr create failed before PR metadata readback.",
-            missing_inputs=[completed.stderr.strip() or completed.stdout.strip() or "gh pr create failed"],
-            fallback_to=["create the PR manually, then rerun loom runtime-upgrade pr --pr <n> --update --json"],
-        )
-    number, url = runtime_upgrade_parse_pr_url(completed.stdout)
-    return output(
-        "runtime-upgrade pr create",
-        "pass",
-        summary="runtime-upgrade maintenance PR created; metadata readback must still pass before hosted gate.",
-        pr={"number": number, "url": url, "base": args.base or "main", "head": branch},
-        host_mutations=True,
-        mutates=True,
-    )
-
-
-def runtime_upgrade_issue_payload_from_host(target: Path, *, repo: str | None, issue: str | None) -> dict[str, Any]:
-    command = "runtime-upgrade closeout issue-readback"
-    if not issue:
-        return output(command, "block", summary="Runtime upgrade closeout requires an issue locator.", missing_inputs=["missing issue"], fallback_to=["pass --issue <maintenance-issue>"])
-    inspected = flow_payload(
-        command,
-        [
-            "host-binding",
-            "inspect",
-            "--target",
-            str(target),
-            "--issue",
-            str(issue),
-            *release_closeout_repo_flow_args(repo),
-        ],
-        fallback_to=["loom issue inspect <issue> --json", "pass explicit --pr/--merge-commit/--target-branch/--closed-at"],
-    )
-    chain = inspected.get("binding_chain") if isinstance(inspected.get("binding_chain"), dict) else {}
-    nodes = chain.get("nodes") if isinstance(chain.get("nodes"), dict) else {}
-    issue_node = nodes.get("work_item") if isinstance(nodes.get("work_item"), dict) else {}
-    issue_payload = issue_node.get("value") if isinstance(issue_node.get("value"), dict) else None
-    if not isinstance(issue_payload, dict):
-        return output(command, "block", summary="Issue readback payload is invalid.", missing_inputs=["host-binding issue node is missing"], fallback_to=["loom issue inspect <issue> --json", "pass explicit terminal evidence"])
-    refs = issue_payload.get("closingPullRequests") or issue_payload.get("closedByPullRequestsReferences")
-    pr_number = None
-    if isinstance(refs, list) and refs:
-        first = refs[0]
-        if isinstance(first, dict) and first.get("number") is not None:
-            pr_number = str(first["number"])
-    missing: list[str] = []
-    if str(issue_payload.get("state", "")).upper() != "CLOSED":
-        missing.append("issue is not closed")
-    if not issue_payload.get("closedAt"):
-        missing.append("issue closedAt is missing")
-    result = "pass" if not missing else "block"
-    return output(
-        command,
-        result,
-        summary="Issue readback is closed and can feed runtime-upgrade closeout." if result == "pass" else "Issue readback is not terminal.",
-        issue=issue_payload,
-        inferred_pr=pr_number,
-        host_readback=inspected,
-        missing_inputs=missing,
-        fallback_to=["close the maintenance issue or pass explicit terminal evidence"] if missing else None,
-    )
-
-
-def runtime_upgrade_hosted_run_url(pr: dict[str, Any]) -> str | None:
-    checks = pr.get("statusCheckRollup")
-    if not isinstance(checks, list):
-        return None
-    for check in checks:
-        if not isinstance(check, dict):
-            continue
-        name = str(check.get("name") or check.get("context") or "")
-        url = check.get("detailsUrl") or check.get("targetUrl")
-        if name == "loom-pr-merge-gate" and isinstance(url, str) and url:
-            return url
-    return None
-
-
-def runtime_upgrade_closeout_next_commands(args: argparse.Namespace, target: Path, *, closeout_pr: str | None = None) -> dict[str, str]:
-    branch = runtime_upgrade_effective_branch(args, target) or "<closeout-branch>"
-    head_sha = runtime_upgrade_effective_head(args, target) or "<post-commit-head-sha>"
-    pr = closeout_pr or args.closeout_pr or "<closeout-pr>"
-    return {
-        "metadata_update": f"loom pr metadata-update {pr} --target {target} --surface closeout --item {args.item or '<item>'} --branch {branch} --head-sha {head_sha} --change-class metadata_schema --release-judgment no_release --upgrade-trigger runtime_upgrade --upgrade-trigger carrier_sync_only --apply --json",
-        "metadata_readback": f"loom pr metadata-readback {pr} --target {target} --surface closeout --item {args.item or '<item>'} --branch {branch} --head-sha {head_sha} --json",
-        "gate": f"loom pr gate {pr} --target {target} --surface closeout --work-item {args.item or '<item>'} --head-sha {head_sha} --json",
-        "merge": f"loom merge check {pr} --target {target} --work-item {args.item or '<item>'} --head-sha {head_sha} --pr-role carrier_sync_pr --carrier-sync-pr {pr} --change-class metadata_schema --json",
-        "carrier_only_review": f"loom review --target {target} --item {args.item or '<item>'} --json # review only the carrier-only closeout diff; do not claim product implementation approval",
-    }
-
-
-def runtime_upgrade_pr_intent_prepare_payload(args: argparse.Namespace, target: Path, *, command: str, apply: bool | None = None) -> dict[str, Any] | None:
-    if not args.item:
-        return None
-    profile = PR_INTENT_PROFILES["runtime-upgrade-only"]
-    return pr_intent_prepare_payload(
-        command_name=command,
-        target=target,
-        profile_id="runtime-upgrade-only",
-        profile=profile,
-        item=args.item,
-        issue=args.issue,
-        branch=args.branch,
-        head_sha=args.head_sha,
-        output_file=args.output_file,
-        base_body_file=args.base_body_file or "",
-        rationale=args.rationale,
-        consumer_boundary=args.consumer_boundary,
-        recheck_condition=args.recheck_condition,
-        scope_proof=args.scope_proof,
-        apply=args.apply if apply is None else apply,
-    )
-
-
-def runtime_upgrade_contract_payload(args: argparse.Namespace, target: Path, *, operation: str) -> dict[str, Any]:
-    pins = runtime_upgrade_workflow_pins(target)
-    plan = handle_delivery_payload_for_upgrade_plan(target)
-    freshness = version_freshness()
-    target_version = args.to or freshness.get("latest_package_version") or version_context().get("repo_version")
-    plugin_payload = freshness.get("plugin_payload", {})
-    plugin_guidance = plugin_payload.get("refresh_guidance") or host_plugin_refresh_boundary_action("codex")
-    plugin_freshness = plugin_payload.get("freshness")
-    plugin_advisory = {
-        "mode": "advisory",
-        "freshness": plugin_freshness,
-        "action": plugin_payload.get("action"),
-        "summary": (
-            "Codex plugin/cache freshness is part of the runtime upgrade experience, "
-            "but repository runtime-upgrade commands do not mutate workstation plugin state."
-        ),
-        "blocking_by_default": False,
-        "blocking_when": "--require-plugin-readiness is supplied because the PR explicitly claims workstation Codex runtime/plugin readiness",
-        "guidance": {
-            "readback_command": "loom host doctor --host codex --scope user --json",
-            "apply_commands": [
-                "loom host install --host codex --scope user --apply --json",
-                "loom host register --host codex --scope user --apply --json",
-            ],
-        },
-    }
-    maintenance_profile = {
-        "profile": "runtime-upgrade",
-        "scope": "single-repository",
-        "multi_repo_batch": False,
-        "suite_path": "not_applicable",
-        "review_required": True,
-        "pr_gate_required": True,
-        "hosted_checks_required": True,
-        "head_binding_required": True,
-        "release_judgment": "no-release",
-        "work_item_reuse_forbidden": ["INIT-0001", "product Work Item"],
-    }
-    return {
-        "schema_version": RUNTIME_UPGRADE_SCHEMA,
-        "operation": operation,
-        "target": str(target),
-        "to_version": target_version,
-        "version_layers": {
-            "loom_cli": freshness.get("cli"),
-            "target_repository_workflow_pin": pins,
-            "codex_plugin_cache": plugin_payload,
-        },
-        "workflow_pin_readback": pins,
-        "codex_plugin_cache": plugin_payload,
-        "codex_plugin_guidance": plugin_guidance,
-        "codex_plugin_advisory": plugin_advisory,
-        "mutation_boundary": {
-            "repo_runtime_upgrade_prepare": "may update target repository workflow LOOM_VERSION pins only when --apply is present",
-            "codex_plugin_cache_refresh": "must use loom host doctor|install|register --host codex --scope user; runtime-upgrade does not mutate workstation plugin/cache state",
-        },
-        "version_freshness": freshness,
-        "upgrade_plan": plan,
-        "maintenance_profile": maintenance_profile,
-        "pr_metadata_command": runtime_upgrade_pr_metadata_command(args),
-        "pr_intent_prepare_command": (
-            f"loom pr-intent prepare --intent runtime-upgrade-only --target {target} --item {args.item or '<maintenance-work-item>'} "
-            f"--issue {args.issue or '<issue>'} --branch {args.branch or '<branch>'} --head-sha {args.head_sha or '<head-sha>'} --apply --json"
-        ),
-        "required_sequence": [
-            "runtime-upgrade status",
-            "runtime-upgrade prepare --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --apply",
-            "pr metadata-render/update/readback with runtime_upgrade trigger",
-            "hosted PR gate and semantic review for current head",
-            "runtime-upgrade check --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --head-sha <head>",
-            "runtime-upgrade closeout after merge and carrier closeout-sync",
-        ],
-    }
-
-
-def handle_runtime_upgrade(argv: list[str]) -> int:
-    if not argv:
-        return emit(output("runtime-upgrade", "block", schema=RUNTIME_UPGRADE_SCHEMA, summary="Runtime upgrade requires an operation.", failed_layer="runtime-upgrade-input", fail_closed_reason="missing operation", fallback_to=["loom runtime-upgrade status --target <repo> --json"]))
-    operation = argv[0]
-    if operation in {"-h", "--help", "help"}:
-        return emit(
-            output(
-                "runtime-upgrade help",
-                "pass",
-                schema=RUNTIME_UPGRADE_SCHEMA,
-                summary="Runtime upgrade lane operations: status, prepare, pr, check, closeout.",
-                operations=["status", "prepare", "pr", "check", "closeout"],
-                first_command="loom runtime-upgrade status --target <repo> --json",
-                next_commands=[
-                    "loom runtime-upgrade prepare --target <repo> --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --apply --json",
-                    "loom runtime-upgrade pr --target <repo> --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --create --json",
-                    "loom runtime-upgrade check --target <repo> --item <maintenance-carrier|work_item:issue> [--issue <GitHub Work Item>] --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json",
-                    "loom runtime-upgrade closeout --target <repo> --issue <maintenance-issue> --pr <merged-pr> --sync --create-pr --json",
-                ],
-                mutates=False,
-            )
-        )
-    if operation not in {"status", "prepare", "pr", "check", "closeout"}:
-        return emit(output("runtime-upgrade", "block", schema=RUNTIME_UPGRADE_SCHEMA, summary="Unsupported runtime-upgrade operation.", failed_layer="runtime-upgrade-input", fail_closed_reason=f"unsupported operation: {operation}", fallback_to=["loom runtime-upgrade status --target <repo> --json"]))
-
-    parser = argparse.ArgumentParser(prog=f"loom runtime-upgrade {operation}")
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--to")
-    parser.add_argument("--item")
-    parser.add_argument("--issue", type=int)
-    parser.add_argument("--pr")
-    parser.add_argument("--branch")
-    parser.add_argument("--head-sha")
-    parser.add_argument("--merge-commit")
-    parser.add_argument("--target-branch")
-    parser.add_argument("--closed-at")
-    parser.add_argument("--evidence-locator")
-    parser.add_argument("--repo")
-    parser.add_argument("--base", default="main")
-    parser.add_argument("--title")
-    parser.add_argument("--closeout-pr")
-    parser.add_argument("--pr-payload-file")
-    parser.add_argument("--output-file")
-    parser.add_argument("--base-body-file")
-    parser.add_argument("--rationale")
-    parser.add_argument("--consumer-boundary")
-    parser.add_argument("--recheck-condition")
-    parser.add_argument("--scope-proof")
-    parser.add_argument("--create", action="store_true")
-    parser.add_argument("--update", action="store_true")
-    parser.add_argument("--sync", action="store_true")
-    parser.add_argument("--create-pr", action="store_true")
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--require-plugin-readiness", action="store_true")
-    parser.add_argument("--json", action="store_true")
-    args = parser.parse_args(argv[1:])
-    target = resolve_target(args.target)
-    command = f"runtime-upgrade {operation}"
-    if not target.exists():
-        return emit(block_target(command, target, "target path does not exist"))
-
-    payload = runtime_upgrade_contract_payload(args, target, operation=operation)
-    pins = payload["workflow_pin_readback"]
-    blocking_gaps: list[dict[str, str]] = []
-    plugin_freshness = payload.get("codex_plugin_cache", {}).get("freshness")
-    plugin_ready = plugin_freshness in {None, "current", "already_current"}
-
-    if operation == "status":
-        result = "pass" if pins["pin_count"] else "block"
-        if not pins["pin_count"]:
-            blocking_gaps.append({"id": "missing-workflow-pin", "summary": "No LOOM_VERSION workflow pin was found."})
-        return emit(
-            output(
-                command,
-                result,
-                schema=RUNTIME_UPGRADE_SCHEMA,
-                summary="Runtime upgrade status readback completed." if result == "pass" else "Runtime upgrade status could not find an updatable LOOM_VERSION workflow pin.",
-                mutates=False,
-                failed_layer=None if result == "pass" else "runtime-upgrade-workflow-pin",
-                fail_closed_reason=None if result == "pass" else "missing LOOM_VERSION workflow pin",
-                blocking_gaps=blocking_gaps,
-                fallback_to=None if result == "pass" else ["add a workflow LOOM_VERSION pin", "loom upgrade-plan --target <repo> --json"],
-                **payload,
-            )
-        )
-
-    if operation in {"prepare", "pr", "check"} and not args.to:
-        blocking_gaps.append({"id": "missing-target-version", "summary": "Runtime upgrade requires --to <version>."})
-    if not args.item:
-        blocking_gaps.append({"id": "missing-work-item", "summary": "Runtime upgrade maintenance requires a real Work Item."})
-    elif args.item == "INIT-0001":
-        blocking_gaps.append({"id": "reserved-work-item", "summary": "Runtime upgrade must not reuse INIT-0001."})
-    elif operation in {"prepare", "pr", "check"} and not runtime_upgrade_github_work_item_locator(args):
-        blocking_gaps.append(
-            {
-                "id": "missing-github-work-item",
-                "summary": "Runtime upgrade requires --issue <GitHub Work Item> or --item work_item:<issue>; local Work Item ids alone are not host authority.",
-            }
-        )
-    if operation in {"prepare", "pr", "check"} and not pins["pin_count"]:
-        blocking_gaps.append({"id": "missing-workflow-pin", "summary": "No LOOM_VERSION workflow pin was found."})
-
-    if operation == "prepare":
-        planned_writes = [
-            {"file": pin["file"], "from": pin["version"], "to": args.to}
-            for pin in pins["pins"]
-            if args.to and pin.get("version") != args.to
-        ]
-        applied_writes: list[dict[str, Any]] = []
-        pr_intent_prepare = runtime_upgrade_pr_intent_prepare_payload(args, target, command=command, apply=False)
-        if pr_intent_prepare and pr_intent_prepare.get("result") != "pass":
-            blocking_gaps.extend({"id": "pr-intent-prepare", "summary": str(entry)} for entry in pr_intent_prepare.get("missing_inputs", []))
-        if args.apply and pr_intent_prepare:
-            for locator in (args.base_body_file or ".github/PULL_REQUEST_TEMPLATE.md", ".loom/companion/repo-interface.json"):
-                if not (target / locator).is_file():
-                    blocking_gaps.append({"id": "pr-intent-metadata-contract", "summary": f"runtime-upgrade prepare requires {locator} before writing PR metadata"})
-        if args.require_plugin_readiness and not plugin_ready:
-            blocking_gaps.append({"id": "codex-plugin-cache-not-ready", "summary": "Codex plugin/cache readiness was explicitly required but is stale or unreadable."})
-        result = "block" if blocking_gaps else "pass"
-        if result == "pass" and args.apply:
-            pr_intent_prepare = runtime_upgrade_pr_intent_prepare_payload(args, target, command=command, apply=True)
-            if pr_intent_prepare and pr_intent_prepare.get("result") != "pass":
-                blocking_gaps.extend({"id": "pr-intent-prepare", "summary": str(entry)} for entry in pr_intent_prepare.get("missing_inputs", []))
-                result = "block"
-            else:
-                applied_writes = runtime_upgrade_apply_workflow_pin_update(target, args.to)
-                payload["workflow_pin_readback_after"] = runtime_upgrade_workflow_pins(target)
-        return emit(
-            output(
-                command,
-                result,
-                schema=RUNTIME_UPGRADE_SCHEMA,
-                summary="Runtime upgrade workflow pin prepared." if result == "pass" else "Runtime upgrade prepare is blocked by missing maintenance inputs.",
-                mutates=args.apply,
-                planned_writes=planned_writes,
-                applied_writes=applied_writes,
-                pr_intent_prepare=pr_intent_prepare,
-                failed_layer=None if result == "pass" else "runtime-upgrade-input",
-                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
-                blocking_gaps=blocking_gaps,
-                fallback_to=None if result == "pass" else ["loom runtime-upgrade status --target <repo> --json"],
-                **payload,
-            )
-        )
-
-    if operation == "pr":
-        if not args.to:
-            blocking_gaps.append({"id": "missing-target-version", "summary": "Runtime upgrade PR orchestration requires --to <version>."})
-        branch = runtime_upgrade_effective_branch(args, target)
-        head_sha = runtime_upgrade_effective_head(args, target)
-        if not branch:
-            blocking_gaps.append({"id": "missing-branch", "summary": "Runtime upgrade PR orchestration requires --branch or a checked-out branch."})
-        if not head_sha:
-            blocking_gaps.append({"id": "missing-head_sha", "summary": "Runtime upgrade PR orchestration requires --head-sha or a readable git HEAD."})
-        output_file = args.output_file or runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-pr.md")
-        readback_file = runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-pr-readback.md")
-        steps: list[dict[str, Any]] = []
-        rendered: dict[str, Any] | None = None
-        pr_number = str(args.pr) if args.pr else None
-        created: dict[str, Any] | None = None
-        if not blocking_gaps:
-            render_args = runtime_upgrade_pr_metadata_flow_args(
-                args,
-                target,
-                action="render",
-                surface="merge_ready",
-                output_file=output_file,
-            )
-            rendered = flow_payload(command, render_args, fallback_to=["loom pr metadata-render --surface merge_ready --json"])
-            steps.append({"name": "metadata-render", "result": rendered.get("result"), "payload": rendered})
-            if rendered.get("result") != "pass":
-                blocking_gaps.extend({"id": "metadata-render", "summary": str(entry)} for entry in rendered.get("missing_inputs", []))
-
-        if not blocking_gaps and args.create:
-            created = runtime_upgrade_create_pr_payload(args, target, body_file=output_file)
-            steps.append({"name": "pr-create", "result": created.get("result"), "payload": created, "mutates": created.get("mutates", False)})
-            if created.get("result") == "pass":
-                created_pr = created.get("pr") if isinstance(created.get("pr"), dict) else {}
-                if created_pr.get("number"):
-                    pr_number = str(created_pr["number"])
-            else:
-                blocking_gaps.extend({"id": "pr-create", "summary": str(entry)} for entry in created.get("missing_inputs", []))
-
-        if not blocking_gaps and (args.update or (args.create and pr_number)):
-            if not pr_number:
-                blocking_gaps.append({"id": "missing-pr", "summary": "Runtime upgrade PR update requires --pr or a PR created by --create."})
-            else:
-                update_args = runtime_upgrade_pr_metadata_flow_args(
-                    args,
-                    target,
-                    action="update",
-                    surface="merge_ready",
-                    pr=pr_number,
-                    output_file=output_file,
-                    readback_file=readback_file,
-                )
-                update_args.append("--apply")
-                updated = flow_payload(command, update_args, fallback_to=["loom pr metadata-update <pr> --surface merge_ready --apply --json"])
-                steps.append({"name": "metadata-update", "result": updated.get("result"), "payload": updated, "mutates": True})
-                if updated.get("result") != "pass":
-                    blocking_gaps.extend({"id": "metadata-update", "summary": str(entry)} for entry in updated.get("missing_inputs", []))
-
-        readback: dict[str, Any] | None = None
-        if not blocking_gaps and pr_number:
-            readback_args = runtime_upgrade_pr_metadata_flow_args(
-                args,
-                target,
-                action="readback",
-                surface="merge_ready",
-                pr=pr_number,
-                readback_file=readback_file,
-            )
-            readback = flow_payload(command, readback_args, fallback_to=["loom pr metadata-readback <pr> --surface merge_ready --json"])
-            steps.append({"name": "metadata-readback", "result": readback.get("result"), "payload": readback})
-            if readback.get("result") != "pass":
-                blocking_gaps.extend({"id": "metadata-readback", "summary": str(entry)} for entry in readback.get("missing_inputs", []))
-
-        result = "pass" if not blocking_gaps else "block"
-        next_command = (
-            f"loom runtime-upgrade check --target {target} --item {args.item or '<item>'} --to {args.to or '<version>'} --pr {pr_number or '<pr>'} --branch {branch or '<branch>'} --head-sha {head_sha or '<head-sha>'} --json"
-            if result == "pass" and pr_number
-            else f"loom runtime-upgrade pr --target {target} --item {args.item or '<item>'} --to {args.to or '<version>'} --branch {branch or '<branch>'} --head-sha {head_sha or '<head-sha>'} --create --json"
-        )
-        return emit(
-            output(
-                command,
-                result,
-                schema=RUNTIME_UPGRADE_SCHEMA,
-                summary="Runtime upgrade PR metadata is rendered and read back." if result == "pass" else "Runtime upgrade PR orchestration is blocked.",
-                mutates=bool(args.create or args.update),
-                host_mutations=bool(args.create),
-                carrier_mutations=False,
-                pr={"number": pr_number, "branch": branch, "head_sha": head_sha},
-                body_file=output_file,
-                readback_file=readback_file if pr_number else None,
-                steps=steps,
-                readiness=readiness_payload(
-                    ready=result == "pass" and bool(pr_number),
-                    reasons=readiness_reasons_from_text([gap["summary"] for gap in blocking_gaps]),
-                    next_command=next_command,
-                    summary="PR metadata is ready for runtime-upgrade check." if result == "pass" and pr_number else "Create/update and read back the runtime-upgrade PR before hosted gate.",
-                ),
-                failed_layer=None if result == "pass" else "runtime-upgrade-pr",
-                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
-                blocking_gaps=blocking_gaps,
-                fallback_to=None if result == "pass" else [next_command],
-                next_action=next_command,
-                **payload,
-            )
-        )
-
-    if operation == "check":
-        current_versions = set(pins["versions"])
-        if args.to and current_versions != {args.to}:
-            blocking_gaps.append({"id": "workflow-pin-drift", "summary": f"Workflow LOOM_VERSION pins do not all equal {args.to}."})
-        for required, flag in ((args.pr, "--pr"), (args.branch, "--branch"), (args.head_sha, "--head-sha")):
-            if not required:
-                blocking_gaps.append({"id": f"missing-{flag[2:].replace('-', '_')}", "summary": f"Runtime upgrade check requires {flag} readback."})
-        if args.require_plugin_readiness and not plugin_ready:
-            blocking_gaps.append({"id": "codex-plugin-cache-not-ready", "summary": "Codex plugin/cache readiness was explicitly required but is stale or unreadable."})
-        result = "pass" if not blocking_gaps else "block"
-        return emit(
-            output(
-                command,
-                result,
-                schema=RUNTIME_UPGRADE_SCHEMA,
-                summary="Runtime upgrade maintenance PR inputs are ready for normal Loom gates." if result == "pass" else "Runtime upgrade maintenance PR is not ready.",
-                mutates=False,
-                failed_layer=None if result == "pass" else "runtime-upgrade-readback",
-                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
-                blocking_gaps=blocking_gaps,
-                fallback_to=None if result == "pass" else ["loom pr metadata-readback --surface merge_ready --json", "loom pr gate <pr> --json"],
-                **payload,
-            )
-        )
-
-    if operation == "closeout":
-        explicit_terminal_evidence = bool(args.pr and args.merge_commit and args.target_branch and args.evidence_locator)
-        if not args.issue and not explicit_terminal_evidence:
-            blocking_gaps.append({"id": "missing-issue", "summary": "Runtime upgrade closeout requires --issue so Loom can read issue state and closedAt."})
-        steps: list[dict[str, Any]] = []
-        repo_slug = args.repo or infer_github_repo(target)
-        issue_readback: dict[str, Any] | None = None
-        pr_number = str(args.pr) if args.pr else None
-        if not blocking_gaps and args.issue:
-            issue_readback = runtime_upgrade_issue_payload_from_host(target, repo=repo_slug, issue=args.issue)
-            steps.append({"name": "issue-readback", "result": issue_readback.get("result"), "payload": issue_readback})
-            if issue_readback.get("result") != "pass":
-                blocking_gaps.extend({"id": "issue-readback", "summary": str(entry)} for entry in issue_readback.get("missing_inputs", []))
-            if not pr_number and issue_readback.get("inferred_pr"):
-                pr_number = str(issue_readback["inferred_pr"])
-        if not pr_number:
-            blocking_gaps.append({"id": "missing-pr", "summary": "Runtime upgrade closeout requires --pr or an issue readback with a closing PR reference."})
-
-        pr_readback: dict[str, Any] | None = None
-        pr: dict[str, Any] = {}
-        if not blocking_gaps and pr_number and not explicit_terminal_evidence:
-            pr_readback = release_closeout_pr_readback_payload(
-                target=target,
-                pr_number=pr_number,
-                repo=repo_slug,
-                target_commit=args.merge_commit,
-                pr_payload_file=args.pr_payload_file,
-            )
-            steps.append({"name": "pr-readback", "result": pr_readback.get("result"), "payload": pr_readback})
-            if pr_readback.get("result") != "pass":
-                blocking_gaps.extend({"id": "pr-readback", "summary": str(entry)} for entry in pr_readback.get("missing_inputs", []))
-            else:
-                pr = pr_readback.get("pr") if isinstance(pr_readback.get("pr"), dict) else {}
-
-        issue_payload = issue_readback.get("issue") if isinstance(issue_readback, dict) and isinstance(issue_readback.get("issue"), dict) else {}
-        merge_commit = pr.get("mergeCommit") if isinstance(pr.get("mergeCommit"), dict) else {}
-        merge_sha = str(args.merge_commit or merge_commit.get("oid") or "not_applicable")
-        target_branch = str(args.target_branch or pr.get("baseRefName") or "not_applicable")
-        closed_at = str(args.closed_at or issue_payload.get("closedAt") or pr.get("mergedAt") or (now_iso() if explicit_terminal_evidence else "not_applicable"))
-        hosted_run_url = runtime_upgrade_hosted_run_url(pr)
-        evidence_locator = str(
-            args.evidence_locator
-            or ";".join(str(value) for value in (hosted_run_url, issue_payload.get("url"), pr.get("url")) if value)
-            or "runtime-upgrade-host-readback"
-        )
-        terminal_metadata = {
-            "terminal_state": "closed_out",
-            "issue": str(args.issue or "not_applicable"),
-            "pr": str(pr_number or "not_applicable"),
-            "merge_commit": merge_sha,
-            "target_branch": target_branch,
-            "closed_at": closed_at,
-            "evidence_locator": evidence_locator,
-            "hosted_run_url": hosted_run_url,
-        }
-        for field_name in ("merge_commit", "target_branch", "closed_at"):
-            if terminal_metadata[field_name] == "not_applicable":
-                blocking_gaps.append({"id": f"missing-{field_name}", "summary": f"Runtime upgrade closeout could not infer {field_name.replace('_', ' ')} from host readback."})
-
-        apply_closeout = args.sync or args.apply
-        carrier_command = None
-        if not blocking_gaps and args.item:
-            carrier_args = [
-                "carrier",
-                "closeout-sync",
-                "--target",
-                str(target),
-                "--item",
-                args.item,
-                "--terminal-state",
-                "closed_out",
-                "--issue",
-                terminal_metadata["issue"],
-                "--pr",
-                terminal_metadata["pr"],
-                "--merge-commit",
-                terminal_metadata["merge_commit"],
-                "--target-branch",
-                terminal_metadata["target_branch"],
-                "--closed-at",
-                terminal_metadata["closed_at"],
-                "--evidence-locator",
-                terminal_metadata["evidence_locator"],
-                "--apply" if apply_closeout else "--dry-run",
-            ]
-            carrier_command = "loom " + " ".join(str(part) for part in carrier_args)
-            if not apply_closeout:
-                steps.append(
-                    {
-                        "name": "carrier-closeout-sync-plan",
-                        "result": "pass",
-                        "payload": {"command": carrier_command, "result": "pass", "summary": "carrier closeout-sync is planned; rerun with --sync to write repo carriers."},
-                        "mutates": False,
-                    }
-                )
-            else:
-                carrier = flow_payload(command, carrier_args, fallback_to=["loom carrier closeout-sync --target <repo> --item <item> --apply --json"])
-                steps.append({"name": "carrier-closeout-sync", "result": carrier.get("result"), "payload": carrier, "mutates": apply_closeout})
-                if carrier.get("result") != "pass":
-                    blocking_gaps.extend({"id": "carrier-closeout-sync", "summary": str(entry)} for entry in carrier.get("missing_inputs", []))
-            if apply_closeout and not blocking_gaps:
-                stop = (
-                    f"{args.item} runtime-upgrade closeout synced: PR #{terminal_metadata['pr']} merged at {terminal_metadata['merge_commit']}; "
-                    "host readback consumed into terminal repo carrier state."
-                )
-                recovery_args = [
-                    "recovery",
-                    "writeback",
-                    "--target",
-                    str(target),
-                    "--item",
-                    args.item,
-                    "--current-checkpoint",
-                    "closed_out",
-                    "--current-stop",
-                    stop,
-                    "--next-step",
-                    "Commit/push this carrier-only closeout branch, update PR metadata, run hosted gate, then merge the carrier-only PR.",
-                    "--blockers",
-                    "None recorded.",
-                    "--current-lane",
-                    "runtime-upgrade-closeout-sync",
-                ]
-                recovery = flow_payload(command, recovery_args, fallback_to=["loom recovery writeback --target <repo> --item <item>"])
-                steps.append({"name": "recovery-writeback", "result": recovery.get("result"), "payload": recovery, "mutates": True})
-                if recovery.get("result") == "pass":
-                    for surface in ("closeout", "merge_ready"):
-                        refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--surface", surface, "--write"]
-                        refresh = flow_payload(command, refresh_args, fallback_to=["loom carrier refresh --target <repo> --write"])
-                        steps.append({"name": f"carrier-refresh-{surface}", "result": refresh.get("result"), "payload": refresh, "mutates": True})
-                        if refresh.get("result") != "pass":
-                            blocking_gaps.extend({"id": f"carrier-refresh-{surface}", "summary": str(entry)} for entry in refresh.get("missing_inputs", []))
-                else:
-                    blocking_gaps.extend({"id": "recovery-writeback", "summary": str(entry)} for entry in recovery.get("missing_inputs", []))
-        elif not args.item:
-            blocking_gaps.append({"id": "missing-work-item", "summary": "Runtime upgrade closeout requires --item."})
-
-        closeout_pr_number = str(args.closeout_pr) if args.closeout_pr else None
-        body_file = args.output_file or runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-closeout-pr.md")
-        readback_file = runtime_upgrade_artifact_path(target, args.item, "runtime-upgrade-closeout-pr-readback.md")
-        if not blocking_gaps and (args.create_pr or args.closeout_pr):
-            render_args = runtime_upgrade_pr_metadata_flow_args(args, target, action="render", surface="closeout", output_file=body_file)
-            rendered = flow_payload(command, render_args, fallback_to=["loom pr metadata-render --surface closeout --json"])
-            steps.append({"name": "closeout-metadata-render", "result": rendered.get("result"), "payload": rendered})
-            if rendered.get("result") != "pass":
-                blocking_gaps.extend({"id": "closeout-metadata-render", "summary": str(entry)} for entry in rendered.get("missing_inputs", []))
-            if not blocking_gaps and args.create_pr:
-                created = runtime_upgrade_create_pr_payload(args, target, body_file=body_file)
-                steps.append({"name": "closeout-pr-create", "result": created.get("result"), "payload": created, "mutates": created.get("mutates", False)})
-                if created.get("result") == "pass":
-                    created_pr = created.get("pr") if isinstance(created.get("pr"), dict) else {}
-                    if created_pr.get("number"):
-                        closeout_pr_number = str(created_pr["number"])
-                else:
-                    blocking_gaps.extend({"id": "closeout-pr-create", "summary": str(entry)} for entry in created.get("missing_inputs", []))
-            if not blocking_gaps and closeout_pr_number:
-                update_args = runtime_upgrade_pr_metadata_flow_args(
-                    args,
-                    target,
-                    action="update",
-                    surface="closeout",
-                    pr=closeout_pr_number,
-                    output_file=body_file,
-                    readback_file=readback_file,
-                )
-                update_args.append("--apply")
-                updated = flow_payload(command, update_args, fallback_to=["loom pr metadata-update <pr> --surface closeout --apply --json"])
-                steps.append({"name": "closeout-metadata-update", "result": updated.get("result"), "payload": updated, "mutates": True})
-                if updated.get("result") != "pass":
-                    blocking_gaps.extend({"id": "closeout-metadata-update", "summary": str(entry)} for entry in updated.get("missing_inputs", []))
-                else:
-                    readback_args = runtime_upgrade_pr_metadata_flow_args(
-                        args,
-                        target,
-                        action="readback",
-                        surface="closeout",
-                        pr=closeout_pr_number,
-                        readback_file=readback_file,
-                    )
-                    readback = flow_payload(command, readback_args, fallback_to=["loom pr metadata-readback <pr> --surface closeout --json"])
-                    steps.append({"name": "closeout-metadata-readback", "result": readback.get("result"), "payload": readback})
-                    if readback.get("result") != "pass":
-                        blocking_gaps.extend({"id": "closeout-metadata-readback", "summary": str(entry)} for entry in readback.get("missing_inputs", []))
-
-        result = "pass" if not blocking_gaps else "block"
-        next_commands = runtime_upgrade_closeout_next_commands(args, target, closeout_pr=closeout_pr_number)
-        next_action = (
-            next_commands["metadata_update"]
-            if apply_closeout and result == "pass" and not closeout_pr_number
-            else next_commands["gate"]
-            if result == "pass" and closeout_pr_number
-            else "Resolve runtime-upgrade closeout readback gaps before writing carrier metadata."
-        )
-        return emit(
-            output(
-                command,
-                result,
-                schema=RUNTIME_UPGRADE_SCHEMA,
-                summary="Runtime upgrade closeout carrier sync is ready." if result == "pass" else "Runtime upgrade closeout stopped before terminal carrier readiness.",
-                mutates=apply_closeout or bool(args.create_pr),
-                host_mutations=bool(args.create_pr),
-                carrier_mutations=apply_closeout,
-                terminal_metadata=terminal_metadata,
-                carrier_closeout_sync_command=carrier_command,
-                steps=steps,
-                next_commands=next_commands,
-                carrier_only_review={
-                    "mode": "carrier-only",
-                    "summary": "Current-head review may cover only terminal carrier metadata/review carrier drift; it must not be represented as product implementation approval.",
-                    "next_command": next_commands["carrier_only_review"],
-                },
-                readiness=readiness_payload(
-                    ready=False,
-                    reasons=readiness_reasons_from_text([gap["summary"] for gap in blocking_gaps]) if blocking_gaps else ["pr_metadata_stale"],
-                    next_command=next_action,
-                    summary="Carrier sync is written; update/read back closeout PR metadata before hosted gate." if apply_closeout and result == "pass" else "Runtime-upgrade closeout is not a hosted gate bypass.",
-                ),
-                failed_layer=None if result == "pass" else "runtime-upgrade-closeout",
-                fail_closed_reason=None if result == "pass" else "; ".join(gap["summary"] for gap in blocking_gaps),
-                blocking_gaps=blocking_gaps,
-                fallback_to=None if result == "pass" else [next_action],
-                next_action=next_action,
-                **payload,
-            )
-        )
-
-    raise AssertionError(f"unhandled runtime-upgrade operation: {operation}")
-
-
 def handle_delivery(command: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=f"loom {command}")
     parser.add_argument("--target", default=".")
@@ -5835,7 +4375,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     command,
                     "block",
                     schema=DELIVERY_SCHEMA,
-                    summary="Target repository install writes adoption metadata only and requires --apply before mutation.",
+            summary="Target repository install plan is ready; --apply is required before mutation.",
                     target=str(target),
                     host=args.host,
                     mode=mode,
@@ -5860,7 +4400,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     detection=detection,
                     failed_layer="installed-state",
                     fail_closed_reason="current installed-state exists",
-                    fallback_to=["loom upgrade-plan --target <repo> --json", "loom install --target <repo> --apply --force --json"],
+                    fallback_to=["loom upgrade --target <repo> --json", "loom install --target <repo> --apply --force --json"],
                 )
             )
         managed_writes = [ensure_agents_bootstrap(target)]
@@ -5881,75 +4421,6 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 detection=detection,
                 host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                 fallback_to=None,
-            )
-        )
-
-    if command == "upgrade-plan":
-        actions: list[dict[str, Any]] = []
-        freshness = version_freshness()
-        if installed_error is not None or validation_errors:
-            actions.append(
-                {
-                    "id": "repair-installed-state",
-                    "kind": "repair-plan",
-                    "status": "required",
-                    "reason": installed_error["fail_closed_reason"] if installed_error else "installed-state validation failed",
-                    "command": "loom repair plan --target <repo> --json",
-                }
-            )
-        if legacy_surfaces:
-            actions.append(
-                {
-                    "id": "classify-legacy-surfaces",
-                    "kind": "manual-migration-judgment",
-                    "status": "required",
-                    "surface_count": len(legacy_surfaces),
-                    "command": "loom repair plan --target <repo> --json",
-                }
-            )
-        actions.extend(
-            global_cli_runtime_carrier_migration_actions(
-                target,
-                detection,
-                installed_ready=installed_ready,
-                state_path=path,
-            )
-        )
-        migration_action = downstream_top_level_skills_migration_action(target)
-        if migration_action:
-            actions.append(migration_action)
-        if installed_ready and not legacy_surfaces and not any(action.get("id") == "plan-global-cli-runtime-carrier-migration" for action in actions):
-            actions.append(
-                {
-                    "id": "installed-state-current",
-                    "kind": "no-op",
-                    "status": "current",
-                    "reason": "installed-state validates and no legacy surfaces are blocking",
-                    "command": "loom verify --target <repo> --json",
-                }
-            )
-        registration_action = workstation_registration_action(target)
-        if registration_action:
-            actions.append(registration_action)
-        refresh_boundary_action = host_plugin_refresh_boundary_action(args.host)
-        if refresh_boundary_action:
-            actions.append(refresh_boundary_action)
-        actions.append(version_freshness_action(freshness))
-        return emit(
-            output(
-                command,
-                "pass",
-                schema=DELIVERY_SCHEMA,
-                summary="Target repository upgrade plan generated without mutating installed-state; host plugin refresh uses loom host commands.",
-                target=str(target),
-                host=args.host,
-                mutates=False,
-                installed_state_path=str(path) if path else None,
-                detection=detection,
-                installed_state_errors=validation_errors,
-                version_freshness=freshness,
-                actions=actions,
-                fallback_to=None if installed_ready and not legacy_surfaces else ["loom repair plan --target <repo> --json"],
             )
         )
 
@@ -5980,7 +4451,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 installed_state_path=str(path) if path else None,
                 failed_layer=failed_layer,
                 fail_closed_reason=None if result == "pass" else "; ".join(str(check.get("summary", check.get("name"))) for check in blocking_checks),
-                fallback_to=None if result == "pass" else ["loom upgrade-plan --target <repo> --json", "loom repair plan --target <repo> --json", "loom suite validate --target <repo> --item <item> --json"],
+                fallback_to=None if result == "pass" else ["loom upgrade --target <repo> --json", "loom repair plan --target <repo> --json", "loom build --target <repo> --item <item> --json"],
             )
         )
 
@@ -5989,17 +4460,17 @@ def handle_delivery(command: str, argv: list[str]) -> int:
             return emit(
                 output(
                     command,
-                    "block",
+                    "pass",
                     schema=DELIVERY_SCHEMA,
-                    summary="Target repository upgrade refreshes installed-state metadata and requires --apply.",
+                    summary="Target repository upgrade plan generated without mutation; rerun with --apply after resolving required actions.",
                     target=str(target),
                     host=args.host,
                     mutates=True,
                     plan=handle_delivery_payload_for_upgrade_plan(target),
                     host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
-                    failed_layer="upgrade-apply",
-                    fail_closed_reason="explicit --apply is required before upgrade mutates target repository installed-state metadata",
-                    fallback_to=["loom upgrade-plan --target <repo> --json", "loom verify --target <repo> --json"],
+                    failed_layer=None,
+                    fail_closed_reason=None,
+                    fallback_to=["loom upgrade --target <repo> --apply --json", "loom verify --target <repo> --json"],
                 )
             )
         if not installed_ready or legacy_surfaces:
@@ -6060,7 +4531,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
             detection=detection,
             failed_layer="rollback-ownership",
             fail_closed_reason="rollback/delete ownership is not inferred from installed surface detection",
-            fallback_to=["loom upgrade-plan --target <repo> --json", "loom repair plan --target <repo> --json"],
+            fallback_to=["loom upgrade --target <repo> --json", "loom repair plan --target <repo> --json"],
         )
     )
 
@@ -6371,41 +4842,6 @@ def handle_workspace(argv: list[str]) -> int:
     return emit(workspace_payload(args.action, args))
 
 
-def handle_issue(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom issue")
-    parser.add_argument("action", choices=("inspect", "bind", "reconcile"))
-    parser.add_argument("issue", nargs="?")
-    parser.add_argument("--work-item")
-    parser.add_argument("--json", action="store_true")
-    args = parser.parse_args(argv)
-    command = f"issue {args.action}"
-    if args.action == "inspect":
-        if not args.issue:
-            return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Issue inspect requires an issue number.", failed_layer="issue-input", fail_closed_reason="missing issue number", fallback_to=["loom help --json"]))
-        return emit_flow(command, ["github-intake", "issue", "--target", ".", "--issue", args.issue], fallback_to=["github-intake", "manual-reconciliation"])
-    if args.action == "bind":
-        if not args.issue or not args.work_item:
-            return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Issue bind requires issue and --work-item.", failed_layer="issue-binding", fail_closed_reason="missing issue or work item", fallback_to=["loom issue inspect <issue> --json"]))
-        return emit_flow(command, ["host-binding", "inspect", "--target", ".", "--issue", args.issue], fallback_to=["loom issue inspect <issue> --json", "manual-reconciliation"])
-    flow_args = ["reconciliation", "audit", "--target", "."]
-    if args.issue:
-        flow_args.extend(["--issue", args.issue])
-    return emit_flow(command, flow_args, fallback_to=["manual-reconciliation"])
-
-
-def handle_project(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom project")
-    parser.add_argument("action", choices=("status", "reconcile"))
-    parser.add_argument("--issue")
-    parser.add_argument("--json", action="store_true")
-    args = parser.parse_args(argv)
-    command = f"project {args.action}"
-    if args.issue:
-        flow_args = ["github-intake", "issue", "--target", ".", "--issue", args.issue]
-        return emit_flow(command, flow_args, fallback_to=["loom issue inspect <issue> --json", "manual-reconciliation"])
-    return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Project status requires --issue for this CLI contract.", failed_layer="project-input", fail_closed_reason="missing --issue", fallback_to=["loom issue inspect <issue> --json"]))
-
-
 def pr_command_target(explicit_target: str | None) -> str:
     if explicit_target:
         return explicit_target
@@ -6413,6 +4849,145 @@ def pr_command_target(explicit_target: str | None) -> str:
     if github_workspace:
         return github_workspace
     return "."
+
+
+def handle_public_pr_gate(argv: list[str]) -> int:
+    """Read the base-owned hosted delivery gate without repository review carriers."""
+
+    parser = argparse.ArgumentParser(prog="loom pr gate")
+    parser.add_argument("pr", type=int)
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--work-item", required=True)
+    parser.add_argument("--branch")
+    parser.add_argument("--pr-payload-file")
+    parser.add_argument("--status-checks-file")
+    parser.add_argument("--attestation-artifact-input", type=Path, required=True)
+    parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if (args.pr_payload_file or args.status_checks_file) and os.environ.get("LOOM_ALLOW_TEST_FIXTURES") != "1":
+        return emit(output("pr gate", "block", schema=HOST_OBJECT_SCHEMA, summary="Public PR gate requires fresh authenticated GitHub readback; local host-fact fixtures are test-only.", missing_inputs=["remove --pr-payload-file/--status-checks-file"], primary_error_code="github_host_readback_failure", failure_domain="host_service", failure_owner="github", remediation_command="rerun against the live GitHub PR", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    parsed_item = parse_typed_locator(args.work_item, allowed_types={"work_item"}, allow_legacy=False)
+    if parsed_item is None:
+        return emit(output("pr gate", "block", schema=HOST_OBJECT_SCHEMA, summary="PR gate requires a canonical typed Work Item.", missing_inputs=["owner/repo/work_item/id"], repo_execution_carriers_consumed=False, carrier_mutations=False))
+    issue = int(parsed_item["id"])
+    lifecycle = host_lifecycle_admission_payload(
+        target=target,
+        item=args.work_item,
+        issue=issue,
+        owner=str(parsed_item["owner"]),
+        repo_name=str(parsed_item["repo"]),
+        intent="pre-review",
+        pr=args.pr,
+        branch=args.branch,
+    )
+    if lifecycle.get("result") != "pass":
+        return emit(output("pr gate", "block", schema=HOST_OBJECT_SCHEMA, summary="PR gate host binding is invalid.", lifecycle_admission=lifecycle, missing_inputs=lifecycle.get("missing_inputs", []), fallback_to=lifecycle.get("primary_remediation"), repo_execution_carriers_consumed=False, carrier_mutations=False))
+    repo_slug = infer_github_repo(target)
+    owner, repo_name = repo_slug.split("/", 1) if repo_slug and "/" in repo_slug else (None, None)
+    pr_payload: dict[str, Any] | None = None
+    errors: list[str] = []
+    if args.pr_payload_file:
+        path = Path(args.pr_payload_file)
+        path = path if path.is_absolute() else target / path
+        try:
+            raw_pr = read_json(path)
+            pr_payload = raw_pr if isinstance(raw_pr, dict) else None
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"PR fixture: {exc}")
+    elif owner and repo_name:
+        pr_payload, errors = github_host_module.github_pr_payload(target, owner, repo_name, args.pr)
+    else:
+        errors.append("target origin GitHub owner/repo")
+    status_payload: Any = None
+    if args.status_checks_file:
+        path = Path(args.status_checks_file)
+        path = path if path.is_absolute() else target / path
+        try:
+            status_payload = read_json(path)
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"status checks fixture: {exc}")
+    elif repo_slug:
+        completed = run_capture(["gh", "pr", "view", str(args.pr), "--repo", repo_slug, "--json", "statusCheckRollup"])
+        if completed.returncode == 0:
+            try:
+                status_payload = json.loads(completed.stdout)
+            except json.JSONDecodeError as exc:
+                errors.append(f"status checks readback: {exc}")
+        else:
+            errors.append((completed.stderr or completed.stdout or "status checks readback failed").strip())
+    rows = status_payload.get("statusCheckRollup", []) if isinstance(status_payload, dict) else status_payload
+    rows = rows if isinstance(rows, list) else []
+    matches = [
+        row for row in rows
+        if isinstance(row, dict) and str(row.get("name") or row.get("context") or "") == "loom-delivery-gate"
+    ]
+    passing = [
+        row for row in matches
+        if str(row.get("status") or "").upper() == "COMPLETED"
+        and str(row.get("conclusion") or row.get("state") or "").upper() in {"SUCCESS", "EXPECTED", "PASS"}
+    ]
+    if not isinstance(pr_payload, dict):
+        errors.append("current PR readback")
+    else:
+        if int(pr_payload.get("number") or 0) != args.pr:
+            errors.append("PR readback number mismatch")
+        if str(pr_payload.get("state") or "").upper() != "OPEN":
+            errors.append("PR must be open")
+        current_head = pr_payload.get("headRefOid")
+        if args.head_sha and current_head != args.head_sha:
+            errors.append("hosted gate PR head does not match --head-sha")
+    if len(matches) != 1:
+        errors.append(f"expected one current loom-delivery-gate check; found {len(matches)}")
+    elif len(passing) != 1:
+        errors.append("loom-delivery-gate is not completed successfully")
+    attestation_args = argparse.Namespace(
+        owner=owner,
+        repo_name=repo_name,
+        issue=issue,
+        pr=args.pr,
+        implementation_pr=None,
+        release_pr=None,
+        pr_role="implementation_pr",
+        attestation_artifact_input=args.attestation_artifact_input,
+        review_policy=args.review_policy,
+    )
+    review_attestation = ship_host_attestation(attestation_args, target, closeout=False)
+    if review_attestation.get("result") != "pass":
+        errors.extend(str(value) for value in review_attestation.get("missing_inputs", []) or ["current-head review attestation"])
+    attested_host_facts = review_attestation.get("host_facts") if isinstance(review_attestation.get("host_facts"), dict) else {}
+    attested_pr = attested_host_facts.get("pr") if isinstance(attested_host_facts.get("pr"), dict) else {}
+    if isinstance(pr_payload, dict):
+        if attested_pr.get("number") != pr_payload.get("number"):
+            errors.append("review attestation PR number does not match live PR")
+        if attested_pr.get("head_sha") != pr_payload.get("headRefOid"):
+            errors.append("review attestation head does not match live PR head")
+    result = "pass" if not errors else "block"
+    payload = output(
+        "pr gate",
+        result,
+        schema="loom-delivery-gate-readback/v1",
+        summary=("The base-owned hosted delivery gate passed for the current PR head." if result == "pass" else "The hosted delivery gate is missing, stale, or non-passing."),
+        lifecycle_admission=lifecycle,
+        work_item={"locator": args.work_item, "issue": issue},
+        pr={
+            "number": pr_payload.get("number") if isinstance(pr_payload, dict) else args.pr,
+            "head_sha": pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else None,
+            "state": pr_payload.get("state") if isinstance(pr_payload, dict) else None,
+        },
+        hosted_check=passing[0] if passing else (matches[0] if matches else None),
+        review_attestation=review_attestation,
+        assurance="limited",
+        missing_inputs=list(dict.fromkeys(errors)),
+        fallback_to=None if result == "pass" else "rerun the base-owned loom-delivery-gate for the current PR head",
+        repo_execution_carriers_consumed=False,
+        carrier_mutations=False,
+        mutates=False,
+    )
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_pr(argv: list[str]) -> int:
@@ -6625,15 +5200,12 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--delete-branch", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--closeout-run", action="store_true")
-    parser.add_argument("--closeout-mode", choices=("host_only", "inline", "batched_carrier_pr", "full_closeout_pr"), default="host_only")
-    add_legacy_carrier_compatibility_args(parser)
+    parser.add_argument("--closeout-mode", choices=("host_only",), default="host_only")
     parser.add_argument("--issue", type=int)
     parser.add_argument("--target-branch")
     parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
     parser.add_argument("--implementation-pr", type=int)
     parser.add_argument("--release-pr", type=int)
-    parser.add_argument("--carrier-sync-pr", type=int)
-    parser.add_argument("--final-closeout-pr", type=int)
     parser.add_argument("--project")
     parser.add_argument("--phase")
     parser.add_argument("--fr")
@@ -6662,24 +5234,41 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
     command = f"merge {args.action}"
-    if args.closeout_mode != "host_only":
-        compatibility = legacy_carrier_compatibility(args)
-        if compatibility["result"] != "pass":
-            return emit(
-                agent_safe_payload(
-                    output(
-                        command,
-                        "block",
-                        schema_version="loom-legacy-carrier-command/v1",
-                        summary=compatibility["summary"],
-                        mutates=False,
-                        compatibility=compatibility,
-                        missing_inputs=compatibility["missing_inputs"],
-                        fallback_to="use --closeout-mode host_only",
-                    )
-                )
-            )
     target = resolve_target(pr_command_target(args.target))
+    parsed_item = parse_typed_locator(args.work_item, allowed_types={"work_item"}, allow_legacy=False) if args.work_item else None
+    if parsed_item is None:
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge requires a canonical typed Work Item.", missing_inputs=["--work-item <owner>/<repo>/work_item/<issue>"], repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    item_issue = int(parsed_item["id"])
+    if args.issue is not None and args.issue != item_issue:
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge Work Item and issue bindings conflict.", missing_inputs=["consistent --work-item and --issue"], repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    args.issue = item_issue
+    lifecycle = host_lifecycle_admission_payload(
+        target=target,
+        item=args.work_item,
+        issue=args.issue,
+        owner=str(parsed_item["owner"]),
+        repo_name=str(parsed_item["repo"]),
+        intent="ship",
+        pr=args.pr,
+    )
+    if lifecycle.get("result") != "pass":
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge host binding is invalid.", lifecycle_admission=lifecycle, missing_inputs=lifecycle.get("missing_inputs", []), fallback_to=lifecycle.get("primary_remediation"), repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    unsafe_fixture_inputs = [
+        name
+        for name, value in (
+            ("--pr-payload-file", args.pr_payload_file),
+            ("--status-checks-file", args.status_checks_file),
+            ("--branch-protection-file", args.branch_protection_file),
+            ("--ruleset-file", args.ruleset_file),
+        )
+        if value
+    ]
+    if args.action == "run" and args.apply and unsafe_fixture_inputs:
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="A mutating merge must use fresh authenticated GitHub readback, not local host-fact fixtures.", missing_inputs=[f"remove {name}" for name in unsafe_fixture_inputs], primary_error_code="github_host_readback_failure", failure_domain="host_service", failure_owner="github", remediation_command="rerun without local PR/check/protection/ruleset fixture inputs", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    if not args.pr_gate_result_file:
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge requires the retained base-owned loom-delivery-gate readback for the current PR head.", missing_inputs=["--pr-gate-result-file"], remediation_command="run loom pr gate against the live PR and retain its JSON result", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    if args.merge_gate_result_file:
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="The legacy retained merge-gate input is not part of the public merge path.", missing_inputs=["remove --merge-gate-result-file"], primary_error_code="unsupported_command_surface", failure_domain="toolchain", failure_owner="loom", remediation_command="use the host-native loom-delivery-gate readback only", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     flow_args = [
         "controlled-merge",
         "merge" if args.action == "run" else "check",
@@ -6697,7 +5286,7 @@ def handle_merge(argv: list[str]) -> int:
     if args.work_item:
         flow_args.extend(["--item", args.work_item])
     if args.issue:
-        flow_args.extend(["--issue", args.issue])
+        flow_args.extend(["--issue", str(args.issue)])
     if args.owner:
         flow_args.extend(["--owner", args.owner])
     if args.repo_name:
@@ -6723,7 +5312,12 @@ def handle_merge(argv: list[str]) -> int:
     append_full_output_flag(flow_args, args)
     if args.closeout_run:
         return handle_merge_closeout_run(command, args, flow_args)
-    return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])
+    review_attestation = ship_host_attestation(args, target, closeout=False)
+    if review_attestation.get("result") != "pass":
+        return emit(agent_safe_payload(output(command, "block", schema="loom-host-native-merge/v1", summary="Merge requires a live current-head GitHub review attestation; asserted gate JSON is not review authority.", review_attestation=review_attestation, missing_inputs=review_attestation.get("missing_inputs", []), fallback_to=review_attestation.get("fallback_to"), repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False), target_root=target, full_output=args.full_output))
+    controlled = flow_payload(command, flow_args, fallback_to=["refresh the live loom-delivery-gate readback for the current PR head"])
+    result = "pass" if controlled.get("result") == "pass" else "block"
+    return emit(agent_safe_payload(output(command, result, schema="loom-host-native-merge/v1", summary=("Live review attestation and controlled merge preconditions passed." if result == "pass" else "Controlled merge is blocked after live review attestation."), review_attestation=review_attestation, controlled_merge=controlled, missing_inputs=controlled.get("missing_inputs", []), fallback_to=controlled.get("fallback_to"), repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=bool(controlled.get("merge", {}).get("executed")) if isinstance(controlled.get("merge"), dict) else False), target_root=target, full_output=args.full_output))
 
 
 def merge_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argparse.Namespace:
@@ -6734,8 +5328,8 @@ def merge_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argpar
         pr_role=args.pr_role,
         implementation_pr=args.implementation_pr,
         release_pr=args.release_pr,
-        carrier_sync_pr=args.carrier_sync_pr,
-        final_closeout_pr=args.final_closeout_pr,
+        carrier_sync_pr=None,
+        final_closeout_pr=None,
         project=args.project,
         phase=args.phase,
         fr=args.fr,
@@ -6760,20 +5354,13 @@ def merge_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argpar
 
 
 def merge_closeout_policy(args: argparse.Namespace) -> dict[str, Any]:
-    mode = getattr(args, "closeout_mode", "inline")
-    next_action = {
-        "inline": "legacy compatibility: run the retired repo closeout backend after controlled merge",
-        "host_only": "run host reconciliation and closeout readback immediately after controlled merge passes",
-        "batched_carrier_pr": "queue carrier closeout after merge; do not inline carrier writes in controlled-merge",
-        "full_closeout_pr": "use an explicit closeout or release PR path before merging through controlled-merge --closeout-run",
-    }[mode]
     return {
         "schema_version": "loom-closeout-policy-decision/v1",
         "result": "pass",
-        "policy": mode,
+        "policy": "host_only",
         "source": "merge-closeout-run",
         "creates_closeout_pr_by_default": False,
-        "next_action": next_action,
+        "next_action": "run host reconciliation and closeout readback immediately after controlled merge passes",
     }
 
 
@@ -6860,38 +5447,27 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
             summary="merge --closeout-run requires an issue binding for closeout.",
             missing_inputs=["--issue is required for --closeout-run"],
         )
-    if closeout_policy["policy"] not in {"inline", "host_only"}:
-        mode = closeout_policy["policy"]
+    target = resolve_target(pr_command_target(args.target))
+    steps: list[dict[str, Any]] = []
+    premerge_attestation_args = merge_closeout_namespace(args, branch=args.target_branch or "")
+    premerge_attestation = ship_host_attestation(premerge_attestation_args, target, closeout=False)
+    steps.append(
+        merge_closeout_step(
+            "host-review-attestation",
+            premerge_attestation,
+            mutates=False,
+            evidence_locator="GitHub host attestation readback",
+        )
+    )
+    if premerge_attestation.get("result") != "pass":
         return merge_closeout_block(
             command,
             args,
-            summary=f"merge --closeout-run cannot inline closeout mode `{mode}`.",
-            missing_inputs=[f"closeout mode `{mode}` requires an explicit post-merge carrier or closeout PR path"],
-            fallback_to=[str(closeout_policy["next_action"])],
+            summary="merge run stopped before controlled merge because host review attestation did not pass.",
+            missing_inputs=[str(value) for value in premerge_attestation.get("missing_inputs", [])],
+            steps=steps,
+            fallback_to=premerge_attestation.get("fallback_to") or "provide a valid GitHub host attestation artifact",
         )
-
-    target = resolve_target(pr_command_target(args.target))
-    steps: list[dict[str, Any]] = []
-    if closeout_policy["policy"] == "host_only":
-        premerge_attestation_args = merge_closeout_namespace(args, branch=args.target_branch or "")
-        premerge_attestation = ship_host_attestation(premerge_attestation_args, target, closeout=False)
-        steps.append(
-            merge_closeout_step(
-                "host-review-attestation",
-                premerge_attestation,
-                mutates=False,
-                evidence_locator="GitHub host attestation readback",
-            )
-        )
-        if premerge_attestation.get("result") != "pass":
-            return merge_closeout_block(
-                command,
-                args,
-                summary="merge run stopped before controlled merge because host review attestation did not pass.",
-                missing_inputs=[str(value) for value in premerge_attestation.get("missing_inputs", [])],
-                steps=steps,
-                fallback_to=premerge_attestation.get("fallback_to") or "provide a valid GitHub host attestation artifact",
-            )
     merge_payload = flow_payload(command, forwarded_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])
     steps.append(merge_closeout_step("controlled-merge-apply", merge_payload, mutates=True))
     if merge_payload.get("command") and merge_payload.get("command") != command:
@@ -6939,24 +5515,16 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
         )
 
     closeout_args = merge_closeout_namespace(args, branch=closeout_branch)
-    closeout: dict[str, Any]
-    terminal_metadata: dict[str, Any] = {}
-    if closeout_policy["policy"] == "host_only":
-        reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
-        add_closeout_host_args(reconciliation_args, closeout_args, include_comment=True)
-        reconciliation_args.append("--apply")
-        reconciliation = flow_payload(command, reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout --target <repo> --json"])
-        steps.append(merge_closeout_step("host-reconciliation-sync", reconciliation, mutates=True, evidence_locator="reconciliation sync payload"))
-        if reconciliation.get("result") == "pass":
-            closeout = ship_host_attestation(closeout_args, target, closeout=True)
-            steps.append(merge_closeout_step("host-closeout-attestation", closeout, mutates=False, evidence_locator="GitHub host attestation readback"))
-        else:
-            closeout = reconciliation
+    reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
+    add_closeout_host_args(reconciliation_args, closeout_args, include_comment=True)
+    reconciliation_args.append("--apply")
+    reconciliation = flow_payload(command, reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout --target <repo> --json"])
+    steps.append(merge_closeout_step("host-reconciliation-sync", reconciliation, mutates=True, evidence_locator="reconciliation sync payload"))
+    if reconciliation.get("result") == "pass":
+        closeout = ship_host_attestation(closeout_args, target, closeout=True)
+        steps.append(merge_closeout_step("host-closeout-attestation", closeout, mutates=False, evidence_locator="GitHub host attestation readback"))
     else:
-        closeout = run_closeout_payload(closeout_args, target)
-        terminal_metadata = closeout.get("terminal_metadata") if isinstance(closeout.get("terminal_metadata"), dict) else {}
-        evidence_locator = terminal_metadata.get("evidence_locator") if isinstance(terminal_metadata, dict) else None
-        steps.append(merge_closeout_step("closeout-run", closeout, mutates=True, evidence_locator=evidence_locator))
+        closeout = reconciliation
     blocker = first_blocking_step(steps)
     result = "pass" if blocker is None else "block"
     summary = (
@@ -6982,7 +5550,7 @@ def handle_merge_closeout_run(command: str, args: argparse.Namespace, flow_args:
                 closeout_mode=closeout_policy["policy"],
                 creates_closeout_pr=False,
                 target_branch=closeout_branch,
-                terminal_metadata=terminal_metadata,
+                terminal_metadata={},
                 evidence_locators=closeout.get("evidence_locators", []),
                 steps=steps,
                 first_blocker=blocker,
@@ -7016,80 +5584,6 @@ def governance_metadata_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
-LEGACY_CARRIER_COMPATIBILITY_POLICY = "reinforced-carrier-compat/v1"
-LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS = 90
-
-
-def legacy_carrier_compatibility(args: argparse.Namespace) -> dict[str, Any]:
-    expiry_text = str(getattr(args, "compatibility_expires_at", "") or "").strip()
-    expiry: datetime | None = None
-    try:
-        parsed = datetime.fromisoformat(expiry_text.replace("Z", "+00:00"))
-        expiry = parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
-    except ValueError:
-        expiry = None
-    now = datetime.now(timezone.utc)
-    valid = (
-        getattr(args, "governance_intensity", None) == "reinforced"
-        and getattr(args, "compatibility_policy", None) == LEGACY_CARRIER_COMPATIBILITY_POLICY
-        and expiry is not None
-        and now < expiry <= now + timedelta(days=LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS)
-    )
-    return {
-        "schema_version": "loom-legacy-carrier-compatibility/v1",
-        "result": "pass" if valid else "block",
-        "policy": getattr(args, "compatibility_policy", None),
-        "governance_intensity": getattr(args, "governance_intensity", None),
-        "expires_at": expiry_text or None,
-        "max_days": LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS,
-        "summary": (
-            "A reinforced, time-bounded compatibility exception explicitly enables the retired carrier backend."
-            if valid
-            else "The retired carrier backend is disabled outside an explicit reinforced, time-bounded compatibility exception."
-        ),
-        "missing_inputs": [] if valid else [
-            f"set --governance-intensity reinforced --compatibility-policy {LEGACY_CARRIER_COMPATIBILITY_POLICY} "
-            f"--compatibility-expires-at <RFC3339 within {LEGACY_CARRIER_COMPATIBILITY_MAX_DAYS} days>"
-        ],
-        "fallback_to": None if valid else "use host attestation/readback and host-only closeout",
-    }
-
-
-def add_legacy_carrier_compatibility_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--governance-intensity", choices=("reinforced",))
-    parser.add_argument("--compatibility-policy")
-    parser.add_argument("--compatibility-expires-at")
-
-
-def split_legacy_carrier_compatibility_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
-    parser = argparse.ArgumentParser(add_help=False)
-    add_legacy_carrier_compatibility_args(parser)
-    return parser.parse_known_args(argv)
-
-
-def handle_review_command(argv: list[str]) -> int:
-    if not argv or argv[0] != "record":
-        return dispatch("review", argv)
-    compatibility_args, forwarded = split_legacy_carrier_compatibility_args(argv[1:])
-    compatibility = legacy_carrier_compatibility(compatibility_args)
-    if compatibility["result"] != "pass":
-        return emit(
-            agent_safe_payload(
-                output(
-                    "review record",
-                    "block",
-                    schema_version="loom-legacy-carrier-command/v1",
-                    summary=compatibility["summary"],
-                    mutates=False,
-                    compatibility=compatibility,
-                    missing_inputs=compatibility["missing_inputs"],
-                    fallback_to="loom attestation readback --repo <owner/repo> --pr <n> --work-item <n> --artifact-input <file> --json",
-                )
-            )
-        )
-    return dispatch("review", ["record", *forwarded])
-
-
 def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | None = None) -> dict[str, Any]:
     intensity = intensity_override if intensity_override not in {None, "auto"} else fields.get("governance_intensity")
     change_class = fields.get("change_class")
@@ -7120,7 +5614,6 @@ def ship_closeout_policy(fields: dict[str, Any], *, intensity_override: str | No
         "release_judgment": release_judgment,
         "upgrade_reasons": upgrade_reasons,
         "creates_closeout_pr_by_default": False,
-        "legacy_carrier_compatibility_policy": LEGACY_CARRIER_COMPATIBILITY_POLICY,
         "next_action": "run loom ship --apply after dry-run blockers are clear" if policy == "host_only" else "publish through the release workflow, then use release readback without a closeout PR",
     }
 
@@ -7232,1049 +5725,6 @@ def ship_changed_paths_payload(args: argparse.Namespace, target: Path, *, target
 
 def path_matches_any(path: str, prefixes: tuple[str, ...], exact: tuple[str, ...] = ()) -> bool:
     return path in exact or any(path.startswith(prefix) for prefix in prefixes)
-
-
-PR_INTENT_PROFILE_SCHEMA = "loom-pr-intent-profile/v1"
-PR_INTENT_PREPARE_SCHEMA = "loom-pr-intent-prepare/v1"
-PR_INTENT_CHECK_SCHEMA = "loom-pr-intent-check/v1"
-
-PR_INTENT_SHARED_CONTRACTS = (
-    "docs/methodology/harness/cli-command-matrix.md",
-    "docs/methodology/harness/full-spec-suite-cli-surface.md",
-    "docs/methodology/harness/task-carrier-contract.md",
-    ".loom/companion/repo-interface.json",
-)
-
-PR_INTENT_DOC_PREFIXES = (
-    "docs/",
-    ".loom/specs/",
-    ".loom/work-items/",
-    ".loom/progress/",
-    ".loom/status/",
-    ".loom/reviews/",
-    ".loom/shadow/",
-)
-PR_INTENT_DOC_EXACT = (
-    "README.md",
-    "README.zh-CN.md",
-    "VISION.md",
-    "AGENTS.md",
-    ".github/PULL_REQUEST_TEMPLATE.md",
-)
-PR_INTENT_CARRIER_PREFIXES = (
-    ".loom/bootstrap/",
-    ".loom/work-items/",
-    ".loom/progress/",
-    ".loom/status/",
-    ".loom/reviews/",
-    ".loom/shadow/",
-    ".loom/runtime/",
-)
-PR_INTENT_RELEASE_PREFIXES = (
-    "docs/evidence/",
-    "plugins/loom/",
-    "packages/",
-    ".github/workflows/",
-)
-PR_INTENT_RELEASE_EXACT = (
-    "VERSION",
-    "package.json",
-    "package-lock.json",
-    "README.md",
-    "README.zh-CN.md",
-)
-PR_INTENT_RELEASE_ALLOWED_PREFIXES = PR_INTENT_RELEASE_PREFIXES + PR_INTENT_CARRIER_PREFIXES
-PR_INTENT_FIXTURE_PREFIXES = (
-    "test/",
-    "docs/evidence/fixtures/",
-    "examples/new-project/",
-    ".loom/specs/",
-)
-PR_INTENT_RUNTIME_UPGRADE_PREFIXES = (
-    ".github/workflows/",
-    ".loom/specs/",
-    ".loom/runtime/",
-    ".loom/work-items/",
-    ".loom/progress/",
-    ".loom/status/",
-    ".loom/reviews/",
-    ".loom/shadow/",
-)
-
-PR_INTENT_PROFILES: dict[str, dict[str, Any]] = {
-    "docs-governance-only": {
-        "aliases": ("docs", "docs-only", "governance-only", "docs-pr"),
-        "summary": "Docs/governance-only PR carrier set.",
-        "surface": "merge_ready",
-        "governance_intensity": "light",
-        "change_class": "docs_governance",
-        "suite_path": "not_applicable",
-        "review_requirement": "current_head_review_required",
-        "release_judgment": "no_release",
-        "upgrade_triggers": (),
-        "allowed_prefixes": PR_INTENT_DOC_PREFIXES,
-        "allowed_exact": PR_INTENT_DOC_EXACT,
-        "default_rationale": "docs/governance-only PR intent does not require a formal behavior suite",
-        "default_consumer_boundary": "suite validate, review, PR gate, merge-ready, and closeout may consume this only as formal suite non-applicability; Work Item truth, current-head review, CI, no-release judgment, and closeout evidence remain required",
-        "default_recheck_condition": "scope expands beyond docs/governance-only carrier or contract text",
-    },
-    "closeout-only": {
-        "aliases": ("closeout", "final-closeout-only"),
-        "summary": "Terminal closeout-only PR carrier set.",
-        "surface": "closeout",
-        "governance_intensity": "standard",
-        "change_class": "metadata_schema",
-        "suite_path": "not_applicable",
-        "review_requirement": "current_head_review_required",
-        "release_judgment": "no_release",
-        "upgrade_triggers": ("closeout_only",),
-        "allowed_prefixes": PR_INTENT_CARRIER_PREFIXES,
-        "allowed_exact": (),
-        "default_rationale": "closeout-only PR intent only consumes already completed implementation facts",
-        "default_consumer_boundary": "closeout, PR gate, and merge-ready may consume this only as formal suite non-applicability; retained review, PR metadata, host reconciliation, and terminal carrier evidence remain required",
-        "default_recheck_condition": "diff touches implementation/runtime paths or non-terminal carriers",
-    },
-    "release-only": {
-        "aliases": ("release", "release-prep-only"),
-        "summary": "Release-only PR carrier set.",
-        "surface": "merge_ready",
-        "governance_intensity": "standard",
-        "change_class": "release",
-        "suite_path": "minimal",
-        "review_requirement": "current_head_review_required",
-        "release_judgment": "release_required",
-        "upgrade_triggers": ("release_or_version_closeout",),
-        "allowed_prefixes": PR_INTENT_RELEASE_ALLOWED_PREFIXES,
-        "allowed_exact": PR_INTENT_RELEASE_EXACT,
-        "default_rationale": None,
-        "default_consumer_boundary": None,
-        "default_recheck_condition": None,
-    },
-    "carrier-sync-only": {
-        "aliases": ("carrier-sync", "carrier-only"),
-        "summary": "Carrier-sync-only PR carrier set.",
-        "surface": "closeout",
-        "governance_intensity": "standard",
-        "change_class": "metadata_schema",
-        "suite_path": "not_applicable",
-        "review_requirement": "current_head_review_required",
-        "release_judgment": "no_release",
-        "upgrade_triggers": ("carrier_sync_only",),
-        "allowed_prefixes": PR_INTENT_CARRIER_PREFIXES,
-        "allowed_exact": (),
-        "default_rationale": "carrier-sync-only PR intent synchronizes derived Loom carriers from existing facts",
-        "default_consumer_boundary": "review, PR gate, merge-ready, and closeout may consume this only as carrier synchronization non-applicability; implementation review, host readback, and closeout evidence remain required",
-        "default_recheck_condition": "carrier sync introduces new implementation scope or a non-consumed fact",
-    },
-    "fixture-only": {
-        "aliases": ("fixture", "fixtures-only"),
-        "summary": "Fixture-only PR carrier set.",
-        "surface": "merge_ready",
-        "governance_intensity": "light",
-        "change_class": "fixture",
-        "suite_path": "minimal",
-        "review_requirement": "current_head_review_required",
-        "release_judgment": "no_release",
-        "upgrade_triggers": (),
-        "allowed_prefixes": PR_INTENT_FIXTURE_PREFIXES,
-        "allowed_exact": (),
-        "default_rationale": None,
-        "default_consumer_boundary": None,
-        "default_recheck_condition": None,
-    },
-    "runtime-upgrade-only": {
-        "aliases": ("runtime-upgrade", "loom-runtime-upgrade", "workflow-runtime-upgrade"),
-        "summary": "Single-repository Loom runtime workflow pin upgrade PR carrier set.",
-        "surface": "merge_ready",
-        "governance_intensity": "light",
-        "change_class": "runtime_upgrade",
-        "suite_path": "not_applicable",
-        "review_requirement": "current_head_review_required",
-        "release_judgment": "no_release",
-        "upgrade_triggers": ("runtime_upgrade",),
-        "allowed_prefixes": PR_INTENT_RUNTIME_UPGRADE_PREFIXES,
-        "allowed_exact": (),
-        "default_rationale": "runtime-upgrade-only PR intent updates the target repository Loom workflow pin and maintenance carriers only",
-        "default_consumer_boundary": "suite validate, review, PR gate, merge-ready, and closeout may consume this only as workflow-only runtime maintenance non-applicability; PR metadata, current-head review, hosted checks, head binding, and carrier closeout remain required",
-        "default_recheck_condition": "diff touches non-workflow runtime code, product behavior, release surfaces, or workstation plugin/cache state",
-    },
-}
-
-PR_INTENT_ALIAS_INDEX: dict[str, str] = {
-    alias: profile_id
-    for profile_id, profile in PR_INTENT_PROFILES.items()
-    for alias in (profile_id, *profile["aliases"])
-}
-PR_INTENT_PRESERVE_SUITE_PROFILES = {"closeout-only", "carrier-sync-only"}
-READINESS_REASON_ORDER = (
-    "head_sha_drift",
-    "pr_metadata_stale",
-    "review_stale",
-    "shadow_stale",
-    "carrier_not_terminal",
-    "release_readback_mismatch",
-    "carrier_set_incomplete",
-)
-
-
-def pr_intent_profile(raw_intent: str | None) -> tuple[str | None, dict[str, Any] | None, str | None]:
-    normalized = str(raw_intent or "").strip().lower().replace("_", "-")
-    profile_id = PR_INTENT_ALIAS_INDEX.get(normalized)
-    if not profile_id:
-        return None, None, f"unknown PR intent profile: {raw_intent or '<missing>'}"
-    return profile_id, PR_INTENT_PROFILES[profile_id], None
-
-
-def readiness_reasons_from_text(values: list[Any]) -> list[str]:
-    text = "\n".join(str(value).lower() for value in values if value)
-    reasons: list[str] = []
-    if "head_sha" in text or "head sha" in text or "head-sha" in text:
-        reasons.append("head_sha_drift")
-    if "metadata" in text or "machine block" in text or "pr body" in text:
-        reasons.append("pr_metadata_stale")
-    if "review" in text:
-        reasons.append("review_stale")
-    if "shadow" in text:
-        reasons.append("shadow_stale")
-    if "carrier_not_terminal" in text or "not terminal" in text:
-        reasons.append("carrier_not_terminal")
-    if "release readback" in text or "release_readback" in text:
-        reasons.append("release_readback_mismatch")
-    if not reasons and text:
-        reasons.append("carrier_set_incomplete")
-    return [reason for reason in READINESS_REASON_ORDER if reason in set(reasons)]
-
-
-def readiness_payload(
-    *,
-    ready: bool,
-    reasons: list[str],
-    next_command: str | None,
-    summary: str | None = None,
-) -> dict[str, Any]:
-    return {
-        "schema_version": "loom-shift-left-readiness/v1",
-        "ready_for_hosted_gate": ready,
-        "reasons": reasons,
-        "next_command": None if ready else next_command,
-        "summary": summary
-        or (
-            "Local readiness inputs are bound; hosted gate may be run for final confirmation."
-            if ready
-            else "Local readiness found drift or an incomplete carrier set before hosted gate."
-        ),
-    }
-
-
-def pr_intent_effective_profile(
-    *,
-    target: Path,
-    item: str | None,
-    profile_id: str,
-    profile: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    effective = dict(profile)
-    probe: dict[str, Any] = {
-        "schema_version": "loom-pr-intent-suite-path-resolution/v1",
-        "profile_suite_path": profile.get("suite_path"),
-        "effective_suite_path": profile.get("suite_path"),
-        "source": "profile_default",
-    }
-    if profile_id not in PR_INTENT_PRESERVE_SUITE_PROFILES or not item:
-        return effective, probe
-    summary, result, payload, failed_layer, fail_reason, fallback_to = suite_validate_payload(target, item)
-    existing_suite_path = str(payload.get("suite_path") or "")
-    probe.update(
-        {
-            "suite_validate_result": result,
-            "suite_path": existing_suite_path,
-            "summary": summary,
-            "failed_layer": failed_layer,
-            "fail_closed_reason": fail_reason,
-            "fallback_to": fallback_to,
-        }
-    )
-    if result == "pass" and existing_suite_path in {"minimal", "full"}:
-        effective["suite_path"] = existing_suite_path
-        probe.update({"effective_suite_path": existing_suite_path, "source": "preserved_existing_suite"})
-    return effective, probe
-
-
-def pr_intent_current_head(target: Path, explicit_head: str | None) -> str | None:
-    return explicit_head or git_head_sha_for_target(target)
-
-
-def pr_intent_current_branch(target: Path, explicit_branch: str | None) -> str | None:
-    return explicit_branch or git_branch_for_target(target)
-
-
-def pr_intent_na_value(profile: dict[str, Any], key: str, explicit: str | None) -> str:
-    return str(explicit or profile.get(f"default_{key}") or "").strip()
-
-
-def pr_intent_scope_proof(profile_id: str, paths: list[str], explicit: str | None) -> str:
-    if explicit:
-        return explicit.strip()
-    if paths:
-        return f"{profile_id} changed paths: " + ", ".join(paths[:20])
-    return f"{profile_id} scope proof: no changed paths reported by local diff"
-
-
-def pr_intent_not_applicable_spec_content(
-    *,
-    item: str,
-    profile_id: str,
-    profile: dict[str, Any],
-    rationale: str,
-    consumer_boundary: str,
-    recheck_condition: str,
-    scope_proof: str,
-) -> str:
-    return (
-        "# Spec\n\n"
-        "- Suite path: not_applicable\n\n"
-        f"- Suite-level not_applicable: rationale: {rationale}; "
-        f"consumer boundary: {consumer_boundary}; "
-        f"recheck condition: {recheck_condition}; "
-        f"scope proof: {scope_proof}; "
-        f"review requirement: {profile['review_requirement']}.\n\n"
-        "## PR Intent\n\n"
-        f"- Intent profile: {profile_id}\n"
-        f"- Work Item: {item}\n"
-        f"- Change class: {profile['change_class']}\n"
-        "- Review, PR gate, merge-ready, release readback, and closeout evidence remain required by their normal gates.\n"
-    )
-
-
-def pr_intent_not_applicable_write(
-    *,
-    target: Path,
-    item: str,
-    profile_id: str,
-    profile: dict[str, Any],
-    rationale: str,
-    consumer_boundary: str,
-    recheck_condition: str,
-    scope_proof: str,
-    apply: bool,
-) -> tuple[dict[str, Any], str | None]:
-    item_error = suite_item_segment_error(item)
-    destination = target / ".loom" / "specs" / item / "spec.md"
-    locator = f".loom/specs/{item}/spec.md"
-    missing_inputs: list[str] = []
-    if item_error:
-        missing_inputs.append(item_error)
-    for component in (target / ".loom", target / ".loom" / "specs", destination.parent, destination):
-        if component.is_symlink():
-            try:
-                missing_inputs.append(f"not_applicable path must not traverse symlink: {repo_locator(component, target)}")
-            except ValueError:
-                missing_inputs.append("not_applicable path must not traverse symlink")
-    if destination.exists() and not destination.is_file():
-        missing_inputs.append(f"not_applicable spec target is not a regular file: {locator}")
-    created_locators: list[str] = []
-    exists = destination.exists()
-    if apply and not exists and not missing_inputs:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(
-            pr_intent_not_applicable_spec_content(
-                item=item,
-                profile_id=profile_id,
-                profile=profile,
-                rationale=rationale,
-                consumer_boundary=consumer_boundary,
-                recheck_condition=recheck_condition,
-                scope_proof=scope_proof,
-            ),
-            encoding="utf-8",
-        )
-        created_locators.append(locator)
-    payload = {
-        "suite_path": "not_applicable",
-        "planned_writes": [
-            {
-                "artifact": "spec.md",
-                "locator": locator,
-                "status": "exists" if exists else ("created" if created_locators else "would_create"),
-                "planned_action": "preserve_existing" if exists else "create",
-                "would_write": not exists,
-                "wrote": bool(created_locators),
-                "overwrite_policy": "preserve_existing",
-                "requirement": "suite_not_applicable_decision",
-            }
-        ],
-        "overwrite_policy": {
-            "mode": "preserve_existing",
-            "allows_overwrite": False,
-            "existing_files": [locator] if exists else [],
-        },
-        "created_locators": created_locators,
-        "missing_inputs": missing_inputs,
-        "not_applicable": {
-            "rationale": rationale,
-            "consumer_boundary": consumer_boundary,
-            "recheck_condition": recheck_condition,
-            "scope_proof": scope_proof,
-            "review_requirement": profile["review_requirement"],
-        },
-    }
-    return payload, "invalid_not_applicable_target" if missing_inputs else None
-
-
-def pr_intent_changed_paths(
-    *,
-    target: Path,
-    explicit_paths: list[str],
-    base: str | None,
-    head_sha: str | None,
-) -> tuple[list[str], list[str], str]:
-    paths = sorted({normalized for path in explicit_paths if (normalized := normalize_changed_path(path))})
-    if paths:
-        return paths, [], "explicit"
-    local_paths, errors = ship_local_changed_paths(target, target_branch=base, head_sha=head_sha)
-    return local_paths, errors, "local_git_diff"
-
-
-def pr_intent_scope_validation(profile: dict[str, Any], paths: list[str], path_errors: list[str]) -> dict[str, Any]:
-    allowed_prefixes = tuple(profile.get("allowed_prefixes") or ())
-    allowed_exact = tuple(profile.get("allowed_exact") or ())
-    blocked_paths = [
-        path
-        for path in paths
-        if not path_matches_any(path, prefixes=allowed_prefixes, exact=allowed_exact)
-    ]
-    result = "pass" if not path_errors and not blocked_paths else "block"
-    return {
-        "schema_version": "loom-pr-intent-scope-proof/v1",
-        "result": result,
-        "changed_paths": paths,
-        "allowed_prefixes": list(allowed_prefixes),
-        "allowed_exact": list(allowed_exact),
-        "blocked_paths": blocked_paths,
-        "missing_inputs": path_errors,
-        "summary": (
-            "Changed paths match the declared PR intent profile."
-            if result == "pass"
-            else "Changed paths are unreadable or outside the declared PR intent profile."
-        ),
-    }
-
-
-def pr_intent_metadata_flow_args(
-    *,
-    operation: str,
-    target: Path,
-    profile: dict[str, Any],
-    item: str,
-    issue: str | None,
-    branch: str | None,
-    head_sha: str | None,
-    body_file: str | None = None,
-    output_file: str | None = None,
-    base_body_file: str | None = None,
-    rationale: str | None = None,
-    consumer_boundary: str | None = None,
-    recheck_condition: str | None = None,
-    scope_proof: str | None = None,
-    pr: str | None = None,
-) -> list[str]:
-    args = ["pr-metadata", operation, "--target", str(target), "--surface", str(profile["surface"]), "--item", item]
-    if issue:
-        args.extend(["--issue", issue])
-    if branch:
-        args.extend(["--branch", branch])
-    if head_sha:
-        args.extend(["--head-sha", head_sha])
-    if pr:
-        args.extend(["--pr", pr])
-    if body_file:
-        args.extend(["--body-file", body_file])
-    if output_file:
-        args.extend(["--output-file", output_file])
-    if base_body_file:
-        args.extend(["--base-body-file", base_body_file])
-    if operation in {"render", "update"}:
-        args.extend(["--governance-intensity", str(profile["governance_intensity"])])
-        args.extend(["--change-class", str(profile["change_class"])])
-        args.extend(["--suite-path", str(profile["suite_path"])])
-        args.extend(["--review-requirement", str(profile["review_requirement"])])
-        args.extend(["--release-judgment", str(profile["release_judgment"])])
-        for trigger in profile.get("upgrade_triggers") or ():
-            args.extend(["--upgrade-trigger", str(trigger)])
-        if profile["suite_path"] == "not_applicable":
-            args.extend(["--suite-na-rationale", rationale or ""])
-            args.extend(["--suite-na-consumer-boundary", consumer_boundary or ""])
-            args.extend(["--suite-na-recheck-condition", recheck_condition or ""])
-            args.extend(["--suite-na-scope-proof", scope_proof or ""])
-            args.extend(["--suite-na-review-requirement", str(profile["review_requirement"])])
-    return args
-
-
-def pr_intent_governance_fields(metadata_payload: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(metadata_payload, dict):
-        return {}
-    carrier = metadata_payload.get("governance_intensity_carrier")
-    envelope = carrier.get("envelope") if isinstance(carrier, dict) else None
-    fields = envelope.get("fields") if isinstance(envelope, dict) else None
-    return fields if isinstance(fields, dict) else {}
-
-
-def pr_intent_consistency_validation(
-    *,
-    target: Path,
-    profile_id: str,
-    profile: dict[str, Any],
-    item: str,
-    issue: str | None,
-    branch: str | None,
-    head_sha: str | None,
-    metadata_payload: dict[str, Any] | None,
-    suite_result: str,
-) -> dict[str, Any]:
-    fields = pr_intent_governance_fields(metadata_payload)
-    missing: list[str] = []
-    parsed_item = parse_typed_locator(item, allowed_types={"work_item"})
-    repo_slug = infer_github_repo(target)
-    if isinstance(issue, str) and issue.isdigit() and repo_slug:
-        owner, repo = repo_slug.split("/", 1)
-        expected_work_item_locator = typed_locator(owner, repo, "work_item", int(issue))
-    elif parsed_item and not parsed_item["legacy"]:
-        expected_work_item_locator = str(parsed_item["locator"])
-    elif parsed_item and repo_slug:
-        owner, repo = repo_slug.split("/", 1)
-        expected_work_item_locator = typed_locator(owner, repo, "work_item", int(parsed_item["id"]))
-    else:
-        expected_work_item_locator = item
-    expected = {
-        "work_item_locator": expected_work_item_locator,
-        "change_class": profile["change_class"],
-        "suite_path": profile["suite_path"],
-        "review_requirement": profile["review_requirement"],
-        "release_judgment": profile["release_judgment"],
-    }
-    for key, value in expected.items():
-        if fields.get(key) != value:
-            missing.append(f"metadata.{key}")
-    if profile["suite_path"] == "not_applicable":
-        if suite_result != "not_applicable":
-            missing.append("suite.not_applicable")
-        suite_na = fields.get("suite_not_applicable")
-        if not isinstance(suite_na, dict):
-            missing.append("metadata.suite_not_applicable")
-        else:
-            for key in ("rationale", "consumer_boundary", "recheck_condition", "scope_proof", "review_requirement"):
-                if not isinstance(suite_na.get(key), str) or not suite_na.get(key).strip():
-                    missing.append(f"metadata.suite_not_applicable.{key}")
-    elif suite_result not in {"pass"}:
-        missing.append("suite.path_ready")
-    return {
-        "schema_version": "loom-pr-intent-carrier-set-consistency/v1",
-        "result": "pass" if not missing else "block",
-        "intent": profile_id,
-        "expected": expected,
-        "metadata_fields": fields,
-        "suite_result": suite_result,
-        "missing_inputs": missing,
-        "summary": (
-            "Metadata, suite path, typed Work Item binding, and profile intent agree."
-            if not missing
-            else "Metadata, suite path, typed Work Item binding, or profile intent drifted across carriers."
-        ),
-    }
-
-
-def pr_intent_suite_prepare(
-    *,
-    target: Path,
-    item: str,
-    profile_id: str,
-    profile: dict[str, Any],
-    rationale: str,
-    consumer_boundary: str,
-    recheck_condition: str,
-    scope_proof: str,
-    apply: bool,
-) -> tuple[dict[str, Any], str | None]:
-    if profile["suite_path"] == "not_applicable":
-        return pr_intent_not_applicable_write(
-            target=target,
-            item=item,
-            profile_id=profile_id,
-            profile=profile,
-            rationale=rationale,
-            consumer_boundary=consumer_boundary,
-            recheck_condition=recheck_condition,
-            scope_proof=scope_proof,
-            apply=apply,
-        )
-    summary, payload, failure = suite_scaffold_payload(target, item, str(profile["suite_path"]), apply=apply)
-    return {**payload, "summary": summary}, failure
-
-
-def pr_intent_prepare_payload(
-    *,
-    command_name: str,
-    target: Path,
-    profile_id: str,
-    profile: dict[str, Any],
-    item: str | None,
-    issue: str | None,
-    branch: str | None,
-    head_sha: str | None,
-    output_file: str | None,
-    base_body_file: str,
-    rationale: str | None,
-    consumer_boundary: str | None,
-    recheck_condition: str | None,
-    scope_proof: str | None,
-    apply: bool,
-) -> dict[str, Any]:
-    missing_inputs: list[str] = []
-    if not item:
-        missing_inputs.append("missing --item")
-    if item and suite_item_segment_error(item):
-        missing_inputs.append(str(suite_item_segment_error(item)))
-    current_branch = pr_intent_current_branch(target, branch)
-    current_head = pr_intent_current_head(target, head_sha)
-    if not current_branch:
-        missing_inputs.append("branch is unavailable; pass --branch <work/...>")
-    if not current_head:
-        missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
-    if not target.exists():
-        missing_inputs.append("target path does not exist")
-
-    effective_item = item or "<item>"
-    profile, suite_path_resolution = pr_intent_effective_profile(
-        target=target,
-        item=item,
-        profile_id=profile_id,
-        profile=profile,
-    )
-    effective_output = output_file or f".loom/runtime/pr/{effective_item}-{profile_id}-body.md"
-    paths, path_errors, path_source = pr_intent_changed_paths(target=target, explicit_paths=[], base="main", head_sha=current_head)
-    effective_scope_proof = pr_intent_scope_proof(profile_id, paths, scope_proof)
-    effective_rationale = pr_intent_na_value(profile, "rationale", rationale)
-    effective_consumer = pr_intent_na_value(profile, "consumer_boundary", consumer_boundary)
-    effective_recheck = pr_intent_na_value(profile, "recheck_condition", recheck_condition)
-
-    suite_prepare: dict[str, Any] = {"planned_writes": [], "created_locators": [], "missing_inputs": []}
-    suite_failure: str | None = None
-    metadata_prepare: dict[str, Any] = {
-        "operation": "render",
-        "output_file": effective_output,
-        "apply": apply,
-        "planned_command": "loom pr metadata-render --surface "
-        + str(profile["surface"])
-        + " --item "
-        + effective_item
-        + " --output-file "
-        + effective_output
-        + " --json",
-    }
-    if not missing_inputs and item:
-        suite_prepare, suite_failure = pr_intent_suite_prepare(
-            target=target,
-            item=item,
-            profile_id=profile_id,
-            profile=profile,
-            rationale=effective_rationale,
-            consumer_boundary=effective_consumer,
-            recheck_condition=effective_recheck,
-            scope_proof=effective_scope_proof,
-            apply=apply,
-        )
-        missing_inputs.extend(str(entry) for entry in suite_prepare.get("missing_inputs", []))
-        if apply:
-            metadata_args = pr_intent_metadata_flow_args(
-                operation="render",
-                target=target,
-                profile=profile,
-                item=item,
-                issue=issue,
-                branch=current_branch,
-                head_sha=current_head,
-                output_file=effective_output,
-                base_body_file=base_body_file,
-                rationale=effective_rationale,
-                consumer_boundary=effective_consumer,
-                recheck_condition=effective_recheck,
-                scope_proof=effective_scope_proof,
-            )
-            metadata_prepare = flow_payload(
-                command_name,
-                metadata_args,
-                fallback_to=["loom pr metadata-render --surface <surface> --item <id> --json"],
-            )
-            if metadata_prepare.get("result") != "pass":
-                missing_inputs.extend(str(entry) for entry in metadata_prepare.get("missing_inputs", []))
-    metadata_preflight: dict[str, Any] | None = None
-    if apply and not missing_inputs and item and metadata_prepare.get("result") == "pass":
-        preflight_args = pr_intent_metadata_flow_args(
-            operation="preflight",
-            target=target,
-            profile=profile,
-            item=item,
-            issue=issue,
-            branch=current_branch,
-            head_sha=current_head,
-            body_file=effective_output,
-        )
-        metadata_preflight = flow_payload(
-            command_name,
-            preflight_args,
-            fallback_to=["loom pr metadata-preflight --surface <surface> --body-file <rendered-pr-body.md> --json"],
-        )
-        if metadata_preflight.get("result") != "pass":
-            missing_inputs.extend(str(entry) for entry in metadata_preflight.get("missing_inputs", []))
-    result = "pass" if not missing_inputs and suite_failure is None else "block"
-    check_command = (
-        f"loom pr-intent check --intent {profile_id} --target {target} --item {effective_item} "
-        f"--branch {current_branch or '<branch>'} --head-sha {current_head or '<head-sha>'} "
-        f"--body-file {effective_output} --json"
-    )
-    readiness_reasons = readiness_reasons_from_text(missing_inputs)
-    return output(
-        command_name,
-        result,
-        schema=PR_INTENT_PREPARE_SCHEMA,
-        target=str(target),
-        item_id=item,
-        intent=profile_id,
-        mutates=apply,
-        summary=(
-            "PR intent prepare produced or planned the profile carrier set."
-            if result == "pass"
-            else "PR intent prepare found missing or invalid carrier inputs."
-        ),
-        profile={
-            "schema_version": PR_INTENT_PROFILE_SCHEMA,
-            "intent": profile_id,
-            "surface": profile["surface"],
-            "suite_path": profile["suite_path"],
-            "change_class": profile["change_class"],
-            "release_judgment": profile["release_judgment"],
-        },
-        path_source=path_source,
-        path_read_warnings=path_errors,
-        suite_path_resolution=suite_path_resolution,
-        suite_prepare=suite_prepare,
-        metadata_prepare=metadata_prepare,
-        metadata_preflight=metadata_preflight,
-        readiness=readiness_payload(
-            ready=False,
-            reasons=readiness_reasons or ([] if result == "pass" else ["carrier_set_incomplete"]),
-            next_command=check_command if result == "pass" else f"loom pr-intent prepare --intent {profile_id} --target {target} --item <id> --apply --json",
-            summary=(
-                "Carrier files passed local preflight; update/read back the PR body before hosted gate."
-                if result == "pass"
-                else "Prepare stopped before the carrier set was ready for PR metadata readback."
-            ),
-        ),
-        missing_inputs=dedupe_strings(missing_inputs),
-        fallback_to=[f"loom {command_name} --intent {profile_id} --item <id> --apply --json"] if result == "block" else None,
-        consumed_contracts=list(PR_INTENT_SHARED_CONTRACTS),
-    )
-
-
-def pr_intent_check_payload(
-    *,
-    command_name: str,
-    target: Path,
-    profile_id: str,
-    profile: dict[str, Any],
-    item: str | None,
-    issue: str | None,
-    branch: str | None,
-    head_sha: str | None,
-    body_file: str | None,
-    pr: str | None,
-    changed_paths: list[str],
-    base: str | None,
-) -> dict[str, Any]:
-    blocking_gaps: list[dict[str, Any]] = []
-    missing_inputs: list[str] = []
-    if not item:
-        missing_inputs.append("missing --item")
-    if item and suite_item_segment_error(item):
-        missing_inputs.append(str(suite_item_segment_error(item)))
-    current_branch = pr_intent_current_branch(target, branch)
-    current_head = pr_intent_current_head(target, head_sha)
-    if not current_branch:
-        missing_inputs.append("branch is unavailable; pass --branch <work/...>")
-    if not current_head:
-        missing_inputs.append("head_sha is unavailable; pass --head-sha <40-hex>")
-    if not body_file and not pr:
-        missing_inputs.append("metadata check requires --body-file or PR number")
-    profile, suite_path_resolution = pr_intent_effective_profile(
-        target=target,
-        item=item,
-        profile_id=profile_id,
-        profile=profile,
-    )
-
-    suite_validation: dict[str, Any] = {"result": "block", "missing_inputs": ["missing --item"]}
-    evidence_validation: dict[str, Any] = {"result": "not_applicable", "summary": "Suite evidence validation is not applicable for this intent profile."}
-    carrier_validation: dict[str, Any] = {"result": "not_applicable", "summary": "Suite carrier validation is not applicable for this intent profile."}
-    metadata_validation: dict[str, Any] | None = None
-
-    if item and not suite_item_segment_error(item):
-        suite_summary, suite_result, suite_payload, suite_failed_layer, suite_fail_reason, suite_fallback = suite_validate_payload(target, item)
-        suite_validation = {
-            "command": "suite validate",
-            "result": suite_result,
-            "summary": suite_summary,
-            "failed_layer": suite_failed_layer,
-            "fail_closed_reason": suite_fail_reason,
-            "fallback_to": suite_fallback,
-            "payload": suite_payload,
-        }
-        if profile["suite_path"] == "not_applicable":
-            if suite_result != "not_applicable":
-                missing_inputs.append("suite path is not the profile-required not_applicable decision")
-        elif suite_result != "pass":
-            missing_inputs.extend(str(entry) for entry in suite_payload.get("missing_inputs", []))
-        else:
-            evidence_summary, evidence_result, evidence_payload, evidence_failed_layer, evidence_fail_reason, evidence_fallback = suite_evidence_validate_payload(target, item)
-            evidence_validation = {
-                "command": "suite evidence validate",
-                "result": evidence_result,
-                "summary": evidence_summary,
-                "failed_layer": evidence_failed_layer,
-                "fail_closed_reason": evidence_fail_reason,
-                "fallback_to": evidence_fallback,
-                "payload": evidence_payload,
-            }
-            carrier_summary, carrier_result, carrier_payload, carrier_failed_layer, carrier_fail_reason, carrier_fallback = suite_carrier_validate_payload(target, item)
-            carrier_validation = {
-                "command": "suite carrier validate",
-                "result": carrier_result,
-                "summary": carrier_summary,
-                "failed_layer": carrier_failed_layer,
-                "fail_closed_reason": carrier_fail_reason,
-                "fallback_to": carrier_fallback,
-                "payload": carrier_payload,
-            }
-            if evidence_result != "pass":
-                missing_inputs.extend(str(entry) for entry in evidence_payload.get("missing_inputs", []))
-            if carrier_result != "pass":
-                missing_inputs.extend(str(entry) for entry in carrier_payload.get("missing_inputs", []))
-
-    if item and (body_file or pr):
-        metadata_args = pr_intent_metadata_flow_args(
-            operation="preflight",
-            target=target,
-            profile=profile,
-            item=item,
-            issue=issue,
-            branch=current_branch,
-            head_sha=current_head,
-            body_file=body_file,
-            pr=pr,
-        )
-        metadata_validation = flow_payload(
-            command_name,
-            metadata_args,
-            fallback_to=["loom pr metadata-preflight --surface <surface> --body-file <rendered-pr-body.md> --json"],
-        )
-        if metadata_validation.get("result") != "pass":
-            missing_inputs.extend(str(entry) for entry in metadata_validation.get("missing_inputs", []))
-
-    paths, path_errors, path_source = pr_intent_changed_paths(
-        target=target,
-        explicit_paths=changed_paths,
-        base=base,
-        head_sha=current_head,
-    )
-    scope_validation = pr_intent_scope_validation(profile, paths, path_errors)
-    if scope_validation["result"] != "pass":
-        missing_inputs.extend(str(entry) for entry in scope_validation.get("missing_inputs", []))
-        missing_inputs.extend(f"scope path outside intent: {path}" for path in scope_validation.get("blocked_paths", []))
-
-    consistency_validation = pr_intent_consistency_validation(
-        target=target,
-        profile_id=profile_id,
-        profile=profile,
-        item=item or "",
-        issue=issue,
-        branch=current_branch,
-        head_sha=current_head,
-        metadata_payload=metadata_validation,
-        suite_result=str(suite_validation.get("result")),
-    )
-    if consistency_validation["result"] != "pass":
-        missing_inputs.extend(str(entry) for entry in consistency_validation.get("missing_inputs", []))
-
-    for key, validation in (
-        ("suite", suite_validation),
-        ("evidence", evidence_validation),
-        ("carrier", carrier_validation),
-        ("metadata", metadata_validation or {}),
-        ("scope", scope_validation),
-        ("consistency", consistency_validation),
-    ):
-        if isinstance(validation, dict) and validation.get("result") == "block":
-            blocking_gaps.append(
-                {
-                    "surface": key,
-                    "summary": validation.get("summary"),
-                    "missing_inputs": validation.get("missing_inputs", []),
-                    "fallback_to": validation.get("fallback_to"),
-                }
-            )
-
-    missing_inputs = dedupe_strings(missing_inputs)
-    result = "pass" if not missing_inputs and not blocking_gaps else "block"
-    ready_for_hosted_gate = result == "pass" and bool(pr)
-    readiness_reasons = readiness_reasons_from_text(missing_inputs)
-    if result == "pass" and not pr:
-        readiness_reasons = ["pr_metadata_stale"]
-    next_command = (
-        f"loom pr gate {pr} --target {target} --surface {profile['surface']} --work-item {item or '<item>'} --json"
-        if ready_for_hosted_gate
-        else f"loom pr metadata-update <pr> --target {target} --surface {profile['surface']} --item {item or '<item>'} --branch {current_branch or '<branch>'} --apply --json"
-    )
-    return output(
-        command_name,
-        result,
-        schema=PR_INTENT_CHECK_SCHEMA,
-        target=str(target),
-        item_id=item,
-        intent=profile_id,
-        mutates=False,
-        summary=(
-            "PR intent check passed across suite, metadata, scope, branch binding, and carrier consistency."
-            if result == "pass"
-            else "PR intent check found missing, stale, partial, or cross-surface drift."
-        ),
-        profile={
-            "schema_version": PR_INTENT_PROFILE_SCHEMA,
-            "intent": profile_id,
-            "surface": profile["surface"],
-            "suite_path": profile["suite_path"],
-            "change_class": profile["change_class"],
-            "release_judgment": profile["release_judgment"],
-        },
-        validations={
-            "suite": suite_validation,
-            "evidence": evidence_validation,
-            "carrier": carrier_validation,
-            "metadata": metadata_validation,
-            "scope": scope_validation,
-            "consistency": consistency_validation,
-        },
-        suite_path_resolution=suite_path_resolution,
-        readiness=readiness_payload(
-            ready=ready_for_hosted_gate,
-            reasons=readiness_reasons,
-            next_command=next_command,
-        ),
-        changed_paths={"source": path_source, "paths": paths},
-        missing_inputs=missing_inputs,
-        blocking_gaps=blocking_gaps,
-        fallback_to=[f"loom {command_name} --intent {profile_id} --item <id> --body-file <rendered-pr-body.md> --json"] if result == "block" else None,
-        consumed_contracts=list(PR_INTENT_SHARED_CONTRACTS),
-    )
-
-
-def handle_pr_intent(argv: list[str], *, default_intent: str | None = None, command_root: str = "pr-intent") -> int:
-    parser = argparse.ArgumentParser(prog=f"loom {command_root}")
-    parser.add_argument("action", choices=("prepare", "check"))
-    if default_intent is None:
-        parser.add_argument("--intent", required=True)
-    else:
-        parser.add_argument("--intent", default=default_intent)
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--item")
-    parser.add_argument("--issue")
-    parser.add_argument("--pr")
-    parser.add_argument("--branch")
-    parser.add_argument("--head-sha")
-    parser.add_argument("--body-file")
-    parser.add_argument("--output-file")
-    parser.add_argument("--base-body-file", default=".github/PULL_REQUEST_TEMPLATE.md")
-    parser.add_argument("--base", default="main")
-    parser.add_argument("--changed-path", action="append", default=[])
-    parser.add_argument("--rationale")
-    parser.add_argument("--consumer-boundary")
-    parser.add_argument("--recheck-condition")
-    parser.add_argument("--scope-proof")
-    parser.add_argument("--apply", action="store_true")
-    add_legacy_carrier_compatibility_args(parser)
-    parser.add_argument("--json", action="store_true")
-    args = parser.parse_args(argv)
-    profile_id, profile, profile_error = pr_intent_profile(args.intent)
-    command_name = f"{command_root} {args.action}"
-    target = resolve_target(args.target)
-    if profile_error or profile is None or profile_id is None:
-        return emit(
-            output(
-                command_name,
-                "block",
-                schema=PR_INTENT_CHECK_SCHEMA if args.action == "check" else PR_INTENT_PREPARE_SCHEMA,
-                target=str(target),
-                intent=args.intent,
-                mutates=False,
-                summary="Unsupported PR intent profile.",
-                missing_inputs=[profile_error],
-                fallback_to=["loom pr-intent prepare --intent docs-governance-only --item <id> --json"],
-                supported_intents=sorted(PR_INTENT_PROFILES),
-            )
-        )
-    if profile_id in PR_INTENT_PRESERVE_SUITE_PROFILES:
-        compatibility = legacy_carrier_compatibility(args)
-        if compatibility["result"] != "pass":
-            return emit(
-                agent_safe_payload(
-                    output(
-                        command_name,
-                        "block",
-                        schema_version="loom-legacy-carrier-command/v1",
-                        summary=compatibility["summary"],
-                        target=str(target),
-                        intent=profile_id,
-                        mutates=False,
-                        compatibility=compatibility,
-                        missing_inputs=compatibility["missing_inputs"],
-                        fallback_to="use a normal implementation/release PR and host-only closeout",
-                    )
-                )
-            )
-    if not target.exists():
-        return emit(block_target(command_name, target, "target path does not exist"))
-    if args.action == "prepare":
-        payload = pr_intent_prepare_payload(
-            command_name=command_name,
-            target=target,
-            profile_id=profile_id,
-            profile=profile,
-            item=args.item,
-            issue=args.issue,
-            branch=args.branch,
-            head_sha=args.head_sha,
-            output_file=args.output_file,
-            base_body_file=args.base_body_file,
-            rationale=args.rationale,
-            consumer_boundary=args.consumer_boundary,
-            recheck_condition=args.recheck_condition,
-            scope_proof=args.scope_proof,
-            apply=args.apply,
-        )
-    else:
-        payload = pr_intent_check_payload(
-            command_name=command_name,
-            target=target,
-            profile_id=profile_id,
-            profile=profile,
-            item=args.item,
-            issue=args.issue,
-            branch=args.branch,
-            head_sha=args.head_sha,
-            body_file=args.body_file,
-            pr=args.pr,
-            changed_paths=args.changed_path,
-            base=args.base,
-        )
-    return emit(payload)
 
 
 def ship_validation_profile_for_paths(paths: list[str], closeout_policy: dict[str, Any]) -> tuple[str, list[str]]:
@@ -8425,6 +5875,93 @@ def git_branch_for_target(target: Path) -> str | None:
         return None
     branch = completed.stdout.strip()
     return branch if branch and branch != "HEAD" else None
+
+
+def github_default_branch_for_target(target: Path) -> tuple[str | None, str | None]:
+    repo_slug = infer_github_repo(target)
+    if not repo_slug:
+        return None, "target origin GitHub owner/repo"
+    completed = run_capture(["gh", "repo", "view", repo_slug, "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"], cwd=target)
+    if completed.returncode != 0:
+        return None, (completed.stderr or completed.stdout or "GitHub default branch readback failed").strip()
+    branch = completed.stdout.strip()
+    return (branch, None) if branch else (None, "GitHub default branch readback was empty")
+
+
+def public_pr_stage_binding(
+    *,
+    target: Path,
+    lifecycle_admission: dict[str, Any],
+    expected_branch: str | None,
+) -> dict[str, Any]:
+    """Bind a public PR stage to live GitHub and the checked-out worktree only."""
+
+    subject = lifecycle_admission.get("subject_readback")
+    subject = subject if isinstance(subject, dict) else {}
+    pr_number = subject.get("pr_number")
+    repo_slug = infer_github_repo(target)
+    missing: list[str] = []
+    if not isinstance(repo_slug, str) or repo_slug.count("/") != 1:
+        missing.append("target origin GitHub owner/repo")
+    if not isinstance(pr_number, int):
+        missing.append("current GitHub PR")
+    if missing:
+        return {
+            "result": "block",
+            "summary": "The PR stage requires an authenticated GitHub PR binding.",
+            "missing_inputs": missing,
+            "primary_error_code": "github_host_readback_failure",
+            "failure_domain": "host_service",
+            "failure_owner": "github",
+            "remediation_command": "create or bind the real implementation PR, then retry the same command",
+        }
+    assert isinstance(repo_slug, str) and isinstance(pr_number, int)
+    owner, repo_name = repo_slug.split("/", 1)
+    pr_payload, errors = github_host_module.github_pr_payload(target, owner, repo_name, pr_number)
+    if errors or pr_payload is None:
+        return {
+            "result": "block",
+            "summary": "The current GitHub PR could not be read back.",
+            "missing_inputs": list(errors or ["GitHub PR readback"]),
+            "primary_error_code": "github_host_readback_failure",
+            "failure_domain": "host_service",
+            "failure_owner": "github",
+            "remediation_command": f"gh pr view {pr_number} --repo {repo_slug}",
+        }
+    worktree_branch = git_branch_for_target(target)
+    worktree_head = git_head_sha_for_target(target)
+    branch = expected_branch or worktree_branch
+    if pr_payload.get("state") != "OPEN":
+        missing.append(f"open PR; GitHub reports {pr_payload.get('state') or 'UNKNOWN'}")
+    if pr_payload.get("isDraft") is True:
+        missing.append("PR must be ready for review")
+    if branch and pr_payload.get("headRefName") != branch:
+        missing.append("PR head branch must match the formal worktree branch")
+    if worktree_branch and branch and worktree_branch != branch:
+        missing.append("checked-out worktree branch must match the requested branch")
+    if worktree_head and pr_payload.get("headRefOid") and worktree_head != pr_payload.get("headRefOid"):
+        missing.append("checked-out HEAD must match the current GitHub PR head")
+    return {
+        "result": "pass" if not missing else "block",
+        "summary": (
+            "GitHub PR, current head, branch, Work Item, and worktree are consistently bound."
+            if not missing
+            else "The GitHub PR and formal worktree binding is inconsistent."
+        ),
+        "missing_inputs": missing,
+        "repository": repo_slug,
+        "pr": pr_payload,
+        "issue_number": subject.get("issue_number"),
+        "branch": branch,
+        "worktree_head": worktree_head,
+        "primary_error_code": None if not missing else "github_host_readback_failure",
+        "failure_domain": None if not missing else "host_service",
+        "failure_owner": None if not missing else "github",
+        "remediation_command": None if not missing else "push the formal worktree head or correct the PR/branch binding, then retry",
+        "repo_execution_carriers_consumed": False,
+        "carrier_mutations": False,
+        "mutates": False,
+    }
 
 
 def ship_pr_payload(args: argparse.Namespace, target: Path) -> tuple[dict[str, Any] | None, list[str]]:
@@ -8591,8 +6128,8 @@ def ship_closeout_namespace(args: argparse.Namespace, *, branch: str) -> argpars
         pr_role=args.pr_role,
         implementation_pr=args.implementation_pr,
         release_pr=args.release_pr,
-        carrier_sync_pr=args.carrier_sync_pr,
-        final_closeout_pr=args.final_closeout_pr,
+        carrier_sync_pr=None,
+        final_closeout_pr=None,
         project=args.project,
         phase=args.phase,
         fr=args.fr,
@@ -8635,241 +6172,6 @@ def ship_json_read(completed: subprocess.CompletedProcess[str], *, label: str, e
 def ship_missing_readback(detail: str) -> bool:
     lowered = detail.lower()
     return any(marker in lowered for marker in ("404", "not found", "no match found", "e404"))
-
-
-def ship_status_surface(target: Path) -> dict[str, Any]:
-    path = target / ".loom" / "status" / "current.md"
-    if not path.exists():
-        return {"path": ".loom/status/current.md", "state": "missing", "current_checkpoint": None, "current_stop": None}
-    values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        match = re.match(r"- (Current Checkpoint|Current Stop|Next Step|Blockers):\s*(.*)", line)
-        if match:
-            values[match.group(1)] = match.group(2).strip()
-    checkpoint = values.get("Current Checkpoint")
-    current_stop = values.get("Current Stop")
-    terminal = bool(
-        (checkpoint and checkpoint.lower() in {"complete", "completed", "terminal", "closed", "done"})
-        or (current_stop and any(word in current_stop.lower() for word in ("complete", "terminal", "closed")))
-        or values.get("Next Step", "").lower().startswith("none")
-    )
-    return {
-        "path": ".loom/status/current.md",
-        "state": "terminal" if terminal else "active",
-        "current_checkpoint": checkpoint,
-        "current_stop": current_stop,
-        "next_step": values.get("Next Step"),
-        "blockers": values.get("Blockers"),
-    }
-
-
-def ship_host_issue_status(target: Path, *, repo: str | None, issue: int | None, milestone: str | None) -> dict[str, Any]:
-    repo_slug = repo or infer_github_repo(target)
-    payload: dict[str, Any] = {"repo": repo_slug, "issue": None, "milestone": None, "errors": []}
-    if not repo_slug:
-        payload["errors"].append("unable to infer GitHub repository")
-        return payload
-    if issue is not None:
-        completed = run_capture(["gh", "api", f"repos/{repo_slug}/issues/{issue}", "--jq", "{number,state,closed_at,title}"], cwd=target)
-        if completed.returncode == 0:
-            payload["issue"] = ship_json_read(completed, label=f"GitHub issue #{issue}", errors=payload["errors"])
-        else:
-            payload["errors"].append(completed.stderr.strip() or completed.stdout.strip())
-    if milestone:
-        completed = run_capture(["gh", "api", f"repos/{repo_slug}/milestones/{milestone}", "--jq", "{number,title,state,open_issues,closed_issues}"], cwd=target)
-        if completed.returncode == 0:
-            payload["milestone"] = ship_json_read(completed, label=f"GitHub milestone {milestone}", errors=payload["errors"])
-        else:
-            payload["errors"].append(completed.stderr.strip() or completed.stdout.strip())
-    return payload
-
-
-def ship_release_presence(target: Path, *, repo: str | None, version: str | None, package_name: str | None) -> dict[str, Any]:
-    context = release_package_context(target, version=version, package_name=package_name)
-    tag = context["tag"]
-    npm_version = context["npm_version"]
-    package = context["npm_package"]
-    repo_slug = repo or infer_github_repo(target)
-    tag_sha, _tag_error = ship_git_read(target, ["rev-list", "-n", "1", tag])
-    release: dict[str, Any] = {"exists": False}
-    npm_package = {"exists": False}
-    errors: list[str] = []
-    if repo_slug:
-        completed = run_capture(["gh", "api", f"repos/{repo_slug}/releases/tags/{tag}", "--jq", "{tag_name,name,draft,prerelease,published_at,html_url}"], cwd=target)
-        if completed.returncode == 0:
-            decoded = ship_json_read(completed, label=f"GitHub release {tag}", errors=errors)
-            if decoded is not None:
-                release = {"exists": True, **decoded}
-        else:
-            detail = completed.stderr.strip() or completed.stdout.strip()
-            if detail and not ship_missing_readback(detail):
-                errors.append(detail)
-    if package:
-        completed = run_capture(["npm", "view", f"{package}@{npm_version}", "version", "dist-tags", "--json"], cwd=target)
-        if completed.returncode == 0:
-            decoded = ship_json_read(completed, label=f"npm package {package}@{npm_version}", errors=errors)
-            if decoded is not None:
-                npm_package = {"exists": True, "readback": decoded}
-        else:
-            detail = completed.stderr.strip() or completed.stdout.strip()
-            if detail and not ship_missing_readback(detail):
-                errors.append(detail)
-    return {
-        "version": context["version"],
-        "tag": {"name": tag, "exists": bool(tag_sha), "commit": tag_sha},
-        "github_release": release,
-        "npm": {"package": package, "version": npm_version, **npm_package},
-        "errors": errors,
-    }
-
-
-def ship_checkout_status(target: Path) -> dict[str, Any]:
-    branch = git_branch_for_target(target)
-    head = git_head_sha_for_target(target)
-    origin_main, origin_error = ship_git_read(target, ["rev-parse", "origin/main"])
-    dirty, dirty_error = ship_git_read(target, ["status", "--short"])
-    stale = False
-    ancestry_error = None
-    if head and origin_main and head != origin_main:
-        completed = run_capture(["git", "-C", str(target), "merge-base", "--is-ancestor", head, origin_main], cwd=target)
-        stale = completed.returncode == 0
-        if completed.returncode not in (0, 1):
-            ancestry_error = completed.stderr.strip() or completed.stdout.strip() or "git merge-base --is-ancestor failed"
-    return {
-        "branch": branch,
-        "head_sha": head,
-        "origin_main": origin_main,
-        "stale_against_origin_main": stale,
-        "dirty": bool(dirty),
-        "dirty_paths": dirty.splitlines() if dirty else [],
-        "errors": [error for error in [origin_error, dirty_error, ancestry_error] if error],
-    }
-
-
-def ship_status_diagnostic(
-    *,
-    host: dict[str, Any],
-    release: dict[str, Any],
-    checkout: dict[str, Any],
-    carrier: dict[str, Any],
-    adoption_mode: str | None = None,
-) -> tuple[str, list[str], list[str], str]:
-    blockers: list[str] = []
-    fixed: list[str] = []
-    if checkout.get("stale_against_origin_main"):
-        blockers.append("checkout_stale_against_origin_main")
-    if checkout.get("dirty"):
-        blockers.append("checkout_has_uncommitted_changes")
-    issue = host.get("issue") if isinstance(host.get("issue"), dict) else None
-    if issue and issue.get("state") == "closed" and carrier.get("state") == "active":
-        fixed.append("legacy_repo_carrier_ignored")
-    if release.get("tag", {}).get("exists") or release.get("github_release", {}).get("exists") or release.get("npm", {}).get("exists"):
-        blockers.append("target_release_already_exists")
-    if host.get("errors") or release.get("errors") or checkout.get("errors"):
-        blockers.append("readback_errors")
-    if not blockers:
-        next_action = (
-            "run loom workstation current --target <repo> --clear --apply --json"
-            if "repair_global_current_pointer" in fixed
-            else "run loom ship --dry-run or loom ship --apply after PR bindings are ready"
-        )
-        return "pass", blockers, fixed, next_action
-    if "checkout_stale_against_origin_main" in blockers:
-        fixed.append("fast-forward or recreate the issue worktree from origin/main")
-    if "checkout_has_uncommitted_changes" in blockers:
-        fixed.append("commit, stash, or discard local changes before shipping")
-    if "repair_global_current_pointer" in fixed:
-        fixed.append("run loom workstation current --target <repo> --clear --apply --json")
-    if "target_release_already_exists" in blockers:
-        fixed.append("read back the existing release/tag/npm package before publishing")
-    return "block", blockers, fixed, fixed[0] if fixed else "resolve ship preflight blockers"
-
-
-def handle_ship_status(argv: list[str], *, mode: str) -> int:
-    parser = argparse.ArgumentParser(prog=f"loom ship {mode}")
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--item")
-    parser.add_argument("--issue", type=int)
-    parser.add_argument("--fr", type=int)
-    parser.add_argument("--pr", type=int)
-    parser.add_argument("--branch")
-    parser.add_argument("--milestone")
-    parser.add_argument("--version")
-    parser.add_argument("--package")
-    parser.add_argument("--owner")
-    parser.add_argument("--repo", dest="repo_name")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--full-output", action="store_true")
-    args = parser.parse_args(argv)
-    target = resolve_target(args.target)
-    lifecycle_admission = host_lifecycle_admission_payload(
-        target=target,
-        issue=args.issue,
-        fr=args.fr,
-        owner=args.owner,
-        repo_name=args.repo_name,
-        intent="ship",
-        pr=args.pr,
-        branch=args.branch,
-    )
-    if lifecycle_admission["result"] != "pass":
-        return emit(
-            agent_safe_payload(
-                output(
-                    f"ship {mode}",
-                    "block",
-                    schema_version="loom-ship-status/v1",
-                    summary="ship preflight stopped before carrier diagnostics because the host-native lifecycle admission is blocked.",
-                    mutates=False,
-                    target=str(target),
-                    issue={"number": args.issue},
-                    fr={"number": args.fr},
-                    missing_inputs=lifecycle_admission.get("missing_inputs") or lifecycle_admission.get("admission", {}).get("missing_inputs", []),
-                    fallback_to=[lifecycle_admission.get("primary_remediation")],
-                    lifecycle_admission=lifecycle_admission,
-                ),
-                target_root=target,
-                full_output=args.full_output,
-            )
-        )
-    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else None
-    host = ship_host_issue_status(target, repo=repo_slug, issue=args.issue, milestone=args.milestone)
-    release = ship_release_presence(target, repo=repo_slug, version=args.version, package_name=args.package)
-    checkout = ship_checkout_status(target)
-    carrier = ship_status_surface(target)
-    adoption_mode = target_adoption_mode(target)
-    workstation_current = read_workstation_current(target)
-    result, blockers, fixed, next_action = ship_status_diagnostic(
-        host=host,
-        release=release,
-        checkout=checkout,
-        carrier=carrier,
-        adoption_mode=adoption_mode,
-    )
-    payload = output(
-        f"ship {mode}",
-        result,
-        schema_version="loom-ship-status/v1",
-        summary="ship preflight found no blocking checkout, release, host, or carrier status drift." if result == "pass" else "ship preflight found blocking status drift before delivery.",
-        mutates=False,
-        target=str(target),
-        item={"id": args.item},
-        issue={"number": args.issue},
-        fr={"number": args.fr},
-        milestone={"number": args.milestone},
-        adoption_mode=adoption_mode,
-        diagnostic={"blocked": result == "block", "blockers": blockers, "fixed": fixed, "next_action": next_action},
-        missing_inputs=blockers,
-        fallback_to=fixed or None,
-        host=host,
-        release=release,
-        checkout=checkout,
-        carrier=carrier,
-        workstation_current=workstation_current,
-        lifecycle_admission=lifecycle_admission,
-        next_action=next_action,
-    )
-    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def ship_host_attestation(args: argparse.Namespace, target: Path, *, closeout: bool) -> dict[str, Any]:
@@ -8922,8 +6224,6 @@ def ship_host_attestation(args: argparse.Namespace, target: Path, *, closeout: b
 
 
 def handle_ship(argv: list[str]) -> int:
-    if argv and argv[0] in {"status", "preflight"}:
-        return handle_ship_status(argv[1:], mode=argv[0])
     parser = argparse.ArgumentParser(prog="loom ship")
     parser.add_argument("--target", default=".")
     parser.add_argument("--item", required=True)
@@ -8938,8 +6238,6 @@ def handle_ship(argv: list[str]) -> int:
     parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, default="implementation_pr")
     parser.add_argument("--implementation-pr", type=int)
     parser.add_argument("--release-pr", type=int)
-    parser.add_argument("--carrier-sync-pr", type=int)
-    parser.add_argument("--final-closeout-pr", type=int)
     parser.add_argument("--project")
     parser.add_argument("--phase")
     parser.add_argument("--fr", type=int)
@@ -8957,6 +6255,7 @@ def handle_ship(argv: list[str]) -> int:
     parser.add_argument("--status-checks-file")
     parser.add_argument("--branch-protection-file")
     parser.add_argument("--ruleset-file")
+    parser.add_argument("--pr-gate-result-file")
     parser.add_argument("--skip-gate", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -8964,8 +6263,18 @@ def handle_ship(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     command = "ship"
     target = resolve_target(args.target)
+    parsed_item = parse_typed_locator(args.item, allowed_types={"work_item"}, allow_legacy=False)
+    if parsed_item is None:
+        return emit(output(command, "block", schema="loom-ship/v1", summary="Ship requires a canonical typed Work Item.", missing_inputs=["--item <owner>/<repo>/work_item/<issue>"], repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    item_issue = int(parsed_item["id"])
+    if args.issue is not None and args.issue != item_issue:
+        return emit(output(command, "block", schema="loom-ship/v1", summary="Ship Work Item and issue bindings conflict.", missing_inputs=["consistent --item and --issue"], repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+    args.issue = item_issue
+    if args.apply and any((args.pr_payload_file, args.status_checks_file, args.branch_protection_file, args.ruleset_file)):
+        return emit(output(command, "block", schema="loom-ship/v1", summary="Mutating ship requires fresh authenticated GitHub readback, not local host-fact fixtures.", missing_inputs=["remove local PR/check/protection/ruleset fixture inputs"], primary_error_code="github_host_readback_failure", failure_domain="host_service", failure_owner="github", remediation_command="rerun ship --apply against live GitHub host facts", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     lifecycle_admission = host_lifecycle_admission_payload(
         target=target,
+        item=args.item,
         issue=args.issue,
         fr=args.fr,
         owner=args.owner,
@@ -9056,74 +6365,36 @@ def handle_ship(argv: list[str]) -> int:
                 full_output=args.full_output,
             )
         )
-    if args.apply:
-        repair_args = ship_metadata_update_args(args, target, branch=effective_branch, head_sha=effective_head_sha)
-        if repair_args is None:
-            steps.append(
-                ship_step(
-                    "safe-metadata-repair",
-                    {"result": "skipped", "summary": "safe metadata repair requires --issue plus inferred or explicit branch."},
-                    skipped_reason="not enough binding inputs for safe PR metadata repair",
-                )
-            )
-        else:
-            repair = flow_payload(command, repair_args, fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --apply --json"])
-            steps.append(ship_step("safe-metadata-repair", repair, mutates=True))
-            if repair.get("result") != "pass":
-                closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
-                return ship_apply_admission_block(
-                    command=command,
-                    target=target,
-                    args=args,
-                    steps=steps,
-                    closeout_policy=closeout_policy,
-                    summary="ship --apply stopped before merge because safe PR metadata repair did not pass.",
-                    missing_inputs=[str(value) for value in repair.get("missing_inputs", [])],
-                    fallback_to=["loom pr metadata-update <pr> --item <id> --issue <n> --branch <branch> --apply --json"],
-                )
-
-    metadata_args = ["pr-metadata", "preflight", *common, "--surface", "merge_ready", "--pr", str(args.pr), "--item", args.item]
-    if args.issue is not None:
-        metadata_args.extend(["--issue", str(args.issue)])
-    if effective_branch:
-        metadata_args.extend(["--branch", effective_branch])
-    if args.head_sha:
-        metadata_args.extend(["--head-sha", args.head_sha])
-    if args.pr_payload_file:
-        metadata_args.extend(["--pr-payload-file", args.pr_payload_file])
-    metadata = flow_payload(command, metadata_args, fallback_to=["loom pr metadata-update <pr> --item <id> --apply --json"])
-
-    pr_gate_args = ["pr-gate", "check", *common, "--pr", str(args.pr), "--item", args.item]
-    if args.head_sha:
-        pr_gate_args.extend(["--head-sha", args.head_sha])
-    if args.pr_payload_file:
-        pr_gate_args.extend(["--pr-payload-file", args.pr_payload_file])
-    pr_gate = flow_payload(command, pr_gate_args, fallback_to=["loom pr gate <pr> --work-item <id> --json"])
-
-    merge_args = ["controlled-merge", "check", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method]
-    if args.head_sha:
-        merge_args.extend(["--head-sha", args.head_sha])
-    for flag, value in (
-        ("--pr-payload-file", args.pr_payload_file),
-        ("--status-checks-file", args.status_checks_file),
-        ("--branch-protection-file", args.branch_protection_file),
-        ("--ruleset-file", args.ruleset_file),
-    ):
-        if value:
-            merge_args.extend([flag, value])
-    merge_check = flow_payload(command, merge_args, fallback_to=["loom merge check <pr> --work-item <id> --json"])
-
-    fields = governance_metadata_fields(metadata)
-    closeout_policy = ship_closeout_policy(fields, intensity_override=args.intensity)
+    closeout_policy = ship_closeout_policy({}, intensity_override=args.intensity)
     changed_paths = ship_changed_paths_payload(args, target, target_branch=effective_target_branch, head_sha=effective_head_sha)
     validation_profile = ship_validation_profile_payload(args, changed_paths, closeout_policy)
     review_attestation = ship_host_attestation(args, target, closeout=False)
+    if not args.pr_gate_result_file:
+        merge_check = {"result": "block", "summary": "Ship requires the retained host-native delivery gate result.", "missing_inputs": ["--pr-gate-result-file"], "fallback_to": "loom pr gate <pr> --work-item <locator> --attestation-artifact-input <locator> --json"}
+    else:
+        merge_check = delivery_control_module.controlled_merge_payload(
+            target_root=target,
+            output_relative=".loom/runtime/controlled-merge.json",
+            expected_item=args.item,
+            owner=str(parsed_item["owner"]),
+            repo_name=str(parsed_item["repo"]),
+            issue_number=args.issue,
+            pr_number=args.pr,
+            head_sha=effective_head_sha or args.head_sha,
+            merge_method=args.merge_method,
+            delete_branch=False,
+            execute=False,
+            pr_payload_file=args.pr_payload_file,
+            status_checks_file=args.status_checks_file,
+            branch_protection_file=args.branch_protection_file,
+            ruleset_file=args.ruleset_file,
+            pr_gate_result_file=args.pr_gate_result_file,
+            merge_gate_result_file=None,
+        )
     steps.extend([
-        ship_step("pr-metadata-preflight", metadata),
-        ship_step("pr-gate", pr_gate),
+        ship_step("host-review-attestation", review_attestation),
         ship_step("controlled-merge-check", merge_check),
         ship_step("validation-profile", validation_profile),
-        ship_step("host-review-attestation", review_attestation),
         ship_step("closeout-policy", closeout_policy),
     ])
     if not args.apply:
@@ -9193,7 +6464,7 @@ def handle_ship(argv: list[str]) -> int:
             validation_profile=validation_profile,
             summary="ship --apply stopped before merge because this item requires a non-default closeout path.",
             missing_inputs=[f"closeout policy `{policy}` is not eligible for default host-only closeout"],
-            fallback_to=["loom closeout queue status --item <id> --issue <n> --pr <n> --json", "use explicit full closeout PR path when policy requires it"],
+            fallback_to=["use an explicit release Work Item and host attestation when policy requires it"],
         )
     closeout_branch = ship_closeout_target_branch(args, merge_check, inferred_target_branch=effective_target_branch)
     if args.apply and not closeout_branch:
@@ -9210,18 +6481,25 @@ def handle_ship(argv: list[str]) -> int:
             fallback_to=["rerun with --target-branch <base-branch>"],
         )
     if args.apply:
-        merge_apply_args = ["controlled-merge", "merge", *common, "--pr", str(args.pr), "--item", args.item, "--merge-method", args.merge_method, "--execute"]
-        if args.head_sha:
-            merge_apply_args.extend(["--head-sha", args.head_sha])
-        for flag, value in (
-            ("--pr-payload-file", args.pr_payload_file),
-            ("--status-checks-file", args.status_checks_file),
-            ("--branch-protection-file", args.branch_protection_file),
-            ("--ruleset-file", args.ruleset_file),
-        ):
-            if value:
-                merge_apply_args.extend([flag, value])
-        merge_apply = flow_payload(command, merge_apply_args, fallback_to=["loom merge check <pr> --work-item <id> --json"])
+        merge_apply = delivery_control_module.controlled_merge_payload(
+            target_root=target,
+            output_relative=".loom/runtime/controlled-merge.json",
+            expected_item=args.item,
+            owner=str(parsed_item["owner"]),
+            repo_name=str(parsed_item["repo"]),
+            issue_number=args.issue,
+            pr_number=args.pr,
+            head_sha=effective_head_sha or args.head_sha,
+            merge_method=args.merge_method,
+            delete_branch=False,
+            execute=True,
+            pr_payload_file=None,
+            status_checks_file=None,
+            branch_protection_file=None,
+            ruleset_file=None,
+            pr_gate_result_file=args.pr_gate_result_file,
+            merge_gate_result_file=None,
+        )
         steps.append(ship_step("controlled-merge-apply", merge_apply, mutates=True))
         if merge_apply.get("result") != "pass":
             blocker = steps[-1]
@@ -9257,42 +6535,8 @@ def handle_ship(argv: list[str]) -> int:
             )
 
         closeout_branch = ship_closeout_target_branch(args, merge_apply, inferred_target_branch=effective_target_branch) or closeout_branch
-        closeout_args = ship_closeout_namespace(args, branch=closeout_branch)
-        reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
-        add_closeout_host_args(reconciliation_args, closeout_args, include_comment=True)
-        reconciliation_args.append("--apply")
-        reconciliation = flow_payload(command, reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout --target <repo> --json"])
-        steps.append(ship_step("host-reconciliation-sync", reconciliation, mutates=True))
-        if reconciliation.get("result") == "pass":
-            final_closeout = ship_host_attestation(args, target, closeout=True)
-            steps.append(ship_step("host-closeout-attestation", final_closeout, mutates=False))
-            if final_closeout.get("result") == "pass":
-                current_payload = workstation_current_payload(
-                    target,
-                    item=args.item,
-                    issue=str(args.issue) if args.issue is not None else None,
-                    pr=str(args.pr),
-                    branch=closeout_branch,
-                    clear=True,
-                )
-                try:
-                    current_path = write_workstation_current(target, current_payload)
-                    global_current = {
-                        "command": "workstation current",
-                        "result": "pass",
-                        "summary": "host-only closeout cleared the workstation current pointer without mutating repository carriers.",
-                        "path": str(current_path),
-                        "current": current_payload,
-                    }
-                except OSError as exc:
-                    global_current = {
-                        "command": "workstation current",
-                        "result": "block",
-                        "summary": "host-only closeout could not update the workstation current pointer.",
-                        "missing_inputs": [str(exc)],
-                        "fallback_to": "loom workstation current --target <repo> --clear --apply --json",
-                    }
-                steps.append(ship_step("global-current-closeout", global_current, mutates=global_current.get("result") == "pass"))
+        final_closeout = ship_host_attestation(args, target, closeout=True)
+        steps.append(ship_step("host-closeout-attestation", final_closeout, mutates=False))
 
         blocker = first_ship_blocker(steps)
         ship_result = "pass" if blocker is None else "block"
@@ -9359,91 +6603,6 @@ def handle_ship(argv: list[str]) -> int:
     return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
-def handle_reconcile(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom reconcile")
-    parser.add_argument("--issue")
-    parser.add_argument("--pr")
-    parser.add_argument("--work-item")
-    parser.add_argument("--head-sha")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--full-output", action="store_true")
-    args = parser.parse_args(argv)
-    flow_args = ["reconciliation", "audit", "--target", "."]
-    if args.issue:
-        flow_args.extend(["--issue", args.issue])
-    if args.pr:
-        flow_args.extend(["--pr", args.pr])
-    if args.work_item:
-        flow_args.extend(["--item", args.work_item])
-    append_full_output_flag(flow_args, args)
-    return emit_flow("reconcile", flow_args, fallback_to=["manual-reconciliation"])
-
-
-def handle_carrier(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom carrier")
-    parser.add_argument("action", choices=("closeout-sync",))
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--item")
-    parser.add_argument("--output")
-    parser.add_argument("--terminal-state")
-    parser.add_argument("--issue")
-    parser.add_argument("--pr")
-    parser.add_argument("--merge-commit")
-    parser.add_argument("--target-branch")
-    parser.add_argument("--closed-at")
-    parser.add_argument("--evidence-locator")
-    parser.add_argument("--dry-run", action="store_true", default=True)
-    parser.add_argument("--apply", dest="dry_run", action="store_false")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--full-output", action="store_true")
-    add_legacy_carrier_compatibility_args(parser)
-    args = parser.parse_args(argv)
-    target = resolve_target(args.target)
-    compatibility = legacy_carrier_compatibility(args)
-    if compatibility["result"] != "pass":
-        return emit(
-            agent_safe_payload(
-                output(
-                    f"carrier {args.action}",
-                    "block",
-                    schema_version="loom-legacy-carrier-command/v1",
-                    summary=compatibility["summary"],
-                    mutates=False,
-                    target=str(target),
-                    compatibility=compatibility,
-                    missing_inputs=compatibility["missing_inputs"],
-                    fallback_to=compatibility["fallback_to"],
-                ),
-                target_root=target,
-                full_output=args.full_output,
-            )
-        )
-    flow_args = ["carrier", args.action, "--target", str(target)]
-    for flag, value in (
-        ("--item", args.item),
-        ("--output", args.output),
-        ("--terminal-state", args.terminal_state),
-        ("--issue", args.issue),
-        ("--pr", args.pr),
-        ("--merge-commit", args.merge_commit),
-        ("--target-branch", args.target_branch),
-        ("--closed-at", args.closed_at),
-        ("--evidence-locator", args.evidence_locator),
-    ):
-        if value is not None:
-            flow_args.extend([flag, str(value)])
-    if not args.dry_run:
-        flow_args.append("--apply")
-    append_full_output_flag(flow_args, args)
-    command = f"carrier {args.action}"
-    payload = flow_payload(command, flow_args, fallback_to=["loom closeout --target <repo> --json"])
-    payload.setdefault("schema_version", OUTPUT_SCHEMA)
-    if payload.get("command") and payload.get("command") != command:
-        payload["wrapped_command"] = payload.get("command")
-    payload["command"] = command
-    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
-
-
 def add_closeout_host_args(flow_args: list[str], args: argparse.Namespace, *, include_comment: bool) -> None:
     for flag, value in (
         ("--item", args.item),
@@ -9471,858 +6630,11 @@ def add_closeout_host_args(flow_args: list[str], args: argparse.Namespace, *, in
                 flow_args.extend([flag, str(value)])
 
 
-def add_closeout_check_args(flow_args: list[str], args: argparse.Namespace) -> None:
-    add_closeout_host_args(flow_args, args, include_comment=True)
-    for flag, value in (
-        ("--goal-completion", args.goal_completion),
-        ("--gate-profile", args.gate_profile),
-        ("--status-checks-file", args.status_checks_file),
-        ("--branch-protection-file", args.branch_protection_file),
-        ("--ruleset-file", args.ruleset_file),
-    ):
-        if value is not None:
-            flow_args.extend([flag, str(value)])
-    if args.skip_gate:
-        flow_args.append("--skip-gate")
-
-
-def closeout_run_step(name: str, payload: dict[str, Any], *, mutates: bool, evidence_locator: str | None = None) -> dict[str, Any]:
-    return {
-        "name": name,
-        "result": payload.get("result"),
-        "summary": payload.get("summary"),
-        "missing_inputs": payload.get("missing_inputs", []),
-        "fallback_to": payload.get("fallback_to"),
-        "mutates": mutates,
-        "evidence_locator": evidence_locator,
-        "payload": payload,
-    }
-
-
-def issue_state(payload: dict[str, Any]) -> str | None:
-    issue = payload.get("issue")
-    return str(issue.get("state")) if isinstance(issue, dict) and issue.get("state") is not None else None
-
-
-def pr_state(payload: dict[str, Any]) -> str | None:
-    pr = payload.get("pr")
-    return str(pr.get("state")) if isinstance(pr, dict) and pr.get("state") is not None else None
-
-
-def closeout_terminal_metadata(closeout_payload: dict[str, Any], args: argparse.Namespace) -> tuple[dict[str, str], list[str]]:
-    issue = closeout_payload.get("issue") if isinstance(closeout_payload.get("issue"), dict) else {}
-    pr = closeout_payload.get("pr") if isinstance(closeout_payload.get("pr"), dict) else {}
-    merge_commit = pr.get("mergeCommit") if isinstance(pr, dict) else None
-    merge_commit_sha = merge_commit.get("oid") if isinstance(merge_commit, dict) else None
-    issue_number = issue.get("number") if isinstance(issue, dict) else None
-    pr_number = pr.get("number") if isinstance(pr, dict) else None
-    issue_url = issue.get("url") if isinstance(issue, dict) else None
-    pr_url = pr.get("url") if isinstance(pr, dict) else None
-    metadata = {
-        "terminal_state": "closed_out",
-        "issue": str(issue_number or args.issue or "not_applicable"),
-        "pr": str(pr_number or args.pr or "not_applicable"),
-        "merge_commit": str(merge_commit_sha or "not_applicable"),
-        "target_branch": str(pr.get("baseRefName") or "not_applicable") if isinstance(pr, dict) else "not_applicable",
-        "closed_at": str(issue.get("closedAt") or issue.get("closed_at") or pr.get("mergedAt") or "not_applicable") if isinstance(issue, dict) and isinstance(pr, dict) else "not_applicable",
-        "evidence_locator": ";".join(str(value) for value in (issue_url, pr_url) if isinstance(value, str) and value.strip()) or "host-readback",
-    }
-    missing: list[str] = []
-    for field_name in ("issue", "pr", "merge_commit", "target_branch", "closed_at", "evidence_locator"):
-        if metadata[field_name] == "not_applicable":
-            missing.append(f"{field_name.replace('_', '-')} is required for closeout run carrier sync")
-    return metadata, missing
-
-
 def first_blocking_step(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
     for step in steps:
         if step.get("result") != "pass":
             return step
     return None
-
-
-def closeout_run_failure_classifier(blocking_step: dict[str, Any] | None) -> str | None:
-    if blocking_step is None:
-        return None
-    missing_inputs = [str(value) for value in blocking_step.get("missing_inputs") or []]
-    if any("required check" in value or "status checks" in value for value in missing_inputs):
-        return "host_checks_unreadable_or_incomplete"
-    if any("PR is draft" in value or "pr is not merged" in value.lower() for value in missing_inputs):
-        return "pr_not_merge_ready_or_unmerged"
-    if any("issue is not closed" in value.lower() for value in missing_inputs):
-        return "issue_not_closed"
-    if any("binding" in value.lower() for value in missing_inputs):
-        return "host_binding_drift"
-    if any("carrier" in value.lower() or "shadow" in value.lower() for value in missing_inputs):
-        return "carrier_refresh_required"
-    if missing_inputs:
-        return "missing_or_stale_closeout_input"
-    return "closeout_step_blocked"
-
-
-def closeout_run_next_action(*, apply: bool, blocking_step: dict[str, Any] | None) -> str:
-    if blocking_step is None:
-        return "Closeout run completed." if apply else "Review the dry-run plan, then rerun with --apply when the planned host and repo carrier mutations are acceptable."
-    fallback_to = blocking_step.get("fallback_to")
-    if isinstance(fallback_to, str) and fallback_to:
-        return fallback_to
-    if blocking_step.get("name") == "reconciliation-sync":
-        return "Review reconciliation findings, then rerun closeout run after host drift is readable and safe to sync."
-    if blocking_step.get("name") == "final-closeout-check":
-        return "Inspect final closeout check missing_inputs; rerun closeout run only after the blocker is classified."
-    return f"Resolve blocked step `{blocking_step.get('name')}` before rerunning closeout run."
-
-
-def closeout_sync_step(name: str, payload: dict[str, Any], *, mutates: bool = False) -> dict[str, Any]:
-    return {
-        "name": name,
-        "result": payload.get("result"),
-        "summary": payload.get("summary"),
-        "missing_inputs": payload.get("missing_inputs", []),
-        "fallback_to": payload.get("fallback_to"),
-        "mutates": mutates,
-        "payload": payload,
-    }
-
-
-def closeout_sync_blocker(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
-    for step in steps:
-        if step.get("result") == "block":
-            return step
-    return None
-
-
-def closeout_metadata_artifact(target: Path, args: argparse.Namespace, suffix: str) -> str:
-    item = args.item or "closeout"
-    pr = closeout_current_pr_input(args) or args.pr or "pr"
-    safe_item = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(item)).strip("-") or "closeout"
-    safe_pr = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(pr)).strip("-") or "pr"
-    return f".loom/runtime/pr/{safe_item}-{safe_pr}-closeout-{suffix}.md"
-
-
-def add_closeout_metadata_args(flow_args: list[str], args: argparse.Namespace, target: Path, *, include_output: bool = False, include_readback: bool = False) -> None:
-    for flag, value in (
-        ("--pr", closeout_current_pr_input(args) or args.pr),
-        ("--item", args.item),
-        ("--issue", args.issue),
-        ("--head-sha", getattr(args, "head_sha", None)),
-        ("--branch", args.branch),
-        ("--pr-payload-file", args.pr_payload_file),
-    ):
-        if value is not None:
-            flow_args.extend([flag, str(value)])
-    if include_output:
-        flow_args.extend(["--output-file", closeout_metadata_artifact(target, args, "rendered")])
-    if include_readback:
-        flow_args.extend(["--readback-file", closeout_metadata_artifact(target, args, "readback")])
-
-
-def closeout_metadata_readback_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
-    if closeout_current_pr_input(args) is None and args.pr is None:
-        return {
-            "command": "closeout metadata-readback",
-            "result": "not_applicable",
-            "summary": "PR metadata readback was skipped because no PR binding was provided.",
-            "missing_inputs": [],
-            "fallback_to": None,
-        }
-    flow_args = ["pr-metadata", "readback", "--target", str(target), "--surface", "closeout"]
-    add_closeout_metadata_args(flow_args, args, target, include_readback=True)
-    return flow_payload(
-        "closeout sync",
-        flow_args,
-        fallback_to=["loom pr metadata-update <pr> --surface closeout --item <id> --head-sha <sha> --apply --json"],
-    )
-
-
-def closeout_metadata_update_payload(args: argparse.Namespace, target: Path, *, apply: bool) -> dict[str, Any]:
-    flow_args = ["pr-metadata", "update", "--target", str(target), "--surface", "closeout"]
-    add_closeout_metadata_args(flow_args, args, target, include_output=True, include_readback=True)
-    flow_args.append("--apply" if apply else "--dry-run")
-    return flow_payload(
-        "closeout sync",
-        flow_args,
-        fallback_to=["loom pr metadata-render --surface closeout --item <id> --json", "loom pr metadata-readback <pr> --surface closeout --json"],
-    )
-
-
-def parse_git_worktree_porcelain(raw: str) -> list[dict[str, str]]:
-    entries: list[dict[str, str]] = []
-    current: dict[str, str] = {}
-    for line in raw.splitlines():
-        if not line.strip():
-            if current:
-                entries.append(current)
-                current = {}
-            continue
-        key, _, value = line.partition(" ")
-        if key:
-            current[key] = value.strip()
-    if current:
-        entries.append(current)
-    return entries
-
-
-def closeout_terminal_cleanup_payload(target: Path, args: argparse.Namespace) -> dict[str, Any]:
-    branch = args.branch
-    checks: list[dict[str, Any]] = []
-    cleanup_actions: list[str] = []
-    missing_inputs: list[str] = []
-    blocking = False
-
-    worktree_result = run_capture(["git", "worktree", "list", "--porcelain"], cwd=target)
-    worktrees: list[dict[str, str]] = []
-    if worktree_result.returncode == 0:
-        worktrees = parse_git_worktree_porcelain(worktree_result.stdout)
-    else:
-        missing_inputs.append(worktree_result.stderr.strip() or "git worktree list failed")
-        blocking = True
-
-    if branch:
-        branch_ref = f"refs/heads/{branch}"
-        matching_worktrees = [entry for entry in worktrees if entry.get("branch") == branch_ref]
-        if matching_worktrees:
-            for entry in matching_worktrees:
-                path = entry.get("worktree")
-                if path:
-                    cleanup_actions.append(f"git worktree remove {path}")
-            checks.append({"id": "issue_worktree", "result": "warn", "branch": branch, "worktrees": matching_worktrees})
-        else:
-            checks.append({"id": "issue_worktree", "result": "pass", "branch": branch, "worktrees": []})
-
-        local_branch = run_capture(["git", "show-ref", "--verify", f"refs/heads/{branch}"], cwd=target)
-        if local_branch.returncode == 0:
-            cleanup_actions.append(f"git branch -d {branch}")
-            checks.append({"id": "local_branch", "result": "warn", "branch": branch})
-        else:
-            checks.append({"id": "local_branch", "result": "pass", "branch": branch})
-
-        remote_branch = run_capture(["git", "show-ref", "--verify", f"refs/remotes/origin/{branch}"], cwd=target)
-        if remote_branch.returncode == 0:
-            cleanup_actions.append(f"git push origin --delete {branch}")
-            checks.append({"id": "remote_branch", "result": "warn", "branch": f"origin/{branch}"})
-        else:
-            checks.append({"id": "remote_branch", "result": "pass", "branch": f"origin/{branch}"})
-    else:
-        checks.append({"id": "branch_cleanup", "result": "not_applicable", "summary": "No branch binding was provided."})
-
-    main_worktree = next((entry.get("worktree") for entry in worktrees if entry.get("branch") == "refs/heads/main"), None)
-    if main_worktree:
-        dirty = run_capture(["git", "-C", main_worktree, "status", "--short"], cwd=target)
-        if dirty.returncode != 0:
-            missing_inputs.append(dirty.stderr.strip() or "main worktree dirty-state readback failed")
-            blocking = True
-            checks.append({"id": "main_worktree_dirty", "result": "block", "worktree": main_worktree})
-        elif dirty.stdout.strip():
-            missing_inputs.append("main worktree has uncommitted changes")
-            blocking = True
-            checks.append({"id": "main_worktree_dirty", "result": "block", "worktree": main_worktree, "status": dirty.stdout.strip().splitlines()})
-        else:
-            checks.append({"id": "main_worktree_dirty", "result": "pass", "worktree": main_worktree})
-    else:
-        checks.append({"id": "main_worktree_dirty", "result": "not_applicable", "summary": "No local main worktree was found in git worktree list."})
-
-    cleanup_actions = list(dict.fromkeys(cleanup_actions))
-    cleanup_needed = bool(cleanup_actions)
-    result = "block" if blocking else ("warn" if cleanup_needed else "pass")
-    verdict = "blocked" if blocking else ("cleanup_needed" if cleanup_needed else "clean_terminal")
-    next_action = (
-        "Resolve main worktree dirty state or unreadable git cleanup inputs before deleting branches."
-        if blocking
-        else ("; ".join(cleanup_actions) if cleanup_needed else "No terminal cleanup action required.")
-    )
-    return {
-        "schema_version": "loom-closeout-terminal-cleanup/v1",
-        "command": "closeout cleanup-check",
-        "result": result,
-        "verdict": verdict,
-        "summary": "terminal cleanup readback found cleanup actions." if cleanup_needed else "terminal cleanup readback is clean.",
-        "missing_inputs": missing_inputs,
-        "fallback_to": next_action if result == "block" else None,
-        "branch": branch,
-        "checks": checks,
-        "cleanup_actions": cleanup_actions,
-        "next_action": next_action,
-        "mutates": False,
-    }
-
-
-def closeout_sync_diagnostic(*, operation: str, apply: bool, steps: list[dict[str, Any]]) -> dict[str, Any]:
-    blocker = closeout_sync_blocker(steps)
-    cleanup_step = next((step for step in steps if step.get("name") == "terminal-cleanup-check"), None)
-    cleanup_payload = cleanup_step.get("payload") if isinstance(cleanup_step, dict) and isinstance(cleanup_step.get("payload"), dict) else {}
-    fixed = operation == "sync" and apply and blocker is None
-    if blocker is not None:
-        fallback = blocker.get("fallback_to")
-        next_action = fallback if isinstance(fallback, str) else (fallback[0] if isinstance(fallback, list) and fallback else f"Resolve `{blocker.get('name')}` before rerunning closeout sync.")
-    elif cleanup_payload.get("result") == "warn":
-        next_action = str(cleanup_payload.get("next_action") or "Run terminal cleanup actions after confirming no user work remains.")
-    elif operation == "sync" and not apply:
-        next_action = "Review the dry-run plan, then rerun `loom closeout sync --apply` when the host reconciliation mutation is acceptable."
-    else:
-        next_action = "Closeout sync is terminal; proceed to the next dependent Work Item."
-    return {
-        "blocked": blocker is not None,
-        "fixed": fixed,
-        "next_action": next_action,
-        "first_blocker": blocker.get("name") if blocker else None,
-        "cleanup_verdict": cleanup_payload.get("verdict") if isinstance(cleanup_payload, dict) else None,
-    }
-
-
-def build_closeout_sync_parser(prog: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog=prog)
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--item", required=True)
-    parser.add_argument("--issue", type=int, required=True)
-    parser.add_argument("--pr", type=int)
-    parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
-    parser.add_argument("--implementation-pr", type=int)
-    parser.add_argument("--release-pr", type=int)
-    parser.add_argument("--carrier-sync-pr", type=int)
-    parser.add_argument("--final-closeout-pr", type=int)
-    parser.add_argument("--project")
-    parser.add_argument("--phase")
-    parser.add_argument("--fr")
-    parser.add_argument("--branch")
-    parser.add_argument("--head-sha")
-    parser.add_argument("--owner")
-    parser.add_argument("--repo", dest="repo_name")
-    parser.add_argument("--comment")
-    parser.add_argument("--comment-file")
-    parser.add_argument("--goal-completion")
-    parser.add_argument("--attestation-artifact-input", type=Path)
-    parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
-    parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"), default="auto")
-    parser.add_argument("--issue-payload-file")
-    parser.add_argument("--pr-payload-file")
-    parser.add_argument("--project-payload-file")
-    parser.add_argument("--status-checks-file")
-    parser.add_argument("--branch-protection-file")
-    parser.add_argument("--ruleset-file")
-    parser.add_argument("--skip-gate", action="store_true")
-    parser.add_argument("--skip-metadata", action="store_true")
-    parser.add_argument("--skip-cleanup", action="store_true")
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--full-output", action="store_true")
-    return parser
-
-
-def handle_closeout_sync(operation: str, argv: list[str]) -> int:
-    parser = build_closeout_sync_parser(f"loom closeout {operation}")
-    args = parser.parse_args(argv)
-    if closeout_current_pr_input(args) is None and args.pr is None:
-        parser.error("--pr or one closeout PR role flag is required")
-    target = resolve_target(args.target)
-    steps: list[dict[str, Any]] = []
-    if operation == "sync":
-        reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
-        add_closeout_host_args(reconciliation_args, args, include_comment=True)
-        reconciliation_args.append("--apply" if args.apply else "--dry-run")
-        reconciliation = flow_payload("closeout sync", reconciliation_args, fallback_to=["manual-reconciliation"])
-        steps.append(closeout_sync_step("host-reconciliation-sync", reconciliation, mutates=args.apply))
-
-    if closeout_sync_blocker(steps) is None:
-        attestation = ship_host_attestation(args, target, closeout=True)
-        steps.append(closeout_sync_step("host-closeout-attestation", attestation))
-
-    if not args.skip_cleanup:
-        cleanup = closeout_terminal_cleanup_payload(target, args)
-        steps.append(closeout_sync_step("terminal-cleanup-check", cleanup))
-
-    blocker = closeout_sync_blocker(steps)
-    result = "pass" if blocker is None else "block"
-    diagnostic = closeout_sync_diagnostic(operation=operation, apply=args.apply, steps=steps)
-    summary = (
-        "closeout sync applied host reconciliation and consumed host attestation without repository carrier mutation."
-        if operation == "sync" and args.apply and result == "pass"
-        else "closeout sync dry-run produced a readback and repair plan."
-        if operation == "sync"
-        else "closeout status read back host attestation and local cleanup state."
-    )
-    payload = output(
-        f"closeout {operation}",
-        result,
-        schema_version="loom-closeout-sync/v1",
-        summary=summary if result == "pass" else "closeout sync/status stopped at a blocking readback step.",
-        target=str(target),
-        item={"id": args.item},
-        issue={"number": args.issue},
-        pr={"number": closeout_current_pr_input(args) or args.pr},
-        apply=args.apply,
-        dry_run=not args.apply,
-        mutates=operation == "sync" and args.apply,
-        repo_mutations=False,
-        creates_closeout_pr=False,
-        steps=steps,
-        diagnostic=diagnostic,
-        first_blocker=blocker,
-        missing_inputs=blocker.get("missing_inputs", []) if blocker else [],
-        fallback_to=diagnostic["next_action"] if blocker else None,
-        next_action=diagnostic["next_action"],
-    )
-    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
-
-
-def closeout_run_payload(
-    *,
-    args: argparse.Namespace,
-    target: Path,
-    steps: list[dict[str, Any]],
-    evidence_locators: list[str],
-    closeout_payload: dict[str, Any],
-    terminal_metadata: dict[str, str],
-    apply: bool,
-    dry_run_blocking_step: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    if apply:
-        blocking_step = first_blocking_step(steps)
-        result = "pass" if blocking_step is None else "block"
-        summary = "closeout run applied host and repo carrier closeout and final check passed." if result == "pass" else "closeout run apply stopped at a blocking step."
-    else:
-        blocking_step = dry_run_blocking_step
-        result = "pass" if blocking_step is None else "block"
-        summary = "closeout run dry-run produced a post-merge closeout step plan." if result == "pass" else "closeout run dry-run could not produce a safe step plan."
-
-    next_action = closeout_run_next_action(apply=apply, blocking_step=blocking_step)
-    pr_roles = closeout_payload.get("pr_roles") if isinstance(closeout_payload.get("pr_roles"), dict) else None
-    current_pr_role = pr_roles.get("current") if isinstance(pr_roles, dict) and isinstance(pr_roles.get("current"), dict) else None
-    return output(
-        "closeout run",
-        result,
-        schema_version="loom-closeout-run/v1",
-        summary=summary,
-        dry_run=not apply,
-        apply=apply,
-        target=str(target),
-        item={"id": args.item},
-        issue={"number": args.issue, "state": issue_state(closeout_payload)},
-        pr={"number": (current_pr_role or {}).get("number", args.pr), "state": pr_state(closeout_payload)},
-        pr_roles=pr_roles,
-        current_pr_role=current_pr_role,
-        terminal_metadata=terminal_metadata,
-        steps=steps,
-        evidence_locators=evidence_locators,
-        failure_classifier=closeout_run_failure_classifier(blocking_step),
-        next_action=next_action,
-        fallback_to=None if result == "pass" else next_action,
-    )
-
-
-def run_closeout_payload(args: argparse.Namespace, target: Path) -> dict[str, Any]:
-    steps: list[dict[str, Any]] = []
-    evidence_locators: list[str] = []
-
-    reconciliation_args = ["reconciliation", "sync", "--target", str(target)]
-    add_closeout_host_args(reconciliation_args, args, include_comment=True)
-    reconciliation_args.append("--apply" if args.apply else "--dry-run")
-    reconciliation = flow_payload("closeout run", reconciliation_args, fallback_to=["manual-reconciliation", "loom closeout run --json"])
-    steps.append(closeout_run_step("reconciliation-sync", reconciliation, mutates=args.apply, evidence_locator="reconciliation sync payload"))
-    if args.apply and reconciliation.get("result") != "pass":
-        terminal_metadata = {
-            "terminal_state": "closed_out",
-            "issue": str(args.issue),
-            "pr": str(closeout_current_pr_input(args) or "not_applicable"),
-            "merge_commit": "not_applicable",
-            "target_branch": "not_applicable",
-            "closed_at": "not_applicable",
-            "evidence_locator": "host-readback",
-        }
-        return closeout_run_payload(
-            args=args,
-            target=target,
-            steps=steps,
-            evidence_locators=evidence_locators,
-            closeout_payload={},
-            terminal_metadata=terminal_metadata,
-            apply=args.apply,
-        )
-
-    closeout_args = ["closeout", "check", "--target", str(target)]
-    add_closeout_check_args(closeout_args, args)
-    closeout_after_reconciliation = flow_payload("closeout run", closeout_args, fallback_to=["loom closeout run --json", "manual-reconciliation"])
-    steps.append(closeout_run_step("closeout-check", closeout_after_reconciliation, mutates=False, evidence_locator="closeout check payload"))
-    if args.apply and closeout_after_reconciliation.get("result") != "pass":
-        metadata, _metadata_missing = closeout_terminal_metadata(closeout_after_reconciliation, args)
-        return closeout_run_payload(
-            args=args,
-            target=target,
-            steps=steps,
-            evidence_locators=evidence_locators,
-            closeout_payload=closeout_after_reconciliation,
-            terminal_metadata=metadata,
-            apply=args.apply,
-        )
-
-    metadata, metadata_missing = closeout_terminal_metadata(closeout_after_reconciliation, args)
-    carrier_args = [
-        "carrier",
-        "closeout-sync",
-        "--target",
-        str(target),
-        "--item",
-        args.item,
-        "--terminal-state",
-        metadata["terminal_state"],
-        "--issue",
-        metadata["issue"],
-        "--pr",
-        metadata["pr"],
-        "--merge-commit",
-        metadata["merge_commit"],
-        "--target-branch",
-        metadata["target_branch"],
-        "--closed-at",
-        metadata["closed_at"],
-        "--evidence-locator",
-        metadata["evidence_locator"],
-    ]
-    carrier_args.append("--apply" if args.apply else "--dry-run")
-    if metadata_missing:
-        carrier_payload = output(
-            "closeout run",
-            "block",
-            summary="closeout run could not infer terminal carrier metadata from host readback.",
-            missing_inputs=metadata_missing,
-            fallback_to=["loom closeout check --json", "manual-reconciliation"],
-            terminal_metadata=metadata,
-        )
-    else:
-        carrier_payload = flow_payload("closeout run", carrier_args, fallback_to=["loom carrier closeout-sync --json"])
-    steps.append(closeout_run_step("carrier-closeout-sync", carrier_payload, mutates=args.apply, evidence_locator=metadata["evidence_locator"]))
-    if metadata["evidence_locator"] != "host-readback":
-        evidence_locators.append(metadata["evidence_locator"])
-    if args.apply and carrier_payload.get("result") != "pass":
-        return closeout_run_payload(
-            args=args,
-            target=target,
-            steps=steps,
-            evidence_locators=evidence_locators,
-            closeout_payload=closeout_after_reconciliation,
-            terminal_metadata=metadata,
-            apply=args.apply,
-        )
-
-    if args.apply:
-        stop = (
-            f"{args.item} closed out by closeout run: PR #{metadata['pr']} merged at {metadata['merge_commit']}, "
-            f"issue #{metadata['issue']} closed, host reconciliation consumed, terminal carrier metadata written, "
-            "status/shadow refresh completed, and final closeout check passed."
-        )
-        recovery_args = [
-            "recovery",
-            "writeback",
-            "--target",
-            str(target),
-            "--item",
-            args.item,
-            "--current-checkpoint",
-            "closed_out",
-            "--current-stop",
-            stop,
-            "--next-step",
-            f"No further {args.item} implementation work remains.",
-            "--blockers",
-            "None recorded.",
-            "--current-lane",
-            "post-merge-closeout-run",
-        ]
-        recovery = flow_payload("closeout run", recovery_args, fallback_to=["loom recovery writeback --target <repo> --item <item>"])
-        steps.append(closeout_run_step("recovery-writeback", recovery, mutates=True, evidence_locator=".loom/progress"))
-        if recovery.get("result") != "pass":
-            return closeout_run_payload(
-                args=args,
-                target=target,
-                steps=steps,
-                evidence_locators=evidence_locators,
-                closeout_payload=closeout_after_reconciliation,
-                terminal_metadata=metadata,
-                apply=args.apply,
-            )
-
-        refresh_args = ["carrier", "refresh", "--target", str(target), "--item", args.item, "--surface", "closeout", "--write"]
-        first_refresh = flow_payload("closeout run", refresh_args, fallback_to=["loom carrier refresh --target <repo> --item <item> --write"])
-        steps.append(closeout_run_step("carrier-refresh", first_refresh, mutates=True, evidence_locator=".loom/shadow"))
-        if first_refresh.get("result") != "pass":
-            return closeout_run_payload(
-                args=args,
-                target=target,
-                steps=steps,
-                evidence_locators=evidence_locators,
-                closeout_payload=closeout_after_reconciliation,
-                terminal_metadata=metadata,
-                apply=args.apply,
-            )
-        second_refresh = flow_payload("closeout run", refresh_args, fallback_to=["loom carrier refresh --target <repo> --item <item> --write"])
-        steps.append(closeout_run_step("carrier-refresh-readback", second_refresh, mutates=True, evidence_locator=".loom/shadow"))
-        if second_refresh.get("result") != "pass":
-            return closeout_run_payload(
-                args=args,
-                target=target,
-                steps=steps,
-                evidence_locators=evidence_locators,
-                closeout_payload=closeout_after_reconciliation,
-                terminal_metadata=metadata,
-                apply=args.apply,
-            )
-
-        final_closeout = flow_payload("closeout run", closeout_args, fallback_to=["loom closeout --target <repo> --json", "manual-reconciliation"])
-        steps.append(closeout_run_step("final-closeout-check", final_closeout, mutates=False, evidence_locator="closeout check payload"))
-
-    return closeout_run_payload(
-        args=args,
-        target=target,
-        steps=steps,
-        evidence_locators=evidence_locators,
-        closeout_payload=closeout_after_reconciliation,
-        terminal_metadata=metadata,
-        apply=args.apply,
-        dry_run_blocking_step=first_blocking_step(steps),
-    )
-
-
-def batch_closeout_comment_body(args: argparse.Namespace, issue: int, *, repo_slug: str | None) -> str:
-    if args.comment_file:
-        comment_path = Path(args.comment_file).expanduser()
-        if not comment_path.is_absolute():
-            comment_path = resolve_target(args.target) / comment_path
-        return comment_path.read_text(encoding="utf-8")
-    if args.comment:
-        return args.comment
-
-    evidence_lines = []
-    if args.pr is not None:
-        pr_reference = f"https://github.com/{repo_slug}/pull/{args.pr}" if repo_slug else f"#{args.pr}"
-        evidence_lines.append(f"- PR: {pr_reference}")
-    if args.merge_commit:
-        evidence_lines.append(f"- Merge commit: {args.merge_commit}")
-    if args.target_branch:
-        evidence_lines.append(f"- Target branch: {args.target_branch}")
-    if args.evidence_locator:
-        evidence_lines.append(f"- Evidence: {args.evidence_locator}")
-    evidence = "\n".join(evidence_lines) if evidence_lines else "- Evidence: host readback"
-    return (
-        f"Batch closeout: issue #{issue} is covered by the merged implementation batch.\n\n"
-        f"{evidence}\n\n"
-        "Closeout mode: host-only batch closeout; no repository closeout PR or Loom carrier mutation was created."
-    )
-
-
-def batch_closeout_issue_step(
-    *,
-    issue: int,
-    comment_body: str,
-    repo_slug: str | None,
-    target: Path,
-    apply: bool,
-) -> dict[str, Any]:
-    step: dict[str, Any] = {
-        "issue": issue,
-        "mode": "host_only",
-        "planned_actions": ["comment", "close"],
-        "result": "pass",
-        "mutates": apply,
-        "commands": [],
-        "errors": [],
-    }
-    if not apply:
-        step["status"] = "planned"
-        return step
-    if not repo_slug:
-        step["result"] = "block"
-        step["status"] = "blocked"
-        step["errors"].append("unable to infer GitHub repository; pass --owner and --repo")
-        return step
-
-    comment_command = ["gh", "issue", "comment", str(issue), "--repo", repo_slug, "--body", comment_body]
-    close_command = ["gh", "issue", "close", str(issue), "--repo", repo_slug, "--reason", "completed"]
-    for action, command in (("comment", comment_command), ("close", close_command)):
-        completed = run_capture(command, cwd=target)
-        step["commands"].append({"action": action, "command": shlex.join(command), "returncode": completed.returncode})
-        if completed.returncode != 0:
-            step["result"] = "block"
-            step["status"] = "blocked"
-            step["errors"].append(completed.stderr.strip() or completed.stdout.strip() or f"gh issue {action} failed")
-            break
-    if step["result"] == "pass":
-        step["status"] = "applied"
-    return step
-
-
-def handle_closeout_batch(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom closeout batch")
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--issue", type=int, action="append", required=True, help="Repeatable covered issue number to comment and close")
-    parser.add_argument("--anchor-issue", type=int)
-    parser.add_argument("--pr", type=int)
-    parser.add_argument("--merge-commit")
-    parser.add_argument("--target-branch", default="main")
-    parser.add_argument("--evidence-locator")
-    parser.add_argument("--owner")
-    parser.add_argument("--repo", dest="repo_name")
-    body_group = parser.add_mutually_exclusive_group()
-    body_group.add_argument("--comment")
-    body_group.add_argument("--comment-file")
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--dry-run", dest="apply", action="store_false")
-    parser.set_defaults(apply=False)
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--full-output", action="store_true")
-    args = parser.parse_args(argv)
-
-    target = resolve_target(args.target)
-    covered_issues = list(dict.fromkeys(args.issue or []))
-    anchor_issue = args.anchor_issue if args.anchor_issue is not None else covered_issues[0]
-    missing_inputs: list[str] = []
-    if anchor_issue not in covered_issues:
-        missing_inputs.append("--anchor-issue must be included in at least one --issue")
-    repo_slug = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else infer_github_repo(target)
-    if args.apply and not repo_slug:
-        missing_inputs.append("owner/repo")
-
-    try:
-        comment_bodies = {
-            issue: batch_closeout_comment_body(args, issue, repo_slug=repo_slug)
-            for issue in covered_issues
-        }
-    except OSError as exc:
-        missing_inputs.append(f"comment-file unreadable: {exc}")
-        comment_bodies = {}
-
-    if missing_inputs:
-        return emit(
-            output(
-                "closeout batch",
-                "block",
-                schema_version="loom-batch-closeout/v1",
-                summary="batch closeout is missing required host inputs.",
-                dry_run=not args.apply,
-                apply=args.apply,
-                mutates=False,
-                host_mutations=False,
-                carrier_mutations=False,
-                creates_closeout_pr=False,
-                target=str(target),
-                anchor_issue=anchor_issue,
-                covered_issues=covered_issues,
-                pr=args.pr,
-                repo=repo_slug,
-                missing_inputs=missing_inputs,
-                fallback_to=["loom closeout batch --issue <n> --pr <merged-pr> --json"],
-            )
-        )
-
-    steps = [
-        batch_closeout_issue_step(
-            issue=issue,
-            comment_body=comment_bodies[issue],
-            repo_slug=repo_slug,
-            target=target,
-            apply=args.apply,
-        )
-        for issue in covered_issues
-    ]
-    blocking_steps = [step for step in steps if step.get("result") == "block"]
-    result = "block" if blocking_steps else "pass"
-    payload = output(
-        "closeout batch",
-        result,
-        schema_version="loom-batch-closeout/v1",
-        summary=(
-            "batch closeout applied host-only comments and issue closes."
-            if args.apply and result == "pass"
-            else "batch closeout dry-run produced a host-only issue closeout plan."
-            if result == "pass"
-            else "batch closeout stopped because one or more host mutations failed."
-        ),
-        dry_run=not args.apply,
-        apply=args.apply,
-        mutates=args.apply,
-        host_mutations=args.apply,
-        carrier_mutations=False,
-        creates_closeout_pr=False,
-        target=str(target),
-        repo=repo_slug,
-        anchor_issue=anchor_issue,
-        covered_issues=covered_issues,
-        pr=args.pr,
-        merge_commit=args.merge_commit,
-        target_branch=args.target_branch,
-        evidence_locator=args.evidence_locator,
-        closeout_mode="host_only_batch",
-        steps=steps if args.full_output or not args.apply else [
-            {
-                "issue": step.get("issue"),
-                "mode": step.get("mode"),
-                "result": step.get("result"),
-                "status": step.get("status"),
-                "planned_actions": step.get("planned_actions"),
-                "errors": step.get("errors"),
-            }
-            for step in steps
-        ],
-        missing_inputs=[error for step in blocking_steps for error in step.get("errors", [])],
-        fallback_to=["inspect failed host mutations and rerun `loom closeout batch --apply --json`"] if blocking_steps else None,
-    )
-    return emit(payload)
-
-
-def handle_closeout_run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom closeout run")
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--item", required=True)
-    parser.add_argument("--issue", required=True)
-    parser.add_argument("--pr")
-    parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
-    parser.add_argument("--implementation-pr", type=int)
-    parser.add_argument("--release-pr", type=int)
-    parser.add_argument("--carrier-sync-pr", type=int)
-    parser.add_argument("--final-closeout-pr", type=int)
-    parser.add_argument("--project")
-    parser.add_argument("--phase")
-    parser.add_argument("--fr")
-    parser.add_argument("--branch", required=True)
-    parser.add_argument("--owner")
-    parser.add_argument("--repo", dest="repo_name")
-    parser.add_argument("--comment")
-    parser.add_argument("--comment-file")
-    parser.add_argument("--goal-completion")
-    parser.add_argument("--gate-profile", choices=("auto", "closeout-contract", "source-self-fixture", "bootstrap-regression", "distribution-regression", "strong-profile-full-gate"))
-    parser.add_argument("--issue-payload-file")
-    parser.add_argument("--pr-payload-file")
-    parser.add_argument("--project-payload-file")
-    parser.add_argument("--status-checks-file")
-    parser.add_argument("--branch-protection-file")
-    parser.add_argument("--ruleset-file")
-    parser.add_argument("--skip-gate", action="store_true")
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--json", action="store_true")
-    add_legacy_carrier_compatibility_args(parser)
-    args = parser.parse_args(argv)
-    if closeout_current_pr_input(args) is None:
-        parser.error("--pr or one closeout PR role flag is required")
-
-    target = resolve_target(args.target)
-    compatibility = legacy_carrier_compatibility(args)
-    if compatibility["result"] != "pass":
-        return emit(
-            agent_safe_payload(
-                output(
-                    "closeout run",
-                    "block",
-                    schema_version="loom-legacy-carrier-command/v1",
-                    summary=compatibility["summary"],
-                    mutates=False,
-                    target=str(target),
-                    compatibility=compatibility,
-                    missing_inputs=compatibility["missing_inputs"],
-                    fallback_to="loom attestation closeout --repo <owner/repo> --pr <n> --work-item <n> --artifact-input <file> --json",
-                ),
-                target_root=target,
-            )
-        )
-    return emit(run_closeout_payload(args, target))
 
 
 def supported_hosts(target: Path) -> list[dict[str, Any]]:
@@ -11171,7 +7483,6 @@ def installed_state_readback(target: Path) -> dict[str, Any]:
             "reason": f"expected {INSTALLED_STATE_SCHEMA}",
         }
     repo_payload = payload.get("repo_payload") if isinstance(payload.get("repo_payload"), dict) else {}
-    slimdown = installed_state_slimdown_analysis(payload)
     return {
         "status": "present",
         "locator": ".loom/installed-state.json",
@@ -11180,547 +7491,7 @@ def installed_state_readback(target: Path) -> dict[str, Any]:
         "schema_version": payload.get("schema_version"),
         "repo_payload_mode": repo_payload.get("mode"),
         "version_context": payload.get("version_context") if isinstance(payload.get("version_context"), dict) else {},
-        "slimdown": slimdown,
     }
-
-
-def installed_state_slimdown_analysis(payload: dict[str, Any]) -> dict[str, Any]:
-    repo_payload = payload.get("repo_payload") if isinstance(payload.get("repo_payload"), dict) else {}
-    contract = payload.get("contract") if isinstance(payload.get("contract"), dict) else {}
-    companion = payload.get("repo_companion") if isinstance(payload.get("repo_companion"), dict) else {}
-    workstation_fields = [field for field in INSTALLED_STATE_WORKSTATION_FIELDS if field in payload]
-    missing_repo_truth: list[str] = []
-    if repo_payload.get("mode") != "metadata-only":
-        missing_repo_truth.append("repo_payload.mode=metadata-only")
-    if not isinstance(repo_payload.get("adoption_mode"), str) or not repo_payload.get("adoption_mode"):
-        missing_repo_truth.append("repo_payload.adoption_mode")
-    if not isinstance(contract.get("minimum_loom_version"), str) or not contract.get("minimum_loom_version"):
-        missing_repo_truth.append("contract.minimum_loom_version")
-    locator_keys = ("repo_interface_locator", "repo_interop_locator", "companion_locator", "interop_locator")
-    declared_locators = {
-        key: value
-        for key, value in companion.items()
-        if key in locator_keys and isinstance(value, str) and value
-    }
-    update_required = bool(workstation_fields or missing_repo_truth)
-    return {
-        "schema_version": "loom-installed-state-slimdown/v1",
-        "classification": "pr_required" if update_required else "current",
-        "summary": (
-            "installed-state contains workstation-local or missing minimal repo truth fields"
-            if update_required
-            else "installed-state already carries only repository adoption truth required by this migration check"
-        ),
-        "retain_fields": [
-            "schema_version",
-            "repo_payload.mode",
-            "repo_payload.adoption_mode",
-            "contract.minimum_loom_version",
-            "skills_provider",
-            "provider_requirements",
-            "repo companion/interop locators when declared",
-        ],
-        "remove_workstation_fields": workstation_fields,
-        "missing_repo_truth": missing_repo_truth,
-        "declared_repo_locators": declared_locators,
-        "mutates": False,
-        "apply_action": "repo_pr_required" if update_required else "none",
-    }
-
-
-def migration_cache_entry(target: Path, locator: str) -> dict[str, Any]:
-    path = target / locator
-    tracked = git_list_files(target, locator)
-    ignored_entries = git_list_files(target, locator, ignored=True)
-    untracked_entries = git_list_files(target, locator, others=True)
-    exists = path.exists()
-    movable = exists and not tracked
-    blocking = bool(tracked)
-    if path.is_file() or path.is_symlink():
-        file_count = 1
-    elif path.is_dir():
-        file_count = sum(1 for child in path.rglob("*") if child.is_file() or child.is_symlink())
-    else:
-        file_count = 0
-    return {
-        "locator": locator,
-        "exists": exists,
-        "tracked_entries": path_sample(tracked),
-        "untracked_entries": path_sample(untracked_entries),
-        "ignored_entries": path_sample(ignored_entries),
-        "ignored": git_is_ignored(target, locator) or bool(ignored_entries),
-        "file_count": file_count,
-        "movable": movable,
-        "blocking": blocking,
-        "classification": "tracked_cache_blocked" if blocking else "movable_cache" if movable else "absent",
-        "global_locator": f"~/.loom/repos/<repo-id>/{locator.removeprefix('.loom/')}" if exists else None,
-    }
-
-
-def repo_slimdown_entry(target: Path, locator: str, kind: str, disposition: str, reason: str) -> dict[str, Any]:
-    path = target / locator
-    tracked = git_list_files(target, locator)
-    ignored_entries = git_list_files(target, locator, ignored=True)
-    untracked_entries = git_list_files(target, locator, others=True)
-    exists = path.exists()
-    if path.is_file() or path.is_symlink():
-        file_count = 1
-    elif path.is_dir():
-        file_count = sum(1 for child in path.rglob("*") if child.is_file() or child.is_symlink())
-    else:
-        file_count = 0
-    if not exists:
-        strategy = "no_op"
-        classification = "absent"
-    elif disposition == "retain_repo_truth":
-        strategy = "no_op"
-        classification = "retained_repo_truth"
-    elif disposition == "move_to_global_cache" and not tracked:
-        strategy = "auto_commit_candidate"
-        classification = "global_cache_candidate"
-    elif tracked:
-        strategy = "pr_required"
-        classification = "tracked_repo_residue"
-    else:
-        strategy = "auto_commit_candidate"
-        classification = "untracked_repo_residue"
-    return {
-        "locator": locator,
-        "kind": kind,
-        "exists": exists,
-        "file_count": file_count,
-        "tracked_entries": path_sample(tracked),
-        "untracked_entries": path_sample(untracked_entries),
-        "ignored_entries": path_sample(ignored_entries),
-        "classification": classification,
-        "recommended_disposition": disposition,
-        "strategy": strategy,
-        "reason": reason,
-        "global_locator": f"~/.loom/repos/<repo-id>/{locator.removeprefix('.loom/')}" if exists and disposition == "move_to_global_cache" else None,
-        "mutated_by_apply": disposition == "move_to_global_cache" and strategy == "auto_commit_candidate",
-    }
-
-
-def legacy_residue_entry(target: Path, locator: str) -> dict[str, Any]:
-    path = target / locator
-    tracked = git_list_files(target, locator)
-    ignored_entries = git_list_files(target, locator, ignored=True)
-    untracked_entries = git_list_files(target, locator, others=True)
-    exists = path.exists()
-    if tracked:
-        classification = "tracked_legacy_residue"
-        strategy = "pr_required"
-    elif exists:
-        classification = "untracked_legacy_residue"
-        strategy = "auto_commit_candidate"
-    else:
-        classification = "absent"
-        strategy = "no_op"
-    return {
-        "locator": locator,
-        "exists": exists,
-        "tracked_entries": path_sample(tracked),
-        "untracked_entries": path_sample(untracked_entries),
-        "ignored_entries": path_sample(ignored_entries),
-        "classification": classification,
-        "ownership": "tracked_repo_payload" if tracked else "untracked_or_ignored_residue" if exists else "absent",
-        "strategy": strategy,
-        "blocking": False,
-        "apply_action": "diagnose_only" if tracked else "leave_in_place" if exists else "none",
-    }
-
-
-def repo_slimdown_summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
-    counts = Counter(str(entry.get("strategy")) for entry in entries)
-    retained = [
-        {"locator": entry.get("locator"), "reason": entry.get("reason")}
-        for entry in entries
-        if entry.get("classification") == "retained_repo_truth" and entry.get("exists")
-    ]
-    pr_required = [
-        entry.get("locator")
-        for entry in entries
-        if entry.get("strategy") == "pr_required"
-    ]
-    return {
-        "schema_version": "loom-repo-slimdown-summary/v1",
-        "strategy_counts": dict(sorted(counts.items())),
-        "retained_repo_truth": retained,
-        "pr_required_locators": pr_required,
-        "target_default_loom_file_goal": "<10",
-        "mutates": False,
-    }
-
-
-def migration_strategy(
-    installed_state: dict[str, Any],
-    cache_entries: list[dict[str, Any]],
-    residue_entries: list[dict[str, Any]],
-    slimdown_entries: list[dict[str, Any]],
-) -> dict[str, Any]:
-    blocking_reasons: list[str] = []
-    if installed_state.get("blocking"):
-        blocking_reasons.append(str(installed_state.get("reason") or "installed-state is not valid"))
-    for entry in cache_entries:
-        if entry.get("blocking"):
-            blocking_reasons.append(f"{entry.get('locator')} contains tracked cache entries")
-    if blocking_reasons:
-        return {
-            "classification": "blocked",
-            "display": "blocked",
-            "reason": "; ".join(blocking_reasons),
-            "requires_pr": False,
-            "apply_allowed": False,
-        }
-    slimdown_pr_required = [entry for entry in slimdown_entries if entry.get("strategy") == "pr_required"]
-    installed_state_slimdown = installed_state.get("slimdown") if isinstance(installed_state.get("slimdown"), dict) else {}
-    if any((entry.get("tracked_entries") or {}).get("count") for entry in residue_entries) or slimdown_pr_required or installed_state_slimdown.get("classification") == "pr_required":
-        return {
-            "classification": "pr_required",
-            "display": "PR required",
-            "reason": "tracked legacy residue or installed-state slimdown requires repository-scoped review before deletion or rewrite",
-            "requires_pr": True,
-            "apply_allowed": False,
-        }
-    if (
-        any(entry.get("movable") for entry in cache_entries)
-        or any(entry.get("exists") for entry in residue_entries)
-        or any(entry.get("strategy") == "auto_commit_candidate" for entry in slimdown_entries)
-    ):
-        return {
-            "classification": "auto_commit_candidate",
-            "display": "auto-commit candidate",
-            "reason": "only untracked or ignored Loom cache/residue was detected",
-            "requires_pr": False,
-            "apply_allowed": True,
-        }
-    return {
-        "classification": "no_op",
-        "display": "no-op",
-        "reason": "no repo-local Loom cache or legacy residue was detected",
-        "requires_pr": False,
-        "apply_allowed": True,
-    }
-
-
-def migration_plan_payload(command: str, target: Path) -> dict[str, Any]:
-    if not target.exists():
-        return output(
-            command,
-            "block",
-            schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
-            summary="Legacy migration target does not exist.",
-            target=str(target),
-            plan_only=True,
-            mutates=False,
-            failed_layer="target",
-            fail_closed_reason="target path does not exist",
-            fallback_to=["loom migrate-global-cache plan --target <repo> --json"],
-        )
-    installed_state = installed_state_readback(target)
-    cache_entries = [migration_cache_entry(target, locator) for locator in REPO_LOCAL_CACHE_LOCATORS]
-    residue_entries = [legacy_residue_entry(target, locator) for locator in LEGACY_RESIDUE_LOCATORS]
-    slimdown_entries = [
-        repo_slimdown_entry(target, locator, kind, disposition, reason)
-        for locator, kind, disposition, reason in REPO_SLIMDOWN_LOCATOR_RULES
-    ]
-    slimdown = repo_slimdown_summary(slimdown_entries)
-    strategy = migration_strategy(installed_state, cache_entries, residue_entries, slimdown_entries)
-    return output(
-        command,
-        "block" if strategy["classification"] == "blocked" else "pass",
-        schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
-        summary=(
-            "Legacy global cache migration plan is blocked."
-            if strategy["classification"] == "blocked"
-            else "Legacy global cache migration plan generated without mutating state."
-        ),
-        target=str(target),
-        plan_only=True,
-        mutates=False,
-        installed_state=installed_state,
-        cache_entries=cache_entries,
-        legacy_residue=residue_entries,
-        repo_slimdown=slimdown,
-        repo_slimdown_entries=slimdown_entries,
-        repo_change_strategy=strategy,
-        strategy=strategy["classification"],
-        strategy_display=strategy["display"],
-        validation_package=None,
-        failed_layer="legacy-migration" if strategy["classification"] == "blocked" else None,
-        fail_closed_reason=strategy["reason"] if strategy["classification"] == "blocked" else None,
-        fallback_to=(
-            ["repair installed-state", "open a repository-scoped PR for tracked cache entries"]
-            if strategy["classification"] == "blocked"
-            else None
-        ),
-    )
-
-
-def move_cache_file_to_global(target: Path, source: Path) -> dict[str, Any]:
-    relative = source.relative_to(target).as_posix()
-    destination = global_runtime_path(target, relative)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        if destination.is_dir():
-            shutil.rmtree(destination)
-        else:
-            destination.unlink()
-    shutil.move(str(source), str(destination))
-    return {
-        "source": relative,
-        "global_path": str(destination),
-        "global_locator": relative,
-        "sha256": sha256_path(destination) if destination.is_file() else None,
-    }
-
-
-def sha256_path(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def prune_empty_directories(root: Path) -> None:
-    if not root.exists():
-        return
-    directories = [path for path in root.rglob("*") if path.is_dir()]
-    for directory in sorted(directories, key=lambda path: len(path.parts), reverse=True):
-        try:
-            directory.rmdir()
-        except OSError:
-            pass
-    try:
-        root.rmdir()
-    except OSError:
-        pass
-
-
-def apply_global_cache_moves(target: Path, cache_entries: list[dict[str, Any]]) -> dict[str, Any]:
-    moved: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-    for entry in cache_entries:
-        locator = entry.get("locator")
-        if not isinstance(locator, str) or not entry.get("exists"):
-            skipped.append({"locator": locator, "reason": "absent"})
-            continue
-        if (entry.get("tracked_entries") or {}).get("count"):
-            return {
-                "result": "block",
-                "moved": moved,
-                "skipped": skipped,
-                "failed_layer": "legacy-cache",
-                "fail_closed_reason": f"{locator} contains tracked entries",
-            }
-        root = target / locator
-        if root.is_file() or root.is_symlink():
-            moved.append(move_cache_file_to_global(target, root))
-            continue
-        if not root.is_dir():
-            skipped.append({"locator": locator, "reason": "not a regular file or directory"})
-            continue
-        files = [path for path in root.rglob("*") if path.is_file() or path.is_symlink()]
-        for path in files:
-            moved.append(move_cache_file_to_global(target, path))
-        prune_empty_directories(root)
-    return {
-        "result": "pass",
-        "moved": moved,
-        "skipped": skipped,
-        "failed_layer": None,
-        "fail_closed_reason": None,
-    }
-
-
-def register_migrated_repository(target: Path) -> dict[str, Any]:
-    path = workstation_registry_path()
-    registry, error = load_workstation_registry(path)
-    if error or registry is None:
-        return {
-            "result": "block",
-            "registry_path": str(path),
-            "failed_layer": "workstation-registry",
-            "fail_closed_reason": error or "workstation registry is unavailable",
-        }
-    raw_repositories = registry.get("repositories", [])
-    if not all(isinstance(entry, dict) for entry in raw_repositories):
-        return {
-            "result": "block",
-            "registry_path": str(path),
-            "failed_layer": "workstation-registry",
-            "fail_closed_reason": "repository entries must be JSON objects before mutation",
-        }
-    blocking = [
-        item for item in workstation_registry_classifications(registry) if item.get("blocking") is True
-    ]
-    if blocking:
-        return {
-            "result": "block",
-            "registry_path": str(path),
-            "failed_layer": "workstation-registry",
-            "fail_closed_reason": "registry contains blocking identity or path drift",
-            "classifications": blocking,
-        }
-    repositories = [entry for entry in raw_repositories if isinstance(entry, dict)]
-    entry = workstation_registry_entry(target, source="loom migrate-global-cache apply")
-    retained = [
-        existing
-        for existing in repositories
-        if existing.get("id") != entry["id"] and existing.get("path") != entry["path"]
-    ]
-    retained.append(entry)
-    registry["repositories"] = sorted(retained, key=lambda item: str(item.get("path", "")))
-    registry["updated_at"] = now_iso()
-    write_json(path, registry)
-    return {
-        "result": "pass",
-        "registry_path": str(path),
-        "repository": entry,
-        "repository_count": len(registry["repositories"]),
-        "writes": [str(path)],
-    }
-
-
-def run_json_command_step(step_id: str, command: list[str], *, cwd: Path) -> dict[str, Any]:
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-    )
-    try:
-        payload: Any = json.loads(completed.stdout) if completed.stdout.strip() else None
-    except json.JSONDecodeError:
-        payload = None
-    return {
-        "id": step_id,
-        "command": " ".join(shlex.quote(part) for part in command),
-        "result": "pass" if completed.returncode == 0 else "block",
-        "returncode": completed.returncode,
-        "payload_result": payload.get("result") if isinstance(payload, dict) else None,
-        "stdout_sha256": hashlib.sha256(completed.stdout.encode("utf-8")).hexdigest() if completed.stdout else None,
-        "stderr": completed.stderr.strip(),
-    }
-
-
-def migration_validation_package(target: Path) -> dict[str, Any]:
-    loom = [sys.executable, str(Path(__file__).resolve())]
-    steps = [
-        run_json_command_step("installed-state-validate", [*loom, "installed-state", "validate", "--target", str(target), "--json"], cwd=REPO_ROOT),
-        run_json_command_step("host-verify", [*loom, "host", "verify", "--host", "codex", "--scope", "user", "--target", str(target), "--json"], cwd=REPO_ROOT),
-        run_json_command_step("skills-check", [*loom, "skills", "check", "--target", str(target), "--json"], cwd=REPO_ROOT),
-        run_json_command_step("doctor", [*loom, "doctor", "--target", str(target), "--json"], cwd=REPO_ROOT),
-    ]
-    git_status = run_readback_command(["git", "status", "--short"], cwd=target)
-    git_step = {
-        "id": "git-status",
-        "command": "git status --short",
-        "result": "pass" if git_status.returncode == 0 else "block",
-        "returncode": git_status.returncode,
-        "porcelain": git_status.stdout.splitlines(),
-        "stderr": git_status.stderr.strip(),
-    }
-    steps.append(git_step)
-    blocking = [step for step in steps if step.get("result") != "pass"]
-    return {
-        "schema": "loom-legacy-migration-validation-package/v1",
-        "result": "block" if blocking else "pass",
-        "steps": steps,
-        "blocking_step_ids": [str(step.get("id")) for step in blocking],
-    }
-
-
-def migration_apply_payload(command: str, target: Path) -> dict[str, Any]:
-    plan = migration_plan_payload(command, target)
-    strategy = plan.get("repo_change_strategy") if isinstance(plan.get("repo_change_strategy"), dict) else {}
-    if plan.get("result") == "block":
-        return {**plan, "plan_only": False, "mutates": False}
-    if strategy.get("classification") == "pr_required":
-        return output(
-            command,
-            "block",
-            schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
-            summary="Legacy migration apply stopped before tracked repository payload changes.",
-            target=str(target),
-            plan_only=False,
-            mutates=False,
-            installed_state=plan.get("installed_state"),
-            cache_entries=plan.get("cache_entries"),
-            legacy_residue=plan.get("legacy_residue"),
-            repo_slimdown=plan.get("repo_slimdown"),
-            repo_slimdown_entries=plan.get("repo_slimdown_entries"),
-            repo_change_strategy=strategy,
-            strategy=strategy.get("classification"),
-            strategy_display=strategy.get("display"),
-            failed_layer="legacy-residue",
-            fail_closed_reason=strategy.get("reason"),
-            fallback_to=["open a repository-scoped PR for tracked legacy residue"],
-        )
-    cache_entries = [entry for entry in plan.get("cache_entries", []) if isinstance(entry, dict)]
-    cache_apply = apply_global_cache_moves(target, cache_entries)
-    registry_apply = register_migrated_repository(target) if cache_apply.get("result") == "pass" else None
-    validation = (
-        migration_validation_package(target)
-        if cache_apply.get("result") == "pass" and isinstance(registry_apply, dict) and registry_apply.get("result") == "pass"
-        else None
-    )
-    blocking = [
-        cache_apply.get("result") == "block",
-        isinstance(registry_apply, dict) and registry_apply.get("result") == "block",
-        isinstance(validation, dict) and validation.get("result") == "block",
-    ]
-    return output(
-        command,
-        "block" if any(blocking) else "pass",
-        schema=GLOBAL_CACHE_MIGRATION_SCHEMA,
-        summary=(
-            "Legacy global cache migration apply completed."
-            if not any(blocking)
-            else "Legacy global cache migration apply blocked before all validation passed."
-        ),
-        target=str(target),
-        plan_only=False,
-        mutates=bool(cache_apply.get("moved") or (isinstance(registry_apply, dict) and registry_apply.get("writes"))),
-        installed_state=plan.get("installed_state"),
-        cache_entries=cache_entries,
-        legacy_residue=plan.get("legacy_residue"),
-        repo_slimdown=plan.get("repo_slimdown"),
-        repo_slimdown_entries=plan.get("repo_slimdown_entries"),
-        repo_change_strategy=strategy,
-        strategy=strategy.get("classification"),
-        strategy_display=strategy.get("display"),
-        cache_apply=cache_apply,
-        registry_apply=registry_apply,
-        validation_package=validation,
-        failed_layer=(
-            cache_apply.get("failed_layer")
-            if cache_apply.get("result") == "block"
-            else registry_apply.get("failed_layer")
-            if isinstance(registry_apply, dict) and registry_apply.get("result") == "block"
-            else "legacy-migration-validation"
-            if isinstance(validation, dict) and validation.get("result") == "block"
-            else None
-        ),
-        fail_closed_reason=(
-            cache_apply.get("fail_closed_reason")
-            if cache_apply.get("result") == "block"
-            else registry_apply.get("fail_closed_reason")
-            if isinstance(registry_apply, dict) and registry_apply.get("result") == "block"
-            else "post-migration validation package failed"
-            if isinstance(validation, dict) and validation.get("result") == "block"
-            else None
-        ),
-        fallback_to=(
-            ["repair validation package findings and rerun loom migrate-global-cache plan --json"]
-            if any(blocking)
-            else None
-        ),
-    )
 
 
 def handle_migrate_global_cache(argv: list[str]) -> int:
@@ -12272,128 +8043,6 @@ def handle_host(argv: list[str]) -> int:
     return emit(output(command, result, schema=HOST_SCHEMA, summary=summary, target=str(target), host=host, scope=args.scope, source_kind=source_kind, mutates=False, verifies="repository-adoption-metadata-and-codex-user-plugin-provider", workstation_registration=registration, checks=checks, failed_layer=failed_layer, fail_closed_reason=fail_closed_reason, fallback_to=fallback_to))
 
 
-def handle_skills(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom skills")
-    parser.add_argument("action", choices=("list", "generate", "check", "doctor", "package", "release-check"))
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--json", action="store_true")
-    args = parser.parse_args(argv)
-    command = f"skills {args.action}"
-    target = resolve_target(args.target)
-    registry = read_optional_json(PLUGIN_SKILLS_ROOT / "registry.json") or {}
-    entries = registry.get("entries") if isinstance(registry, dict) else []
-    if args.action == "list":
-        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Codex plugin payload skills registry listed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), skills=entries, plugin_payload_root="plugins/loom/skills", fallback_to=None))
-    if args.action == "generate" and not args.apply:
-        return emit(output(command, "block", schema=SKILLS_SCHEMA, summary="`loom skills generate` mutates the Loom source repository skills mirror and Codex plugin payload, and requires --apply.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason="explicit --apply is required before rewriting source repository skills/plugin payload", fallback_to=["loom skills check --target <repo> --json"]))
-    if args.action == "generate":
-        try:
-            managed_writes = generate_source_skills_payload(target)
-        except RuntimeError as exc:
-            return emit(output(command, "block", schema=SKILLS_SCHEMA, summary="Source skills/plugin payload generation failed.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason=str(exc), fallback_to=["python3 tools/skills_surface.py check"]))
-        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Loom source skills mirror and Codex plugin payload generated.", target=str(target), mutates=True, managed_writes=managed_writes, fallback_to=None))
-    if args.action in {"check", "doctor", "release-check"}:
-        checks = []
-        if target.resolve() == REPO_ROOT.resolve():
-            checks.append([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "check"])
-        else:
-            ok, managed_checks = verify_cli_managed_surfaces(target, host="codex")
-            checks.append({"command": "loom skills check metadata-only adoption", "returncode": 0 if ok else 1, "stdout": json.dumps(managed_checks, ensure_ascii=False), "stderr": "" if ok else "metadata-only adoption is incomplete or contains repo-local payload residue"})
-        if args.action == "release-check":
-            checks.extend(
-                [
-                    [sys.executable, str(TOOLS_ROOT / "host_adapter_check.py")],
-                    [sys.executable, str(TOOLS_ROOT / "version_surface_check.py")],
-                    [sys.executable, str(TOOLS_ROOT / "check_release_surface.py")],
-                    [sys.executable, str(TOOLS_ROOT / "check_npm_package.py")],
-                ]
-            )
-        results = []
-        for check in checks:
-            if isinstance(check, dict):
-                results.append(check)
-            else:
-                completed = run_capture(check)
-                results.append({"command": " ".join(check), "returncode": completed.returncode, "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()})
-        failures = [item for item in results if item["returncode"] != 0]
-        result = "pass" if not failures else "block"
-        release_authority = None
-        if args.action == "release-check":
-            release_authority = {
-                "active_cli_line": "loom",
-                "candidate_authority": "VERSION",
-                "published_evidence": ["GitHub v* tag", "GitHub Release"],
-                "legacy_installer_evidence": {
-                    "package": "@mc-and-his-agents/loom-installer",
-                    "final_active_baseline": "0.1.119",
-                    "tag": "loom-installer-v0.1.119",
-                    "active_cli_evidence": False,
-                },
-            }
-        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Skills/plugin payload checks passed." if result == "pass" else "Skills/plugin payload checks failed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), checks=results, release_authority=release_authority, failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else "one or more skills checks failed", fallback_to=None if result == "pass" else ["loom skills generate --apply --json"]))
-    payload_root = REPO_ROOT / "plugins" / "loom" / "skills"
-    missing_payload_inputs = []
-    if not (REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json").is_file():
-        missing_payload_inputs.append("plugins/loom/.codex-plugin/plugin.json")
-    if not (payload_root / "registry.json").is_file():
-        missing_payload_inputs.append("plugins/loom/skills/registry.json")
-    skill_records = []
-    for entry in entries or []:
-        skill_id = entry.get("id") if isinstance(entry, dict) else None
-        if not isinstance(skill_id, str):
-            continue
-        skill_records.append(
-            {
-                "id": skill_id,
-                "role": entry.get("role"),
-                "contract_version": entry.get("contract_version"),
-                "skill": f"plugins/loom/skills/{skill_id}/SKILL.md",
-                "contract": f"plugins/loom/skills/{skill_id}/contract.json",
-                "executable": f"plugins/loom/skills/{entry.get('executable')}",
-            }
-        )
-    result = "pass" if not missing_payload_inputs else "block"
-    return emit(
-        output(
-            command,
-            result,
-            schema=SKILLS_SCHEMA,
-            summary="Codex plugin payload metadata collected without single-skill package artifacts."
-            if result == "pass"
-            else "Codex plugin payload is incomplete.",
-            mutates=False,
-            registry_version=registry.get("registry_version"),
-            root_entry=registry.get("root_entry"),
-            plugin_payload={
-                "manifest": "plugins/loom/.codex-plugin/plugin.json",
-                "skills_root": "plugins/loom/skills",
-                "single_skill_packages": False,
-                "skills": skill_records,
-            },
-            failed_layer=None if result == "pass" else "plugin-payload",
-            fail_closed_reason=None if result == "pass" else "missing plugin payload inputs",
-            missing_inputs=missing_payload_inputs,
-            fallback_to=None if result == "pass" else ["python3 tools/skills_surface.py generate", "python3 tools/skills_surface.py check"],
-        )
-    )
-
-
-def handle_init(argv: list[str]) -> int:
-    if not argv:
-        return emit(output("init", "block", schema=SCENARIO_SCHEMA, summary="Init requires an operation.", failed_layer="scenario-input", fail_closed_reason="missing init operation", fallback_to=["loom init bootstrap --target <repo> --json", "loom init verify --target <repo> --json"]))
-    return emit_delegated("init", "loom_init.py", strip_json_flag(argv), failed_layer="loom-init", fallback_to=["loom init verify --target <repo> --json", "loom doctor --target <repo> --json"])
-
-
-def handle_adopt(argv: list[str]) -> int:
-    if not argv:
-        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Adopt requires an operation.", failed_layer="adoption-input", fail_closed_reason="missing adopt operation", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom adopt adversarial-test --target <repo> --record --json", "loom init bootstrap --target <repo> --json"]))
-    operation = argv[0]
-    if operation not in {"verify", "adversarial-test"}:
-        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Unsupported adopt operation.", failed_layer="adoption-input", fail_closed_reason=f"unsupported adopt operation: {operation}", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom adopt adversarial-test --target <repo> --record --json", "loom init bootstrap --target <repo> --json"]))
-    return emit_flow("adopt", ["adopt", operation, *strip_json_flag(argv[1:])], fallback_to=["loom init verify --target <repo> --json", "loom profile status --target <repo> --json"])
-
-
 def handle_route(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom route")
     parser.add_argument("--target", required=True, help="Target repository root")
@@ -12447,79 +8096,88 @@ def handle_route(argv: list[str]) -> int:
         return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route requires one host subject.", missing_inputs=["host subject"], fallback_to="loom route --target <repo> --issue <issue> --json"))
     if args.issue is not None and parsed_item is not None and args.issue != parsed_item["id"]:
         return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route host subjects conflict.", missing_inputs=["consistent Work Item subject"], fallback_to="make --issue and --item identify the same Work Item"))
-    flow_args = [
-        "github-intake",
-        "admission",
-        "--target",
-        args.target,
-        "--issue",
-        str(issue),
-        "--intent",
-        args.intent,
-    ]
-    if args.task:
-        flow_args.extend(["--task", args.task])
-    if parsed_item is not None:
-        flow_args.extend(["--owner", str(parsed_item["owner"]), "--repo", str(parsed_item["repo"])])
-    for blocker in args.blocked_by:
-        flow_args.extend(["--blocked-by", str(blocker)])
-    if args.work_item is not None:
-        flow_args.extend(["--work-item", str(args.work_item)])
-    if args.apply:
-        flow_args.append("--apply")
-    if args.full_output:
-        flow_args.append("--full-output")
-    return emit_flow("route", flow_args, fallback_to=["loom route --target <repo> --issue <fr> --task <work-item scope> --intent build --apply --json"])
+    repo_slug = infer_github_repo(target)
+    owner, repo_name = repo_slug.split("/", 1) if repo_slug and "/" in repo_slug else (None, None)
+    payload = github_fr_wi_admission_payload(
+        host=GITHUB_ADMISSION_HOST,
+        target_root=target,
+        owner=str(parsed_item["owner"]) if parsed_item is not None else owner,
+        repo_name=str(parsed_item["repo"]) if parsed_item is not None else repo_name,
+        issue_number=int(issue),
+        intent=args.intent,
+        task=args.task,
+        blocked_by=args.blocked_by,
+        work_item_number=args.work_item,
+        apply=args.apply,
+        lifecycle_only=False,
+    )
+    payload["command"] = "route"
+    payload["repo_execution_carriers_consumed"] = False
+    payload["carrier_mutations"] = False
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_status(argv: list[str]) -> int:
-    target = target_from_args(argv)
-    forwarded, full_output = split_agent_output_args(argv)
-    payload = delegated_payload("status", "loom_status.py", strip_json_flag(forwarded), failed_layer="loom-status", fallback_to=["loom fact-chain --target <repo> --json", "loom checkpoint admission --target <repo> --json"])
-    payload.setdefault("schema_version", OUTPUT_SCHEMA)
-    if payload.get("command") and payload.get("command") != "status":
-        payload["wrapped_command"] = payload.get("command")
-    payload["command"] = "status"
+    parser = argparse.ArgumentParser(prog="loom status")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
+    parser.add_argument("--issue", type=int)
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--branch")
+    parser.add_argument("--owner")
+    parser.add_argument("--repo", dest="repo_name")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--full-output", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target("status", target, "target path does not exist"))
+    repo_slug = infer_github_repo(target)
+    owner, repo_name = repo_slug.split("/", 1) if repo_slug and "/" in repo_slug else (None, None)
+    owner, repo_name = args.owner or owner, args.repo_name or repo_name
+    branch = args.branch or git_branch_for_target(target)
+    head = git_head_sha_for_target(target)
+    subject: dict[str, Any] | None = None
+    if owner and repo_name and any(value is not None for value in (args.item, args.issue, args.pr)):
+        parsed_item = parse_typed_locator(args.item, allowed_types={"work_item"}, allow_legacy=False) if args.item else None
+        if args.item and parsed_item is None:
+            return emit(output("status", "block", schema=SCENARIO_SCHEMA, summary="Status requires a canonical typed Work Item locator.", missing_inputs=["canonical Work Item locator"], repo_execution_carriers_consumed=False, carrier_mutations=False))
+        subject = github_lifecycle_subject_readback(
+            target,
+            owner,
+            repo_name,
+            issue_number=args.issue or (int(parsed_item["id"]) if parsed_item else None),
+            pr_number=args.pr,
+            branch_name=branch,
+            intent="build" if args.pr is None else "pre-review",
+            target_owner=repo_slug.split("/", 1)[0] if repo_slug and "/" in repo_slug else None,
+            target_repo=repo_slug.split("/", 1)[1] if repo_slug and "/" in repo_slug else None,
+        )
+    result = "pass" if subject is None or subject.get("result") == "pass" else "block"
+    payload = output(
+        "status",
+        result,
+        schema=SCENARIO_SCHEMA,
+        summary=("Status is derived from the formal worktree and live GitHub subject; repository execution carriers were not read." if result == "pass" else "Live GitHub subject readback is inconsistent."),
+        target=str(target),
+        repository=repo_slug,
+        branch=branch,
+        head_sha=head,
+        subject_readback=subject,
+        missing_inputs=[] if subject is None else subject.get("errors", []),
+        fallback_to=None if result == "pass" else "correct the explicit Work Item/PR/branch binding and retry",
+        repo_execution_carriers_consumed=False,
+        carrier_mutations=False,
+        mutates=False,
+    )
     annotate_global_cli_runtime_entrypoint(payload, command="status", target=target, argv=argv)
-    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
-
-
-def handle_fact_chain(argv: list[str]) -> int:
-    target = target_from_args(argv)
-    forwarded, full_output = split_agent_output_args(argv)
-    payload = flow_payload("fact-chain", ["fact-chain", *strip_json_flag(forwarded)], fallback_to=["loom init verify --target <repo> --json", "loom status --target <repo> --json"])
-    payload.setdefault("schema_version", OUTPUT_SCHEMA)
-    if payload.get("command") and payload.get("command") != "fact-chain":
-        payload["wrapped_command"] = payload.get("command")
-    payload["command"] = "fact-chain"
-    annotate_global_cli_runtime_entrypoint(payload, command="fact-chain", target=target, argv=argv)
-    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
-
-
-def handle_shadow_parity(argv: list[str]) -> int:
-    target = target_from_args(argv)
-    forwarded, full_output = split_agent_output_args(argv)
-    payload = flow_payload("shadow-parity", ["shadow-parity", *strip_json_flag(forwarded)], fallback_to=["loom shadow-parity --target <repo> --surface all --blocking --json", "loom status --target <repo> --json"])
-    payload.setdefault("schema_version", OUTPUT_SCHEMA)
-    if payload.get("command") and payload.get("command") != "shadow-parity":
-        payload["wrapped_command"] = payload.get("command")
-    payload["command"] = "shadow-parity"
-    annotate_global_cli_runtime_entrypoint(payload, command="shadow-parity", target=target, argv=argv)
-    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
+    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_profile(argv: list[str]) -> int:
     if not argv:
-        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Profile requires an operation.", failed_layer="profile-input", fail_closed_reason="missing profile operation", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json"]))
+        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Profile requires an operation.", failed_layer="profile-input", fail_closed_reason="missing profile operation", fallback_to=["loom profile status --target <repo> --json"]))
     operation = argv[0]
-    if operation == "light-migration-plan":
-        return emit_delegated(
-            "profile light-migration-plan",
-            "light_profile.py",
-            ["plan", *strip_json_flag(argv[1:])],
-            failed_layer="light-profile",
-            fallback_to=["loom profile light-migration-plan --target <repo> --json"],
-        )
     if operation == "light-migration-reconcile":
         return emit_delegated(
             "profile light-migration-reconcile",
@@ -12528,120 +8186,9 @@ def handle_profile(argv: list[str]) -> int:
             failed_layer="light-profile-migration",
             fallback_to=["loom profile light-migration-reconcile --target <repo> --repository <owner/repo> --branch <branch> --work-item <issue> --gate-pr <pr> --migration-pr <pr> --context <check> --app-id <id> --json"],
         )
-    if operation not in {"status", "upgrade-plan", "upgrade"}:
-        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported profile operation: {operation}", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json", "loom profile light-migration-plan --target <repo> --json", "loom profile light-migration-reconcile --target <repo> --repository <owner/repo> --branch <branch> --work-item <issue> --gate-pr <pr> --migration-pr <pr> --context <check> --app-id <id> --json"]))
+    if operation != "status":
+        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported profile operation: {operation}", fallback_to=["loom profile status --target <repo> --json", "loom profile light-migration-reconcile --target <repo> --repository <owner/repo> --branch <branch> --work-item <issue> --gate-pr <pr> --migration-pr <pr> --context <check> --app-id <id> --json"]))
     return emit_flow(f"profile {operation}", ["governance-profile", operation, *strip_json_flag(argv[1:])], fallback_to=["loom profile status --target <repo> --json", "docs/adoption/github-profile-upgrade.md"])
-
-
-def handle_governance_profile(argv: list[str]) -> int:
-    if not argv:
-        return emit(output("governance-profile", "block", schema=PROFILE_SCHEMA, summary="Governance profile requires an operation.", failed_layer="profile-input", fail_closed_reason="missing governance-profile operation", fallback_to=["loom governance-profile status --target <repo> --json", "loom profile status --target <repo> --json"]))
-    operation = argv[0]
-    if operation not in {"status", "upgrade-plan", "upgrade", "binding"}:
-        return emit(output("governance-profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported governance-profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported governance-profile operation: {operation}", fallback_to=["loom governance-profile status --target <repo> --json", "loom profile status --target <repo> --json"]))
-    return emit_flow(f"governance-profile {operation}", ["governance-profile", operation, *strip_json_flag(argv[1:])], fallback_to=["loom governance-profile status --target <repo> --json", "docs/adoption/github-profile-upgrade.md"])
-
-
-def handle_checkpoint(argv: list[str]) -> int:
-    if not argv:
-        return emit(output("checkpoint", "block", schema=GATE_SCHEMA, summary="Checkpoint requires a stage.", failed_layer="checkpoint-input", fail_closed_reason="missing checkpoint stage", fallback_to=["loom checkpoint admission --target <repo> --json", "loom checkpoint build --target <repo> --json", "loom checkpoint merge --target <repo> --json"]))
-    stage = argv[0]
-    if stage not in {"admission", "build", "merge"}:
-        return emit(output("checkpoint", "block", schema=GATE_SCHEMA, summary="Unsupported checkpoint stage.", failed_layer="checkpoint-input", fail_closed_reason=f"unsupported checkpoint stage: {stage}", fallback_to=["loom checkpoint admission --target <repo> --json", "loom checkpoint build --target <repo> --json", "loom checkpoint merge --target <repo> --json"]))
-    return emit_flow(f"checkpoint {stage}", ["checkpoint", stage, *strip_json_flag(argv[1:])], fallback_to=["loom status --target <repo> --json", "loom fact-chain --target <repo> --json"])
-
-
-def handle_gate(argv: list[str]) -> int:
-    if not argv:
-        return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Gate requires a gate name.", failed_layer="gate-input", fail_closed_reason="missing gate name", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
-    gate = argv[0]
-    rest = strip_json_flag(argv[1:])
-    if gate in {"pre-review", "spec-review", "review"}:
-        return emit_flow(f"gate {gate}", ["flow", gate, *rest], fallback_to=["loom status --target <repo> --json", f"loom {gate} --target <repo> --json"])
-    if gate == "pr":
-        return emit_flow("gate pr", ["pr-gate", "check", *rest], fallback_to=["loom pr gate <pr> --json", "loom review --target <repo> --json"])
-    if gate == "merge":
-        return emit_flow("gate merge", ["controlled-merge", "check", *rest], fallback_to=["loom checkpoint merge --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"])
-    if gate == "freeze":
-        if not rest:
-            return emit(output("gate freeze", "block", schema=GATE_SCHEMA, summary="Gate freeze requires an operation.", failed_layer="gate-input", fail_closed_reason="missing gate freeze operation", fallback_to=["loom gate freeze check --target <repo> --json", "loom gate freeze write --target <repo> --json"]))
-        operation = rest[0]
-        if operation not in {"check", "write"}:
-            return emit(output("gate freeze", "block", schema=GATE_SCHEMA, summary="Unsupported gate freeze operation.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate freeze operation: {operation}", fallback_to=["loom gate freeze check --target <repo> --json", "loom gate freeze write --target <repo> --json"]))
-        return handle_gate_freeze_operation(operation, rest[1:])
-    if gate == "closeout":
-        return emit_flow("gate closeout", ["closeout", "check", *rest], fallback_to=["loom merge check <pr> --json", "loom status --target <repo> --json"])
-    if gate == "repair-pr":
-        return emit_flow("gate repair-pr", ["gate-repair-pr", *rest], fallback_to=["loom gate pr --target <repo> --pr <number> --json", "loom merge check <pr> --json"])
-    return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Unsupported gate name.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate name: {gate}", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
-
-
-def handle_gate_freeze_operation(operation: str, forwarded: list[str], *, probe: bool = False) -> int | dict[str, Any]:
-    if operation not in {"check", "write"}:
-        raise ValueError(f"unsupported gate freeze operation: {operation}")
-    capability = f"gate-freeze-{operation}"
-    if probe:
-        return {"capability": capability, "mutates": False}
-    return emit_flow(
-        f"gate freeze {operation}",
-        ["gate-freeze", operation, *forwarded],
-        fallback_to=[
-            "loom pr metadata-preflight --surface merge_ready --target <repo> --json",
-            "loom shadow-parity --target <repo> --surface all --blocking --json",
-        ],
-    )
-
-
-def handle_closeout_queue_status(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="loom closeout queue status")
-    parser.add_argument("--target", default=".")
-    parser.add_argument("--issue", type=int, action="append", default=[])
-    parser.add_argument("--item", action="append", default=[])
-    parser.add_argument("--queue-file")
-    parser.add_argument("--output")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--full-output", action="store_true")
-    args = parser.parse_args(argv)
-    target = resolve_target(args.target)
-    if not target.exists():
-        payload = block_target("closeout queue status", target, "target path does not exist")
-        payload.update(
-            {
-                "schema_version": "loom-closeout-queue-status/v1",
-                "operation": "status",
-                "mode": "blocked",
-                "mutates": False,
-                "host_mutations": False,
-                "carrier_mutations": False,
-                "item_count": 0,
-                "items": [],
-                "next_action": "provide an existing target repository before reading closeout queue status",
-                "next_command": None,
-            }
-        )
-        return emit(payload)
-    flow_args = ["closeout-queue", "status", "--target", str(target)]
-    for issue in args.issue:
-        flow_args.extend(["--issue", str(issue)])
-    for item in args.item:
-        flow_args.extend(["--item", item])
-    for flag, value in (
-        ("--queue-file", args.queue_file),
-        ("--output", args.output),
-    ):
-        if value is not None:
-            flow_args.extend([flag, value])
-    append_full_output_flag(flow_args, args)
-    payload = flow_payload(
-        "closeout queue status",
-        flow_args,
-        fallback_to=["loom closeout --target <repo> --json", "loom reconcile --issue <issue> --pr <pr> --json"],
-    )
-    payload.setdefault("schema_version", SCENARIO_SCHEMA)
-    if payload.get("command") and payload.get("command") != "closeout queue status":
-        payload["wrapped_command"] = payload.get("command")
-    payload["command"] = "closeout queue status"
-    return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
 
 def handle_scenario(command: str, argv: list[str]) -> int:
@@ -12657,8 +8204,6 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES)
     parser.add_argument("--implementation-pr", type=int)
     parser.add_argument("--release-pr", type=int)
-    parser.add_argument("--carrier-sync-pr", type=int)
-    parser.add_argument("--final-closeout-pr", type=int)
     parser.add_argument("--pr-payload-file")
     parser.add_argument("--project", type=int)
     parser.add_argument("--phase", type=int)
@@ -12683,6 +8228,8 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     parser.add_argument("--status-checks-file")
     parser.add_argument("--branch-protection-file")
     parser.add_argument("--ruleset-file")
+    parser.add_argument("--pr-gate-result-file")
+    parser.add_argument("--merge-gate-result-file")
     parser.add_argument("--attestation-artifact-input", type=Path)
     parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
     parser.add_argument("--skip-gate", action="store_true")
@@ -12713,96 +8260,203 @@ def handle_scenario(command: str, argv: list[str]) -> int:
             )
         )
 
-    flow_operations = {
-        "story": "story",
-        "build": "build",
-        "pre-review": "pre-review",
-        "handoff": "handoff",
-        "retire": "handoff",
-    }
-    if command in flow_operations:
-        if command in {"build", "pre-review"}:
-            legacy_item_match = re.fullmatch(r"WI-(\d+)", args.item or "")
-            if legacy_item_match is not None and args.issue is not None and int(legacy_item_match.group(1)) != args.issue:
-                return emit(
-                    output(
-                        command,
-                        "block",
-                        schema=SCENARIO_SCHEMA,
-                        summary="Legacy Work Item locator conflicts with the explicit host subject; execution is not admitted.",
-                        wrapped_command="flow",
-                        fallback_to="admission",
-                        blocking_failures=[
-                            {
-                                "message": (
-                                    "current item mismatch: legacy locator "
-                                    f"{args.item} does not identify host Work Item {args.issue}; "
-                                    "no repository current pointer was read"
-                                )
-                            }
-                        ],
-                        carrier_mutations=False,
-                        repo_execution_carriers_consumed=False,
-                        compatibility_envelope={
-                            "synthetic": True,
-                            "delegated": False,
-                            "legacy_locator_accepted": False,
-                        },
-                    )
-                )
-            lifecycle_admission = host_lifecycle_admission_payload(
-                target=target,
-                item=args.item,
-                issue=args.issue,
-                fr=args.fr,
-                owner=args.owner,
-                repo_name=args.repo_name,
-                intent="pr" if command == "pre-review" else command,
-                pr=args.pr,
-                branch=args.branch,
-            )
-            if lifecycle_admission["result"] != "pass":
-                return emit(
-                    output(
-                        command,
-                        "block",
-                        schema=SCENARIO_SCHEMA,
-                        summary="Host lifecycle admission blocked before repository carrier reads.",
-                        lifecycle_admission=lifecycle_admission,
-                        missing_inputs=lifecycle_admission.get("missing_inputs", []),
-                        fallback_to=lifecycle_admission.get("primary_remediation"),
-                    )
-                )
-        flow_args = ["flow", flow_operations[command], "--target", str(target)]
-        for flag, value in (
-            ("--item", args.item),
-            ("--output", args.output),
-            ("--build-evidence", args.build_evidence),
-            ("--owner", args.owner),
-            ("--repo", args.repo_name),
-            ("--issue", args.issue),
-            ("--fr", args.fr),
-            ("--pr", args.pr),
-            ("--pr-payload-file", args.pr_payload_file),
-            ("--project", args.project),
-            ("--branch", args.branch),
-            ("--project-drift-mode", args.project_drift_mode if command in {"pre-review"} else None),
-        ):
-            if value is not None:
-                flow_args.extend([flag, str(value)])
-        payload = flow_payload(command, flow_args, fallback_to=["loom status --target <repo> --json", "loom checkpoint build --target <repo> --json"])
+    if command == "story":
+        payload = flow_payload(
+            command,
+            ["flow", "story", "--target", str(target), *(["--item", args.item] if args.item else [])],
+            fallback_to=["loom route --target <repo> --issue <issue> --json"],
+        )
         payload.setdefault("schema_version", SCENARIO_SCHEMA)
-        if payload.get("command") and payload.get("command") != command:
-            payload["wrapped_command"] = payload.get("command")
         payload["command"] = command
-        if command == "story":
-            annotate_global_cli_runtime_entrypoint(payload, command="story", target=target, argv=argv)
-        if command == "retire":
-            payload["retire_contract"] = {
-                "mutates": False,
-                "summary": "Retire currently exposes the handoff/cleanup checklist and does not delete worktrees or host objects.",
-                "fallback_to": ["loom workspace retire --target <repo> --json", "loom handoff --target <repo> --json"],
-            }
+        annotate_global_cli_runtime_entrypoint(payload, command="story", target=target, argv=argv)
+        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
+
+    if command in {"build", "pre-review", "review", "merge-ready"}:
+        legacy_item_match = re.fullmatch(r"WI-(\d+)", args.item or "")
+        if legacy_item_match is not None:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=SCENARIO_SCHEMA,
+                    summary="Legacy Work Item locators are removed from the public lifecycle.",
+                    missing_inputs=["canonical typed Work Item locator"],
+                    primary_error_code="unsupported_command_surface",
+                    failure_domain="toolchain",
+                    failure_owner="loom",
+                    remediation_command="use <owner>/<repo>/work_item/<issue> together with --issue <issue>",
+                    carrier_mutations=False,
+                    repo_execution_carriers_consumed=False,
+                )
+            )
+        stage_intent = "build" if command == "build" else "pre-review"
+        effective_branch = args.branch or git_branch_for_target(target)
+        lifecycle_admission = host_lifecycle_admission_payload(
+            target=target,
+            item=args.item,
+            issue=args.issue,
+            fr=args.fr,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            intent=stage_intent,
+            pr=args.pr,
+            branch=effective_branch,
+        )
+        if lifecycle_admission["result"] != "pass":
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=SCENARIO_SCHEMA,
+                    summary="Host lifecycle admission blocked without reading repository execution carriers.",
+                    lifecycle_admission=lifecycle_admission,
+                    missing_inputs=lifecycle_admission.get("missing_inputs", []),
+                    fallback_to=lifecycle_admission.get("primary_remediation"),
+                    repo_execution_carriers_consumed=False,
+                    carrier_mutations=False,
+                )
+            )
+        subject = lifecycle_admission.get("subject_readback") if isinstance(lifecycle_admission.get("subject_readback"), dict) else {}
+        if command == "build":
+            local_branch = git_branch_for_target(target)
+            branch_errors = []
+            default_branch, default_branch_error = github_default_branch_for_target(target)
+            if not effective_branch:
+                branch_errors.append("formal issue-scoped branch")
+            elif local_branch != effective_branch:
+                branch_errors.append("checked-out worktree branch must match --branch")
+            if default_branch_error:
+                branch_errors.append(f"GitHub default branch readback: {default_branch_error}")
+            elif effective_branch == default_branch:
+                branch_errors.append("build must not run on the repository default branch")
+            item_issue = subject.get("issue_number") or args.issue
+            if effective_branch and isinstance(item_issue, int) and re.search(rf"(?:^|[/_-]){item_issue}(?:$|[/_-])", effective_branch) is None:
+                branch_errors.append("formal branch must be issue-scoped to the Work Item")
+            result = "pass" if not branch_errors else "block"
+            return emit(
+                output(
+                    command,
+                    result,
+                    schema=SCENARIO_SCHEMA,
+                    summary=(
+                        "Build is admitted from the explicit GitHub Work Item and worktree branch; no PR or repository execution carrier is required."
+                        if result == "pass"
+                        else "Build requires the formal issue-scoped worktree branch, but never an empty PR."
+                    ),
+                    target=str(target),
+                    item={"id": args.item, "issue": subject.get("issue_number") or args.issue},
+                    branch=effective_branch,
+                    pre_pr=subject.get("pr_number") is None,
+                    lifecycle_admission=lifecycle_admission,
+                    missing_inputs=branch_errors,
+                    repo_execution_carriers_consumed=False,
+                    carrier_mutations=False,
+                    mutates=False,
+                    next_action="implement the bounded Work Item, then run loom pre-review after a real diff and PR exist" if result == "pass" else "switch to the formal issue-scoped branch and retry",
+                    fallback_to=None if result == "pass" else "git switch <issue-scoped-branch>",
+                )
+            )
+        binding = public_pr_stage_binding(
+            target=target,
+            lifecycle_admission=lifecycle_admission,
+            expected_branch=effective_branch,
+        )
+        if binding["result"] != "pass" or command == "pre-review":
+            payload = output(
+                command,
+                binding["result"],
+                schema=SCENARIO_SCHEMA,
+                summary=binding["summary"],
+                lifecycle_admission=lifecycle_admission,
+                host_binding=binding,
+                missing_inputs=binding.get("missing_inputs", []),
+                fallback_to=binding.get("remediation_command"),
+                next_action=("perform semantic review and publish a current-head host attestation" if binding["result"] == "pass" else binding.get("remediation_command")),
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+            )
+            return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
+        attestation = ship_host_attestation(args, target, closeout=False)
+        if attestation.get("result") != "pass" or command == "review":
+            result = "pass" if attestation.get("result") == "pass" else "block"
+            payload = output(
+                command,
+                result,
+                schema=SCENARIO_SCHEMA,
+                summary=(
+                    "Current-head semantic review is authenticated by GitHub host attestation."
+                    if result == "pass"
+                    else "Semantic review is not authenticated for the current GitHub PR head."
+                ),
+                lifecycle_admission=lifecycle_admission,
+                host_binding=binding,
+                review_attestation=attestation,
+                missing_inputs=attestation.get("missing_inputs", []),
+                fallback_to=attestation.get("fallback_to"),
+                next_action="run loom merge-ready with the same current-head attestation and hosted PR-gate result" if result == "pass" else attestation.get("fallback_to"),
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+            )
+            return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
+        if not args.pr_gate_result_file:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=SCENARIO_SCHEMA,
+                    summary="Merge readiness requires the hosted PR-gate result for this exact PR head.",
+                    lifecycle_admission=lifecycle_admission,
+                    host_binding=binding,
+                    review_attestation=attestation,
+                    missing_inputs=["--pr-gate-result-file"],
+                    fallback_to="download or save the hosted loom-delivery-gate result, then retry",
+                    repo_execution_carriers_consumed=False,
+                    carrier_mutations=False,
+                    mutates=False,
+                )
+            )
+        repo_slug = str(binding["repository"])
+        owner, repo_name = repo_slug.split("/", 1)
+        work_item = args.item or typed_locator(owner, repo_name, "work_item", int(subject["issue_number"]))
+        effective_issue = int(subject["issue_number"])
+        if any((args.pr_payload_file, args.status_checks_file, args.branch_protection_file, args.ruleset_file)) and os.environ.get("LOOM_ALLOW_TEST_FIXTURES") != "1":
+            return emit(output(command, "block", schema=SCENARIO_SCHEMA, summary="Public merge readiness requires live GitHub host facts; local host-fact fixtures are test-only.", missing_inputs=["remove local PR/check/protection/ruleset fixture inputs"], primary_error_code="github_host_readback_failure", failure_domain="host_service", failure_owner="github", remediation_command="rerun against the live GitHub PR", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+        pr_number = int(binding.get("pr", {}).get("number"))
+        merge_args = [
+            "controlled-merge", "check", "--target", str(target), "--pr", str(pr_number),
+            "--item", work_item, "--issue", str(effective_issue),
+            "--head-sha", str(binding.get("pr", {}).get("headRefOid")),
+            "--owner", owner, "--repo", repo_name,
+            "--pr-gate-result-file", args.pr_gate_result_file,
+        ]
+        for flag, value in (
+            ("--pr-payload-file", args.pr_payload_file),
+            ("--status-checks-file", args.status_checks_file),
+            ("--branch-protection-file", args.branch_protection_file),
+            ("--ruleset-file", args.ruleset_file),
+            ("--merge-gate-result-file", args.merge_gate_result_file),
+        ):
+            if value:
+                merge_args.extend([flag, str(value)])
+        merge_check = flow_payload(command, merge_args, fallback_to=["refresh the hosted gate result for the current PR head"])
+        result = "pass" if merge_check.get("result") == "pass" else "block"
+        payload = output(
+            command,
+            result,
+            schema=SCENARIO_SCHEMA,
+            summary=("The current PR head is merge-ready from host attestation, retained hosted gate, required checks, and mergeability." if result == "pass" else "The current PR head is not merge-ready."),
+            lifecycle_admission=lifecycle_admission,
+            host_binding=binding,
+            review_attestation=attestation,
+            merge_check=merge_check,
+            missing_inputs=merge_check.get("missing_inputs", []),
+            fallback_to=merge_check.get("fallback_to"),
+            repo_execution_carriers_consumed=False,
+            carrier_mutations=False,
+            mutates=False,
+        )
         return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
 
     if command in {"spec", "plan"}:
@@ -12829,87 +8483,14 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         )
 
     if command == "closeout":
-        if derived_manifest is not None:
-            attestation = ship_host_attestation(args, target, closeout=True)
-            attestation["command"] = "closeout"
-            attestation["profile"] = derived_manifest.get("profile")
-            attestation["repo_execution_carriers_consumed"] = False
-            return emit(
-                agent_safe_payload(
-                    attestation,
-                    target_root=target,
-                    full_output=args.full_output,
-                )
-            )
-        flow_args = ["closeout", "check", "--target", str(target)]
-        for flag, value in (
-            ("--item", args.item),
-            ("--issue", args.issue),
-            ("--pr", args.pr),
-            ("--pr-role", args.pr_role),
-            ("--implementation-pr", args.implementation_pr),
-            ("--release-pr", args.release_pr),
-            ("--carrier-sync-pr", args.carrier_sync_pr),
-            ("--final-closeout-pr", args.final_closeout_pr),
-            ("--project", args.project),
-            ("--phase", args.phase),
-            ("--fr", args.fr),
-            ("--branch", args.branch),
-            ("--goal-completion", args.goal_completion),
-            ("--gate-profile", args.gate_profile if args.gate_profile != "auto" else None),
-            ("--owner", args.owner),
-            ("--repo", args.repo_name),
-            ("--comment", args.comment),
-            ("--issue-payload-file", args.issue_payload_file),
-            ("--pr-payload-file", args.pr_payload_file),
-            ("--project-payload-file", args.project_payload_file),
-            ("--status-checks-file", args.status_checks_file),
-            ("--branch-protection-file", args.branch_protection_file),
-            ("--ruleset-file", args.ruleset_file),
-        ):
-            if value is not None:
-                flow_args.extend([flag, str(value)])
-        if args.skip_gate:
-            flow_args.append("--skip-gate")
-        payload = flow_payload(command, flow_args, fallback_to=["loom merge check <pr> --json", "loom reconcile --issue <issue> --pr <pr> --json"])
-        payload.setdefault("schema_version", SCENARIO_SCHEMA)
-        if payload.get("command") and payload.get("command") != command:
-            payload["wrapped_command"] = payload.get("command")
-        payload["command"] = command
-        return emit(agent_safe_payload(payload, target_root=target, full_output=args.full_output))
+        attestation = ship_host_attestation(args, target, closeout=True)
+        attestation["command"] = "closeout"
+        attestation["profile"] = derived_manifest.get("profile") if isinstance(derived_manifest, dict) else None
+        attestation["repo_execution_carriers_consumed"] = False
+        attestation["carrier_mutations"] = False
+        return emit(agent_safe_payload(attestation, target_root=target, full_output=args.full_output))
 
     return emit(output(command, "block", schema=SCENARIO_SCHEMA, summary="Unsupported scenario command.", failed_layer="scenario-input", fail_closed_reason=command, fallback_to=["loom help --json"]))
-
-
-def dispatch(command: str, forwarded_args: list[str]) -> int:
-    tool_name, prefix = COMMAND_ROUTES[command]
-    tool_path = TOOLS_ROOT / tool_name
-    if not tool_path.exists():
-        return emit(
-            output(
-                command,
-                "block",
-                summary="Delegated compatibility wrapper is missing.",
-                failed_layer="delegated-wrapper",
-                fail_closed_reason=f"missing delegated tool: {tool_path}",
-                fallback_to=["loom help --json"],
-            ),
-            stream=sys.stderr,
-        )
-    forwarded_args, full_output = split_agent_output_args(forwarded_args)
-    target = target_root_from_explicit_arg(forwarded_args)
-    payload = delegated_payload(
-        command,
-        tool_name,
-        [*prefix, *strip_json_flag(forwarded_args)],
-        failed_layer="delegated-wrapper",
-        fallback_to=["loom help --json"],
-    )
-    payload.setdefault("schema_version", OUTPUT_SCHEMA)
-    if payload.get("command") and payload.get("command") != command:
-        payload["wrapped_command"] = payload.get("command")
-    payload["command"] = command
-    return emit(agent_safe_payload(payload, target_root=target, full_output=full_output))
 
 
 def reserved_command(command: str, argv: list[str]) -> int:
@@ -12929,6 +8510,39 @@ def reserved_command(command: str, argv: list[str]) -> int:
         return emit(payload)
     print(f"loom: {command} is reserved but not implemented", file=sys.stderr)
     return 2
+
+
+def resolve_removed_legacy_command(argv: list[str]) -> str | None:
+    """Recognize a retired command without parsing target, host, or mutation flags."""
+
+    for length in (3, 2, 1):
+        if len(argv) >= length:
+            candidate = " ".join(argv[:length])
+            if candidate in LEGACY_COMMAND_INVENTORY:
+                return candidate
+    return None
+
+
+def reject_unsupported_command_surface(command: str) -> int:
+    return emit(
+        output(
+            command,
+            "block",
+            summary="This command is not part of the Loom v0.31 public surface.",
+            failed_layer="cli-command-router",
+            fail_closed_reason="unsupported legacy command surface",
+            fallback_to=["loom help --json"],
+            failure_domain="toolchain",
+            primary_error_code="unsupported_command_surface",
+            cause_class="unsupported_command_surface",
+            failure_owner="loom",
+            retryable=False,
+            remediation_command="loom help --json",
+            mutates=False,
+            host_mutations=False,
+            carrier_mutations=False,
+        )
+    )
 
 
 def resolve_command(argv: list[str]) -> tuple[str, list[str]] | None:
@@ -15666,11 +11280,18 @@ def main(argv: list[str]) -> int:
         print(version_context()["repo_version"])
         return 0
 
+    removed_legacy_command = resolve_removed_legacy_command(argv[1:])
+    if removed_legacy_command is not None:
+        return reject_unsupported_command_surface(removed_legacy_command)
+
     resolved = resolve_command(argv[1:])
     if resolved is None:
         print_usage(sys.stderr)
         return 2
     command, forwarded = resolved
+
+    if command not in PUBLIC_COMMAND_NAMES and command not in {"-h", "--help"}:
+        return reject_unsupported_command_surface(command)
 
     if command in {"-h", "--help", "help"}:
         return handle_help(forwarded)
@@ -15680,110 +11301,34 @@ def main(argv: list[str]) -> int:
         return handle_detect(forwarded)
     if command == "doctor":
         return handle_doctor(forwarded)
-    if command == "installed-state":
-        return handle_installed_state(forwarded)
-    if command.startswith("installed-state "):
+    if command == "installed-state validate":
         return handle_installed_state(command.split()[1:] + forwarded)
-    if command == "repair" or command.startswith("repair "):
-        repair_args = command.split()[1:] + forwarded if command.startswith("repair ") else forwarded
-        return handle_repair(repair_args)
-    if command == "release" or command.startswith("release "):
-        release_args = command.split()[1:] + forwarded if command.startswith("release ") else forwarded
-        return handle_release(release_args)
-    if command in {"install", "upgrade-plan", "upgrade", "rollback", "verify"}:
+    if command == "repair plan":
+        return handle_repair(["plan", *forwarded])
+    if command == "release readback":
+        return handle_release(["readback", *forwarded])
+    if command in {"install", "upgrade", "verify"}:
         return handle_delivery(command, forwarded)
-    if command == "runtime-upgrade" or command.startswith("runtime-upgrade "):
-        runtime_upgrade_args = command.split()[1:] + forwarded if command.startswith("runtime-upgrade ") else forwarded
-        return handle_runtime_upgrade(runtime_upgrade_args)
-    if command == "migrate-global-cache" or command.startswith("migrate-global-cache "):
-        migrate_args = command.split()[1:] + forwarded if command.startswith("migrate-global-cache ") else forwarded
-        return handle_migrate_global_cache(migrate_args)
-    if command == "workspace" or command.startswith("workspace "):
-        workspace_args = command.split()[1:] + forwarded if command.startswith("workspace ") else forwarded
-        return handle_workspace(workspace_args)
-    if command == "issue" or command.startswith("issue "):
-        issue_args = command.split()[1:] + forwarded if command.startswith("issue ") else forwarded
-        return handle_issue(issue_args)
-    if command == "project" or command.startswith("project "):
-        project_args = command.split()[1:] + forwarded if command.startswith("project ") else forwarded
-        return handle_project(project_args)
-    if command == "pr-intent" or command.startswith("pr-intent "):
-        intent_args = command.split()[1:] + forwarded if command.startswith("pr-intent ") else forwarded
-        return handle_pr_intent(intent_args)
-    if command == "docs-pr" or command.startswith("docs-pr "):
-        docs_pr_args = command.split()[1:] + forwarded if command.startswith("docs-pr ") else forwarded
-        return handle_pr_intent(docs_pr_args, default_intent="docs-governance-only", command_root="docs-pr")
-    if command == "pr" or command.startswith("pr "):
-        pr_args = command.split()[1:] + forwarded if command.startswith("pr ") else forwarded
-        return handle_pr(pr_args)
-    if command == "merge" or command.startswith("merge "):
-        merge_args = command.split()[1:] + forwarded if command.startswith("merge ") else forwarded
-        return handle_merge(merge_args)
-    if command == "ship" or command.startswith("ship "):
-        ship_args = command.split()[1:] + forwarded if command.startswith("ship ") else forwarded
-        return handle_ship(ship_args)
-    if command == "reconcile":
-        return handle_reconcile(forwarded)
-    if command == "carrier" or command.startswith("carrier "):
-        carrier_args = command.split()[1:] + forwarded if command.startswith("carrier ") else forwarded
-        return handle_carrier(carrier_args)
-    if command == "host" or command.startswith("host "):
-        host_args = command.split()[1:] + forwarded if command.startswith("host ") else forwarded
-        return handle_host(host_args)
-    if command == "workstation" or command.startswith("workstation "):
-        workstation_args = command.split()[1:] + forwarded if command.startswith("workstation ") else forwarded
-        return handle_workstation(workstation_args)
-    if command == "skills" or command.startswith("skills "):
-        skills_args = command.split()[1:] + forwarded if command.startswith("skills ") else forwarded
-        return handle_skills(skills_args)
-    if command == "suite" or command.startswith("suite "):
-        suite_args = command.split()[1:] + forwarded if command.startswith("suite ") else forwarded
-        return handle_suite(suite_args)
-    if command == "acceptance" or command.startswith("acceptance "):
-        acceptance_args = command.split()[1:] + forwarded if command.startswith("acceptance ") else forwarded
-        return emit_imported_main(command, product_acceptance_main, acceptance_args)
-    if command == "attestation" or command.startswith("attestation "):
-        attestation_args = command.split()[1:] + forwarded if command.startswith("attestation ") else forwarded
-        return emit_imported_main(command, host_attestation_main, attestation_args)
-    if command == "init":
-        return handle_init(forwarded)
-    if command == "adopt" or command.startswith("adopt "):
-        adopt_args = command.split()[1:] + forwarded if command.startswith("adopt ") else forwarded
-        return handle_adopt(adopt_args)
+    if command.startswith("workspace "):
+        return handle_workspace([command.split()[1], *forwarded])
+    if command == "pr gate":
+        return handle_public_pr_gate(forwarded)
+    if command.startswith("merge "):
+        return handle_merge([command.split()[1], *forwarded])
+    if command == "ship":
+        return handle_ship(forwarded)
+    if command == "acceptance resolve":
+        return emit_imported_main(command, product_acceptance_main, ["resolve", *forwarded])
+    if command.startswith("attestation "):
+        return emit_imported_main(command, host_attestation_main, [command.split()[1], *forwarded])
     if command == "route":
         return handle_route(forwarded)
     if command == "status":
         return handle_status(forwarded)
-    if command == "fact-chain":
-        return handle_fact_chain(forwarded)
-    if command == "shadow-parity":
-        return handle_shadow_parity(forwarded)
-    if command == "profile" or command.startswith("profile "):
-        profile_args = command.split()[1:] + forwarded if command.startswith("profile ") else forwarded
-        return handle_profile(profile_args)
-    if command == "governance-profile" or command.startswith("governance-profile "):
-        profile_args = command.split()[1:] + forwarded if command.startswith("governance-profile ") else forwarded
-        return handle_governance_profile(profile_args)
-    if command == "checkpoint" or command.startswith("checkpoint "):
-        checkpoint_args = command.split()[1:] + forwarded if command.startswith("checkpoint ") else forwarded
-        return handle_checkpoint(checkpoint_args)
-    if command == "gate" or command.startswith("gate "):
-        gate_args = command.split()[1:] + forwarded if command.startswith("gate ") else forwarded
-        return handle_gate(gate_args)
-    if command in {"closeout status", "closeout sync"}:
-        return handle_closeout_sync(command.split()[1], forwarded)
-    if command == "closeout run":
-        return handle_closeout_run(forwarded)
-    if command == "closeout batch":
-        return handle_closeout_batch(forwarded)
-    if command == "closeout queue status":
-        return handle_closeout_queue_status(forwarded)
-    if command in {"story", "spec", "plan", "build", "pre-review", "closeout", "handoff", "retire"}:
+    if command.startswith("profile "):
+        return handle_profile([command.split()[1], *forwarded])
+    if command in {"story", "build", "pre-review", "review", "merge-ready", "closeout"}:
         return handle_scenario(command, forwarded)
-    if command == "review":
-        return handle_review_command(forwarded)
-    if command in COMMAND_ROUTES:
-        return dispatch(command, forwarded)
     if command in COMMAND_INDEX:
         return reserved_command(command, forwarded)
 

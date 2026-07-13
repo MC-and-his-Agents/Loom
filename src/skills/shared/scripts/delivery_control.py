@@ -367,6 +367,8 @@ POST_MERGE_REVIEW_DIAGNOSTIC_SCHEMA = "loom-post-merge-review-diagnostic/v1"
 
 PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
 
+HOSTED_DELIVERY_GATE_READBACK_SCHEMA = "loom-delivery-gate-readback/v1"
+
 CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
 
 GOVERNANCE_CAPABILITY_PROFILE_SCHEMA = "loom-governance-capability-profile/v1"
@@ -375,7 +377,7 @@ HIGH_RISK_GOVERNANCE_CHANGE_CLASSES = {"release", "security", "payment", "data_m
 
 GATE_REPAIR_PR_SCHEMA = "loom-gate-repair-pr/v1"
 
-PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
+PR_MERGE_GATE_CHECK_NAME = "loom-delivery-gate"
 
 HOST_MERGEABILITY_HARD_BLOCK_STATUSES = {"DIRTY", "DRAFT"}
 
@@ -8540,6 +8542,76 @@ def retained_pr_gate_consumption(
     pr_number: int,
 ) -> dict[str, Any]:
     missing_inputs: list[str] = []
+    current_head = current_pr.get("headRefOid")
+    if isinstance(retained, dict) and retained.get("schema_version") == HOSTED_DELIVERY_GATE_READBACK_SCHEMA:
+        retained_pr = retained.get("pr") if isinstance(retained.get("pr"), dict) else {}
+        retained_work_item = retained.get("work_item") if isinstance(retained.get("work_item"), dict) else {}
+        hosted_check = retained.get("hosted_check") if isinstance(retained.get("hosted_check"), dict) else {}
+        review_attestation = (
+            retained.get("review_attestation")
+            if isinstance(retained.get("review_attestation"), dict)
+            else {}
+        )
+        host_facts = (
+            review_attestation.get("host_facts")
+            if isinstance(review_attestation.get("host_facts"), dict)
+            else {}
+        )
+        attested_pr = host_facts.get("pr") if isinstance(host_facts.get("pr"), dict) else {}
+        retained_head = retained_pr.get("head_sha")
+        retained_item = retained_work_item.get("locator")
+        check_name = str(hosted_check.get("name") or hosted_check.get("context") or "")
+        check_status = str(hosted_check.get("status") or "").upper()
+        check_conclusion = str(hosted_check.get("conclusion") or hosted_check.get("state") or "").upper()
+        if retained.get("result") != "pass":
+            missing_inputs.append("retained hosted delivery gate result must be pass")
+        if retained.get("assurance") not in {"limited", "strong"}:
+            missing_inputs.append("retained hosted delivery gate assurance is not recognized")
+        if retained_pr.get("number") != pr_number:
+            missing_inputs.append("retained hosted delivery gate PR number does not match current PR")
+        if not isinstance(retained_head, str) or not retained_head:
+            missing_inputs.append("retained hosted delivery gate PR head is missing")
+        elif retained_head != current_head:
+            missing_inputs.append("retained hosted delivery gate PR head does not match current PR head")
+        if expected_item and retained_item != expected_item:
+            missing_inputs.append("retained hosted delivery gate Work Item does not match expected item")
+        if check_name != "loom-delivery-gate":
+            missing_inputs.append("retained hosted delivery gate check name is not loom-delivery-gate")
+        if check_status != "COMPLETED" or check_conclusion not in {"SUCCESS", "EXPECTED", "PASS"}:
+            missing_inputs.append("retained hosted delivery gate check is not completed successfully")
+        if review_attestation.get("result") != "pass":
+            missing_inputs.append("retained host review attestation must be pass")
+        if expected_item and review_attestation.get("work_item_locator") != expected_item:
+            missing_inputs.append("retained host review attestation Work Item does not match expected item")
+        if attested_pr.get("number") != pr_number:
+            missing_inputs.append("retained host review attestation PR number does not match current PR")
+        if attested_pr.get("head_sha") != current_head:
+            missing_inputs.append("retained host review attestation head does not match current PR head")
+        result = "pass" if not missing_inputs else "block"
+        return {
+            "source": "retained",
+            "locator": locator,
+            "schema_version": retained.get("schema_version"),
+            "result": result,
+            "summary": (
+                "retained hosted delivery gate is fresh for the current PR head."
+                if result == "pass"
+                else "retained hosted delivery gate is missing, stale, or not bound to the current host facts."
+            ),
+            "missing_inputs": missing_inputs,
+            "fallback_to": None if result == "pass" else "pr gate",
+            "freshness": "fresh" if result == "pass" else "stale",
+            "bindings": {
+                "pr": pr_number,
+                "work_item": retained_item,
+                "retained_head_sha": retained_head,
+                "current_head_sha": current_head,
+                "hosted_check": check_name,
+                "assurance": retained.get("assurance"),
+                "review_attestation_schema": review_attestation.get("schema_version"),
+                "review_attested_head": attested_pr.get("head_sha"),
+            },
+        }
     retained_pr = retained.get("pr") if isinstance(retained, dict) and isinstance(retained.get("pr"), dict) else {}
     retained_work_item = (
         retained.get("work_item")
@@ -8557,7 +8629,6 @@ def retained_pr_gate_consumption(
         else {}
     )
     retained_head = retained_pr.get("head_sha")
-    current_head = current_pr.get("headRefOid")
     retained_item = retained_work_item.get("id")
     semantic_disposition = (
         review_approval.get("semantic_review_disposition")
