@@ -84,6 +84,8 @@ def main() -> int:
         "host_only_delivery",
         "failure_envelope",
         "missing_delivery_attestation",
+        "product_problem",
+        "PHASE_CHILD_TYPES",
     )
     evaluator_missing = [needle for needle in evaluator_required if needle not in evaluator]
     if missing or present or evaluator_missing:
