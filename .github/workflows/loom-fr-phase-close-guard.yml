@@ -40,7 +40,10 @@ jobs:
             const issueQuery = `
               query($owner:String!, $repo:String!, $number:Int!) {
                 repository(owner:$owner, name:$repo) {
-                  defaultBranchRef { name }
+              defaultBranchRef {
+                name
+                branchProtectionRule { requiredApprovingReviewCount }
+              }
                   issue(number:$number) {
                     number state stateReason body closedAt
                     labels(first:100) { pageInfo { hasNextPage } nodes { name } }
@@ -84,6 +87,7 @@ jobs:
               const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
               return {
                 default_branch: repository.defaultBranchRef.name,
+                required_approving_review_count: repository.defaultBranchRef.branchProtectionRule?.requiredApprovingReviewCount,
                 issue: {
                   number: issue.number,
                   state: issue.state,
@@ -139,6 +143,7 @@ jobs:
               repository: `${owner}/${repo}`,
               event_closed_at: context.payload.issue?.closed_at || null,
               default_branch: null,
+              review_policy: { read_complete: false, required_approving_review_count: null },
               host_readable: true,
               issues: [],
             };
@@ -154,6 +159,17 @@ jobs:
                 const fetched = await fetchIssue(number);
                 snapshot.default_branch ||= fetched.default_branch;
                 if (snapshot.default_branch !== fetched.default_branch) snapshot.host_readable = false;
+                const requiredApprovals = fetched.required_approving_review_count;
+                if (!Number.isInteger(requiredApprovals) || requiredApprovals < 0) {
+                  throw new Error("GitHub required review policy read is incomplete");
+                }
+                if (snapshot.review_policy.read_complete && snapshot.review_policy.required_approving_review_count !== requiredApprovals) {
+                  throw new Error("GitHub required review policy changed during snapshot read");
+                }
+                snapshot.review_policy = {
+                  read_complete: true,
+                  required_approving_review_count: requiredApprovals,
+                };
                 byNumber.set(number, fetched.issue);
                 queue.push(...fetched.issue.children);
               }
