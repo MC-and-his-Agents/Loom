@@ -6710,7 +6710,7 @@ def gate_freeze_payload(args: argparse.Namespace, *, operation: str) -> dict[str
         expected_item=context["item_id"],
         expected_head_sha=head_sha,
         expected_branch=branch_name,
-        issue_number=args.issue,
+        issue_number=getattr(args, "issue", None),
     )
     metadata_suite_not_applicable = metadata_suite_not_applicable_payload(
         context,
