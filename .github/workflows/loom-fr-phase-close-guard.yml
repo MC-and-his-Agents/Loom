@@ -236,7 +236,7 @@ jobs:
               return;
             }
             const details = Array.isArray(verdict.reasons)
-              ? verdict.reasons.map((entry) => `- \`${entry.code}\`: ${entry.message}`).join("\n")
+              ? verdict.reasons.map((entry) => `- \`${entry.code}\` at \`${entry.locator || "issue:unknown"}\`: ${entry.message}`).join("\n")
               : "- \`host_unreadable\`: the closure evaluator returned no structured reasons";
             const body = `${remediationMarker}\n\nLoom 已重新打开该 FR/Phase：它不能以 completed 关闭。\n\n${details}\n\n处理后再次关闭；不要通过补 current、carrier、shadow 或手写 head 字段绕过。`;
             const markerComments = comments.filter((comment) => String(comment.body || "").includes(remediationMarker));
