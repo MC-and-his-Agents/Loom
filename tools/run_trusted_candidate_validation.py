@@ -37,7 +37,7 @@ PROTECTED_HARNESS_FILES = (
 )
 CONTRACT_TRANSITION_CHECKER = "tools/check_cli_contract.py"
 CONTRACT_TRANSITION_SURFACE = "legacy-command-eol"
-CONTRACT_TRANSITION_REQUIRED_TARGET = "cli-contract-check"
+CONTRACT_TRANSITION_TARGETS = ("py-compile", "cli-contract-check")
 CONTRACT_TRANSITION_ORIGIN = "https://github.com/MC-and-his-Agents/Loom.git"
 CONTRACT_TRANSITION_TRUSTED_SHA256 = "9570ae1384a389725cd140b954ccac79e29cbbc03e31851bf02e90154d5628b5"
 CONTRACT_TRANSITION_CANDIDATE_SHA256 = "f1800e4470da0d88367c55b559a72593d36927873458fbdaed90d004ebb5e0d6"
@@ -142,7 +142,8 @@ def contract_transition_allowed(
     if (
         runner_root != trusted_root
         or drift != [CONTRACT_TRANSITION_CHECKER]
-        or CONTRACT_TRANSITION_REQUIRED_TARGET not in targets
+        or len(targets) != len(CONTRACT_TRANSITION_TARGETS)
+        or set(targets) != set(CONTRACT_TRANSITION_TARGETS)
     ):
         return False
     trusted_checker = trusted_root / CONTRACT_TRANSITION_CHECKER
@@ -392,18 +393,20 @@ def main() -> int:
                     ),
                 }
             )
+            if contract_transition:
+                # Tree equality covers every candidate file except the exact-hash checker,
+                # which this isolated path compiles before running targeted + aggregate.
+                return run_contract_transition_check(
+                    candidate_root,
+                    Path(temporary),
+                    safe_environment,
+                )
             completed = subprocess.run(
                 ["make", "-f", str(validation_root / "Makefile"), "--", *targets],
                 cwd=validation_root,
                 env=safe_environment,
                 check=False,
             )
-            if completed.returncode == 0 and contract_transition:
-                return run_contract_transition_check(
-                    candidate_root,
-                    Path(temporary),
-                    safe_environment,
-                )
         except ValueError as error:
             print(str(error), file=sys.stderr)
             return 2
