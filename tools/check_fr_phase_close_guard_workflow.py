@@ -49,6 +49,8 @@ def main() -> int:
         "statusCheckRollup",
         "closedAt",
         "event_closed_at",
+        "context.payload.sender?.id",
+        "context.payload.sender?.login",
         'current.state !== "closed"',
         'current.state_reason !== "completed"',
         "changed after the closure snapshot",
