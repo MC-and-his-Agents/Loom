@@ -43,7 +43,6 @@ def main() -> int:
     assert loom.ship_validation_profile_for_paths([], release)[0] == "release"
 
     source = (ROOT / "tools" / "loom.py").read_text(encoding="utf-8")
-    assert loom.LEGACY_SURFACE_STATE == "removed"
     assert len(loom.COMMANDS) == len(loom.PUBLIC_COMMAND_NAMES) == 30
     assert set(loom.COMMAND_INDEX) == loom.PUBLIC_COMMAND_NAMES
     for retired in (

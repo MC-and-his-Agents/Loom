@@ -992,6 +992,7 @@ def check_trusted_candidate_harness() -> None:
         drift_cases = {
             "makefile": ("Makefile", "delivery-gate-check:\n\t@true\n"),
             "checker": ("tools/check_probe.py", "raise SystemExit(0)\n"),
+            "public-checker": ("tools/check_cli_contract.py", "raise SystemExit(0)\n"),
             "os-exit": ("src/skills/shared/scripts/delivery_gate.py", "import os\nos._exit(0)\n"),
             "top-level-side-effect": ("src/skills/shared/scripts/light_profile.py", "raise SystemExit(0)\n"),
         }

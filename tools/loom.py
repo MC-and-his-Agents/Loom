@@ -312,7 +312,6 @@ PUBLIC_PROTOCOL_TYPES = (
     "release_judgment",
     "readback",
 )
-LEGACY_SURFACE_STATE = "removed"
 LEGACY_COMMAND_INVENTORY = (
     "acceptance validate",
     "upgrade-plan",
@@ -4272,75 +4271,6 @@ def extract_loom_package_specs(line: str) -> list[str]:
             spec = re.split(r"[\s'\"`]", value, maxsplit=1)[0]
         specs.append(normalize_workflow_version_value(spec))
         start = index + len(marker)
-
-
-def runtime_upgrade_effective_branch(args: argparse.Namespace, target: Path) -> str | None:
-    return args.branch or git_branch_for_target(target)
-
-
-def runtime_upgrade_effective_head(args: argparse.Namespace, target: Path) -> str | None:
-    return args.head_sha or git_head_sha_for_target(target)
-
-
-def runtime_upgrade_pr_metadata_flow_args(
-    args: argparse.Namespace,
-    target: Path,
-    *,
-    action: str,
-    surface: str,
-    pr: str | None = None,
-    output_file: str | None = None,
-    readback_file: str | None = None,
-) -> list[str]:
-    branch = runtime_upgrade_effective_branch(args, target)
-    head_sha = runtime_upgrade_effective_head(args, target)
-    flow_args = ["pr-metadata", action, "--target", str(target), "--surface", surface]
-    for flag, value in (
-        ("--pr", pr),
-        ("--item", args.item),
-        ("--issue", args.issue),
-        ("--branch", branch),
-        ("--head-sha", head_sha),
-    ):
-        if value:
-            flow_args.extend([flag, str(value)])
-    if output_file:
-        flow_args.extend(["--output-file", output_file])
-    if readback_file:
-        flow_args.extend(["--readback-file", readback_file])
-    if args.base_body_file:
-        flow_args.extend(["--base-body-file", args.base_body_file])
-    flow_args.extend(
-        [
-            "--change-class",
-            "runtime_upgrade" if surface == "merge_ready" else "metadata_schema",
-            "--suite-path",
-            "not_applicable" if surface == "merge_ready" else "minimal",
-            "--review-requirement",
-            "current_head_review_required",
-            "--release-judgment",
-            "no_release",
-            "--upgrade-trigger",
-            "runtime_upgrade",
-        ]
-    )
-    if surface == "closeout":
-        flow_args.extend(["--upgrade-trigger", "carrier_sync_only"])
-    flow_args.extend(
-        [
-            "--suite-na-rationale",
-            "workflow-only Loom runtime version pin maintenance",
-            "--suite-na-consumer-boundary",
-            "CI workflow installs the pinned @mc-and-his-agents/loom runtime; carrier-only closeout remains repo metadata only",
-            "--suite-na-recheck-condition",
-            "workflow pin, PR metadata, head SHA, hosted checks, and carrier closeout change",
-            "--suite-na-scope-proof",
-            "only Loom runtime workflow pin and maintenance carrier surfaces changed",
-            "--suite-na-review-requirement",
-            "current_head_review_required",
-        ]
-    )
-    return flow_args
 
 
 def handle_delivery(command: str, argv: list[str]) -> int:

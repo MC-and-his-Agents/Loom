@@ -7,7 +7,9 @@ import importlib.util
 import hashlib
 import io
 import json
+import subprocess
 import sys
+import tempfile
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -126,6 +128,33 @@ def main() -> int:
         raise AssertionError("host-resolved waiver must retain trusted provenance and rationale")
     if "delivery_gate" in SOURCE.read_text(encoding="utf-8"):
         raise AssertionError("product acceptance adapter must not depend on delivery gate")
+    with tempfile.TemporaryDirectory(prefix="loom-acceptance-writer-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        readback = tmp / "release-readback.json"
+        output = tmp / "acceptance.json"
+        writer_args = [
+            sys.executable,
+            str(WRITER),
+            "--story", "MC-and-his-Agents/Loom/issue/2101",
+            "--scenario", "v0.31-product-acceptance-2101",
+            "--evidence-class", "live_readonly",
+            "--provider-profile", "loom-v0.31-product-acceptance",
+            "--repository", "MC-and-his-Agents/Loom",
+            "--head-sha", "a" * 40,
+            "--run-id", "9",
+            "--verifier-login", "maintainer",
+            "--verifier-id", "42",
+            "--release-readback", str(readback),
+            "--output", str(output),
+        ]
+        readback.write_text(json.dumps({"result": "pass", "classification": {"verdict": "missing", "gaps": ["tag"]}}), encoding="utf-8")
+        rejected = subprocess.run(writer_args, check=False, capture_output=True, text=True)
+        if rejected.returncode == 0 or output.exists():
+            raise AssertionError("acceptance writer trusted an incomplete release readback")
+        readback.write_text(json.dumps({"result": "pass", "classification": {"verdict": "published", "gaps": []}}), encoding="utf-8")
+        accepted = subprocess.run(writer_args, check=False, capture_output=True, text=True)
+        if accepted.returncode != 0 or json.loads(output.read_text(encoding="utf-8"))["evidence"][0]["evidence_class"] != "live_readonly":
+            raise AssertionError("acceptance writer rejected a gap-free published release readback")
     tracked_copies = [str(path.relative_to(ROOT)) for path in GENERATED_COPIES if path.exists()]
     if tracked_copies:
         raise AssertionError("product acceptance must remain canonical-source only: " + ", ".join(tracked_copies))
@@ -134,8 +163,14 @@ def main() -> int:
         "workflow_dispatch:",
         "ref: ${{ github.sha }}",
         "product acceptance must run from the default branch",
+        "fetch-depth: 0",
         "tools/write_product_acceptance.py",
         "name: loom-product-acceptance",
+        "v0.31-product-acceptance",
+        "python3 tools/check_cli_contract.py",
+        "Read back published v0.31 release",
+        "--provider-profile",
+        "--release-readback",
         "actions/upload-artifact@v4",
         "retention-days: 30",
     ):
