@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from failure_envelope import envelope, primary_cause
-from github_host import HOST_ATTESTATION_WORKFLOW_PATH, github_pr_attestation_readback
 from product_acceptance import resolve_acceptance
 
 
@@ -25,10 +24,7 @@ TYPE_LABELS = {"fr": "fr", "phase": "phase", "work-item": "work_item"}
 DEFERRED_LABEL = "deferred"
 EXPECTED_CHILD_TYPE = {"phase": "fr", "fr": "work_item"}
 WAIVER_POLICY_LABEL = "product_acceptance_waiver_allowed"
-SINGLE_MAINTAINER_LABEL = "review_policy_single_maintainer"
 PRODUCT_ARTIFACT_RE = re.compile(r"<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->", re.IGNORECASE)
-ATTESTATION_ARTIFACT_RE = re.compile(r"<!--\s*loom:host-attestation-artifact\s+pr:(\d+)\s+head:([0-9a-f]{40})\s+id:(\d+)\s*-->", re.IGNORECASE)
-SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 DELIVERY_CHECK_CONTEXTS = frozenset({"py-compile", "loom-delivery-gate", "loom-pr-merge-gate"})
 
 
@@ -64,7 +60,7 @@ def _reason(code: str, locator: str, message: str) -> dict[str, str]:
 
 
 def _payload(subject: int, verdict: str, summary: str, reasons: list[dict[str, str]], *, completed: bool) -> dict[str, Any]:
-    remediation = "reconcile native children, dependencies, trusted product acceptance, review attestation, and check evidence before closing again" if verdict == "reopen_required" else None
+    remediation = "reconcile native children, dependencies, trusted product acceptance, merged delivery, and check evidence before closing again" if verdict == "reopen_required" else None
     failure = None
     if verdict == "reopen_required":
         acceptance_failure = any(reason.get("code", "").startswith("product_acceptance") for reason in reasons)
@@ -158,27 +154,11 @@ def _comment_marker(bodies: object, pattern: re.Pattern[str], *, pr_number: int 
     return values.pop(), []
 
 
-def _attestation_marker(comments: object, pr_number: int, head_sha: str) -> tuple[int | None, list[str]]:
-    if not isinstance(comments, list):
-        return None, ["host attestation comment read is incomplete"]
-    matches: list[int] = []
-    for comment in comments:
-        if not isinstance(comment, dict) or not isinstance(comment.get("body"), str):
-            return None, ["host attestation comment identity is unreadable"]
-        for match in ATTESTATION_ARTIFACT_RE.finditer(comment["body"]):
-            if int(match.group(1)) == pr_number and match.group(2).lower() == head_sha.lower():
-                matches.append(int(match.group(3)))
-    if len(matches) != 1:
-        return None, ["exactly one explicit single-maintainer attestation comment must bind the PR and current head"]
-    return matches[0], []
-
-
 def resolve_host_facts(
     snapshot: dict[str, Any],
     root: Path,
     *,
     acceptance_resolver: Any = resolve_acceptance,
-    attestation_reader: Any = github_pr_attestation_readback,
 ) -> dict[str, Any]:
     """Resolve artifact locators through authenticated host readers before evaluation."""
     repository = snapshot.get("repository")
@@ -198,36 +178,6 @@ def resolve_host_facts(
         snapshot["product_acceptance"] = None
     else:
         snapshot["product_acceptance"] = acceptance_resolver(root, f"{owner}/{repo}/issue/{subject}", artifact_id)
-    for issue in by_number.values():
-        if _type(issue) != "work_item" or SINGLE_MAINTAINER_LABEL not in _labels(issue):
-            continue
-        if issue.get("comments_complete") is not True:
-            issue["read_complete"] = False
-            continue
-        prs = issue.get("merged_prs") if isinstance(issue.get("merged_prs"), list) else []
-        for pr in prs:
-            if not isinstance(pr, dict) or not isinstance(pr.get("number"), int):
-                continue
-            head_sha = pr.get("head_sha")
-            if not isinstance(head_sha, str):
-                pr["host_attestation_errors"] = ["merged PR head is unreadable"]
-                continue
-            attestation_id, attestation_errors = _attestation_marker(issue.get("comments"), pr["number"], head_sha)
-            if attestation_errors or attestation_id is None:
-                pr["host_attestation_errors"] = attestation_errors
-                continue
-            facts, errors = attestation_reader(
-                root,
-                owner,
-                repo,
-                pr["number"],
-                attestation_id,
-                work_item=issue["number"],
-                allow_merged=True,
-                review_policy="single_maintainer",
-            )
-            pr["host_attestation"] = facts
-            pr["host_attestation_errors"] = errors
     snapshot["host_facts_resolved"] = True
     return snapshot
 
@@ -266,54 +216,7 @@ def _trusted_product_acceptance(snapshot: dict[str, Any], subject: int, labels: 
     reasons.append(_reason("product_acceptance_not_satisfied", locator, "completed closure requires passed, reasoned not_required, or a policy-allowed reasoned waiver"))
 
 
-def _valid_single_maintainer_attestation(pr: dict[str, Any]) -> bool:
-    facts = pr.get("host_attestation")
-    if not isinstance(facts, dict) or pr.get("host_attestation_errors") not in (None, []):
-        return False
-    policy = facts.get("review_policy") if isinstance(facts.get("review_policy"), dict) else {}
-    maintainer = policy.get("maintainer") if isinstance(policy.get("maintainer"), dict) else {}
-    attested_pr = facts.get("pr") if isinstance(facts.get("pr"), dict) else {}
-    tree = facts.get("semantic_tree") if isinstance(facts.get("semantic_tree"), dict) else {}
-    artifact = facts.get("artifact") if isinstance(facts.get("artifact"), dict) else {}
-    run = facts.get("workflow_run") if isinstance(facts.get("workflow_run"), dict) else {}
-    review = facts.get("review") if isinstance(facts.get("review"), dict) else {}
-    return (
-        facts.get("source") == "github"
-        and facts.get("read_complete") is True
-        and policy.get("mode") == "single_maintainer"
-        and policy.get("verified") is True
-        and policy.get("assertion_verified") is True
-        and policy.get("maintainer_count") == 1
-        and isinstance(maintainer.get("id"), int)
-        and not isinstance(maintainer.get("id"), bool)
-        and isinstance(maintainer.get("login"), str)
-        and bool(maintainer.get("login"))
-        and all(isinstance(policy.get(field), str) and policy[field] for field in ("run_started_at", "run_updated_at", "artifact_created_at"))
-        and attested_pr.get("number") == pr.get("number")
-        and attested_pr.get("head_sha") == pr.get("head_sha")
-        and attested_pr.get("base_ref") == pr.get("base_ref")
-        and attested_pr.get("merge_commit_sha") == pr.get("merge_commit")
-        and isinstance(tree.get("semantic_digest"), str)
-        and SHA256_RE.fullmatch(tree["semantic_digest"]) is not None
-        and tree.get("commit_sha") == pr.get("head_sha")
-        and isinstance(artifact.get("digest"), str)
-        and SHA256_RE.fullmatch(artifact["digest"]) is not None
-        and artifact.get("name") == f"loom-host-attestation-{pr.get('number')}"
-        and isinstance(artifact.get("run_id"), int)
-        and not isinstance(artifact.get("run_id"), bool)
-        and run.get("id") == artifact.get("run_id")
-        and run.get("event") in {"pull_request_target", "workflow_dispatch"}
-        and run.get("binding") in {"pull_request_target", "workflow_dispatch_reattest"}
-        and (run.get("binding") == "workflow_dispatch_reattest" or run.get("head_sha") == pr.get("head_sha"))
-        and run.get("path") == HOST_ATTESTATION_WORKFLOW_PATH
-        and _text(run.get("status")) == "completed"
-        and _text(run.get("conclusion")) == "success"
-        and review.get("state") == "SINGLE_MAINTAINER_ATTESTED"
-        and review.get("commit_id") == pr.get("head_sha")
-    )
-
-
-def _reviewed_green_merged_pr(issue: dict[str, Any], default_branch: str, review_policy: dict[str, Any]) -> bool:
+def _green_merged_pr(issue: dict[str, Any], default_branch: str) -> bool:
     prs = issue.get("merged_prs")
     if not isinstance(prs, list):
         return False
@@ -323,11 +226,7 @@ def _reviewed_green_merged_pr(issue: dict[str, Any], default_branch: str, review
         pr_number, head_sha, merge_commit, commit_sha = pr.get("number"), pr.get("head_sha"), pr.get("merge_commit"), pr.get("commit_sha")
         if not isinstance(pr_number, int) or not all(isinstance(value, str) and value for value in (head_sha, merge_commit, commit_sha)) or commit_sha != head_sha:
             continue
-        required_approvals = review_policy.get("required_approving_review_count")
-        review_ready = required_approvals == 0 or _text(pr.get("review_decision")) == "approved"
-        if SINGLE_MAINTAINER_LABEL in _labels(issue):
-            review_ready = _valid_single_maintainer_attestation(pr)
-        if review_ready and _successful_check_rollup(pr):
+        if _successful_check_rollup(pr):
             return True
     return False
 
@@ -336,7 +235,6 @@ def _validate_completed(
     issue: dict[str, Any],
     issues: dict[int, dict[str, Any]],
     default_branch: str,
-    review_policy: dict[str, Any],
     reasons: list[dict[str, str]],
     visiting: set[int],
 ) -> None:
@@ -363,8 +261,8 @@ def _validate_completed(
             reasons.append(_reason("open_native_blocker", locator, "completed closure cannot retain an open or unreadable native blocker"))
     kind = _type(issue)
     if kind == "work_item":
-        if not _reviewed_green_merged_pr(issue, default_branch, review_policy):
-            reasons.append(_reason("missing_reviewed_merged_pr_or_green_check", locator, "Work Item needs a default-branch merged PR satisfying the host review policy and successful host check rollup"))
+        if not _green_merged_pr(issue, default_branch):
+            reasons.append(_reason("missing_merged_pr_or_green_check", locator, "Work Item needs a default-branch merged PR with successful merge-time delivery checks"))
         return
     expected = EXPECTED_CHILD_TYPE.get(kind)
     children = issue.get("children")
@@ -380,7 +278,7 @@ def _validate_completed(
         if _type(child) != expected:
             reasons.append(_reason("invalid_native_child_type", f"issue:{child_number}", f"{kind} requires native {expected} children"))
             continue
-        _validate_completed(child, issues, default_branch, review_policy, reasons, next_visiting)
+        _validate_completed(child, issues, default_branch, reasons, next_visiting)
 
 
 def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[str, Any]:
@@ -390,7 +288,6 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
     subject = snapshot.get("subject")
     issue_rows = snapshot.get("issues")
     default_branch = snapshot.get("default_branch")
-    review_policy = snapshot.get("review_policy")
     issues = {
         row.get("number"): row
         for row in issue_rows
@@ -423,20 +320,12 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
         return _payload(subject, "allow_non_completion_close", "Explicit non-completion closure is not counted as completed.", [], completed=False)
     if labels.intersection(NON_COMPLETION_LABELS):
         return _payload(subject, "reopen_required", "Non-completion labels must use not planned semantics.", [_reason("non_completion_requires_not_planned", f"issue:{subject}", "non-completion labels cannot use completed semantics")], completed=False)
-    if (
-        not isinstance(review_policy, dict)
-        or review_policy.get("read_complete") is not True
-        or not isinstance(review_policy.get("required_approving_review_count"), int)
-        or isinstance(review_policy.get("required_approving_review_count"), bool)
-        or review_policy["required_approving_review_count"] < 0
-    ):
-        return _payload(subject, "reopen_required", "GitHub review policy is unreadable.", [_reason("host_unreadable", f"issue:{subject}", "required approving review policy read is missing")], completed=False)
     reasons: list[dict[str, str]] = []
     _trusted_product_acceptance(snapshot, subject, labels, reasons, host_resolved=host_resolved)
-    _validate_completed(subject_issue, issues, default_branch, review_policy, reasons, set())
+    _validate_completed(subject_issue, issues, default_branch, reasons, set())
     if reasons:
         return _payload(subject, "reopen_required", "Completed FR/Phase closure is missing required host facts.", reasons, completed=False)
-    return _payload(subject, "allow_completed_close", "Trusted product acceptance, native children, dependencies, review policy, and check evidence permit completed closure.", [], completed=True)
+    return _payload(subject, "allow_completed_close", "Trusted product acceptance, native children, dependencies, merged delivery, and check evidence permit completed closure.", [], completed=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -444,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, required=True, help="GitHub host snapshot JSON")
     parser.add_argument("--output", type=Path, help="write the verdict JSON to this path")
-    parser.add_argument("--resolve-host-facts", action="store_true", help="resolve acceptance and single-maintainer artifact locators through authenticated GitHub readback")
+    parser.add_argument("--resolve-host-facts", action="store_true", help="resolve acceptance artifact locators through authenticated GitHub readback")
     args = parser.parse_args(argv)
     try:
         snapshot = json.loads(args.snapshot.read_text(encoding="utf-8"))

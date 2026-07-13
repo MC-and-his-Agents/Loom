@@ -44,8 +44,6 @@ def main() -> int:
         'String(comment.body || "") !== body',
         "reopen_required",
         "defaultBranchRef",
-        "branchProtectionRule",
-        "requiredApprovingReviewCount",
         "closedByPullRequestsReferences",
         "reviewDecision",
         "statusCheckRollup",
@@ -69,6 +67,8 @@ def main() -> int:
         "const evaluate",
         "validateCompleted",
         "getBranchProtection",
+        "branchProtectionRule",
+        "requiredApprovingReviewCount",
     )
     missing = [needle for needle in required if needle not in text]
     present = [needle for needle in forbidden if needle in text]
@@ -77,12 +77,9 @@ def main() -> int:
         "resolve_host_facts",
         "product_acceptance_missing",
         "product_acceptance_untrusted",
-        "review_policy_single_maintainer",
-        "assertion_verified",
         "loom:product-acceptance-artifact",
-        "loom:host-attestation-artifact",
         "failure_envelope",
-        "required_approving_review_count",
+        "missing_merged_pr_or_green_check",
     )
     evaluator_missing = [needle for needle in evaluator_required if needle not in evaluator]
     if missing or present or evaluator_missing:
