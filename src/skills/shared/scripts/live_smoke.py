@@ -23,9 +23,9 @@ def local_command_json(target_root: Path, args: list[str]) -> tuple[dict[str, An
 
 
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
-HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
+EXTERNAL_RESULT_SOURCE_READBACK_SCHEMA = "loom-external-result-source-readback/v1"
 DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
-HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v1"
+HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v2"
 HOOK_ENVELOPE_LIVE_CHECK_SCHEMA = "loom-hook-envelope-check/v1"
 HOOKS_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
@@ -40,7 +40,7 @@ HOOK_ENVELOPE_FAILURE_CLASSIFICATIONS = {
     "not_applicable",
     "permission_unavailable",
     "unsafe",
-    "host_mapping_failed",
+    "harness_mapping_failed",
 }
 HOOK_ENVELOPE_FALLBACKS = {
     None,
@@ -107,7 +107,7 @@ EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS = {
 }
 HOOK_CLEANUP_ALLOWED_OWNERSHIPS = {"loom_owned"}
 HOOK_LIFECYCLES = {"before-run", "after-run", "cleanup"}
-HOOK_ADAPTER_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
+HARNESS_SUPPORT_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
 
 def discover_loom_flow_entrypoint() -> Path:
     source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
@@ -145,28 +145,8 @@ def live_smoke_release_interpretation(status: str) -> str:
         return "explicit unavailable evidence is a non-blocking confidence input and does not silently pass."
     return "profile-local live smoke failure lowers release confidence but does not replace orchestration-core gate results."
 
-def current_host_adapter_version() -> str | None:
-    source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
-    candidates: list[Path] = []
-    if source_repo_root:
-        candidates.append(Path(source_repo_root).expanduser().resolve() / "plugins/loom/.codex-plugin/plugin.json")
-    for path in candidates:
-        if not path.exists():
-            continue
-        try:
-            payload = load_json_file(path)
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            continue
-        if not isinstance(payload, dict):
-            continue
-        x_loom = payload.get("x-loom")
-        version = x_loom.get("host_adapter_version") if isinstance(x_loom, dict) else None
-        if isinstance(version, str) and version.strip():
-            return version.strip()
-    return None
-
-def host_adapter_live_drift_command(target_root: Path) -> str:
-    return live_smoke_command(["live-smoke", "host-adapter-drift", "--target", str(target_root)])
+def external_result_source_readback_command(target_root: Path) -> str:
+    return live_smoke_command(["live-smoke", "external-result-source-readback", "--target", str(target_root)])
 
 def dynamic_tool_live_availability_command(target_root: Path, *, surface: str) -> str:
     return live_smoke_command(["live-smoke", "dynamic-tool-availability", "--target", str(target_root), "--surface", surface])
@@ -185,28 +165,31 @@ def hook_envelope_command(target_root: Path, *, envelope: str, requirement: str)
         ]
     )
 
-def host_adapter_live_drift_command_plan(target_root: Path, host_adapters: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def external_result_source_readback_command_plan(
+    target_root: Path,
+    external_result_sources: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     target = command_target(target_root)
     plan = [
         {
             "id": "target-check",
             "command": f"test -d {target}",
-            "description": "Confirm the adopted-repo target path exists before reading host adapter retained result locators.",
+            "description": "Confirm the adopted-repo target path exists before reading external result locators.",
         },
         {
             "id": "repo-interop-contract",
             "command": f"read {target_root / '.loom/companion/interop.json'}",
-            "description": "Read the repo interop contract and discover declared host adapter retained result locators.",
+            "description": "Read the repo interop contract and discover declared external result locators.",
         },
     ]
-    for index, entry in enumerate(host_adapters or []):
+    for index, entry in enumerate(external_result_sources or []):
         entry_id = entry.get("id") if isinstance(entry, dict) else None
         locator = entry.get("locator") if isinstance(entry, dict) else None
         plan.append(
             {
-                "id": str(entry_id or f"host-adapter-{index}"),
+                "id": str(entry_id or f"external-result-source-{index}"),
                 "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
-                "description": "Read the retained host action result envelope declared in repo interop.",
+                "description": "Read the retained external result envelope declared in repo interop.",
             }
         )
     return plan
@@ -371,8 +354,26 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
             "evidence": evidence,
         }
 
+    if envelope.get("schema_version") == "loom-hook-envelope/v1" or (
+        isinstance(envelope.get("input"), dict) and "host_adapter_mapping" in envelope["input"]
+    ):
+        return {
+            "result": "block",
+            "classification": "invalid_envelope",
+            "summary": "hook envelope uses the removed host adapter mapping contract.",
+            "missing_inputs": ["migrate to `loom-hook-envelope/v2` and `input.agent_harness_mapping`"],
+            "migration_diagnostics": [
+                {
+                    "code": "legacy_hook_host_adapter_mapping",
+                    "replacement": "input.agent_harness_mapping",
+                }
+            ],
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
     if envelope.get("schema_version") != HOOK_ENVELOPE_SCHEMA:
-        missing_inputs.append("schema_version must be `loom-hook-envelope/v1`")
+        missing_inputs.append("schema_version must be `loom-hook-envelope/v2`")
     else:
         evidence["schema_status"] = "valid"
 
@@ -389,7 +390,7 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
             missing_inputs.append("hook.lifecycle must be `before-run`, `after-run`, or `cleanup`")
 
     input_payload = envelope.get("input")
-    adapter_result = None
+    support_result = None
     if not isinstance(input_payload, dict):
         missing_inputs.append("hook envelope missing `input` object")
     else:
@@ -397,20 +398,20 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
             value = input_payload.get(field)
             if not isinstance(value, str) or not value.strip():
                 missing_inputs.append(f"input missing `{field}`")
-        mapping = input_payload.get("host_adapter_mapping")
+        mapping = input_payload.get("agent_harness_mapping")
         if not isinstance(mapping, dict):
-            missing_inputs.append("input missing `host_adapter_mapping` object")
+            missing_inputs.append("input missing `agent_harness_mapping` object")
         else:
             for field in ("host", "event"):
                 value = mapping.get(field)
                 if not isinstance(value, str) or not value.strip():
-                    missing_inputs.append(f"host_adapter_mapping missing `{field}`")
-            if mapping.get("adapter_result") not in HOOK_ADAPTER_RESULTS:
+                    missing_inputs.append(f"agent_harness_mapping missing `{field}`")
+            if mapping.get("support_result") not in HARNESS_SUPPORT_RESULTS:
                 missing_inputs.append(
-                    "host_adapter_mapping.adapter_result must be `supported`, `not_applicable`, `advisory`, or `unsafe`"
+                    "agent_harness_mapping.support_result must be `supported`, `not_applicable`, `advisory`, or `unsafe`"
                 )
             else:
-                adapter_result = mapping.get("adapter_result")
+                support_result = mapping.get("support_result")
 
     output = envelope.get("output")
     output_category = None
@@ -463,29 +464,29 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
             "evidence": evidence,
         }
 
-    if adapter_result == "unsafe":
+    if support_result == "unsafe":
         return {
             "result": "block",
             "classification": "unsafe",
-            "summary": "hook adapter mapping reports unsafe.",
-            "missing_inputs": ["host_adapter_mapping.adapter_result is unsafe"],
+            "summary": "hook harness mapping reports unsafe.",
+            "missing_inputs": ["agent_harness_mapping.support_result is unsafe"],
             "fallback_to": "manual_repair",
             "evidence": evidence,
         }
-    if adapter_result == "not_applicable":
+    if support_result == "not_applicable":
         return {
             "result": "warn",
             "classification": "not_applicable",
-            "summary": "hook adapter mapping reports not_applicable.",
+            "summary": "hook harness mapping reports not_applicable.",
             "missing_inputs": [],
             "fallback_to": None,
             "evidence": evidence,
         }
-    if adapter_result == "advisory":
+    if support_result == "advisory":
         return {
             "result": "warn",
             "classification": "unsupported",
-            "summary": "hook adapter mapping is advisory and remains profile-local evidence.",
+            "summary": "hook harness mapping is advisory and remains profile-local evidence.",
             "missing_inputs": [],
             "fallback_to": None,
             "evidence": evidence,
@@ -501,7 +502,7 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
             "evidence": evidence,
         }
     if failure_classification:
-        result = "block" if failure_classification in {"permission_unavailable", "unsafe", "host_mapping_failed"} else "warn"
+        result = "block" if failure_classification in {"permission_unavailable", "unsafe", "harness_mapping_failed"} else "warn"
         return {
             "result": result,
             "classification": failure_classification,
@@ -519,7 +520,7 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
         "evidence": evidence,
     }
 
-def host_adapter_permission_unavailable(payload: dict[str, Any]) -> bool:
+def external_result_permission_unavailable(payload: dict[str, Any]) -> bool:
     candidates: list[str] = []
     for key in ("status", "result", "classification", "failure_category"):
         value = payload.get(key)
@@ -534,25 +535,49 @@ def host_adapter_permission_unavailable(payload: dict[str, Any]) -> bool:
     normalized = {value.strip().lower().replace("-", "_") for value in candidates if value.strip()}
     return "permission_unavailable" in normalized
 
-def host_adapter_envelope_version(payload: dict[str, Any]) -> str | None:
-    direct = payload.get("host_adapter_version")
-    if isinstance(direct, str) and direct.strip():
-        return direct.strip()
-    version_context = payload.get("version_context")
-    if isinstance(version_context, dict):
-        nested = version_context.get("host_adapter_version")
-        if isinstance(nested, str) and nested.strip():
-            return nested.strip()
+def external_result_source_envelope_issue(
+    target_root: Path,
+    envelope: dict[str, Any],
+    *,
+    surfaces: list[str],
+) -> tuple[str, str] | None:
+    if not isinstance(envelope.get("schema_version"), str) or not envelope.get("schema_version"):
+        return "invalid_envelope", "external result source envelope is missing `schema_version`"
+
+    raw_result = envelope.get("result") if isinstance(envelope.get("result"), str) else envelope.get("status")
+    if not isinstance(raw_result, str) or not raw_result:
+        return "invalid_result", "external result source envelope is missing `result` or `status`"
+    normalized_result = raw_result.strip().lower().replace("-", "_")
+    if normalized_result in {
+        "block", "blocked", "deny", "denied", "error", "fail", "failed", "failure",
+        "invalid", "mismatch", "rejected", "stale", "unavailable", "unsafe",
+    }:
+        return "retained_result_failed", f"external result source reported `{raw_result}`"
+    if normalized_result not in {"allow", "pass", "passed", "ready", "success", "succeeded"}:
+        return "invalid_result", f"external result source reported unsupported result `{raw_result}`"
+
+    head_bound = bool({"pre_review", "review", "merge_ready", "closeout"}.intersection(surfaces))
+    freshness = envelope.get("freshness")
+    if head_bound:
+        if not isinstance(freshness, str) or freshness.strip().lower() not in {"current", "fresh"}:
+            return "stale_result", "head-bound external result source must report current freshness"
+        expected_head = git_head_sha(target_root)
+        observed_head = envelope.get("head_sha")
+        if not expected_head or not isinstance(observed_head, str) or not re.fullmatch(r"[0-9a-f]{40}", observed_head):
+            return "binding_unavailable", "head-bound external result source is missing a verifiable head SHA"
+        if observed_head != expected_head:
+            return "binding_mismatch", "external result source is bound to another head SHA"
+    elif isinstance(freshness, str) and freshness.strip().lower() not in {"current", "fresh"}:
+        return "stale_result", "external result source reports stale freshness"
     return None
 
-def host_adapter_drift_check(
+def external_result_source_check(
     target_root: Path,
     *,
     entry: object,
     index: int,
-    expected_host_adapter_version: str | None,
 ) -> dict[str, Any]:
-    prefix = f"host_adapters[{index}]"
+    prefix = f"external_result_sources[{index}]"
     if not isinstance(entry, dict):
         return {
             "id": f"invalid-{index}",
@@ -568,7 +593,7 @@ def host_adapter_drift_check(
             "evidence": {"locator_status": "invalid"},
         }
 
-    entry_id = str(entry.get("id") or f"host-adapter-{index}")
+    entry_id = str(entry.get("id") or f"external-result-source-{index}")
     requirement = str(entry.get("requirement") or "required")
     fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) and entry.get("fallback_to") else "admission"
     owner = str(entry.get("owner") or "unknown")
@@ -600,7 +625,7 @@ def host_adapter_drift_check(
             "locator": locator_value,
             "result": result,
             "classification": classification,
-            "summary": "host adapter locator is missing.",
+            "summary": "external result source locator is missing.",
             "missing_inputs": [*missing_inputs, f"{prefix} `{entry_id}` locator missing `locator`"],
             "fallback_to": fallback_to if result == "block" else None,
             "evidence": {"locator_status": "missing"},
@@ -614,7 +639,7 @@ def host_adapter_drift_check(
             "locator": locator_value,
             "result": "block",
             "classification": "invalid_declaration",
-            "summary": "host adapter declaration is incomplete or invalid.",
+            "summary": "external result source declaration is incomplete or invalid.",
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "evidence": {"locator_status": "invalid"},
@@ -634,7 +659,7 @@ def host_adapter_drift_check(
             "locator": locator_value,
             "result": "block",
             "classification": "unsafe_locator",
-            "summary": "host adapter locator is outside the repository boundary or otherwise unsafe.",
+            "summary": "external result source locator is outside the repository boundary or otherwise unsafe.",
             "missing_inputs": locator_errors,
             "fallback_to": fallback_to,
             "evidence": {"locator_status": "unsafe"},
@@ -650,7 +675,7 @@ def host_adapter_drift_check(
             "locator": locator_value,
             "result": result,
             "classification": "locator_missing",
-            "summary": "host adapter locator points to a missing retained result path.",
+            "summary": "external result source locator points to a missing retained result path.",
             "missing_inputs": [f"{prefix} locator points to missing path `{locator_value}`"],
             "fallback_to": fallback_to if result == "block" else None,
             "evidence": {"locator_status": "missing"},
@@ -665,7 +690,7 @@ def host_adapter_drift_check(
             "locator": locator_value,
             "result": result,
             "classification": "locator_unreadable",
-            "summary": "host adapter locator points to a directory, not a retained result envelope.",
+            "summary": "external result source locator points to a directory, not a retained result envelope.",
             "missing_inputs": [f"{prefix} locator points to a directory `{locator_value}`"],
             "fallback_to": fallback_to if result == "block" else None,
             "evidence": {"locator_status": "directory"},
@@ -682,7 +707,7 @@ def host_adapter_drift_check(
             "locator": locator_value,
             "result": result,
             "classification": "locator_unreadable",
-            "summary": "host adapter retained result envelope is unreadable.",
+            "summary": "external result source envelope is unreadable.",
             "missing_inputs": [f"{prefix} locator is unreadable: {exc}"],
             "fallback_to": fallback_to if result == "block" else None,
             "evidence": {"locator_status": "unreadable"},
@@ -697,21 +722,18 @@ def host_adapter_drift_check(
             "locator": locator_value,
             "result": result,
             "classification": "locator_unreadable",
-            "summary": "host adapter retained result envelope must be a JSON object.",
+            "summary": "external result source envelope must be a JSON object.",
             "missing_inputs": [f"{prefix} locator must expose a JSON object envelope"],
             "fallback_to": fallback_to if result == "block" else None,
             "evidence": {"locator_status": "invalid-envelope"},
         }
 
-    declared_version = host_adapter_envelope_version(envelope)
     evidence = {
         "locator_status": "readable",
         "envelope_status": str(envelope.get("status") or envelope.get("result") or "present"),
-        "declared_host_adapter_version": declared_version,
-        "expected_host_adapter_version": expected_host_adapter_version,
     }
-    summary = str(envelope.get("summary") or "host adapter retained result envelope is readable.")
-    if host_adapter_permission_unavailable(envelope):
+    summary = str(envelope.get("summary") or "external result source envelope is readable.")
+    if external_result_permission_unavailable(envelope):
         result = "block" if requirement == "required" else "warn"
         return {
             "id": entry_id,
@@ -722,24 +744,25 @@ def host_adapter_drift_check(
             "result": result,
             "classification": "permission_unavailable",
             "summary": summary,
-            "missing_inputs": [f"host adapter `{entry_id}` reported permission_unavailable"],
+            "missing_inputs": [f"external result source `{entry_id}` reported permission_unavailable"],
             "fallback_to": fallback_to if result == "block" else None,
             "evidence": evidence,
         }
-    if declared_version and expected_host_adapter_version and declared_version != expected_host_adapter_version:
+    envelope_issue = external_result_source_envelope_issue(target_root, envelope, surfaces=list(surfaces))
+    if envelope_issue is not None:
+        classification, issue = envelope_issue
+        result = "block" if requirement == "required" else "warn"
         return {
             "id": entry_id,
             "owner": owner,
             "requirement": requirement,
             "surfaces": list(surfaces),
             "locator": locator_value,
-            "result": "warn",
-            "classification": "version_drift",
+            "result": result,
+            "classification": classification,
             "summary": summary,
-            "missing_inputs": [
-                f"host adapter `{entry_id}` version drift: expected `{expected_host_adapter_version}`, found `{declared_version}`"
-            ],
-            "fallback_to": None,
+            "missing_inputs": [issue],
+            "fallback_to": fallback_to if result == "block" else None,
             "evidence": evidence,
         }
     return {
@@ -756,16 +779,16 @@ def host_adapter_drift_check(
         "evidence": evidence,
     }
 
-def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
+def external_result_source_readback_payload(target_root: Path) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     target = live_smoke_target_metadata(target_root)
     payload: dict[str, Any] = {
         "command": "live-smoke",
-        "operation": "host-adapter-drift",
-        "schema_version": HOST_ADAPTER_LIVE_DRIFT_SCHEMA,
+        "operation": "external-result-source-readback",
+        "schema_version": EXTERNAL_RESULT_SOURCE_READBACK_SCHEMA,
         "runtime_state": runtime_state,
         "target": target,
-        "command_plan": host_adapter_live_drift_command_plan(target_root),
+        "command_plan": external_result_source_readback_command_plan(target_root),
         "reports": [],
         "missing_inputs": [],
         "fallback_to": None,
@@ -774,14 +797,13 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
         payload.update(
             {
                 "result": "block",
-                "summary": "host adapter live drift is blocked because the Loom runtime state is inconsistent.",
+                "summary": "external result source readback is blocked because the Loom runtime state is inconsistent.",
                 "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
                 "fallback_to": runtime_state.get("fallback_to"),
-                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
-                "host_adapter_drift": {
+                "profile_check": {"id": "external-result-source-readback", "result": "block"},
+                "external_result_source_readback": {
                     "contract_locator": ".loom/companion/interop.json",
                     "availability": "runtime-blocked",
-                    "expected_host_adapter_version": current_host_adapter_version(),
                     "checks": [],
                 },
             }
@@ -795,13 +817,12 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
         payload.update(
             {
                 "result": "warn",
-                "summary": "host adapter live drift recorded explicit unavailable evidence for the adopted-repo target.",
+                "summary": "external result source readback recorded explicit unavailable evidence for the adopted-repo target.",
                 "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
-                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
-                "host_adapter_drift": {
+                "profile_check": {"id": "external-result-source-readback", "result": "warn"},
+                "external_result_source_readback": {
                     "contract_locator": ".loom/companion/interop.json",
                     "availability": "target-unavailable",
-                    "expected_host_adapter_version": current_host_adapter_version(),
                     "checks": [],
                 },
             }
@@ -810,7 +831,6 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
 
     governance_surface = build_governance_surface(target_root)
     repo_interop = governance_surface.get("repo_interop")
-    expected_version = current_host_adapter_version()
     contract_locator = ".loom/companion/interop.json"
     availability = "absent"
     if isinstance(repo_interop, dict):
@@ -835,7 +855,7 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
         interop_report.update(
             {
                 "result": "warn",
-                "summary": "repo interop contract is absent, so no host adapter retained result can be consumed.",
+                "summary": "repo interop contract is absent, so no external result source can be consumed.",
                 "missing_inputs": ["repo interop contract is absent"],
                 "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
             }
@@ -846,11 +866,10 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
                 "summary": interop_report["summary"],
                 "missing_inputs": interop_report["missing_inputs"],
                 "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
-                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
-                "host_adapter_drift": {
+                "profile_check": {"id": "external-result-source-readback", "result": "warn"},
+                "external_result_source_readback": {
                     "contract_locator": contract_locator,
                     "availability": "absent",
-                    "expected_host_adapter_version": expected_version,
                     "checks": [],
                 },
             }
@@ -862,7 +881,7 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
         interop_report.update(
             {
                 "result": "block",
-                "summary": "repo interop contract is incomplete or unreadable for host adapter live drift.",
+                "summary": "repo interop contract is incomplete or unreadable for external result source readback.",
                 "missing_inputs": interop_errors or ["repo interop contract is unreadable"],
                 "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
             }
@@ -873,24 +892,28 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
                 "summary": interop_report["summary"],
                 "missing_inputs": list(interop_report["missing_inputs"]),
                 "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
-                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
-                "host_adapter_drift": {
+                "profile_check": {"id": "external-result-source-readback", "result": "block"},
+                "migration_diagnostics": (
+                    list(repo_interop.get("migration_diagnostics", []))
+                    if isinstance(repo_interop, dict) and isinstance(repo_interop.get("migration_diagnostics"), list)
+                    else []
+                ),
+                "external_result_source_readback": {
                     "contract_locator": contract_locator,
                     "availability": "incomplete",
-                    "expected_host_adapter_version": expected_version,
                     "checks": [],
                 },
             }
         )
         return payload
 
-    host_adapters = interop_payload.get("host_adapters")
-    if not isinstance(host_adapters, list):
+    external_result_sources = interop_payload.get("external_result_sources", [])
+    if not isinstance(external_result_sources, list):
         interop_report.update(
             {
                 "result": "block",
-                "summary": "repo interop contract does not expose a readable host_adapters list.",
-                "missing_inputs": ["repo interop contract must include `host_adapters` as a list"],
+                "summary": "repo interop contract does not expose a readable external_result_sources list.",
+                "missing_inputs": ["repo interop contract `external_result_sources` must be a list when present"],
                 "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
             }
         )
@@ -900,38 +923,39 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
                 "summary": interop_report["summary"],
                 "missing_inputs": list(interop_report["missing_inputs"]),
                 "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
-                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
-                "host_adapter_drift": {
+                "profile_check": {"id": "external-result-source-readback", "result": "block"},
+                "external_result_source_readback": {
                     "contract_locator": contract_locator,
                     "availability": "incomplete",
-                    "expected_host_adapter_version": expected_version,
                     "checks": [],
                 },
             }
         )
         return payload
 
-    payload["command_plan"] = host_adapter_live_drift_command_plan(target_root, host_adapters=host_adapters)
-    if not host_adapters:
+    payload["command_plan"] = external_result_source_readback_command_plan(
+        target_root,
+        external_result_sources=external_result_sources,
+    )
+    if not external_result_sources:
         interop_report.update(
             {
-                "result": "warn",
-                "summary": "repo interop contract is readable but declares no host adapters.",
-                "missing_inputs": ["repo interop contract declares no host adapters"],
+                "result": "pass",
+                "summary": "repo interop contract declares no external result sources; readback is not applicable.",
+                "missing_inputs": [],
                 "fallback_to": None,
             }
         )
         payload.update(
             {
-                "result": "warn",
+                "result": "pass",
                 "summary": interop_report["summary"],
-                "missing_inputs": list(interop_report["missing_inputs"]),
+                "missing_inputs": [],
                 "fallback_to": None,
-                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
-                "host_adapter_drift": {
+                "profile_check": {"id": "external-result-source-readback", "result": "pass"},
+                "external_result_source_readback": {
                     "contract_locator": contract_locator,
-                    "availability": "present",
-                    "expected_host_adapter_version": expected_version,
+                    "availability": "not-declared",
                     "checks": [],
                 },
             }
@@ -939,13 +963,12 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
         return payload
 
     checks = [
-        host_adapter_drift_check(
+        external_result_source_check(
             target_root,
             entry=entry,
             index=index,
-            expected_host_adapter_version=expected_version,
         )
-        for index, entry in enumerate(host_adapters)
+        for index, entry in enumerate(external_result_sources)
     ]
     for check in checks:
         payload["reports"].append(
@@ -953,7 +976,7 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
                 "id": str(check["id"]),
                 "attempted": True,
                 "command": f"read {check.get('locator') or '<missing-locator>'}",
-                "reported_command": "host-adapter-retained-result",
+                "reported_command": "external-result-source",
                 "reported_result": str(check["classification"]),
                 "result": str(check["result"]),
                 "summary": str(check["summary"]),
@@ -967,22 +990,21 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
     has_block = any(check["result"] == "block" for check in checks)
     has_warn = any(check["result"] == "warn" for check in checks)
     result = "block" if has_block else "warn" if has_warn else "pass"
-    summary = "host adapter retained result locators are readable and show no drift."
+    summary = "external result source locators are readable."
     if result == "warn":
-        summary = "host adapter live drift produced profile-local warnings."
+        summary = "external result source readback produced profile-local warnings."
     if result == "block":
-        summary = "host adapter live drift found blocking retained result declaration or readability gaps."
+        summary = "external result source readback found blocking declaration or readability gaps."
     payload.update(
         {
             "result": result,
             "summary": summary,
             "missing_inputs": missing_inputs,
             "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
-            "profile_check": {"id": "host-adapter-live-drift", "result": result},
-            "host_adapter_drift": {
+            "profile_check": {"id": "external-result-source-readback", "result": result},
+            "external_result_source_readback": {
                 "contract_locator": contract_locator,
                 "availability": "present",
-                "expected_host_adapter_version": expected_version,
                 "checks": checks,
             },
         }
@@ -2289,30 +2311,29 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                 include_blocking_shadow=args.include_blocking_shadow,
             )
         )
-    if args.operation == "host-adapter-drift":
+    if args.operation == "external-result-source-readback":
         if not args.target:
             return emit(
                 {
                     "command": "live-smoke",
-                    "operation": "host-adapter-drift",
-                    "schema_version": HOST_ADAPTER_LIVE_DRIFT_SCHEMA,
+                    "operation": "external-result-source-readback",
+                    "schema_version": EXTERNAL_RESULT_SOURCE_READBACK_SCHEMA,
                     "result": "block",
-                    "summary": "host adapter live drift requires --target.",
+                    "summary": "external result source readback requires --target.",
                     "missing_inputs": ["pass --target <adopted_repo_root>"],
                     "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
                     "runtime_state": runtime_state_payload(Path.cwd()),
                     "command_plan": [],
                     "reports": [],
-                    "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
-                    "host_adapter_drift": {
+                    "profile_check": {"id": "external-result-source-readback", "result": "block"},
+                    "external_result_source_readback": {
                         "contract_locator": ".loom/companion/interop.json",
                         "availability": "missing-target",
-                        "expected_host_adapter_version": current_host_adapter_version(),
                         "checks": [],
                     },
                 }
             )
-        return emit(host_adapter_live_drift_payload(resolve_target_arg(args.target)))
+        return emit(external_result_source_readback_payload(resolve_target_arg(args.target)))
     if args.operation == "dynamic-tool-availability":
         if not args.target:
             return emit(

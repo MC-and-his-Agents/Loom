@@ -10,7 +10,7 @@
 
 `python3 tools/loom_flow.py live-smoke replay --prior-evidence <path>`
 
-`python3 tools/loom_flow.py live-smoke host-adapter-drift --target <repo>`
+`python3 tools/loom_flow.py live-smoke external-result-source-readback --target <repo>`
 
 `python3 tools/loom_flow.py live-smoke dynamic-tool-availability --target <repo> [--surface attempt_time|review|merge_ready|closeout|build|admission|pre_review|all]`
 
@@ -20,7 +20,7 @@
 
 输出 schema 固定为 `loom-live-smoke/v1`。
 
-`host-adapter-drift` 输出 schema 固定为 `loom-host-adapter-live-drift/v1`。
+`external-result-source-readback` 输出 schema 固定为 `loom-external-result-source-readback/v1`。
 
 `dynamic-tool-availability` 输出 schema 固定为 `loom-dynamic-tool-live-availability/v1`。
 
@@ -98,21 +98,21 @@
 
 `run` / `replay` 都不得把 `orchestration-live` 提升为普通 PR 的默认 blocking gate。
 
-## Host Adapter Drift Contract
+## External Result Source Readback Contract
 
-`host-adapter-drift` 读取 adopted repo `.loom/companion/interop.json` 中声明的 `host_adapters[*]`，并对每个 retained host action locator 产出 profile-local drift evidence。
+`external-result-source-readback` 读取 adopted repo `.loom/companion/interop.json`
+中声明的 `external_result_sources[*]`，并对每个 retained result locator
+产出 profile-local readback evidence。它不会把结果来源宣称为可执行 adapter。
 
 最小检查面：
 
 - repo interop contract 是否存在且可读
-- `host_adapters[*]` 是否声明合法的 `id`、`owner`、`requirement`、`surfaces`、`locator`、`fallback_to`
+- `external_result_sources[*]` 是否声明合法的 `id`、`owner`、`requirement`、`surfaces`、`locator`、`fallback_to`
 - locator 是否缺失、越界、不可读或指向目录
 - envelope 是否显式报告 `permission_unavailable`
-- envelope 若声明 `host_adapter_version`，是否与当前 Loom host adapter authority 一致
 
 稳定 drift classification：
 
-- `version_drift`
 - `locator_missing`
 - `locator_unreadable`
 - `permission_unavailable`
@@ -121,10 +121,12 @@
 
 结果纪律：
 
-- required host adapter drift 可以在该命令内返回 `block`
-- optional / advisory host adapter drift 只返回 profile-local `warn`
-- interop absent 或未声明任何 host adapter 时返回 `warn`
+- required external result source 缺口可以在该命令内返回 `block`
+- optional / advisory source 缺口只返回 profile-local `warn`
+- interop absent 返回 `warn`；v2 interop 未声明 external result source 返回 `pass`
 - 命令不得执行 host action、不得写宿主控制面、不得改写 `interop.json`
+- v1 `host_adapters` 不被静默兼容，必须 fail closed 并返回一个
+  `legacy_repo_interop_host_adapters` migration diagnostic
 
 ## Dynamic Tool Live Availability Contract
 

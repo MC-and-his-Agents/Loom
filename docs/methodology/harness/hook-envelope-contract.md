@@ -1,13 +1,13 @@
 # Hook Envelope Contract
 
 This file defines Loom's mapped hook envelope contract. It freezes how host
-hook output is classified after adapter mapping; it does not introduce hook
+hook output is classified after agent-harness mapping; it does not introduce hook
 execution or host-native hook file generation.
 
 ## Goal
 
-`loom-hook-envelope/v1` lets Loom consume hook-related information without
-treating Codex, Claude Code, or another host's native hook fields as authored
+`loom-hook-envelope/v2` lets Loom consume hook-related information without
+treating Codex or a CLI-compatible harness's native hook fields as authored
 truth.
 
 The stable output categories are:
@@ -16,32 +16,32 @@ The stable output categories are:
 - `blocking_decision`
 - `runtime_evidence`
 
-Adapters must map host-native output into one of these categories before Loom
+The agent harness must map host-native output into one of these categories before Loom
 can consume it.
 
 ## Required Shape
 
 Each envelope is a JSON object with:
 
-- `schema_version`: `loom-hook-envelope/v1`
+- `schema_version`: `loom-hook-envelope/v2`
 - `hook`: `id`, `lifecycle`, and `locator`
 - `input`: `item_locator`, `workspace_locator`, `attempt_locator`, and
-  `host_adapter_mapping`
+  `agent_harness_mapping`
 - `output`: `category`, `summary`, and optional mapped `evidence`
 - `failure`: optional `classification`, `summary`, and `fallback_to`
 
 Allowed lifecycle values are `before-run`, `after-run`, and `cleanup`.
 
-The `host_adapter_mapping` block identifies the host adapter mapping that
-produced the Loom envelope. It must include:
+The `agent_harness_mapping` block identifies the harness mapping that produced
+the Loom envelope. It must include:
 
 - `host`
 - `event`
-- `adapter_result`
+- `support_result`
 
-`adapter_result` must be `supported`, `not_applicable`, `advisory`, or `unsafe`.
+`support_result` must be `supported`, `not_applicable`, `advisory`, or `unsafe`.
 
-`adapter_result: unsafe` is a hook safety invariant violation. A required hook
+`support_result: unsafe` is a hook safety invariant violation. A required hook
 path must fail closed, and optional/advisory hook paths may only report
 profile-local warnings. `not_applicable` and `advisory` are explicit mapped
 states; they do not become authored progress or validation truth.
@@ -56,7 +56,7 @@ Failure classification is limited to:
 - `not_applicable`
 - `permission_unavailable`
 - `unsafe`
-- `host_mapping_failed`
+- `harness_mapping_failed`
 
 `fallback_to` can only point to a Loom surface or human repair path. It must not
 point to a host-private action such as a Codex or Claude Code native hook.
@@ -92,8 +92,11 @@ must not author progress, status, review, validation, or closeout truth.
 `blocking_decision` can block the configured hook path, but it does not replace
 review verdicts, merge-ready decisions, or closeout basis.
 
-`runtime_evidence` can be consumed as runtime evidence only after adapter
+`runtime_evidence` can be consumed as runtime evidence only after harness
 mapping.
+
+The removed v1 `host_adapter_mapping` shape is not silently consumed. It fails
+closed with one `legacy_hook_host_adapter_mapping` migration diagnostic.
 
 Cleanup intent may appear only as mapped runtime evidence and must be constrained
 to explicit Loom-owned residue. A cleanup envelope that declares repo-owned,

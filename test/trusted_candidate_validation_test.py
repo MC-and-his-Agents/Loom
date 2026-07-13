@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,22 +40,6 @@ class TrustedCandidateValidationTest(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("raise SystemExit(0)\n", encoding="utf-8")
                 self.assertEqual(runner.candidate_import_shadows(trusted, candidate), [expected])
-
-    def test_git_binding_requires_the_exact_checkout_root(self) -> None:
-        runner = load_runner()
-        with tempfile.TemporaryDirectory() as temporary:
-            repository = Path(temporary) / "repo"
-            repository.mkdir()
-            subprocess.run(["git", "init", "-q", str(repository)], check=True)
-            (repository / "tracked").write_text("trusted\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(repository), "add", "tracked"], check=True)
-            subprocess.run(
-                ["git", "-C", str(repository), "-c", "user.name=Loom Test", "-c", "user.email=loom@example.invalid", "commit", "-qm", "fixture"],
-                check=True,
-            )
-            (repository / "tools").mkdir()
-            self.assertIsNotNone(runner.exact_git_checkout_head(repository))
-            self.assertIsNone(runner.exact_git_checkout_head(repository / "tools"))
 
     def test_candidate_mutation_of_base_owned_files_is_rejected(self) -> None:
         runner = load_runner()

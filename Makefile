@@ -121,10 +121,10 @@ loom-check-runtime-temp-dir-cleanup:
 	python3 tools/check_loom_check_runtime_regressions.py --surface temp-dir-cleanup
 
 daily-execution-cli-fast:
-	python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-fast .
+	python3 tools/check_cli_contract.py --surface public-default-path
 
 daily-execution-cli-full:
-	python3 tools/loom_check.py --profile source --source-surface daily-execution-cli-full .
+	python3 tools/check_cli_contract.py --surface aggregate
 
 check: py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check authority-contract-check product-acceptance-adapter-check light-profile-check npm-package-check loom-check
 

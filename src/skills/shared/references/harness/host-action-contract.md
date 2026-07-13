@@ -1,214 +1,26 @@
 # Host Action Contract
 
-> v0.30 normative override: GitHub host attestation is the default review and
-> ordinary closeout truth. `closeout status|sync` performs reconciliation,
-> closeout-attestation readback and local cleanup only; it does not write repo
-> carriers. `review record`, `carrier closeout-sync`, `closeout run`, and
-> `release closeout-sync` are retired compatibility commands gated by explicit
-> reinforced governance, `reinforced-carrier-compat/v1`, and a future expiry of
-> at most 90 days. The default path never falls back to those commands.
+Loom consumes host facts and invokes host mutations only through public commands.
+It does not mirror host truth into repository execution carriers.
 
-本文件定义 Loom 当前已冻结的宿主动作合同。
+## Ownership
 
-本文件当前承接：
-
-- `#167`
-
-它只收口三件事：
-
-- 哪些现有入口属于 Loom 的宿主动作面
-- 每类入口允许返回什么结果，以及 `fallback_to` 指向哪里
-- Loom 与宿主平台各自拥有哪部分动作，不新增新的宿主产品或自动化层
-
-它同时冻结 v0.7 的 dynamic tool availability / host action declaration 边界：
-
-- 只声明 locator、owner、requirement、surface、fallback_to 与 fail-closed 强度
-- attempt-time advertised / unavailable / unsupported / failed 结果词表由 [dynamic-tool-handshake.md](./dynamic-tool-handshake.md) 承接
-- 不让 Loom 接管 host、platform 或 external tool 的 ownership
-
-## 1. 能力定位
-
-Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身。
-
-它是 Loom 对现有 host-facing actions 的统一合同层，用来把以下能力收成同一组结果语义：
-
-- 宿主对象边界读取
-- 宿主 gate / required checks / merge controls 的放行消费
-- post-merge 的 drift 审计与控制面对齐
-
-当成熟既有仓库需要把 retained host action result 暴露给 Loom 时：
-
-- 结果 locator 通过 companion-owned `.loom/companion/interop.json` 声明
-- Loom 只消费这些结果，不接管动作执行本身
-- `python3 tools/loom_flow.py live-smoke host-adapter-drift --target <repo>` 只读取这组 locator 与 retained result envelope，产出 profile-local drift evidence；它不是新的 host-facing action，也不扩展本文件的顶层结果词表
-
-当成熟既有仓库需要声明 dynamic tool availability 时：
-
-- 工具 locator 通过 companion-owned `.loom/companion/repo-interface.json` 的 `dynamic_tool_locators` 声明
-- Loom 只校验 locator 是否可消费，不调用工具、不探测运行时可用性、不写入尝试结果
-
-当成熟既有仓库需要声明 approval / sandbox policy 读面时：
-
-- policy locator 通过 companion-owned `.loom/companion/repo-interface.json` 的 `policy_locators` 声明
-- host adapter 持有宿主具体 policy 名称、权限请求、sandbox 实现与执行细节
-- Loom 只消费抽象 `declared | missing | conflict | unsafe` 结果与 risk summary，不申请权限、不修改 sandbox、不写 host result
-
-具体专题落点仍保持拆分：
-
-- 对象 ownership 边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
-- merge 前放行细节见 [merge-checkpoint.md](./merge-checkpoint.md)
-- 自动检查与 required checks 读面见 [automation-frontload.md](./automation-frontload.md)
-- drift taxonomy 见 [reconciliation-audit.md](./reconciliation-audit.md)
-- closeout 检查与 sync 顺序见 [closeout-gate.md](./closeout-gate.md)
-- approval / sandbox policy 读面见 [policy-read-surface.md](./policy-read-surface.md)
-- structured event evidence 见 [structured-event-evidence.md](./structured-event-evidence.md)
-
-## 2. 覆盖范围
-
-当前冻结的宿主动作只包括现有入口：
-
-| 类别 | 稳定入口 | 宿主写入 | 说明 |
-| --- | --- | --- | --- |
-| boundary read | `python3 tools/loom_flow.py host-lifecycle --target <repo> [--item <id>]` | 否 | 读取 workspace / branch / PR / git worktree 的 ownership boundary |
-| PR merge gate | `python3 tools/loom_flow.py pr-gate check --target <repo> --pr <n>` | 否 | 证明当前 PR head 已有 fresh authored review approval |
-| merge control read | `python3 tools/loom_flow.py checkpoint merge --target <repo> [--item <id>]` | 否 | 读取 Loom 对 required checks / validation / review / risk rollback 的放行结论 |
-| merge control summary | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | 否 | 汇总进入 host merge 前的统一放行摘要 |
-| controlled merge | `python3 tools/loom_flow.py controlled-merge check\|merge --target <repo> --pr <n> [--pr-gate-result-file <path>] [--merge-gate-result-file <path>]` | `merge` 会写宿主 | 先消费 live 或 retained PR merge gate、merge-ready 与 required checks，再委托 `gh pr merge` |
-| drift audit | `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 只读 issue / PR / project 控制面并输出 drift findings |
-| control-plane sync | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run\|--apply]` | `--apply` 会写宿主 | 默认 dry-run；只执行 safe sync plan 中有 proof 的机械动作 |
-| closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>] [--gate-profile <profile>]` | 否 | 默认用 `closeout-contract` 校验 retained evidence backlink、main、issue、PR、project 与仓内结果是否一致；显式 profile 才执行 heavy local gate |
-| closeout sync | `python3 tools/loom_flow.py closeout sync --target <repo> [--item <id>] [--issue <n>] [--pr <n>] [--project <n>]` | 是，仅 host control-plane | 在可同步条件下继续做 closeout 控制面对齐；不写版本化 carrier |
-| carrier closeout sync | `python3 tools/loom_flow.py carrier closeout-sync --target <repo> --item <id> [--apply] ...` | 是，仅 repo carrier | 显式写结构化 terminal metadata 到 `.loom/progress/<item>.md`；不写 GitHub、Project、PR、issue 或 worktree |
-
-以下内容继续明确排除在 Loom 宿主动作面之外：
-
-- branch create / rename / retire
-- PR create / update / merge / close
-- git worktree create / remove
-- CI 产品实现、required checks 配置界面、merge button 与 ruleset 细节
-
-## 3. 统一输出面
-
-宿主动作沿用 Loom 既有 JSON 输出骨架，不新增第二套结果对象：
-
-- `command`
-- `operation`（若该入口有子动作）
-- `result`
-- `summary`
-- `missing_inputs`
-- `fallback_to`
-
-某些入口会额外带上专题字段，例如：
-
-- `host-lifecycle.objects`
-- `reconciliation.findings`
-- `reconciliation sync_plan`
-- `closeout.reconciliation`
-- `flow merge-ready` / `checkpoint merge` 的放行细节
-
-这些专题字段可以扩展，但不得绕过本文件定义的结果纪律。
-
-## 4. 结果与 `fallback_to` 纪律
-
-宿主动作当前冻结以下结果集合：
-
-| 入口 | 允许结果 | `fallback_to` 纪律 |
+| Fact or action | Owner | Loom behavior |
 | --- | --- | --- |
-| `host-lifecycle` | `pass` / `block` | 只在事实链无法读取时回到 `admission`；正常边界读取不产生 `fallback` 结果 |
-| `pr-gate check` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 gate 修复面；不得指向宿主 merge |
-| `checkpoint merge` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint，不得指向宿主控制面动作 |
-| `flow merge-ready` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint 摘要，不得把 host merge 伪装成回退目标 |
-| `controlled-merge check\|merge` | `pass` / `block` / `fallback` | `merge` 只有在所有前置为 `pass` 且显式执行时才委托宿主；否则不写宿主 |
-| `reconciliation audit` | `pass` / `warn` / `fix-needed` / `block` | 非 `pass` 时只允许 `manual-reconciliation` 或 `null`；它负责报 drift，不把 drift 伪装成 `fallback` |
-| `reconciliation sync` | `pass` / `block` | `block` 时只允许指向 `manual-reconciliation` 或 `null`；`--dry-run` 也不得把未解决 drift 伪装成通过 |
-| `closeout check` | `pass` / `block` | 普通 closeout 缺口指向 `merge`；若 reconciliation 为 `fix-needed` 必须指向 `reconciliation-sync`；若 reconciliation 为 `block` 必须指向 `manual-reconciliation` |
-| `closeout sync` | `pass` / `block` | 不得绕过 reconciliation；若同步前置未满足或同步后仍未对齐，指向 `reconciliation-sync` 或 `manual-reconciliation`；其他 closeout 缺口继续指向 `merge` |
+| issue/FR/WI tree | GitHub | read back; mutate only for an explicit route/close action |
+| PR, branch, head, checks, merge | GitHub | read back immediately before gate or mutation |
+| semantic review | GitHub attestation/artifact | verify current head, run, and artifact digest |
+| `external_result_sources` | external provider | read the retained result and evidence locator; never execute the provider action |
+| worktree | local Git | create/check/retire only the explicit issue-scoped worktree |
+| plugin install/cache | Codex | report a typed provider action; do not mutate from Loom |
 
-补充纪律：
+Every failure exposes one primary cause. `remediation_command` must be a public
+Loom command. Human, GitHub, npm, Git, or Codex work is represented separately
+as `manual_action` or `provider_action`.
 
-- `fallback` 结果只用于 Loom 内部前序 checkpoint / flow 的回退，不用于 closeout 或 reconciliation
-- `warn` 与 `fix-needed` 只作为 `reconciliation audit` 的顶层结果存在
-- `fallback_to` 是下一步去向，不等价于把 `result` 改写成 `fallback`
-- 宿主动作不得把 branch / PR / worktree 的真实生命周期命令当作 `fallback_to`
-- `closeout check` 默认不得无条件执行完整 `loom_check`；只有 `source-self-fixture`、`bootstrap-regression`、`distribution-regression` 或 `strong-profile-full-gate` profile 显式 opt-in 时才执行 heavy local gate
-- `closeout check` 的 host PR checks evidence 只作为当前 PR head freshness / backlink 输入，不替代 authored review record、merge-ready result 或 reconciliation audit
-- `reconciliation sync` 默认 `dry_run=true`；只有显式 `--apply` 才允许执行 GitHub 写入
-- `reconciliation sync` 必须输出 `loom-safe-sync-plan/v1`，包含 `planned_actions`、`skipped_actions`、`manual_actions` 与 `proof`
-- `planned_actions` 固定只允许 `close_issue`、`set_project_done`、`add_closeout_comment`，且每项必须带 `source_finding`、`proof_locator`、`write_target`、`rollback_note`
-- `skipped_actions` 与 `manual_actions` 不得执行；非 dry-run 也只能执行 `planned_actions`
+Host mutations require explicit `--apply`, fresh authenticated readback, and
+post-mutation readback. Local fixture files are never valid mutation authority.
+External result readback consumes declared results only; it does not execute host actions or turn provider output into Loom-owned truth.
 
-## 5. Dynamic Tool 与 Host Action Locator
-
-v0.7 只冻结 declaration-time locator contract。
-
-每个 dynamic tool 或 retained host action locator 必须声明：
-
-- `id`
-- `summary`
-- `locator`
-- `owner`
-- `requirement`
-- `surface`
-- `fallback_to`
-
-字段纪律：
-
-- `owner` 只描述真实拥有者，可为 `repo`、`repo-companion`、`host`、`host-adapter`、`platform` 或 `external-tool`
-- `requirement` 只允许 `required | optional | advisory`
-- `surface` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
-- `fallback_to` 只描述声明不可消费时回到哪个 Loom surface 或人工路径，不描述如何调用工具
-
-消费纪律：
-
-- locator 绝对路径、越界或非法路径对所有 requirement 都必须 fail closed，进入 blocking `missing_inputs`
-- `required` locator 缺失或指向不可读路径必须 fail closed，进入对应 surface 的 blocking `missing_inputs`
-- `optional` / `advisory` locator 缺失或指向不可读路径只能进入 profile-local `missing_optional` / advisory evidence，不得污染 core pass/fail
-- locator 校验不得执行宿主动作、不得调用 dynamic tool、不得写 attempt-time result
-- retained host action result locator 留在 `.loom/companion/interop.json`
-- dynamic tool availability locator 留在 `.loom/companion/repo-interface.json`
-- approval / sandbox policy read locator 留在 `.loom/companion/repo-interface.json`
-
-`controlled-merge check|merge` 也可以通过显式 CLI locator 消费本次 PR 的 retained `pr-gate` / `merge-gate` result。该消费仍沿用同一 locator 纪律：路径必须 repo-relative、可读、不能越界，且 envelope 必须能回链 Work Item、PR、head、review approval、validation summary 与 merge checkpoint。fresh retained result 只允许跳过重复语义审查读取；当前 PR head、required checks、branch protection / active ruleset、mergeability 与 merge method 必须重新 read back，并以 `drift_readback.mode = drift-only` 输出。mergeability readback 中 `DIRTY` 与 `DRAFT` 是 hard-block host gate failure；GitHub `BLOCKED` 是 delegated host policy signal，只有在 Loom authored approval、required checks、head binding 与 host enforcement readback 其余条件均通过时才允许进入 `gh pr merge` 委托。
-
-明确排除：
-
-- 不定义 advertised / unavailable / unsupported / failed 等尝试期结果
-- 不在 Loom core 中定义 host/platform 的调用协议
-- 不定义宿主 approval policy 名称、sandbox 配置项或权限提升动作
-- 不把 optional/advisory 缺口升级成普通 PR blocking gate
-- 不把 structured event evidence 提升为 issue、tracker、recovery 或 scheduler 的 authored truth
-
-## 6. Ownership Boundary
-
-Loom 当前承接：
-
-- workspace execution semantics
-- required checks / validation / review / risk rollback 的放行消费
-- 对宿主对象绑定、drift 与 absorbed 结论的读取和校验
-- closeout 前后的控制面对齐判断
-
-宿主平台当前承接：
-
-- branch / PR / git worktree 的真实生命周期动作
-- 实际 merge / close / status UI 与策略
-- CI 产品实现与 required checks 配置机制
-
-因此，Loom 可以报告、消费、阻断或要求回退，但不会在这里扩展成新的宿主自动化产品。
-
-## 7. 专题文件分工
-
-- [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
-  - 只定义 workspace、branch、PR、git worktree 的 ownership boundary
-- [merge-checkpoint.md](./merge-checkpoint.md)
-  - 只定义 merge control 的执行侧放行输入、结果与回退承接
-- [automation-frontload.md](./automation-frontload.md)
-  - 只定义适合前置机械化的 checks surface
-- [reconciliation-audit.md](./reconciliation-audit.md)
-  - 只定义 drift finding taxonomy 与 audit 结果语义
-- [closeout-gate.md](./closeout-gate.md)
-  - 只定义 closeout check / sync 的最小链路与 fail-closed 顺序
-
-这些宿主动作在 installed-skills / `.loom/bin` carrier 下，都必须先消费 `runtime-state`。
-若 runtime/layout/resources 漂移，入口必须直接 `block`，不得继续读取或写入 GitHub 控制面。
-
-这些文件共同表达一条统一宿主动作链路，但本文件是结果词表、`fallback_to` 与 ownership 收口的唯一主落点。
+See [host-lifecycle-boundary.md](./host-lifecycle-boundary.md) and
+[closeout-gate.md](./closeout-gate.md).

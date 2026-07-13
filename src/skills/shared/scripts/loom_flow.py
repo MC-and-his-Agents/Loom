@@ -798,7 +798,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=(
             "run",
             "replay",
-            "host-adapter-drift",
+            "external-result-source-readback",
             "dynamic-tool-availability",
             "hook-envelope",
             "hooks-extension",

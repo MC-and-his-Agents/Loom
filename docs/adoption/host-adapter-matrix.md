@@ -1,122 +1,109 @@
-# Host Adapter Matrix
+# Agent Harness Support Matrix
 
-This matrix defines consistent Loom semantics across supported hosts. Implementations may differ, but user-visible meaning must not.
+This retained path now owns the machine-readable support semantics for agent
+harnesses. It does not claim that every external result source is an executable
+adapter.
 
-| Host | Support status | Default install path | Discovery surface | Bootstrap/session-start surface | Tool mapping surface | Upgrade surface | Verification surface |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Codex | primary | `npm install -g @mc-and-his-agents/loom`; install or refresh the user-level plugin via `loom host install --host codex --scope user --apply --json` plus `loom host register --host codex --scope user --apply --json`, or via the Loom Codex marketplace source when the workstation uses marketplace-managed plugins; downstream repository adoption uses `loom install --target . --apply --json` | metadata-only repositories consume the user-level Codex Loom plugin provider; the Loom source repository may publish `.agents/plugins/marketplace.json` for plugin discovery, but downstream repositories write no repo-local Loom plugin or skills payload | new Codex session or Codex Desktop restart after registration/marketplace update, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, rerun validation; specifically, update the root CLI through npm, refresh the user-level plugin through host install/register or Codex marketplace update, and rerun each repository's installed-state validation independently | metadata-only: `loom host verify --host codex --target . --json`; workstation dry-run: `loom host install --host codex --scope user --dry-run --json` and `loom host register --host codex --scope user --dry-run --json`; repository validation: `loom installed-state validate --target . --json`, `loom skills check --target . --json`, and `loom doctor --target . --json` |
+| Harness class | Support level | What Loom provides | What Loom does not claim |
+| --- | --- | --- | --- |
+| Codex | `native/primary` | Global Loom CLI, Codex plugin discovery, executable skills, session/tool mapping, verification, and real Codex CLI/App E2E | OS-level isolation from a malicious same-user process |
+| Any harness that can reliably invoke the root `loom` CLI and consume JSON | `CLI-compatible` | The public 30-command CLI protocol | Plugin integration, session binding, tool mapping, or native E2E |
+| A harness without a reliable CLI invocation path | `unsupported` | Documentation only | Installation, execution, discovery, or native integration |
 
-Each supported host has exactly one primary entry: the root `loom` CLI.
-For Codex, metadata-only repository adoption is the supported downstream mode.
-Repo-local plugin payload, repo-local runtime payload, single-skill payload
-consumption, and installer-driven plugin installation are legacy behavior and
-must not be described as default or compatible current paths.
+Codex is the only `native/primary` harness in v0.32. Claude, Cursor, Gemini,
+and OpenCode are not native Loom adapters. They may only be described as
+`CLI-compatible` when the caller actually provides a reliable shell/CLI path;
+otherwise they are `unsupported`.
 
-Host adapters may use global Loom cache for local recovery, diagnostics, and
-batch upgrade planning only through the boundary in
-[repo-global-artifact-classification.md](../methodology/harness/repo-global-artifact-classification.md).
-Adapter verification must still read repository truth and host control-plane
-state; global cache presence is never a host verification result.
+Every harness consumes the same 30 public commands. Unsupported or removed
+surfaces fail closed before Loom reads a target or provider state.
 
-For Codex, repository adoption truth and Codex Desktop workstation registration
-state are separate. In metadata-only mode, repository truth is
-`.loom/installed-state.json` plus repo-owned governance residue; the user-level
-Codex Loom plugin provides skills. Workstation registration is explicit,
-user-scoped, and mutating only with `--apply`; it writes Codex user state such
-as the personal marketplace entry, user plugin cache payload, and config
-enablement. It must not write Codex Desktop private state into target repository
-truth.
+## Native admission
 
-Codex marketplace installation is the same authority line as other user-level
-plugin registration: it can install or update the plugin on the workstation, but
-it is not the CLI package authority and it is not repository adoption truth.
-After a marketplace plugin update, each adopted repository still needs its own
-Loom CLI validation or upgrade PR before repo-level state can be considered
-current.
+A future harness may become native only when all of these have an implemented
+consumer and real E2E evidence:
 
-For downstream metadata-only mode, `.loom/bin`, `plugins/loom/skills/`,
-`plugins/loom/.codex-plugin/plugin.json`, `.agents/skills`, and root `skills/`
-are intentionally absent. Existing Loom-generated copies from older installs
-are unsupported legacy residue; mixed or target-owned `skills/` must fail closed
-to manual review.
+- installation;
+- discovery;
+- execution;
+- session binding;
+- tool mapping;
+- verification;
+- real runtime E2E.
 
-<!-- legacy-release-surface-anchor: embedded skills at `plugins/loom/skills/` -->
+Protocol placeholders, retained JSON locators, documentation, or fixture-only
+tests are insufficient.
 
-The legacy release-surface anchor above is retained only for checker continuity.
-In the milestone #14 target it is historical vocabulary for unsupported
-repo-local payload residue, not a compatible current install mode.
+## Codex install and refresh boundary
 
-## Required Fields
+The Loom package is installed with npm:
 
-Each host adapter must define:
+```text
+npm install -g @mc-and-his-agents/loom@latest
+```
 
-- `host`
-- `support_status`
-- `default_install_path`
-- `install_surface`
-- `discovery_surface`
-- `bootstrap_or_session_start_surface`
-- `default_entry`
-- `invocation_surface`
-- `tool_mapping_surface`
-- `override_or_shadowing_surface`
-- `upgrade_surface`
-- `verification_surface`
-- `fail_closed_conditions`
-- `version_metadata_location`
-- `workstation_registration_surface` when host discovery needs user-level state
+Codex owns its marketplace source and loaded plugin cache. Refreshing or
+enabling the plugin is a structured Codex provider action, not a Loom CLI
+command. After the provider action, use only public Loom readback commands:
 
-## Legacy Single-Skill Boundary
+```text
+loom doctor --target <repo> --json
+loom installed-state validate --target <repo> --json
+loom verify --target <repo> --json
+```
 
-Single-skill package install is not part of the milestone #14 downstream install
-target. The editable source may remain organized by skill, but user-facing Loom
-distribution is the Codex user-level plugin payload installed from the global
-Loom package.
+Start a new Codex session, or restart Codex Desktop when the plugin list or
+runtime cache was already loaded. `loom host install/register/doctor/verify`
+are retired command surfaces and must not appear as current remediation.
 
-## Version Metadata
+Repository adoption remains metadata-only. The target repository does not own
+a repo-local runtime, plugin payload, current pointer, progress, review,
+shadow, or ordinary closeout carrier.
 
-Adapters must surface machine-readable version context instead of implying one global Loom version. The minimum version metadata locations are:
+## External result sources
 
-- root CLI install: `@mc-and-his-agents/loom`, `VERSION`, and the matching GitHub `v*` tag/release evidence
-- plugin payload: `plugins/loom/skills/registry.json` and `plugins/loom/skills/upgrade-contract.json`
-- generated skills mirror: `skills/registry.json` and `skills/upgrade-contract.json`
-- plugin surface: the host plugin manifest, such as `plugins/loom/.codex-plugin/plugin.json`
-- deprecated installer evidence: the historical `@mc-and-his-agents/loom-installer@0.1.119` registry/tag locator recorded in `version-authority-map.md`; no installer tombstone remains in the source tree
+`.loom/companion/interop.json#external_result_sources` may locate retained
+results produced by another system. Loom only reads and validates the locator,
+schema, binding, permission, result, and freshness. It does not call the source
+or claim a native harness integration.
 
-The authority rules for these surfaces live in `version-authority-map.md`.
+The former `host_adapters` field is removed. A v1 interop file receives one
+`legacy_repo_interop_host_adapters` migration diagnostic per invocation and is
+not silently consumed.
 
-## Fail-Closed Conditions
+## Removed v1 matrix vocabulary
 
-Adapters must fail closed and report failure instead of partial success when:
+The v1 support matrix used these field identifiers:
+`default_install_path`, `install_surface`, `discovery_surface`,
+`bootstrap_or_session_start_surface`, `default_entry`,
+`tool_mapping_surface`, `upgrade_surface`, `verification_surface`,
+`fail_closed_conditions`, and `version_metadata_location`. They are retained
+here only as a migration inventory; they are not an active schema and Loom does
+not reconstruct a host adapter from them.
 
-- `SKILL.md` is missing
-- `contract.json` is missing
-- `plugins/loom/skills/registry.json` or shared runtime assets are missing
-- the launcher cannot report `installed-runtime`
-- host discovery cannot observe the installed skill
-- version metadata cannot be read
-- a conflicting user override shadows Loom without explicit operator intent
-- GitHub host API readback cannot consume `gh api` or an explicit process token. When local `gh` auth is present but `GH_TOKEN` / `GITHUB_TOKEN` is not present, Loom runtime must not silently fall back to anonymous public REST; it reports `host_api_unreadable` or `permission` and the single-command bridge next action `CODEX_EXPORT_GH_TOKEN=1 <same loom command>`.
+For Codex, the current entry remains `loom-init` and the generated distribution
+path remains `plugins/loom/skills`. GitHub readback uses `gh api` through the
+authenticated CLI keyring. `host_api_unreadable` is the typed failure when that
+readback or its permission is unavailable; `CODEX_EXPORT_GH_TOKEN=1` remains an
+explicit opt-in for a subprocess that cannot otherwise use the keyring.
 
-## Lifecycle Hook Mapping
+## Version authority
 
-Host adapters may install or generate host-native hook configuration from Loom
-`hook_locators`, but generated host config remains downstream of the Loom locator
-contract. Loom core does not store Codex or Claude Code native hook file shapes.
+The root package/release version, Codex plugin surface version, plugin payload
+version/hash, skills registry version, and protocol schemas remain independent
+authority lines. The historical `x-loom.host_adapter_version` manifest field is
+the Codex plugin interface version; it is not a repo interop adapter claim.
 
-Adapters report hook mapping with:
+## Fail closed
 
-- `supported`
-- `not_applicable`
-- `advisory`
-- `unsafe`
+Loom reports one primary cause when:
 
-Codex mapping:
+- the public CLI or Codex plugin payload is absent or stale;
+- a target, GitHub binding, permission, artifact, or external result locator is
+  unreadable;
+- an external result is stale, failing, unsafe, or bound to another head;
+- a caller presents `host_adapters` instead of `external_result_sources`.
 
-- `before-run`: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`
-- `after-run`: `PostToolUse`, `Stop`, `PostCompact`
-- `cleanup`: `not_applicable` or Loom explicit `workspace cleanup|retire` extension; never required native hook
-
-Host-native hook output must be mapped into Loom runtime evidence and must not
-write authored progress, recovery/status truth, review verdict, validation
-summary, host action result, or closeout basis.
+Provider/manual actions are separate structured fields. Every
+`remediation_command` beginning with `loom` must resolve to one of the 30 public
+commands.

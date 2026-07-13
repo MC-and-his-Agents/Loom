@@ -277,10 +277,10 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         CLI_ONLY_CONTRACT,
         (
-            "The only primary user-facing install surface for Loom is the root `loom` CLI",
-            "Host plugins are host adapter payloads managed by the `loom` CLI",
-            "`SKILLS` are executable scenario payloads managed, synchronized, and verified",
-            "`loom-installer` must not gain a new migration journey",
+            "The only Loom runtime install",
+            "The Codex plugin is not installed by a Loom `host` command",
+            "Repository adoption remains separate",
+            "`@mc-and-his-agents/loom-installer` is a retired historical artifact",
         ),
         errors,
         surface_label=surface_label,
@@ -292,10 +292,10 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
             "The `loom` CLI release line is the primary release line",
             "GitHub `v*` tag and GitHub Release",
             "Installer npm state is never publish evidence for this judgment",
-            "HotCP-style stale carrier fixture",
-            "carrier closeout-sync",
-            "workspace retire",
-            "idle` / `no_active_item",
+            "host-derived closeout",
+            "`workspace retire` remains local-only",
+            "does not write versioned carriers",
+            "no repository closeout carrier",
             "`loom release readback` is the local read-only entry for a release intent",
             "`partial_published`",
             "`docs/evidence/fixtures/release-readback-fixtures.json`",
@@ -349,8 +349,8 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         CODEX_INSTALL,
         (
-            "The npm installer is not the Codex default path",
-            "plugins/loom/skills/",
+            "two independent workstation dependencies",
+            "Codex marketplace/plugin host",
         ),
         errors,
         surface_label=surface_label,
@@ -359,8 +359,8 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         UNIFIED_INSTALL,
         (
-            "use `loom host install` to install host plugin payloads",
-            "Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence",
+            "one public runtime and one host-owned plugin path",
+            "Legacy repo-local payloads",
         ),
         errors,
         surface_label=surface_label,
@@ -369,8 +369,10 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         HOST_ADAPTER_MATRIX,
         (
-            "embedded skills at `plugins/loom/skills/`",
-            "update root CLI, rerun",
+            "Codex is the only `native/primary`",
+            "30 public commands",
+            "`external_result_sources`",
+            "Start a new Codex session",
         ),
         errors,
         surface_label=surface_label,

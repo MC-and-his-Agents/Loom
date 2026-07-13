@@ -276,7 +276,7 @@
 - locator 指向的 handshake declaration 若存在，只能输出 `advertised | unavailable | unsupported | failed`，并由 `tool_availability` 派生展示
 - `python3 tools/loom_flow.py live-smoke dynamic-tool-availability --target <repo>` 只把这组 declaration-time locator 包装成 live smoke / release confidence evidence；它不承载 attempt-time result，不执行业务工具，也不改写 repo companion truth
 - `dynamic_tool_locators` 不得承载 attempt-time result、review summary、validation status 或 retained host action result
-- retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `host_adapters`
+- retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `external_result_sources`
 
 ### 4.6 `policy_locators`
 
@@ -319,7 +319,7 @@
 - locator 指向的 policy declaration 若存在，只能输出 `declared | missing | conflict | unsafe`，并由 `policy_readiness` 派生展示
 - required policy `missing` / `conflict` / `unsafe` 在 owning surface 下阻断；optional / advisory policy risk 只作为 review input 或 advisory evidence
 - `policy_locators` 不得承载 host approval result、sandbox mutation、review summary、validation status 或 retained host action result
-- retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `host_adapters`
+- retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `external_result_sources`
 - policy 读面细节由 [policy-read-surface.md](../harness/policy-read-surface.md) 承接
 
 ### 4.7 `hook_locators`

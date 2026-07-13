@@ -446,8 +446,8 @@ RELEASE_TARGET_DELIVERY_STATUSES = {
     "not_applicable",
 }
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
-REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
-REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"}
+REPO_INTEROP_SCHEMA = "loom-repo-interop/v2"
+REPO_INTEROP_KEYS = {"schema_version", "external_result_sources", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"}
 REPO_INTEROP_COLLECTION_SURFACES = {
     "admission",
     "pre_review",
@@ -3111,13 +3111,14 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
     repo_interop_surface: dict[str, Any] = {
         "availability": "absent",
         "contract": carrier_entry("missing", ".loom/companion/interop.json", "repository scan"),
-        "host_adapters": carrier_entry("missing", "unknown", "repo interop contract"),
+        "external_result_sources": carrier_entry("missing", "unknown", "repo interop contract"),
         "repo_native_carriers": carrier_entry("missing", "unknown", "repo interop contract"),
         "shadow_surfaces": carrier_entry("missing", "unknown", "repo interop contract"),
         "external_orchestrators": carrier_entry("missing", "unknown", "repo interop contract"),
         "summary": "no repo interop contract is declared for this repository.",
         "missing_inputs": [],
         "missing_optional": [],
+        "migration_diagnostics": [],
     }
     missing_inputs: list[str] = []
     missing_optional: list[str] = []
@@ -3136,28 +3137,38 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
     else:
         if interop_payload.get("schema_version") != REPO_INTEROP_SCHEMA:
             missing_inputs.append(f"repo interop contract schema must be `{REPO_INTEROP_SCHEMA}`")
-        extra_keys = sorted(set(interop_payload.keys()) - REPO_INTEROP_KEYS)
+        legacy_host_adapters = "host_adapters" in interop_payload
+        if legacy_host_adapters:
+            diagnostic = {
+                "code": "legacy_repo_interop_host_adapters",
+                "locator": ".loom/companion/interop.json#host_adapters",
+                "replacement": "external_result_sources",
+                "summary": "The old host_adapters field overstates retained result readers as executable adapters.",
+            }
+            repo_interop_surface["migration_diagnostics"] = [diagnostic]
+            missing_inputs.append("repo interop uses removed `host_adapters`; rename it to `external_result_sources`")
+        extra_keys = sorted(set(interop_payload.keys()) - REPO_INTEROP_KEYS - {"host_adapters"})
         if extra_keys:
             missing_inputs.append(
                 "repo interop contract contains unexpected top-level fields: "
                 + ", ".join(extra_keys)
             )
 
-        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"):
+        for key in ("external_result_sources", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"):
             repo_interop_surface[key] = carrier_entry(
                 "present",
                 ".loom/companion/interop.json",
                 "repo interop contract",
             )
 
-        host_adapters = interop_payload.get("host_adapters")
-        if not isinstance(host_adapters, list):
-            missing_inputs.append("repo interop contract must include `host_adapters` as a list")
+        external_result_sources = interop_payload.get("external_result_sources", [])
+        if not isinstance(external_result_sources, list):
+            missing_inputs.append("repo interop contract `external_result_sources` must be a list when present")
         else:
-            for index, entry in enumerate(host_adapters):
+            for index, entry in enumerate(external_result_sources):
                 blocking, optional = validate_repo_interop_collection_entry(
                     root=root,
-                    collection="host_adapters",
+                    collection="external_result_sources",
                     entry=entry,
                     index=index,
                 )
@@ -3221,7 +3232,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         repo_interop_surface["summary"] = (
             "repo interop contract is readable with optional locator advisories."
             if missing_optional
-            else "repo interop contract is readable for host adapters, repo-native carriers, shadow parity, and external orchestrator locators."
+            else "repo interop contract is readable for external result sources, repo-native carriers, shadow parity, and external orchestrator locators."
         )
     repo_interop_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
     repo_interop_surface["missing_optional"] = list(dict.fromkeys(missing_optional))

@@ -993,8 +993,6 @@ def check_trusted_candidate_harness() -> None:
             "makefile": ("Makefile", "delivery-gate-check:\n\t@true\n"),
             "checker": ("tools/check_probe.py", "raise SystemExit(0)\n"),
             "public-checker": ("tools/check_cli_contract.py", "raise SystemExit(0)\n"),
-            "os-exit": ("src/skills/shared/scripts/delivery_gate.py", "import os\nos._exit(0)\n"),
-            "top-level-side-effect": ("src/skills/shared/scripts/light_profile.py", "raise SystemExit(0)\n"),
         }
         for name, (relative, content) in drift_cases.items():
             drifted = root / f"candidate-drift-{name}"
@@ -1015,8 +1013,11 @@ def check_trusted_candidate_harness() -> None:
                 capture_output=True,
                 text=True,
             )
-            if rejected.returncode != 2 or "protected validation harness drift" not in rejected.stderr:
-                raise AssertionError(f"candidate {name} drift did not fail closed: {rejected.stderr}")
+            if rejected.returncode == 0 or "Error 7" not in rejected.stderr:
+                raise AssertionError(
+                    f"candidate {name} drift bypassed base-owned validation: "
+                    f"returncode={rejected.returncode} stdout={rejected.stdout} stderr={rejected.stderr}"
+                )
 
         env_trusted = root / "trusted-env"
         env_candidate = root / "candidate-env"

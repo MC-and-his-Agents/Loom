@@ -30,7 +30,7 @@ class TargetResolutionTest(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["target"], str(root))
 
-    def test_node_wrapper_writes_build_artifact_under_relative_target(self) -> None:
+    def test_node_wrapper_build_failure_does_not_create_repo_runtime_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir).resolve()
             env = os.environ.copy()
@@ -48,12 +48,11 @@ class TargetResolutionTest(unittest.TestCase):
 
             self.assertTrue(result.stdout, result.stderr)
             payload = json.loads(result.stdout)
-            locator = Path(payload["full_output"]["artifact_locator"])
-            self.assertTrue(payload["full_output"]["available"])
-            self.assertFalse(locator.is_absolute())
-            self.assertTrue((root / locator).is_file())
+            self.assertEqual(payload["result"], "block")
+            self.assertFalse(payload["carrier_mutations"])
+            self.assertFalse((root / ".loom").exists())
 
-    def test_node_wrapper_writes_fact_chain_artifact_under_relative_target(self) -> None:
+    def test_node_wrapper_removed_fact_chain_fails_before_target_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir).resolve()
             env = os.environ.copy()
@@ -71,10 +70,10 @@ class TargetResolutionTest(unittest.TestCase):
 
             self.assertTrue(result.stdout, result.stderr)
             payload = json.loads(result.stdout)
-            locator = Path(payload["full_output"]["artifact_locator"])
-            self.assertTrue(payload["full_output"]["available"])
-            self.assertFalse(locator.is_absolute())
-            self.assertTrue((root / locator).is_file())
+            self.assertEqual(payload["result"], "block")
+            self.assertEqual(payload["primary_error_code"], "unsupported_command_surface")
+            self.assertFalse(payload["mutates"])
+            self.assertFalse((root / ".loom").exists())
 
 
 if __name__ == "__main__":

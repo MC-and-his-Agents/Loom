@@ -571,19 +571,34 @@ def retained_host_signals_payload(
             "fallback_to": "adoption",
             "signals": [],
         }
-    host_adapters = interop_payload.get("host_adapters") if isinstance(interop_payload, dict) else None
-    if not isinstance(host_adapters, list):
+    if isinstance(interop_payload, dict) and "host_adapters" in interop_payload:
         return {
             "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
             "surface": surface,
             "result": "block",
-            "summary": "repo interop is missing host_adapters.",
-            "missing_inputs": ["repo interop host_adapters"],
+            "summary": "repo interop uses the removed host_adapters field.",
+            "missing_inputs": ["rename `.loom/companion/interop.json#host_adapters` to `external_result_sources`"],
+            "migration_diagnostics": [{
+                "code": "legacy_repo_interop_host_adapters",
+                "locator": ".loom/companion/interop.json#host_adapters",
+                "replacement": "external_result_sources",
+            }],
+            "fallback_to": "adoption",
+            "signals": [],
+        }
+    external_result_sources = interop_payload.get("external_result_sources", []) if isinstance(interop_payload, dict) else None
+    if not isinstance(external_result_sources, list):
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "repo interop external_result_sources must be a list when present.",
+            "missing_inputs": ["repo interop external_result_sources"],
             "fallback_to": "adoption",
             "signals": [],
         }
 
-    for index, entry in enumerate(host_adapters):
+    for index, entry in enumerate(external_result_sources):
         if not isinstance(entry, dict):
             continue
         surfaces = entry.get("surfaces")
@@ -641,7 +656,7 @@ def retained_host_signals_payload(
         signals.append(
             {
                 "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
-                "id": entry.get("id") or f"host-adapter-{index + 1}",
+                "id": entry.get("id") or f"external-result-source-{index + 1}",
                 "summary": entry.get("summary"),
                 "surface": surface,
                 "locator": locator,

@@ -35,13 +35,6 @@ BASE_OWNED_VALIDATION_GLOBS = ("tools/check_*.py",)
 LOOM_FLOW_PATH = "src/skills/shared/scripts/loom_flow.py"
 PYTHON_IMPORT_ROOTS = ("tools", "src/skills/shared/scripts")
 PYTHON_STARTUP_MODULES = {"sitecustomize", "usercustomize"}
-UNBOUND_FIXTURE_PROTECTED_PATHS = (
-    ".github/workflows/loom-delivery-gate.yml",
-    "src/skills/shared/scripts/delivery_gate.py",
-    "src/skills/shared/scripts/failure_envelope.py",
-    "src/skills/shared/scripts/light_profile.py",
-    "src/skills/shared/scripts/native_validation.py",
-)
 
 
 def base_owned_validation_paths(trusted_root: Path) -> list[str]:
@@ -82,44 +75,6 @@ def candidate_import_shadows(trusted_root: Path, candidate_root: Path) -> list[s
             if _path_snapshot(path) != _path_snapshot(trusted_dir / path.name):
                 shadows.append(relative)
     return sorted(shadows)
-
-
-def exact_git_checkout_head(root: Path) -> str | None:
-    completed = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "--show-toplevel", "HEAD^{commit}"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    lines = completed.stdout.splitlines()
-    if completed.returncode != 0 or len(lines) != 2:
-        return None
-    try:
-        top_level = Path(lines[0]).resolve()
-    except OSError:
-        return None
-    return lines[1] if top_level == root.resolve() and re.fullmatch(r"[0-9a-f]{40}", lines[1]) else None
-
-
-def reject_unbound_fixture_drift(trusted_root: Path, candidate_root: Path) -> None:
-    # Temporary compatibility for the existing isolated checker fixture; #2115
-    # replaces that transition assertion with the real base-owned overlay state.
-    bound = (
-        trusted_root != candidate_root
-        and exact_git_checkout_head(trusted_root) is not None
-        and exact_git_checkout_head(candidate_root) is not None
-    )
-    if bound:
-        return
-    protected = set(base_owned_validation_paths(trusted_root)) | set(UNBOUND_FIXTURE_PROTECTED_PATHS)
-    protected.update(str(path.relative_to(candidate_root)) for path in candidate_root.glob("tools/check_*.py"))
-    drift = sorted(
-        relative
-        for relative in protected
-        if _path_snapshot(trusted_root / relative) != _path_snapshot(candidate_root / relative)
-    )
-    if drift:
-        raise ValueError("protected validation harness drift in unbound fixture: " + ", ".join(drift))
 
 
 def ensure_contained_path(root: Path, destination: Path) -> None:
@@ -293,7 +248,6 @@ def main() -> int:
         print("candidate tree shadows trusted Python imports: " + ", ".join(shadows), file=sys.stderr)
         return 2
     try:
-        reject_unbound_fixture_drift(trusted_root, candidate_root)
         frozen_base_owned = freeze_base_owned_files(trusted_root)
         validate_loom_flow_boundary = (trusted_root / LOOM_FLOW_PATH).is_file()
         validate_security_contract = frozen_base_owned.get("test/trusted_candidate_validation_test.py") is not None

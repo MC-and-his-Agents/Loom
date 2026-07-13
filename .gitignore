@@ -108,6 +108,7 @@ plugins/loom/*
 !plugins/loom/.codex-plugin/plugin.json
 !plugins/loom/skills/
 !plugins/loom/skills/**
+/plugins/loom/skills/**/*.py
 packages/skills/
 .worktrees/
 .loom/runtime/

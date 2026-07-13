@@ -628,7 +628,7 @@ def shadow_parity_report(
         "summary": "shadow parity could not be evaluated for this surface.",
         "missing_inputs": [],
         "recommended_action": "restore the declared Loom and repo-native shadow parity locators before treating this surface as authoritative.",
-        "host_adapters": [],
+        "external_result_sources": [],
         "repo_native_carriers": [],
         "loom_surface": {
             "status": "missing",
@@ -657,18 +657,18 @@ def shadow_parity_report(
     if not isinstance(interop_payload, dict):
         return empty_report
 
-    host_adapters = interop_payload.get("host_adapters")
+    external_result_sources = interop_payload.get("external_result_sources", [])
     repo_native_carriers = interop_payload.get("repo_native_carriers")
     shadow_surfaces = interop_payload.get("shadow_surfaces")
-    if not isinstance(host_adapters, list) or not isinstance(repo_native_carriers, list) or not isinstance(shadow_surfaces, dict):
+    if not isinstance(external_result_sources, list) or not isinstance(repo_native_carriers, list) or not isinstance(shadow_surfaces, dict):
         return {
             **empty_report,
             "summary": "shadow parity is unavailable because the repo interop contract cannot be consumed safely.",
             "missing_inputs": ["repo interop contract"],
         }
 
-    relevant_host_adapters = [
-        entry for entry in host_adapters if isinstance(entry, dict) and surface in entry.get("surfaces", [])
+    relevant_external_result_sources = [
+        entry for entry in external_result_sources if isinstance(entry, dict) and surface in entry.get("surfaces", [])
     ]
     relevant_repo_native_carriers = [
         entry for entry in repo_native_carriers if isinstance(entry, dict) and surface in entry.get("surfaces", [])
@@ -679,7 +679,7 @@ def shadow_parity_report(
             **empty_report,
             "summary": "shadow parity is unavailable because this surface is not declared in the repo interop contract.",
             "missing_inputs": [f"shadow surface missing: {surface}"],
-            "host_adapters": relevant_host_adapters,
+            "external_result_sources": relevant_external_result_sources,
             "repo_native_carriers": relevant_repo_native_carriers,
         }
 
@@ -713,7 +713,7 @@ def shadow_parity_report(
             "summary": "shadow parity is unavailable because a declared surface locator is unsafe.",
             "missing_inputs": [*loom_locator_errors, *repo_locator_errors],
             "missing_details": missing_details,
-            "host_adapters": relevant_host_adapters,
+            "external_result_sources": relevant_external_result_sources,
             "repo_native_carriers": relevant_repo_native_carriers,
         }
     assert loom_path is not None
@@ -759,7 +759,7 @@ def shadow_parity_report(
             **empty_report,
             "summary": "shadow parity is unreadable because one or both declared surfaces cannot be normalized.",
             "missing_inputs": missing_inputs,
-            "host_adapters": relevant_host_adapters,
+            "external_result_sources": relevant_external_result_sources,
             "repo_native_carriers": relevant_repo_native_carriers,
             "loom_surface": loom_surface,
             "repo_surface": repo_surface,
@@ -773,7 +773,7 @@ def shadow_parity_report(
             "summary": "Loom and repo-native surfaces report the same normalized result.",
             "missing_inputs": [],
             "recommended_action": "no shadow parity action required.",
-            "host_adapters": relevant_host_adapters,
+            "external_result_sources": relevant_external_result_sources,
             "repo_native_carriers": relevant_repo_native_carriers,
             "loom_surface": loom_surface,
             "repo_surface": repo_surface,
@@ -786,7 +786,7 @@ def shadow_parity_report(
         "summary": "Loom and repo-native surfaces disagree on the normalized result.",
         "missing_inputs": [],
         "recommended_action": "resolve the parity mismatch or explicitly choose the authoritative surface outside repo interop before enabling blocking consumption.",
-        "host_adapters": relevant_host_adapters,
+        "external_result_sources": relevant_external_result_sources,
         "repo_native_carriers": relevant_repo_native_carriers,
         "loom_surface": loom_surface,
         "repo_surface": repo_surface,

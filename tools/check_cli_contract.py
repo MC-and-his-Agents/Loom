@@ -1520,7 +1520,7 @@ def assert_ship_validation_profile_selection_contract() -> None:
         raise AssertionError("light validation profile must explain docs/package tombstone selection")
 
     runtime_profile = payload(["tools/loom.py", "skills/shared/scripts/loom_flow.py"])
-    if runtime_profile.get("selected_profile") != "full" or runtime_profile.get("source_surface") != "daily-execution-cli-full":
+    if runtime_profile.get("selected_profile") != "full" or runtime_profile.get("source_surface") != "source-self-fixture":
         raise AssertionError(f"runtime/harness paths must select full validation: {runtime_profile}")
 
     release_profile = payload(
@@ -1531,7 +1531,7 @@ def assert_ship_validation_profile_selection_contract() -> None:
         raise AssertionError(f"release closeout must select release validation commands: {release_profile}")
 
     explicit_full = payload(["README.md"], requested="full")
-    if explicit_full.get("selected_profile") != "full" or explicit_full.get("source_surface") != "daily-execution-cli-full":
+    if explicit_full.get("selected_profile") != "full" or explicit_full.get("source_surface") != "source-self-fixture":
         raise AssertionError(f"explicit full validation profile override was not preserved: {explicit_full}")
 
     for requested in ("host-consumer", "carrier-only"):
@@ -3835,8 +3835,8 @@ def assert_gate_freeze_carrier_shadow_bindings_contract() -> None:
         interop.write_text(
             json.dumps(
                 {
-                    "schema_version": "loom-repo-interop/v1",
-                    "host_adapters": [],
+                    "schema_version": "loom-repo-interop/v2",
+                    "external_result_sources": [],
                     "repo_native_carriers": [],
                     "shadow_surfaces": {
                         "review": {
@@ -7083,8 +7083,8 @@ def write_hosted_freeze_admission_inputs(target: Path) -> None:
     (target / ".loom" / "companion" / "interop.json").write_text(
         json.dumps(
             {
-                "schema_version": "loom-repo-interop/v1",
-                "host_adapters": [],
+                "schema_version": "loom-repo-interop/v2",
+                "external_result_sources": [],
                 "repo_native_carriers": [],
                 "shadow_surfaces": shadow_surfaces,
             },
@@ -13578,6 +13578,34 @@ def run_public_default_path_surface() -> None:
     module = load_loom_cli_module()
     if module.COMMAND_ROUTES:
         raise AssertionError(f"public scenarios still expose legacy delegated routes: {module.COMMAND_ROUTES}")
+
+    def assert_no_removed_recommendations(value: object, context: str) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                assert_no_removed_recommendations(nested, f"{context}.{key}")
+            return
+        if isinstance(value, list):
+            for index, nested in enumerate(value):
+                assert_no_removed_recommendations(nested, f"{context}[{index}]")
+            return
+        if not isinstance(value, str):
+            return
+        for removed in LEGACY_COMMAND_INVENTORY:
+            if f"loom {removed}" in value:
+                raise AssertionError(f"{context} recommends removed command `loom {removed}`: {value}")
+        for phrase in ("use upgrade-plan", "uses loom host commands"):
+            if phrase in value:
+                raise AssertionError(f"{context} recommends a removed command surface: {value}")
+
+    usage = io.StringIO()
+    module.print_usage(usage)
+    assert_no_removed_recommendations(usage.getvalue(), "plain-help")
+    for context, payload in (
+        ("workstation-registration", module.codex_workstation_registration_status(REPO_ROOT)),
+        ("upgrade-plan", module.handle_delivery_payload_for_upgrade_plan(REPO_ROOT)),
+        ("codex-provider-action", module.host_plugin_refresh_boundary_action("codex")),
+    ):
+        assert_no_removed_recommendations(payload, context)
     loom_check_workflow = (REPO_ROOT / ".github/workflows/loom-check.yml").read_text(encoding="utf-8")
     release_workflow = (REPO_ROOT / ".github/workflows/loom-cli-release.yml").read_text(encoding="utf-8")
     if "if: ${{ github.event_name == 'push' }}" not in loom_check_workflow or "python3 tools/check_cli_contract.py --surface aggregate" not in loom_check_workflow:
@@ -14311,11 +14339,11 @@ def run_failure_envelope_surface() -> None:
     stream = io.StringIO()
     status = module.emit(
         module.output(
-            "gate pr",
+            "pr gate",
             "block",
             summary="candidate carrier drifted",
             failed_layer="carrier-readback",
-            fallback_to=["loom gate pr --json"],
+            fallback_to=["loom pr gate --json"],
         ),
         stream=stream,
     )
@@ -14335,29 +14363,56 @@ def run_failure_envelope_surface() -> None:
     scoped_failures = (
         (
             module.output("build", "block", summary="current item mismatch: expected issue 2103, got stale current WI-2012"),
-            ("legacy_current_pointer_dependency", "carrier", "loom"),
+            ("legacy_current_pointer_dependency", "carrier", "loom", "manual_action"),
         ),
         (
             module.output("build", "block", summary="branch resolves to 0 eligible pull requests; exactly one authenticated result is required"),
-            ("pre_pr_build_admission_cycle", "toolchain", "loom"),
+            ("pre_pr_build_admission_cycle", "toolchain", "loom", "manual_action"),
         ),
         (
             module.output("status", "block", summary="github control plane: gh: Not Found (HTTP 404)"),
-            ("github_host_readback_failure", "host_service", "github"),
+            ("github_host_readback_failure", "host_service", "github", "provider_action"),
+        ),
+        (
+            module.output("detect", "block", summary="target path does not exist"),
+            ("target_unreadable", "environment", "operator", "manual_action"),
+        ),
+        (
+            module.output("status", "block", summary="github control plane: Bad credentials"),
+            ("github_permission_unavailable", "permission", "operator", "provider_action"),
+        ),
+        (
+            module.output("attestation readback", "block", summary="artifact locator is unreadable"),
+            ("artifact_locator_invalid", "governance_metadata", "operator", "manual_action"),
         ),
     )
     for failure_payload, expected in scoped_failures:
         stream = io.StringIO()
         module.emit(failure_payload, stream=stream)
         scoped = json.loads(stream.getvalue())["failure_envelope"]["primary_cause"]
-        observed = (scoped.get("code"), scoped.get("failure_domain"), scoped.get("owner"))
-        if observed != expected or scoped.get("remediation_command") == "loom help --json":
+        observed = (scoped.get("code"), scoped.get("failure_domain"), scoped.get("owner"), scoped.get("remediation_kind"))
+        if observed != expected:
             raise AssertionError(f"release-critical failure was not classified precisely: {scoped}")
+        if expected[-1] == "public_cli" and scoped.get("remediation_public_command") not in module.PUBLIC_COMMAND_NAMES:
+            raise AssertionError(f"public remediation did not resolve through the shared registry: {scoped}")
+        if expected[-1] != "public_cli" and scoped.get("remediation_command") != "loom help --json":
+            raise AssertionError(f"provider/manual action masqueraded as a Loom command: {scoped}")
+        if expected[0] in {"legacy_current_pointer_dependency", "pre_pr_build_admission_cycle", "target_unreadable"}:
+            action = scoped.get("manual_action") if isinstance(scoped.get("manual_action"), dict) else {}
+            instruction = str(action.get("instruction") or "")
+            if not instruction or instruction.startswith("loom ") or "before" not in instruction and "do not" not in instruction:
+                raise AssertionError(f"release-critical remediation does not change the failed precondition: {scoped}")
+
+    if len(module.PUBLIC_COMMAND_NAMES) != 30:
+        raise AssertionError("shared remediation registry must cover the 30-command public surface")
+    for command in module.PUBLIC_COMMAND_NAMES:
+        if command not in module.PUBLIC_COMMAND_PROTOCOL_TYPES:
+            raise AssertionError(f"public remediation command lacks protocol ownership: {command}")
 
     stream = io.StringIO()
     module.emit(
         module.output(
-            "acceptance validate",
+            "acceptance resolve",
             "block",
             summary="acceptance evidence is insufficient",
             failed_layer="acceptance-adapter",
@@ -14389,7 +14444,7 @@ def run_failure_envelope_surface() -> None:
     stream = io.StringIO()
     module.emit(
         module.output(
-            "gate merge",
+            "merge check",
             "block",
             summary="legacy delegated failure",
             failure_envelope={
@@ -14409,7 +14464,7 @@ def run_failure_envelope_surface() -> None:
         raise AssertionError("v1 secondary_causes compatibility alias drifted")
 
     stream = io.StringIO()
-    module.emit(module.output("gate merge", "block", summary="asserted primary", primary_cause=legacy_primary), stream=stream)
+    module.emit(module.output("merge check", "block", summary="asserted primary", primary_cause=legacy_primary), stream=stream)
     asserted_payload = json.loads(stream.getvalue())
     asserted = asserted_payload["failure_envelope"]["primary_cause"]
     if asserted.get("id") != "legacy_primary" or asserted.get("failure_domain") != "git_history" or asserted_payload.get("primary_cause") != asserted:
@@ -14418,7 +14473,7 @@ def run_failure_envelope_surface() -> None:
     stream = io.StringIO()
     malformed_status = module.emit(
         module.output(
-            "gate merge",
+            "merge check",
             "pass",
             summary="untrusted assertion",
             failure_envelope={"schema_version": "loom-failure-envelope/v1", "primary_cause": {"id": "incomplete"}},
@@ -14432,7 +14487,7 @@ def run_failure_envelope_surface() -> None:
     stream = io.StringIO()
     conflict_status = module.emit(
         module.output(
-            "gate merge",
+            "merge check",
             "block",
             summary="conflicting assertions",
             primary_cause=legacy_primary,
