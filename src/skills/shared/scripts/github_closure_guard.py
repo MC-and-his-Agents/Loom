@@ -234,7 +234,7 @@ def _green_merged_pr(issue: dict[str, Any], default_branch: str) -> bool:
     return False
 
 
-def _host_action_attestation_errors(issue: dict[str, Any], repository: str) -> list[str]:
+def _host_action_attestation_errors(issue: dict[str, Any], repository: str, actor: dict[str, Any]) -> list[str]:
     comments = issue.get("comments")
     if issue.get("comments_complete") is not True or not isinstance(comments, list):
         return ["comments_unreadable"]
@@ -264,21 +264,30 @@ def _host_action_attestation_errors(issue: dict[str, Any], repository: str) -> l
         errors.append("observed_at_invalid")
     if _text(payload.get("verdict")) != "passed":
         errors.append("verdict_not_passed")
-    if _text(comment.get("author_association")) not in TRUSTED_AUTHOR_ASSOCIATIONS:
+    actor_matches = (
+        isinstance(user.get("id"), int)
+        and not isinstance(user.get("id"), bool)
+        and user.get("id") == actor.get("id")
+        and isinstance(user.get("login"), str)
+        and isinstance(actor.get("login"), str)
+        and user["login"].casefold() == actor["login"].casefold()
+    )
+    if _text(comment.get("author_association")) not in TRUSTED_AUTHOR_ASSOCIATIONS and not actor_matches:
         errors.append("author_association_untrusted")
     if not isinstance(user.get("login"), str) or not user.get("login"):
         errors.append("author_login_unreadable")
     return errors
 
 
-def _valid_host_action_attestation(issue: dict[str, Any], repository: str) -> bool:
-    return not _host_action_attestation_errors(issue, repository)
+def _valid_host_action_attestation(issue: dict[str, Any], repository: str, actor: dict[str, Any]) -> bool:
+    return not _host_action_attestation_errors(issue, repository, actor)
 
 
 def _validate_completed(
     issue: dict[str, Any],
     issues: dict[int, dict[str, Any]],
     repository: str,
+    actor: dict[str, Any],
     default_branch: str,
     reasons: list[dict[str, str]],
     visiting: set[int],
@@ -309,7 +318,7 @@ def _validate_completed(
         if _green_merged_pr(issue, default_branch):
             return
         if HOST_ONLY_DELIVERY_LABEL in _labels(issue):
-            attestation_errors = _host_action_attestation_errors(issue, repository)
+            attestation_errors = _host_action_attestation_errors(issue, repository, actor)
             if not attestation_errors:
                 return
             reasons.append(_reason("missing_delivery_attestation", locator, "host-only-delivery attestation is invalid: " + ", ".join(attestation_errors)))
@@ -330,7 +339,7 @@ def _validate_completed(
         if _type(child) != expected:
             reasons.append(_reason("invalid_native_child_type", f"issue:{child_number}", f"{kind} requires native {expected} children"))
             continue
-        _validate_completed(child, issues, repository, default_branch, reasons, next_visiting)
+        _validate_completed(child, issues, repository, actor, default_branch, reasons, next_visiting)
 
 
 def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[str, Any]:
@@ -340,6 +349,7 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
     subject = snapshot.get("subject")
     issue_rows = snapshot.get("issues")
     repository = snapshot.get("repository")
+    actor = snapshot.get("actor") if isinstance(snapshot.get("actor"), dict) else {}
     default_branch = snapshot.get("default_branch")
     issues = {
         row.get("number"): row
@@ -375,7 +385,7 @@ def evaluate_closure(snapshot: object, *, host_resolved: bool = False) -> dict[s
         return _payload(subject, "reopen_required", "Non-completion labels must use not planned semantics.", [_reason("non_completion_requires_not_planned", f"issue:{subject}", "non-completion labels cannot use completed semantics")], completed=False)
     reasons: list[dict[str, str]] = []
     _trusted_product_acceptance(snapshot, subject, labels, reasons, host_resolved=host_resolved)
-    _validate_completed(subject_issue, issues, repository, default_branch, reasons, set())
+    _validate_completed(subject_issue, issues, repository, actor, default_branch, reasons, set())
     if reasons:
         return _payload(subject, "reopen_required", "Completed FR/Phase closure is missing required host facts.", reasons, completed=False)
     return _payload(subject, "allow_completed_close", "Trusted product acceptance, native children, dependencies, merged delivery, and check evidence permit completed closure.", [], completed=True)

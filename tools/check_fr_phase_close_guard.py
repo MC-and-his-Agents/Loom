@@ -62,6 +62,7 @@ def snapshot(subject: int, issues: list[dict[str, object]], *, product_acceptanc
     return {
         "subject": subject,
         "repository": "o/r",
+        "actor": {"id": 1, "login": "maintainer"},
         "default_branch": "main",
         "issues": issues,
         "product_acceptance": acceptance(subject) if product_acceptance is None else product_acceptance,
@@ -88,12 +89,12 @@ def main() -> int:
     if valid.get("verdict") != "allow_completed_close" or valid.get("completed") is not True:
         raise AssertionError(f"complete native tree should close: {valid}")
     host_marker = '<!-- loom:host-action-attestation {"schema_version":"loom-host-action-attestation/v1","action_locator":"github://o/r/host-action/branch-protection/main","observed_at":"2026-07-11T00:02:00Z","verdict":"passed"} -->'
-    host_comment = {"body": host_marker, "created_at": "2026-07-11T00:02:00Z", "author_association": "MEMBER", "user": {"id": 1, "login": "maintainer"}}
+    host_comment = {"body": host_marker, "created_at": "2026-07-11T00:02:00Z", "author_association": "NONE", "user": {"id": 1, "login": "maintainer"}}
     host_only = issue(3, "work_item", labels=["host-only-delivery"], comments=[host_comment])
     if module.evaluate_closure(snapshot(1, [phase, fr, host_only]), host_resolved=True).get("verdict") != "allow_completed_close":
         raise AssertionError("authenticated host-only delivery attestation must replace a fabricated implementation PR")
     for invalid_comment in (
-        {**host_comment, "author_association": "NONE"},
+        {**host_comment, "author_association": "NONE", "user": {"id": 2, "login": "outsider"}},
         {**host_comment, "body": host_marker.replace("github://o/r/", "github://other/repo/")},
         {**host_comment, "body": host_marker + "\n" + host_marker},
     ):
@@ -181,7 +182,7 @@ def main() -> int:
         "work_item",
         merged_prs=[{**pr, "review_decision": None}],
     )
-    raw_snapshot = {"subject": 1, "repository": "o/r", "default_branch": "main", "host_readable": True, "issues": [locator_phase, fr, locator_work_item]}
+    raw_snapshot = {"subject": 1, "repository": "o/r", "actor": {"id": 1, "login": "maintainer"}, "default_branch": "main", "host_readable": True, "issues": [locator_phase, fr, locator_work_item]}
     def fake_acceptance(root, locator, artifact_id):
         if root != ROOT or locator != "o/r/issue/1" or artifact_id != 17:
             raise AssertionError("closure acceptance locator drifted")
@@ -190,7 +191,7 @@ def main() -> int:
     if resolved.get("host_facts_resolved") is not True or module.evaluate_closure(resolved, host_resolved=True).get("verdict") != "allow_completed_close":
         raise AssertionError(f"host-resolved product acceptance and merged delivery must close: {resolved}")
     ambiguous_phase = issue(1, "phase", children=[2], comment_bodies=["<!-- loom:product-acceptance-artifact id:17 -->", "<!-- loom:product-acceptance-artifact id:18 -->"])
-    ambiguous_snapshot = {"subject": 1, "repository": "o/r", "default_branch": "main", "host_readable": True, "issues": [ambiguous_phase, fr, work_item]}
+    ambiguous_snapshot = {"subject": 1, "repository": "o/r", "actor": {"id": 1, "login": "maintainer"}, "default_branch": "main", "host_readable": True, "issues": [ambiguous_phase, fr, work_item]}
     resolved_ambiguous = module.resolve_host_facts(ambiguous_snapshot, ROOT, acceptance_resolver=fake_acceptance)
     if module.evaluate_closure(resolved_ambiguous).get("verdict") != "reopen_required":
         raise AssertionError("ambiguous artifact locators must fail closed")

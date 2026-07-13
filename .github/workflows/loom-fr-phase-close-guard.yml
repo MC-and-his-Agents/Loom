@@ -137,6 +137,7 @@ jobs:
             const snapshot = {
               subject: subjectNumber,
               repository: `${owner}/${repo}`,
+              actor: { id: context.payload.sender?.id, login: context.payload.sender?.login },
               event_closed_at: context.payload.issue?.closed_at || null,
               default_branch: null,
               host_readable: true,
