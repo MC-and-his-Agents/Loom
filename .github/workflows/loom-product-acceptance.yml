@@ -4,16 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       story_issue:
-        description: 'v0.31 FR receiving this product acceptance verdict.'
+        description: 'v0.32 FR receiving this product acceptance verdict.'
         required: true
         type: choice
         options:
-          - '2100'
-          - '2101'
+          - '2114'
+          - '2115'
+          - '2116'
+          - '2117'
 
 permissions:
   actions: read
   contents: read
+  issues: write
 
 concurrency:
   group: loom-product-acceptance-${{ inputs.story_issue }}
@@ -55,41 +58,99 @@ jobs:
             });
             core.setOutput("verifier_id", String(verifier.data.id));
 
-      - name: Run v0.31 product acceptance matrix
-        env:
-          PYTHONDONTWRITEBYTECODE: '1'
-        run: |
-          python3 tools/check_authority_contract.py
-          python3 tools/check_light_profile.py
-          python3 tools/check_host_attestation.py
-          python3 tools/check_product_acceptance_adapter.py
-          python3 tools/check_delivery_gate.py
-          python3 tools/check_cli_contract.py
-          python3 tools/skills_surface.py check
-          python3 tools/check_release_surface.py
-          python3 tools/check_npm_package.py
-          npm run test:package
+      - name: Verify current-head Codex E2E attestation
+        if: ${{ inputs.story_issue == '2116' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const marker = /^<!-- loom:codex-e2e-attestation (\{.*\}) -->$/m;
+            const trustedPermissions = new Set(["admin", "maintain", "write"]);
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 2116,
+              per_page: 100,
+            });
+            const matching = [];
+            for (const comment of comments) {
+              const match = String(comment.body || "").match(marker);
+              if (!match) continue;
+              let payload;
+              try {
+                payload = JSON.parse(match[1]);
+              } catch (error) {
+                continue;
+              }
+              if (payload?.source_head === context.sha) matching.push({ comment, payload });
+            }
+            if (matching.length !== 1) {
+              core.setFailed(`issue:2116 requires exactly one current-head Codex E2E attestation; found ${matching.length}`);
+              return;
+            }
+            const { comment, payload } = matching[0];
+            if (comment.user?.type !== "User" || typeof comment.user?.login !== "string") {
+              core.setFailed("Codex E2E attestation must be authored by a trusted repository maintainer");
+              return;
+            }
+            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: comment.user.login,
+            });
+            if (!trustedPermissions.has(permission.permission) || permission.user?.id !== comment.user.id || permission.user?.login !== comment.user.login) {
+              core.setFailed("Codex E2E attestation author does not have authenticated repository write permission");
+              return;
+            }
+            const manifest = JSON.parse(fs.readFileSync("plugins/loom/.codex-plugin/plugin.json", "utf8"));
+            const canonicalHash = manifest?.["x-loom"]?.plugin_payload_hash;
+            const observedAt = Date.parse(String(payload?.observed_at || ""));
+            const expectedSkills = Array.isArray(payload?.loaded_skills) &&
+              payload.loaded_skills.length === 2 &&
+              payload.loaded_skills.includes("loom-init") &&
+              payload.loaded_skills.includes("loom-review");
+            const fixture = payload?.clean_fixture || {};
+            const valid =
+              payload?.schema_version === "loom-codex-e2e-attestation/v1" &&
+              payload?.source_head === context.sha &&
+              payload?.reviewed_head === context.sha &&
+              /^019[0-9a-f-]{33}$/i.test(String(payload?.codex_thread_id || "")) &&
+              payload?.candidate_cli_authority === "source-package" &&
+              payload?.plugin_loaded === true &&
+              typeof payload?.plugin_version === "string" &&
+              /^[0-9A-Za-z.+-]+$/.test(payload.plugin_version) &&
+              /^[0-9a-f]{64}$/.test(String(payload?.plugin_payload_hash || "")) &&
+              payload?.canonical_plugin_payload_hash === canonicalHash &&
+              expectedSkills &&
+              payload?.public_command_count === 30 &&
+              payload?.hidden_compatibility_command_count === 0 &&
+              fixture.detect === "pass" && fixture.doctor === "pass" && fixture.verify === "pass" &&
+              payload?.semantic_review_verdict === "passed" &&
+              payload?.mutates === false &&
+              Number.isFinite(observedAt) && observedAt <= Date.now() && Date.now() - observedAt <= 86400000;
+            if (!valid) {
+              core.setFailed("current-head Codex E2E attestation is stale, incomplete, or did not pass the candidate product surface");
+              return;
+            }
+            core.notice(`consumed Codex E2E attestation comment ${comment.id} for ${context.sha}`);
 
-      - name: Read back published v0.31 release
-        if: ${{ inputs.story_issue == '2101' }}
+      - name: Run v0.32 product acceptance matrix
         env:
-          GH_TOKEN: ${{ github.token }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          python3 tools/loom.py release readback \
-            --target . \
-            --version v0.31.0 \
-            --commit "$GITHUB_SHA" \
-            --repo "$GITHUB_REPOSITORY" \
-            --release-judgment release_required \
-            --json > "$RUNNER_TEMP/loom-v0.31-release-readback.json"
+          python3 src/skills/shared/scripts/loom_check.py --profile source --source-surface source-self-fixture .
+          python3 src/skills/shared/scripts/loom_check.py --profile source --source-surface root-self-adoption .
+          python3 test/trusted_candidate_validation_test.py
+          python3 tools/check_product_acceptance_adapter.py
+          python3 tools/check_npm_package.py --surface aggregate
+          python3 tools/check_release_surface.py --surface installed-global-cli-smoke
 
       - name: Write host-bound acceptance record
         env:
           STORY: MC-and-his-Agents/Loom/issue/${{ inputs.story_issue }}
-          SCENARIO: v0.31-product-acceptance-${{ inputs.story_issue }}
-          EVIDENCE_CLASS: ${{ inputs.story_issue == '2101' && 'live_readonly' || 'contract_test' }}
-          PROVIDER_PROFILE: loom-v0.31-product-acceptance
+          SCENARIO: v0.32-product-acceptance-${{ inputs.story_issue }}
+          EVIDENCE_CLASS: process_runtime
+          PROVIDER_PROFILE: loom-v0.32-product-acceptance
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
@@ -108,15 +169,86 @@ jobs:
             --verifier-id "$VERIFIER_ID"
             --output acceptance.json
           )
-          if [ "$EVIDENCE_CLASS" = "live_readonly" ]; then
-            writer_args+=(--release-readback "$RUNNER_TEMP/loom-v0.31-release-readback.json")
-          fi
           python3 tools/write_product_acceptance.py "${writer_args[@]}"
 
       - name: Upload product acceptance
+        id: acceptance_upload
         uses: actions/upload-artifact@v4
         with:
           name: loom-product-acceptance
           path: acceptance.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish issue artifact locator
+        uses: actions/github-script@v7
+        env:
+          STORY_ISSUE: ${{ inputs.story_issue }}
+          ARTIFACT_ID: ${{ steps.acceptance_upload.outputs.artifact-id }}
+          HEAD_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const issueNumber = Number(process.env.STORY_ISSUE);
+            const artifactId = Number(process.env.ARTIFACT_ID);
+            if (!Number.isInteger(issueNumber) || !Number.isInteger(artifactId) || artifactId <= 0) {
+              core.setFailed("acceptance upload did not return a valid issue/artifact binding");
+              return;
+            }
+            const { data: artifact } = await github.rest.actions.getArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: artifactId,
+            });
+            if (artifact.id !== artifactId || artifact.name !== "loom-product-acceptance" || artifact.expired || artifact.workflow_run?.id !== context.runId) {
+              core.setFailed("uploaded acceptance artifact readback does not match this workflow run");
+              return;
+            }
+            const marker = `<!-- loom:product-acceptance-artifact id:${artifactId} -->`;
+            const body = `${marker}\n\nv0.32 Stage A 产品验收已绑定 GitHub host artifact。\n\n- Head: \`${process.env.HEAD_SHA}\`\n- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const markerPattern = /<!--\s*loom:product-acceptance-artifact\s+id:\d+\s*-->/i;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            const markerComments = comments.filter((comment) =>
+              comment.user?.login === "github-actions[bot]" && markerPattern.test(String(comment.body || ""))
+            );
+            if (markerComments.length > 1) {
+              core.setFailed(`issue:${issueNumber} has ambiguous workflow-owned product acceptance locators`);
+              return;
+            }
+            let written;
+            if (markerComments.length === 1) {
+              ({ data: written } = await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: markerComments[0].id,
+                body,
+              }));
+            } else {
+              ({ data: written } = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body,
+              }));
+            }
+            const { data: readback } = await github.rest.issues.getComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: written.id,
+            });
+            const finalComments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            const finalMarkers = finalComments.filter((comment) =>
+              comment.user?.login === "github-actions[bot]" && markerPattern.test(String(comment.body || ""))
+            );
+            if (readback.user?.login !== "github-actions[bot]" || readback.body !== body || finalMarkers.length !== 1 || finalMarkers[0].id !== readback.id) {
+              core.setFailed(`issue:${issueNumber} product acceptance locator readback is incomplete or ambiguous`);
+            }

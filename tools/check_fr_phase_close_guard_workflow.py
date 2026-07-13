@@ -55,6 +55,7 @@ def main() -> int:
         'current.state_reason !== "completed"',
         "changed after the closure snapshot",
         "comment_bodies",
+        'comment.user?.login === "github-actions[bot]"',
         "author_association",
         "created_at",
         "markerComments",
