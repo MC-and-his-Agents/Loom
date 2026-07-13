@@ -21,10 +21,12 @@ on:
       - 'tools/check_cli_contract.py'
       - 'tools/check_*.py'
       - 'tools/fixtures/**'
+      - 'test/**'
       - 'tools/check_npm_package.py'
       - 'tools/check_release_surface.py'
       - 'tools/build_distribution.py'
       - 'tools/version_surface_check.py'
+      - 'test/**'
       - 'src/skills/**'
       - 'skills/**'
       - 'plugins/loom/skills/**'
@@ -103,10 +105,6 @@ jobs:
       - name: Check version surfaces
         run: python3 tools/version_surface_check.py
 
-      - name: Check CLI contract
-        if: ${{ github.event_name != 'pull_request' }}
-        run: python3 tools/check_cli_contract.py
-
       - name: Check host-native lifecycle contracts
         if: ${{ github.event_name == 'pull_request' }}
         env:
@@ -116,8 +114,8 @@ jobs:
       - name: Check npm package contract
         run: python3 tools/check_npm_package.py
 
-      - name: Dry-run npm package payload
-        run: npm pack --dry-run --json --ignore-scripts
+      - name: Smoke-test the packed public CLI
+        run: npm run test:package
 
       - name: Resolve CLI release state
         id: state

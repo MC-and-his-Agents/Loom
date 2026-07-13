@@ -1,94 +1,27 @@
 ---
 name: loom-build
-description: 负责 bounded implementation/build 执行轮。Use when Codex needs to execute or integrate a Loom Work Item after resume and before pre-review, including subagent-driven execution mode.
+description: Execute a bounded Work Item after host-native admission and before pre-review.
 ---
 
 # Loom Build
 
-`loom-build` 承接 resume 之后、pre-review 之前的执行/build 场景。
+Use for implementation of one bounded, typed Work Item in its formal
+issue-scoped worktree.
 
-它不启动 worker daemon，也不把 subagent 输出当作新真相源。所有委派输出只有在主执行者集成到实现、验证证据、recovery/status 和后续 review 输入后，才可作为 build readiness 证据。
+```bash
+loom build \
+  --target <repo> \
+  --item <owner/repo/work_item/id> \
+  --issue <id> \
+  --branch <issue-scoped-branch> \
+  --json
+```
 
-## 1. 使用时机
+Build is valid before a PR exists. It consumes the explicit GitHub Work Item,
+branch, worktree, and repository-native validation entrypoints. It does not
+require a diff, empty commit, empty PR, formal-suite carrier, current pointer,
+status/progress file, review record, shadow, or closeout carrier.
 
-当任务满足以下任一条件时，进入 `loom-build`：
-
-- 明确要求实现当前 Work Item
-- 明确要求执行 build / implementation round
-- 明确要求使用 subagent-driven execution mode
-- 需要把委派输出集成回 Loom carriers 后再进入 review
-- 需要判断 unintegrated subagent output 或 repeated blocker 是否阻断 readiness
-
-如果任务只是恢复上下文，应回到 `loom-resume`。如果任务已经要求 review 前检查，应进入 `loom-pre-review`。
-
-## 2. 固定入口
-
-统一入口固定为：
-
-- `loom build --target <repo> [--item <id>] [--build-evidence <path>] --json`
-
-该入口必须消费全局 `loom suite validate --json` 与
-`loom suite carrier validate --json` 输出作为 build readiness 的机器输入。
-缺少可读的全局 CLI agent-safe JSON 时 fail closed；不得在 skill runtime 中重新实现 suite path、
-scenario mapping 或 task-carrier 判定。
-
-默认输出只传递 agent-safe summary / artifact locator。完整诊断必须由执行者显式加 `--full-output`，且不得内联进线程或 handoff。
-
-## 3. Subagent-Driven Ownership Contract
-
-subagent-driven mode 必须先声明以下字段：
-
-- `task_goal`
-- `context_locators`
-- `read_scope`
-- `write_ownership`
-- `non_goals`
-- `validation_expectation`
-- `output_format`
-- `integration_target`
-
-主执行者仍然负责：
-
-- 将委派输出集成到实现
-- 记录验证证据
-- 更新 recovery/status carriers
-- 把已集成证据输入后续 review
-
-## 4. 阻断语义
-
-以下情况必须阻断 build readiness：
-
-- subagent output 只存在于 session 输出中，尚未集成
-- 多个委派声明重叠 `write_ownership`
-- 多轮或多个委派报告同一 blocker signature
-- 缺少 Work Item、spec、plan、recovery、validation baseline、workspace 或 ownership constraints
-- 选择 full path 但 suite-index、必需 suite 工件、scenario-to-validation mapping、
-  task carrier profile locator、provenance 或当前 build gate 所需 evidence 缺失
-- 选择 minimal path 但 full path 附加工件缺口没有 `not_applicable` rationale、
-  consumer boundary、recheck condition 或替代验证入口
-- 把 `deferred`、source/generated sync 待办或 CLI surface 待办当作 build readiness
-  的 completed truth
-
-## 5. 完成标准
-
-只有当 `flow build` 返回 pass，且 build evidence 证明所有委派输出已集成、无 ownership overlap、无 repeated blocker 时，才允许继续进入 pre-review / review。
-
-Build readiness 只消费全局 `loom suite validate` / `loom suite carrier validate` 已输出的
-full/minimal suite path 决策与 carrier readiness，不重新定义 suite 工件、
-evidence-map、consistency-analysis 或 gate-chain。full path 必须由 agent-safe CLI JSON 或其 artifact locator 证明
-必需工件可读且 fresh；minimal path 必须保留合法 `not_applicable` rationale，并把
-recheck condition 传递给后续 pre-review / review。
-
-输入信号与输出合同见：
-
-- [references/input-signals.md](./references/input-signals.md)
-- [references/output-contract.md](./references/output-contract.md)
-
-Build readiness 消费的共享合同见：
-
-- [spec-suite.md](../shared/references/templates/spec-suite.md)
-- [execution-breakdown.md](../shared/references/templates/execution-breakdown.md)
-- [task-carrier-contract.md](../shared/references/harness/task-carrier-contract.md)
-- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)
-- [evidence-map.md](../shared/references/templates/evidence-map.md)
-- [consistency-analysis.md](../shared/references/templates/consistency-analysis.md)
+Subagent output is evidence only after the primary agent integrates and
+verifies it. Finish when the bounded implementation and targeted validation
+are stable enough to create a real PR and run `loom pre-review`.

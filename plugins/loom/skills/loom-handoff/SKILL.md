@@ -1,28 +1,18 @@
 ---
 name: loom-handoff
-description: 负责交接当前事项。Use when Codex needs to prepare a handoff package before ending the current execution round.
+description: Prepare a session handoff from public derived state without repository mutations.
 ---
 
 # Loom Handoff
 
-这个 skill 承接 handoff 场景。
+Handoff is a conversation artifact, not a CLI command or repository carrier.
+Read `loom status` and `loom workspace check`, then summarize:
 
-优先入口：
+- objective and bounded scope;
+- typed Work Item, branch, formal worktree, PR, and current head;
+- completed changes and targeted validation;
+- current-head review/gate locators when they exist;
+- one next action and any real blocker.
 
-- `loom handoff --target <repo> [--item <id>] --json`
-
-执行要求：
-
-- 只读取现有事实链、状态检查和现场定位结果
-- 只输出 handoff 所需的最小回写清单与载体定位
-- 只传递 agent-safe summary、事实载体 locator 和 artifact locator；不得内联完整报告、完整状态表、完整命令 JSON、长 stdout 或旧线程完整 turns
-- 不直接写 recovery entry、status control plane 或其他 authored 载体
-
-输入信号与输出合同见：
-
-- [references/input-signals.md](./references/input-signals.md)
-- [references/output-contract.md](./references/output-contract.md)
-
-handoff 对 lane 输出与 shared carrier 串行写的边界，消费的共享合同见：
-
-- [lane-orchestration.md](../shared/references/harness/lane-orchestration.md)
+Do not write current, recovery, progress, review, shadow, or closeout files.
+The receiving agent must read back live GitHub/worktree facts before continuing.

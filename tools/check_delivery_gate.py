@@ -1329,18 +1329,19 @@ def check_workflow_event_matrix() -> None:
     if "\n  push:\n" in delivery or "DELIVERY_GATE_ENFORCEMENT: ${{ inputs.loom_ref != '' && inputs.enforcement || 'enforce' }}" not in delivery:
         raise AssertionError("delivery gate must enforce direct PR/merge-group events without a duplicate push run")
     release = (ROOT / ".github" / "workflows" / "loom-cli-release.yml").read_text(encoding="utf-8")
-    for protected_path in ("'Makefile'", "'.github/actions/**'", "'.github/workflows/**'", "'tools/check_*.py'", "'tools/fixtures/**'", "'src/skills/**'", "'skills/**'", "'plugins/loom/skills/**'"):
+    for protected_path in ("'Makefile'", "'.github/actions/**'", "'.github/workflows/**'", "'tools/check_*.py'", "'tools/fixtures/**'", "'test/**'", "'src/skills/**'", "'skills/**'", "'plugins/loom/skills/**'"):
         if protected_path not in release:
             raise AssertionError(f"release judgment PR fallback does not cover host-native aggregate input: {protected_path}")
-    cli_step = release[release.index("      - name: Check CLI contract") : release.index("      - name: Check npm package contract")]
+    cli_step = release[release.index("      - name: Check host-native lifecycle contracts") : release.index("      - name: Check npm package contract")]
     if (
-        "if: ${{ github.event_name != 'pull_request' }}" not in cli_step
-        or "name: Check host-native lifecycle contracts" not in cli_step
-        or "if: ${{ github.event_name == 'pull_request' }}" not in cli_step
+        "if: ${{ github.event_name == 'pull_request' }}" not in cli_step
         or "PYTHONDONTWRITEBYTECODE: '1'" not in cli_step
         or "run: make loom-check" not in cli_step
+        or "check_cli_contract.py --surface aggregate" in cli_step
     ):
         raise AssertionError("feature pull requests must not repeat the full CLI aggregate in release judgment")
+    if "python3 tools/check_cli_contract.py --surface aggregate" not in text:
+        raise AssertionError("main push must own the single complete public CLI aggregate")
     for workflow in (ROOT / ".github" / "workflows").glob("*.yml"):
         workflow_text = workflow.read_text(encoding="utf-8")
         if "\n  push:\n" in workflow_text and "\n    branches:\n      - main\n" not in workflow_text:

@@ -45,24 +45,24 @@ def package_version() -> str:
     return observed
 
 
-def ignored(path: Path) -> bool:
-    relative = path.relative_to(PLUGIN_PAYLOAD_ROOT)
+def ignored(path: Path, payload_root: Path = PLUGIN_PAYLOAD_ROOT) -> bool:
+    relative = path.relative_to(payload_root)
     return any(part in IGNORE_NAMES for part in relative.parts) or path.suffix in IGNORE_SUFFIXES
 
 
-def payload_files() -> list[Path]:
+def payload_files(payload_root: Path = PLUGIN_PAYLOAD_ROOT) -> list[Path]:
     return sorted(
-        (path for path in PLUGIN_PAYLOAD_ROOT.rglob("*") if path.is_file() and not ignored(path)),
-        key=lambda path: path.relative_to(PLUGIN_PAYLOAD_ROOT).as_posix(),
+        (path for path in payload_root.rglob("*") if path.is_file() and not ignored(path, payload_root)),
+        key=lambda path: path.relative_to(payload_root).as_posix(),
     )
 
 
-def compute_hash() -> dict[str, Any]:
+def compute_hash(payload_root: Path = PLUGIN_PAYLOAD_ROOT) -> dict[str, Any]:
     hasher = hashlib.sha256()
     normalized: list[str] = []
-    files = payload_files()
+    files = payload_files(payload_root)
     for path in files:
-        relative = path.relative_to(PLUGIN_PAYLOAD_ROOT).as_posix()
+        relative = path.relative_to(payload_root).as_posix()
         content = path.read_bytes()
         if relative == ".codex-plugin/plugin.json":
             content, substitutions = HASH_FIELD_RE.subn(rb'\1""', content)
@@ -84,11 +84,7 @@ def compute_generated_hash() -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="loom-plugin-stamp-") as tmp:
         output = Path(tmp) / "distribution"
         build_distribution.build(output)
-        build_distribution.materialize(output, "package")
-        try:
-            return compute_hash()
-        finally:
-            build_distribution.clean_materialized("package")
+        return compute_hash(output / "plugins" / "loom")
 
 
 def expected_status(source_git_sha: str) -> str:

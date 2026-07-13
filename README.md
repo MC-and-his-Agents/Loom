@@ -75,8 +75,9 @@ A typical Loom task looks like this:
 7. After merge, the same ship run reads back the host state and completes the
    shortest legal closeout path.
 
-Under the hood, work moves through a gate chain: spec gate, build gate, review
-gate, and merge gate.
+Under the hood, work moves from host-native admission through targeted build
+validation, current-head review attestation, the hosted delivery gate, and
+controlled merge.
 
 The goal is not to make the agent type faster. The goal is to make the work
 harder to lose, misread, or merge prematurely.
@@ -91,7 +92,7 @@ then complete host-only closeout without opening a second closeout PR.
 ```bash
 loom ship \
   --target . \
-  --item WI-123 \
+  --item owner/repository/work_item/123 \
   --issue 123 \
   --pr 456 \
   --branch work/123-example \
@@ -102,13 +103,14 @@ loom ship \
 
 The wrapper contract stays narrow and ordered:
 
-- dry-run reads `pr-metadata preflight -> pr gate -> controlled merge check ->
-  validation profile -> closeout policy`, then reports the first blocker
+- dry-run reads `lifecycle admission -> host binding -> review attestation ->
+  hosted delivery gate -> controlled merge check -> validation profile ->
+  closeout policy`, then reports the first blocker
   summary, `missing_inputs`, and `next_action` without mutating host or repo
   state;
 - `--validation-profile auto` uses changed paths to pick the smallest useful
-  profile and reports the matching `loom_check --source-surface` command;
-  explicit `--validation-profile full` still forces the full path;
+  repository-native validation set; explicit `--validation-profile full`
+  still forces the one aggregate run;
 - `--apply` consumes the semantic review through a GitHub host attestation,
   merges only after current host facts pass, then records host reconciliation
   and closeout attestation; it never refreshes repo carriers or blocking shadow
@@ -125,165 +127,86 @@ The wrapper contract stays narrow and ordered:
 
 Ordinary work should finish in that one command. Reinforced governance increases
 review and verification strength; it does not implicitly restore repo review,
-current, status, shadow, or closeout carriers. Retired carrier commands are
-available only through the explicit `reinforced-carrier-compat/v1` policy with
-an RFC3339 expiry no more than 90 days in the future.
+current, status, shadow, or closeout carriers. Retired carrier commands are removed
+from the v0.31 runtime; reinforced work raises assurance through the public host
+path rather than restoring a legacy carrier backend.
 
 ## Try It In A Repository
 
-The quickest way to understand Loom is to enable it in a real repository and ask
-an agent to start from `loom-init`.
+Loom v0.31 exposes one default product surface: 30 public commands owned by 12
+protocol types. Retired commands are removed; they cannot be re-enabled by a
+profile or compatibility flag.
 
-The install flow has three parts:
+Install the CLI, enable metadata-only repository adoption, and verify it:
 
-1. Install the global Loom CLI.
-2. Install and register the Codex plugin.
-3. Adopt the target repository with metadata-only Loom state.
-
-These layers stay separate even when the Loom source repository is used as a
-Codex marketplace source. The marketplace can make the `loom` Codex plugin
-available to the workstation, but it does not install or upgrade the global
-`loom` CLI, and it does not adopt or migrate any target repository. CLI updates
-still come from npm; repository adoption and repository runtime upgrades still
-run per repository through the Loom CLI and their own PR/closeout flow.
-
-Copy this self-contained prompt to your coding agent:
-
-```text
-Enable Loom in this target repository. Do not assume this repository already
-knows Loom.
-
-Loom has three layers:
-1. Loom CLI: the global `loom` command on this machine.
-2. Codex plugin: the user-level Codex interaction surface installed by the CLI.
-3. Repository adoption: metadata written into the target repository so Loom can
-   manage work items there.
-
-First install the CLI:
-node --version
-npm --version
+```bash
 npm install -g @mc-and-his-agents/loom
 loom version --json
-
-Then install and register the Codex plugin:
-loom host install --host codex --scope user --apply --json
-loom host register --host codex --scope user --apply --json
-
-Then go to the target repository root and enable Loom:
 cd /path/to/target-repository
 loom install --target . --apply --json
-
-Validate the result:
 loom installed-state validate --target . --json
-loom host verify --host codex --target . --json
-loom skills check --target . --json
+loom verify --target . --json
 loom doctor --target . --json
-
-Use metadata-only repository adoption. Do not clone the Loom repository into
-this project. Do not manually create `.loom/bin`, `.agents/skills`, or root
-`skills`. If any command fails, stop, report the failing command, then run:
-loom repair plan --target . --json
 ```
 
-`loom install` and `loom upgrade` manage only the target repository's
-metadata-only adoption state. To inspect or refresh the local Codex plugin
-provider, use `loom host doctor|install|register --host codex --scope user`.
-If the Loom source repository is registered as a Codex marketplace source, use
-Codex marketplace install/update for the plugin surface only; still use
-`npm install -g @mc-and-his-agents/loom` for the CLI and `loom install` /
-`loom runtime-upgrade ...` for each repository.
+Install or update the Codex plugin through the Codex marketplace or plugin host.
+That workstation action is separate from repository adoption and is not
+represented by a Loom repository command.
 
-For an already adopted single repository that pins Loom in a GitHub workflow,
-use the runtime upgrade maintenance flow instead of hand-assembling the fact
-chain:
+Use `loom upgrade --target . --json` for a read-only v0.30→v0.31 plan. Apply
+only after the reported actions are understood:
 
 ```bash
-loom -v
-loom runtime-upgrade status --target . --json
-loom runtime-upgrade prepare --target . --item <maintenance-work-item> --to <version> --apply --json
-loom runtime-upgrade pr --target . --item <maintenance-work-item> --to <version> --create --json
-loom runtime-upgrade check --target . --item <maintenance-work-item> --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json
-loom runtime-upgrade closeout --target . --item <maintenance-work-item> --issue <maintenance-issue> --pr <merged-pr> --sync --create-pr --json
+loom upgrade --target . --json
+loom upgrade --target . --apply --json
+loom verify --target . --json
 ```
 
-This flow is workflow-only maintenance scaffolding. It still requires a real
-maintenance Work Item, host-attested semantic review, hosted checks, head
-binding, and PR gate. After merge it performs host readback and local cleanup;
-it does not create a carrier-closeout PR.
+The ordinary lifecycle is host-native and does not require committed current,
+status, progress, review, shadow, or closeout carriers:
 
-After a release is published, verify the exact tag, package and GitHub Release:
-
-```bash
-loom release readback --target . --version <version> --commit <release-merge-commit> --json
-```
-
-Release readback is terminal for release aftercare. It does not write progress,
-status, shadow, current, review, or closeout carriers.
-
-For ordinary post-merge closeout, use the common runner instead of hand-chaining
-host reconciliation, carrier sync, status writeback, shadow refresh, and final
-checks:
-
-```bash
-loom closeout sync --target . --item <work-item> --issue <issue> --pr <merged-pr> --branch <target-branch> --attestation-artifact-input /path/to/attestation-artifact.json --apply --json
-```
-
-There is no later closeout carrier PR head in the default lifecycle.
-
-`runtime-upgrade status|prepare|check` also reports the local Codex
-plugin/cache freshness and points to `loom host doctor --host codex --scope user
---json` plus `loom host install|register --host codex --scope user --apply
---json` when that workstation surface is stale. That is diagnostic guidance,
-not a repository PR mutation. Plugin/cache stale state is advisory for the repo
-PR unless the PR explicitly claims workstation Codex runtime/plugin readiness.
-
-Start working from `loom-init` in a new Codex session. Restart Codex Desktop if
-it had already loaded the plugin list.
-
-For day-to-day delivery after a PR exists, ask the agent to use `loom ship`
-instead of manually chaining merge-ready, reconciliation, carrier closeout, and
-closeout checks.
-
-For command discovery, start from the task path instead of scanning every
-command:
-
-| Task | First command |
+| Task | Public command |
 | --- | --- |
-| Resume work | `loom resume --target . --item <WI> --json` |
-| Prepare a PR carrier set | `loom pr-intent prepare --intent <intent> --target . --item <WI> --apply --json` |
-| Check PR readiness | `loom pr-intent check --intent <intent> --target . --item <WI> --pr <pr> --head-sha <sha> --json` |
-| Review | `loom review run --target . --item <WI> --json`, then `loom attestation readback ...` |
-| Merge-ready | `loom merge-ready --target . --item <WI> --json` |
-| Post-merge closeout | `loom closeout sync --target . --item <WI> --issue <issue> --pr <merged-pr> --branch <branch> --attestation-artifact-input <file> --apply --json` |
-| Release readback | `loom release readback --target . --version <version> --commit <sha> --json` |
-| Release closeout | `loom release readback --target . --version <version> --commit <sha> --json` |
-| Runtime upgrade | `loom runtime-upgrade status --target . --json` |
-| Codex plugin/cache | `loom host doctor --host codex --scope user --json` |
+| Inspect repository/runtime | `loom detect --target . --json`, `loom doctor --target . --json` |
+| Read derived state | `loom status --target . --json` |
+| Plan or admit an issue | `loom route --target . --issue <issue> --json` |
+| Start implementation before a PR exists | `loom build --target . --issue <work-item> --branch <branch> --json` |
+| Enter review | `loom pre-review ...`, then `loom review ...` |
+| Read host review proof | `loom attestation readback ...` |
+| Check merge readiness | `loom merge-ready ...` or `loom merge check <pr> ...` |
+| Deliver and close out | `loom ship ...` or `loom merge run <pr> --apply --closeout-run ...` |
+| Read host closeout proof | `loom attestation closeout ...` |
+| Retire the local worktree | `loom workspace retire --target . --json` |
+| Verify a release | `loom release readback --target . --version <version> --commit <sha> --json` |
 
-Prepare/apply commands report local readiness and the next command before a
-hosted gate. Hosted gates still remain the final confirmation.
+A build with an explicit Work Item may run before any PR exists. Pre-review,
+review, merge-ready, ship, and closeout consume PR and GitHub host facts when
+those facts become applicable. They never require an empty commit or empty PR.
 
-On a second development machine for an already adopted repository, install the
-global CLI and register the Codex user-level plugin, then verify the repository:
+For ordinary delivery after a real PR exists:
 
 ```bash
-npm install -g @mc-and-his-agents/loom
-loom host install --host codex --scope user --apply --json
-loom host register --host codex --scope user --apply --json
-loom installed-state validate --target . --json
-loom host verify --host codex --target . --json
-loom skills check --target . --json
-loom doctor --target . --json
+loom ship \
+  --target . \
+  --item <typed-work-item> \
+  --issue <issue> \
+  --pr <pr> \
+  --branch <branch> \
+  --attestation-artifact-input /path/to/attestation.json \
+  --json
 ```
 
-Target repository upgrade commands do not refresh the Codex plugin cache. Use
-`loom host doctor --host codex --scope user --json` first, then
-`loom host install --host codex --scope user --apply --json` and
-`loom host register --host codex --scope user --apply --json` when the local
-workstation plugin provider needs repair or refresh. A Codex marketplace
-upgrade can replace the plugin refresh step when the workstation installed the
-plugin through the Loom marketplace source, but it still does not upgrade the
-global CLI or mutate repository adoption state.
+The wrapper contract stays narrow and ordered: lifecycle admission -> host
+bindings -> review attestation -> PR gate -> controlled merge -> validation
+profile -> host-only closeout policy. `--validation-profile auto` chooses the
+smallest relevant validation set. Short wrapper diagnostics expose one primary
+cause; full detail is available through the returned artifact locator.
+
+Release readback is terminal for release aftercare. It creates no current-retire
+or closeout-only PR and writes no repository execution carrier.
+
+Start a Codex task from the `loom-init` scenario skill. Scenario skill names are
+interaction entrypoints, not additional CLI commands.
 
 ## Why Loom Works
 
@@ -291,18 +214,19 @@ Loom separates the parts of agent execution that often get mixed together:
 governance rules, execution harness, evidence, structured artifacts, and
 executable skills.
 
-That separation matters because a PR can look done while the Work Item, review
-record, validation evidence, or closeout state is still stale. Loom keeps those
-channels separate, then uses the CLI to check whether they agree.
+That separation matters because a PR can look done while the Work Item, host
+review attestation, validation evidence, or closeout readback is still stale.
+Loom keeps those channels separate, then uses the CLI to check whether they agree.
 
 At the repository boundary, Loom keeps only metadata. The global `loom` command
-installs the Codex user-level plugin, records repository adoption, reads the
-fact chain, and runs verification. Agents start from `loom-init`, then move
+records metadata-only repository adoption and derives lifecycle state from
+explicit inputs, the worktree, and GitHub host facts. The Codex user-level plugin
+is installed through Codex's own marketplace/host boundary. Agents start from `loom-init`, then move
 through scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`, and
 `loom-review`. When a PR is ready to deliver, `loom ship` is the primary CLI
 path for merge plus closeout.
 
-At the repository level, Loom lands as five stable parts:
+At the repository level, Loom lands as six stable parts:
 
 - Governance defines rules, review models, and closeout semantics.
 - Harness provides execution support, workspace isolation, recovery, and runtime visibility.

@@ -400,7 +400,10 @@ def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
     target = materialize_case(root, fixture)
     status_before = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target, check=True, text=True, stdout=subprocess.PIPE).stdout
     first = evaluator.plan_payload(target)
-    assert_single_failure_envelope(first)
+    try:
+        assert_single_failure_envelope(first)
+    except AssertionError as exc:
+        raise AssertionError(f"{fixture['id']}: {exc}") from exc
     second = evaluator.plan_payload(target)
     status_after = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target, check=True, text=True, stdout=subprocess.PIPE).stdout
     if status_before != status_after:
@@ -444,9 +447,13 @@ def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
             stderr=subprocess.PIPE,
         )
         payload = json.loads(completed.stdout or completed.stderr)
-        assert_single_failure_envelope(payload)
-        if completed.returncode == 0 or payload.get("command") != "profile light-migration-plan" or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier":
-            raise AssertionError(f"CLI route did not preserve light-profile failure semantics: {payload}")
+        if payload.get("primary_error_code") == "unsupported_command_surface":
+            if completed.returncode == 0 or payload.get("mutates") is not False or payload.get("carrier_mutations") is not False:
+                raise AssertionError(f"removed light-migration-plan command did not fail before mutation: {payload}")
+        else:
+            assert_single_failure_envelope(payload)
+            if completed.returncode == 0 or payload.get("command") != "profile light-migration-plan" or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier":
+                raise AssertionError(f"CLI route did not preserve light-profile failure semantics: {payload}")
 
 
 def main() -> int:

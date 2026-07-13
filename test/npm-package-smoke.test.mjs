@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -68,7 +68,7 @@ test("loom bin reports the root VERSION", () => {
   assert.equal(payload.versions.repo_version, repoVersion);
 });
 
-test("packed npm payload runs init bootstrap without a missing skills tree", () => {
+test("packed npm payload runs the public metadata-only adoption path", () => {
   const tmp = mkdtempSync(join(tmpdir(), "loom-npm-package-smoke-"));
   try {
     const packed = spawnSync("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", tmp], {
@@ -89,25 +89,34 @@ test("packed npm payload runs init bootstrap without a missing skills tree", () 
     assert.equal(initialized.status, 0, initialized.stderr);
 
     const loomBin = join(extractRoot, "package", "bin", "loom.mjs");
-    const runtimeState = spawnSync(
+    const installed = spawnSync(
       process.execPath,
-      [loomBin, "init", "runtime-state", "--target", fixtureRepo, "--json"],
+      [loomBin, "install", "--target", fixtureRepo, "--apply", "--json"],
       { cwd: tmp, encoding: "utf8" }
     );
-    assert.equal(runtimeState.status, 0, runtimeState.stderr || runtimeState.stdout);
-    const runtimePayload = JSON.parse(runtimeState.stdout);
-    assert.equal(runtimePayload.runtime_state.scene, "installed-runtime");
-    assert.equal(runtimePayload.runtime_state.carrier, "installed-skills-root");
+    assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+    const installPayload = JSON.parse(installed.stdout);
+    assert.equal(installPayload.result, "pass");
+    assert.deepEqual(new Set(installPayload.managed_writes), new Set([".loom/installed-state.json", "AGENTS.md"]));
 
-    const completed = spawnSync(
+    const validated = spawnSync(
       process.execPath,
-      [loomBin, "init", "bootstrap", "--target", fixtureRepo, "--json"],
+      [loomBin, "installed-state", "validate", "--target", fixtureRepo, "--json"],
       { cwd: tmp, encoding: "utf8" }
     );
-    assert.equal(completed.status, 0, completed.stderr || completed.stdout);
-    assert.doesNotMatch(`${completed.stdout}\n${completed.stderr}`, /FileNotFoundError/);
-    const payload = JSON.parse(completed.stdout);
-    assert.equal(payload.result, "pass");
+    assert.equal(validated.status, 0, validated.stderr || validated.stdout);
+    assert.equal(JSON.parse(validated.stdout).result, "pass");
+
+    const verified = spawnSync(
+      process.execPath,
+      [loomBin, "verify", "--target", fixtureRepo, "--json"],
+      { cwd: tmp, encoding: "utf8" }
+    );
+    assert.equal(verified.status, 0, verified.stderr || verified.stdout);
+    assert.equal(JSON.parse(verified.stdout).result, "pass");
+    for (const removedCarrier of ["status", "progress", "reviews", "shadow", "work-items", "runtime"]) {
+      assert.equal(existsSync(join(fixtureRepo, ".loom", removedCarrier)), false, removedCarrier);
+    }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

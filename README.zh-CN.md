@@ -66,7 +66,8 @@ Loom 采用命令行优先设计，是一个智能体优先的项目运营层，
 6. `loom ship` 在合并前检查工作项、分支、拉取请求、审查和证据是否一致。
 7. 合并后，同一次 ship 运行会读回宿主状态，并完成最短合法收尾路径。
 
-在底层，工作会沿着固定门控链推进：规格门控、构建门控、审查门控和合并门控。
+在底层，工作从宿主原生 admission 进入 targeted build validation、current-head review
+attestation、hosted delivery gate 与 controlled merge。
 
 目标不是让智能体打字更快，而是让工作更不容易丢失、误读或过早合并。
 
@@ -79,7 +80,7 @@ Loom 采用命令行优先设计，是一个智能体优先的项目运营层，
 ```bash
 loom ship \
   --target . \
-  --item WI-123 \
+  --item owner/repository/work_item/123 \
   --issue 123 \
   --pr 456 \
   --branch work/123-example \
@@ -90,11 +91,12 @@ loom ship \
 
 这个包装器的合同保持收敛且有固定顺序：
 
-- dry-run 只读消费 `pr-metadata preflight -> pr gate -> controlled merge check
-  -> validation profile -> closeout policy`，然后输出首个阻塞摘要、
+- dry-run 只读消费 `lifecycle admission -> host binding -> review attestation ->
+  hosted delivery gate -> controlled merge check -> validation profile -> closeout policy`，
+  然后输出首个阻塞摘要、
   `missing_inputs` 与 `next_action`，不修改宿主或仓库状态；
-- `--validation-profile auto` 会按 changed paths 选择最小必要 profile，并输出对应的
-  `loom_check --source-surface` 命令；显式 `--validation-profile full` 仍会强制完整路径；
+- `--validation-profile auto` 会按 changed paths 选择最小必要的仓库原生验证集；显式
+  `--validation-profile full` 只在稳定 head 上强制一次 aggregate；
 - `--apply` 通过 GitHub host attestation 消费语义审查，在当前宿主事实通过后
   合并，再记录宿主 reconciliation 与 closeout attestation；它不刷新 repo
   carrier，也不依赖 blocking shadow；
@@ -103,163 +105,100 @@ loom ship \
 - light、standard 与 reinforced 的普通交付均走仅宿主收尾；release/version
   源码变更走正常发布 PR 与发布工作流，发布后只做 readback。
 
-普通变更通常应在这一条命令里完成。reinforced 只提高审查和验证强度，不会隐式恢复
-repo review、current、status、shadow 或 closeout carrier。退役 carrier 命令仅可在
-显式 `reinforced-carrier-compat/v1` 策略和不超过 90 天的 RFC3339 过期时间下使用。
+普通变更通常应在这一条命令里完成。reinforced 只提高宿主审查和验证强度，不会恢复
+repo review、current、status、shadow 或 closeout carrier；这些退役命令已在 v0.31 移除，
+不能通过 profile 或 compatibility flag 重新启用。
 
 ## 在仓库中试用
 
-理解 Loom 最快的方式，是在一个真实仓库中启用它，然后让智能体从 `loom-init`
-开始。
+Loom v0.31 只有一个默认产品表面：由 12 种协议类型拥有的 30 个公共命令。
+退役命令已删除，不能通过 profile 或 compatibility flag 重新启用。
 
-安装流程分三部分：
+安装 CLI，以 metadata-only 模式启用仓库，并完成验证：
 
-1. 安装全局 Loom 命令行工具。
-2. 安装并注册 Codex 插件。
-3. 用仅元数据的仓库采用模式让目标仓库采用 Loom。
-
-把这段自包含提示词复制给编码智能体：
-
-```text
-请在当前目标仓库启用 Loom。不要假设这个仓库已经了解 Loom。
-
-Loom 有三层：
-1. Loom CLI：安装在本机的全局 `loom` 命令。
-2. Codex 插件：由 CLI 安装的用户级 Codex 交互入口。
-3. 仓库启用：向目标仓库写入元数据，让 Loom 可以管理工作项。
-
-先安装 CLI：
+```bash
 node --version
 npm --version
 npm install -g @mc-and-his-agents/loom
+
 loom version --json
-
-然后安装并注册 Codex 插件：
-loom host install --host codex --scope user --apply --json
-loom host register --host codex --scope user --apply --json
-
-然后进入目标仓库根目录并启用 Loom：
 cd /path/to/target-repository
 loom install --target . --apply --json
-
-最后验证：
 loom installed-state validate --target . --json
-loom host verify --host codex --target . --json
-loom skills check --target . --json
+loom verify --target . --json
 loom doctor --target . --json
-
-仓库启用必须使用仅元数据模式。不要把 Loom 仓库 clone 到目标项目里。
-不要手动创建 `.loom/bin`、`.agents/skills` 或根 `skills`。如果任何命令失败，
-立即停止，汇报失败命令，然后运行：
-loom repair plan --target . --json
 ```
 
-`loom install` 和 `loom upgrade` 只管理目标仓库的仅元数据启用状态。检查或刷新本机
-Codex 插件入口时，使用 `loom host doctor|install|register --host codex --scope user`。
+Codex 插件通过 Codex marketplace 或 plugin host 安装、更新。该 workstation 动作与
+仓库采用相互独立，不对应额外的 Loom 仓库命令。
 
-对于已经启用 Loom、并在 GitHub workflow 中固定 Loom 版本的单仓，使用运行时升级
-维护流程，不要手工拼装事实链：
+`loom upgrade --target . --json` 只生成 v0.30→v0.31 只读计划。理解计划后再显式应用：
 
 ```bash
-loom -v
-loom runtime-upgrade status --target . --json
-loom runtime-upgrade prepare --target . --item <maintenance-work-item> --to <version> --apply --json
-loom runtime-upgrade pr --target . --item <maintenance-work-item> --to <version> --create --json
-loom runtime-upgrade check --target . --item <maintenance-work-item> --to <version> --pr <pr> --branch <branch> --head-sha <head-sha> --json
-loom runtime-upgrade closeout --target . --item <maintenance-work-item> --issue <maintenance-issue> --pr <merged-pr> --sync --create-pr --json
+loom upgrade --target . --json
+loom upgrade --target . --apply --json
+loom verify --target . --json
 ```
 
-这个流程只是 workflow-only 维护入口，仍然需要真实维护 Work Item、PR metadata
-readback、语义审查、hosted checks、head binding、PR gate 和 carrier closeout
-sync。closeout lane 会从宿主 issue/PR 读回 `closedAt`、merge commit、target branch
-和 hosted run URL；carrier-only review evidence 只覆盖 terminal carrier metadata
-漂移，不代表产品实现审查通过。
+普通生命周期由宿主事实驱动，不需要提交 current、status、progress、review、shadow
+或 closeout carrier：
 
-当 release 已经发布并完成读回后，用 release closeout sync 包装器把仓库载体收口到
-terminal 状态，不重新发布：
-
-```bash
-loom release closeout-sync --target . --version <version> --item <work-item> --pr <release-pr> --apply --json
-```
-
-它只在 `--apply` 下写仓库载体表面：progress terminal metadata、status sync、
-closeout/merge-ready shadow refresh，以及提交后的 PR metadata / gate 下一步命令。
-它不会创建 tag、发布 npm、编辑 GitHub Release，也不会合并 closeout PR。
-
-普通 PR 合并后的收口，优先使用 common runner，不要手工串联宿主事实同步、载体
-收口、status 回写、shadow refresh 和最终检查：
-
-```bash
-loom closeout run --target . --item <work-item> --issue <issue> --pr <merged-pr> --branch <target-branch> --apply --json
-```
-
-如果在后续 closeout carrier PR head 上做 release readback，应通过
-`--commit <release-merge-commit>` 明确传入已发布 release PR 的 merge commit；
-Loom 检测到这种 closeout-head drift 时也会输出这条精确下一步命令。
-
-`runtime-upgrade status|prepare|check` 也会显示本机 Codex plugin/cache 的新鲜度。
-如果该本机表面过期或不可读，命令会指向 `loom host doctor --host codex --scope user
---json`，以及需要时显式运行的 `loom host install|register --host codex --scope user
---apply --json`。这是诊断和引导，不是仓库 PR 写入；plugin/cache stale 默认只作为
-repo PR 的 advisory，除非 PR 明确声明本次也验证本机 Codex runtime/plugin readiness。
-
-在新的 Codex 会话中从 `loom-init` 开始工作；如果 Codex Desktop 已经加载过
-插件列表，重启 Codex Desktop。
-
-日常开发中，当工作项已经有拉取请求后，让智能体使用 `loom ship` 交付，不要手工串联
-合并就绪、宿主事实同步、载体收尾和收尾检查这些底层步骤。
-
-查找命令时，先从任务路径进入，不要先扫全量命令表：
-
-| 任务 | 第一条命令 |
+| 任务 | 公共命令 |
 | --- | --- |
-| 接手事项 | `loom resume --target . --item <WI> --json` |
-| 准备 PR 载体组 | `loom pr-intent prepare --intent <intent> --target . --item <WI> --apply --json` |
-| 检查 PR readiness | `loom pr-intent check --intent <intent> --target . --item <WI> --pr <pr> --head-sha <sha> --json` |
-| 审查 | `loom review --target . --item <WI> --json` |
-| 合并就绪 | `loom merge-ready --target . --item <WI> --json` |
-| 合并后收口 | `loom closeout run --target . --item <WI> --issue <issue> --pr <merged-pr> --branch <branch> --apply --json` |
-| 发布读回 | `loom release readback --target . --version <version> --commit <sha> --json` |
-| 发布后收口 | `loom release closeout-sync --target . --version <version> --item <WI> --pr <release-pr> --apply --json` |
-| 运行时升级 | `loom runtime-upgrade status --target . --json` |
-| Codex plugin/cache | `loom host doctor --host codex --scope user --json` |
+| 检查仓库/runtime | `loom detect --target . --json`、`loom doctor --target . --json` |
+| 读取派生状态 | `loom status --target . --json` |
+| 规划或准入 issue | `loom route --target . --issue <issue> --json` |
+| 在 PR 创建前开始实现 | `loom build --target . --issue <work-item> --branch <branch> --json` |
+| 进入审查 | `loom pre-review ...`，然后 `loom review ...` |
+| 读取宿主审查证明 | `loom attestation readback ...` |
+| 检查合并就绪 | `loom merge-ready ...` 或 `loom merge check <pr> ...` |
+| 交付并收口 | `loom ship ...` 或 `loom merge run <pr> --apply --closeout-run ...` |
+| 读取宿主收口证明 | `loom attestation closeout ...` |
+| 退休本地 worktree | `loom workspace retire --target . --json` |
+| 验证发布 | `loom release readback --target . --version <version> --commit <sha> --json` |
 
-`prepare/apply` 类命令会在进入 hosted gate 前输出本地 readiness 和下一条命令。
-hosted gate 仍然是最终确认，不被本地检查替代。
+显式绑定 Work Item 的 build 可以在 PR 创建前运行。pre-review、review、merge-ready、
+ship 与 closeout 只在相关事实产生后消费 PR 和 GitHub 宿主事实；不会要求空提交或空 PR。
 
-在第二台开发机器上打开已采用 Loom 的仓库时，安装全局命令行工具、注册 Codex
-用户级插件，然后验证仓库：
+真实 PR 存在后的普通交付路径是：
 
 ```bash
-npm install -g @mc-and-his-agents/loom
-loom host install --host codex --scope user --apply --json
-loom host register --host codex --scope user --apply --json
-loom installed-state validate --target . --json
-loom host verify --host codex --target . --json
-loom skills check --target . --json
-loom doctor --target . --json
+loom ship \
+  --target . \
+  --item <typed-work-item> \
+  --issue <issue> \
+  --pr <pr> \
+  --branch <branch> \
+  --attestation-artifact-input /path/to/attestation.json \
+  --json
 ```
 
-目标仓库的 upgrade 命令不会刷新 Codex 插件缓存。先运行
-`loom host doctor --host codex --scope user --json`，需要修复或刷新本机插件入口时再运行
-`loom host install --host codex --scope user --apply --json` 和
-`loom host register --host codex --scope user --apply --json`。
+包装器按固定顺序消费：lifecycle admission → host bindings → review attestation →
+PR gate → controlled merge → validation profile → host-only closeout policy。
+`--validation-profile auto` 选择最小相关验证集；短诊断只输出一个 primary cause，完整细节
+通过返回的 artifact locator 读取。
+
+release readback 是发布后的终态动作；它不创建 current-retire 或 closeout-only PR，也不写
+repo execution carrier。
+
+Codex task 从 `loom-init` 场景 skill 开始。场景 skill 名称是交互入口，不是额外 CLI 命令。
 
 ## 为什么 Loom 能保持可靠
 
 Loom 把智能体执行中最容易混在一起的部分拆开：治理规则、执行支撑、验证证据、
 结构化工件和可执行技能。
 
-这种拆分很重要，因为一个拉取请求看起来可能已经完成，但工作项、审查记录、验证证据
-或收尾状态仍然可能是过期的。Loom 让这些通道保持独立，再通过命令行检查它们是否
+这种拆分很重要，因为一个拉取请求看起来可能已经完成，但工作项、宿主审查证明、验证证据
+或收尾回读仍然可能是过期的。Loom 让这些通道保持独立，再通过命令行检查它们是否
 一致。
 
-在仓库边界，Loom 只保留元数据。全局 `loom` 命令负责安装 Codex 用户级插件、
-记录仓库采用、读取事实链并执行验证。智能体从 `loom-init` 进入路由，再使用
+在仓库边界，Loom 只保留元数据。全局 `loom` 命令记录 metadata-only 仓库采用，
+并从显式输入、worktree 和 GitHub 宿主事实派生生命周期状态；Codex 用户级插件由
+Codex 自己的 marketplace/host 边界安装。智能体从 `loom-init` 进入路由，再使用
 `loom-adopt`、`loom-resume`、`loom-build` 和 `loom-review` 等场景技能推进工作。
 当拉取请求准备交付时，`loom ship` 是合并与收尾的主要命令行路径。
 
-在仓库实现层面，Loom 落为五个稳定部分：
+在仓库实现层面，Loom 落为六个稳定部分：
 
 - 治理定义规则、审查模型和收尾语义。
 - 支撑提供执行支持、工作区隔离、恢复机制和运行时可见性。
