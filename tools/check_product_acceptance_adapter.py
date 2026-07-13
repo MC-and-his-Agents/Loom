@@ -155,6 +155,31 @@ def main() -> int:
         accepted = subprocess.run(writer_args, check=False, capture_output=True, text=True)
         if accepted.returncode != 0 or json.loads(output.read_text(encoding="utf-8"))["evidence"][0]["evidence_class"] != "live_readonly":
             raise AssertionError("acceptance writer rejected a gap-free published release readback")
+        process_output = tmp / "process-runtime.json"
+        process_args = [
+            sys.executable,
+            str(WRITER),
+            "--story", "MC-and-his-Agents/Loom/issue/2114",
+            "--scenario", "v0.32-product-acceptance-2114",
+            "--evidence-class", "process_runtime",
+            "--provider-profile", "loom-v0.32-product-acceptance",
+            "--repository", "MC-and-his-Agents/Loom",
+            "--head-sha", "a" * 40,
+            "--run-id", "10",
+            "--verifier-login", "maintainer",
+            "--verifier-id", "42",
+            "--output", str(process_output),
+        ]
+        process_written = subprocess.run(process_args, check=False, capture_output=True, text=True)
+        process_record = json.loads(process_output.read_text(encoding="utf-8")) if process_output.exists() else {}
+        process_boundary = process_record.get("evidence", [{}])[0].get("operation_boundary", {})
+        process_errors = adapter.evidence_errors(
+            process_record.get("evidence", [{}])[0],
+            minimum_class="process_runtime",
+            now=datetime.now(timezone.utc),
+        )
+        if process_written.returncode != 0 or "launch" not in process_boundary.get("allowed_actions", []) or "launch" not in process_boundary.get("observed_actions", []) or process_errors:
+            raise AssertionError("process_runtime writer evidence must prove a launched candidate runtime")
     tracked_copies = [str(path.relative_to(ROOT)) for path in GENERATED_COPIES if path.exists()]
     if tracked_copies:
         raise AssertionError("product acceptance must remain canonical-source only: " + ", ".join(tracked_copies))
@@ -166,12 +191,27 @@ def main() -> int:
         "fetch-depth: 0",
         "tools/write_product_acceptance.py",
         "name: loom-product-acceptance",
-        "v0.31-product-acceptance",
-        "python3 tools/check_cli_contract.py",
-        "Read back published v0.31 release",
+        "v0.32-product-acceptance",
+        "--source-surface source-self-fixture",
+        "--source-surface root-self-adoption",
+        "test/trusted_candidate_validation_test.py",
+        "--surface installed-global-cli-smoke",
         "--provider-profile",
-        "--release-readback",
+        "EVIDENCE_CLASS: process_runtime",
         "actions/upload-artifact@v4",
+        "id: acceptance_upload",
+        "steps.acceptance_upload.outputs.artifact-id",
+        "issues: write",
+        "loom:product-acceptance-artifact",
+        "github-actions[bot]",
+        "getArtifact",
+        "getComment",
+        "loom:codex-e2e-attestation",
+        "getCollaboratorPermissionLevel",
+        'new Set(["admin", "maintain", "write"])',
+        "candidate_cli_authority",
+        "canonical_plugin_payload_hash",
+        "semantic_review_verdict",
         "retention-days: 30",
     ):
         if required not in workflow:

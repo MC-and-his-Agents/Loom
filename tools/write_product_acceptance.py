@@ -43,6 +43,10 @@ def main() -> int:
     elif args.release_readback is not None:
         parser.error("--release-readback is only valid for live_readonly evidence")
 
+    observed_actions = ["read"]
+    if args.evidence_class == "process_runtime":
+        observed_actions.insert(0, "launch")
+
     record = {
         "schema_version": "loom-product-acceptance/v1",
         "story_locator": args.story,
@@ -63,7 +67,7 @@ def main() -> int:
                 },
                 "component_versions": {args.repository: args.head_sha.lower()},
                 "operation_boundary": {
-                    "allowed_actions": ["read"],
+                    "allowed_actions": observed_actions,
                     "prohibited_actions": [
                         "login",
                         "captcha_or_risk_bypass",
@@ -72,7 +76,7 @@ def main() -> int:
                         "send",
                         "external_visible_write",
                     ],
-                    "observed_actions": ["read"],
+                    "observed_actions": observed_actions,
                 },
             }
         ],

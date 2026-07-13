@@ -122,7 +122,10 @@ jobs:
                       commit_sha: commit?.oid,
                     };
                   }) || [],
-                  comment_bodies: comments.map((comment) => comment.body).filter((body) => typeof body === "string"),
+                  comment_bodies: comments
+                    .filter((comment) => comment.user?.login === "github-actions[bot]")
+                    .map((comment) => comment.body)
+                    .filter((body) => typeof body === "string"),
                   comments: comments.map((comment) => ({
                     body: comment.body,
                     created_at: comment.created_at,
