@@ -215,28 +215,46 @@ def public_cli_failure_envelope(payload: dict[str, Any]) -> dict[str, Any] | Non
     scoped_owner: str | None = None
     scoped_remediation: str | None = None
     scoped_retryable: bool | None = None
-    if command == "build" and any(token in diagnostic_text for token in ("current item mismatch", ".loom/status/current", "stale current")):
+    scoped_domain: str | None = None
+    if "target path does not exist" in diagnostic_text:
+        scoped_code = "target_unreadable"
+        scoped_domain = "environment"
+        scoped_owner = "operator"
+        scoped_remediation = "correct the target locator to an existing repository before rerunning detection"
+        scoped_retryable = False
+    elif any(token in diagnostic_text for token in ("classifier=permission", "bad credentials", "authentication", "authorization")):
+        scoped_code = "github_permission_unavailable"
+        scoped_domain = "permission"
+        scoped_owner = "operator"
+        scoped_remediation = "rerun the same command with the authenticated GitHub keyring bridge requested by the diagnostic"
+        scoped_retryable = True
+    elif any(token in diagnostic_text for token in ("artifact input must be exactly", "artifact locator", "artifact input is unreadable")):
+        scoped_code = "artifact_locator_invalid"
+        scoped_domain = "governance_metadata"
+        scoped_owner = "operator"
+        scoped_remediation = "replace the local artifact input with the exact locator shape reported by the command"
+        scoped_retryable = False
+    elif command in {"build", "workspace check", "workspace create"} and any(token in diagnostic_text for token in ("current item mismatch", ".loom/status/current", "stale current")):
         scoped_code = "legacy_current_pointer_dependency"
+        scoped_domain = "carrier"
         scoped_owner = "loom"
-        scoped_remediation = "loom build --target <repo> --issue <work-item> --branch <branch> --json"
+        scoped_remediation = "upgrade Loom or report an implementation defect if the public command still reads a repository current pointer; do not recreate the pointer"
         scoped_retryable = False
     elif command == "build" and "eligible pull requests; exactly one" in diagnostic_text:
         scoped_code = "pre_pr_build_admission_cycle"
+        scoped_domain = "toolchain"
         scoped_owner = "loom"
-        scoped_remediation = "loom build --target <repo> --issue <work-item> --branch <branch> --json"
+        scoped_remediation = "upgrade Loom or report an implementation defect if pre-PR build still requires an existing pull request; do not create an empty pull request"
         scoped_retryable = False
     elif any(token in diagnostic_text for token in ("github control plane", "gh: not found", "github api")):
         scoped_code = "github_host_readback_failure"
+        scoped_domain = "host_service"
         scoped_owner = "github"
         scoped_remediation = "verify the GitHub repository locator and retry the same read-only command"
         scoped_retryable = True
     requested_domain = payload.get("failure_domain")
-    if scoped_code == "legacy_current_pointer_dependency":
-        domain = "carrier"
-    elif scoped_code == "pre_pr_build_admission_cycle":
-        domain = "toolchain"
-    elif scoped_code == "github_host_readback_failure":
-        domain = "host_service"
+    if scoped_domain is not None:
+        domain = scoped_domain
     elif requested_domain in FAILURE_DOMAINS:
         domain = str(requested_domain)
     elif command.startswith("acceptance") or "product_acceptance" in payload:
@@ -295,3 +313,72 @@ def public_cli_failure_envelope(payload: dict[str, Any]) -> dict[str, Any] | Non
                 )
             )
     return envelope(primary, suppressed_diagnostics=suppressed)
+
+
+def _public_remediation_command(raw: str, public_commands: set[str] | frozenset[str]) -> str | None:
+    if not raw.startswith("loom "):
+        return None
+    invocation = raw.removeprefix("loom ").strip()
+    for command in sorted(public_commands, key=len, reverse=True):
+        if invocation == command or invocation.startswith(command + " "):
+            return command
+    return None
+
+
+def enforce_public_remediation(
+    value: dict[str, Any] | None,
+    *,
+    command: str,
+    public_commands: set[str] | frozenset[str],
+) -> dict[str, Any] | None:
+    """Keep executable Loom remediations on the public surface.
+
+    Provider and human actions remain useful evidence, but are no longer
+    disguised as Loom commands.  The v1 compatibility field stays populated
+    with a real public command while the actual non-Loom action is exposed in
+    its own typed field.
+    """
+
+    if value is None:
+        return None
+    primary = value.get("primary_cause")
+    if not isinstance(primary, dict):
+        return value
+    raw = primary.get("remediation_command")
+    if not isinstance(raw, str) or not raw.strip():
+        raw = "inspect the failure evidence and choose a safe next action"
+    raw = raw.strip()
+    public_command = _public_remediation_command(raw, public_commands)
+    if public_command is not None:
+        primary["remediation_kind"] = "public_cli"
+        primary["remediation_public_command"] = public_command
+        return value
+
+    lowered = raw.lower()
+    provider = None
+    if "codex_export_gh_token" in lowered or raw.startswith("gh ") or "github" in lowered:
+        provider = "github"
+    elif raw.startswith("npm "):
+        provider = "npm"
+    elif raw.startswith("git "):
+        provider = "git"
+    elif raw.startswith("codex ") or "codex" in lowered or raw.startswith("loom host "):
+        provider = "codex"
+    action_kind = "provider_action" if provider else "manual_action"
+    primary[action_kind] = {
+        "kind": action_kind,
+        "provider": provider,
+        "instruction": raw,
+        "executable": raw.startswith(("npm ", "gh ", "codex ")),
+    }
+    primary["remediation_kind"] = action_kind
+    primary["remediation_command"] = "loom help --json"
+    primary["remediation_public_command"] = "help"
+    for collection_name in ("consequences", "suppressed_diagnostics", "secondary_causes"):
+        collection = value.get(collection_name)
+        if not isinstance(collection, list):
+            continue
+        for cause in collection:
+            if isinstance(cause, dict):
+                cause["remediation_command"] = primary["remediation_command"]
+    return value

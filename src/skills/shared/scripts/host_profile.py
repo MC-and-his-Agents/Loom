@@ -260,8 +260,7 @@ def default_repo_interface() -> dict[str, Any]:
 
 def default_repo_interop() -> dict[str, Any]:
     return {
-        "schema_version": "loom-repo-interop/v1",
-        "host_adapters": [],
+        "schema_version": "loom-repo-interop/v2",
         "repo_native_carriers": [
             {
                 "id": "generated-companion-residue",

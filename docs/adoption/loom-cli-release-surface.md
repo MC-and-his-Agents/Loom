@@ -167,16 +167,21 @@ When a Work Item does not publish a release, closeout must record an explicit `n
 - PR-event `release-judgment-only` is not being used as final no-release proof;
 - current head, PR, merge commit or target branch readback, review/gate status, and closeout evidence locator remain bound to the same Work Item.
 
-No-release evidence does not replace review, fact-chain, PR metadata preflight, hosted checks, controlled merge, target branch readback, reconciliation audit, or closeout.
+No-release evidence does not replace current-head host attestation, PR binding,
+hosted delivery gate, controlled merge, target branch readback, release
+readback, or host-derived closeout.
 
-For idle closeout sync work, a valid no-release rationale may cite the HotCP-style stale carrier fixture only when the change is documentation, help text, checker coverage, or carrier evidence. The rationale must still retain the command evidence that proves the recovery path:
+For local cleanup after a completed delivery, the evidence must show:
 
-- `workspace retire` remains local-only and does not write versioned carriers.
-- host closeout sync/readback proves issue, Project, PR, merge commit, and target branch truth.
-- `carrier closeout-sync` writes terminal carrier metadata without host mutation.
-- `fact-chain` reads back `idle` / `no_active_item` after carrier sync.
+- `workspace retire` remains local-only and does not write versioned carriers;
+- host-derived closeout reads issue, PR, checks, merge commit, and target branch
+  from GitHub;
+- no repository closeout carrier, current pointer, progress, review, or shadow
+  file is created or refreshed.
 
-Release readiness checks must cover the user-facing command names and the fixture story so release/no-release closeout can distinguish documentation/checker-only work from a CLI behavior shipment.
+Release readiness checks must cover the user-facing command names and the
+host-derived cleanup story so release/no-release closeout can distinguish
+documentation/checker-only work from a CLI behavior shipment.
 
 ## Installer Sunset
 

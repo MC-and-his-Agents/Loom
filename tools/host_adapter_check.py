@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static checks for Loom host adapter distribution contracts."""
+"""Static checks for Loom agent harness support contracts."""
 
 from __future__ import annotations
 
@@ -16,20 +16,6 @@ UNIFIED = ROOT / "docs" / "adoption" / "unified-install-experience.md"
 
 HOSTS = ("Codex",)
 UNSUPPORTED_HOSTS = ("Claude Code", "OpenCode", "Gemini", "Cursor")
-REQUIRED_FIELDS = (
-    "default_install_path",
-    "install_surface",
-    "discovery_surface",
-    "bootstrap_or_session_start_surface",
-    "default_entry",
-    "tool_mapping_surface",
-    "upgrade_surface",
-    "verification_surface",
-    "fail_closed_conditions",
-    "version_metadata_location",
-)
-
-
 def require_contains(path: Path, needles: tuple[str, ...]) -> list[str]:
     if not path.exists():
         return [f"missing {path.relative_to(ROOT)}"]
@@ -42,9 +28,21 @@ def main() -> int:
     errors.extend(require_contains(MATRIX, HOSTS))
     matrix_text = MATRIX.read_text(encoding="utf-8") if MATRIX.exists() else ""
     errors.extend(f"{MATRIX.relative_to(ROOT)} must not advertise unsupported host `{host}`" for host in UNSUPPORTED_HOSTS if f"| {host} |" in matrix_text)
-    errors.extend(require_contains(MATRIX, REQUIRED_FIELDS))
-    errors.extend(require_contains(MATRIX, ("loom-init", "plugins/loom/skills", "fail closed")))
-    errors.extend(require_contains(MATRIX, ("gh api", "host_api_unreadable", "permission", "CODEX_EXPORT_GH_TOKEN=1")))
+    errors.extend(
+        require_contains(
+            MATRIX,
+            (
+                "native/primary",
+                "CLI-compatible",
+                "unsupported",
+                "external_result_sources",
+                "legacy_repo_interop_host_adapters",
+                "x-loom.host_adapter_version",
+                "30 public commands",
+                "fail closed",
+            ),
+        )
+    )
     errors.extend(require_contains(UNIFIED, ("root CLI", "native", "plugins/loom/skills", "metadata-only", "loom-init")))
     for args, expected in ((["help", "--json"], "help"),):
         env = os.environ.copy()
@@ -96,11 +94,11 @@ def main() -> int:
         if retired.returncode == 0 or primary.get("id") != "unsupported_command_surface" or retired_payload.get("mutates") is not False:
             errors.append("retired loom host list did not fail closed before target or host access")
     if errors:
-        print("host adapter check failed:", file=sys.stderr)
+        print("agent harness support check failed:", file=sys.stderr)
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print("host adapter check: OK")
+    print("agent harness support check: OK")
     return 0
 
 

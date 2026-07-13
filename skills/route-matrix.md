@@ -18,6 +18,9 @@ interaction entrypoints; they do not expand the CLI surface.
 | Retire a worksite | `loom-retire` | `loom workspace retire` |
 | Verify a release | root route | `loom release readback` |
 
+`loom-story` produces a User Story, story readiness, and story business confirmation
+before a Work Item enters delivery.
+
 ## Routing invariants
 
 - Planning FRs may have zero Work Items. Build admission requires an explicit

@@ -70,7 +70,7 @@ for shared_scripts_root in reversed(SHARED_SCRIPT_CANDIDATES):
         sys.path.insert(0, str(shared_scripts_root))
 from runtime_paths import global_runtime_path, is_global_runtime_locator
 from authority_contract import parse_typed_locator, typed_locator
-from failure_envelope import public_cli_failure_envelope
+from failure_envelope import enforce_public_remediation, public_cli_failure_envelope
 import github_host as github_host_module
 import delivery_control as delivery_control_module
 import governance_surface as governance_surface_module
@@ -367,6 +367,39 @@ PUBLIC_COMMAND_PROTOCOL_TYPES = {
     "workspace check": "readback",
     "workspace retire": "reconciliation_verdict",
 }
+HARNESS_SUPPORT_SCHEMA = "loom-agent-harness-support/v1"
+
+
+def harness_support_contract() -> dict[str, Any]:
+    native_requirements = [
+        "installation",
+        "discovery",
+        "execution",
+        "session_binding",
+        "tool_mapping",
+        "verification",
+        "live_e2e",
+    ]
+    return {
+        "schema_version": HARNESS_SUPPORT_SCHEMA,
+        "levels": ["native/primary", "CLI-compatible", "unsupported"],
+        "native_primary": {
+            "harness": "codex",
+            "level": "native/primary",
+            "requirements": native_requirements,
+            "verified": True,
+        },
+        "cli_compatible": {
+            "level": "CLI-compatible",
+            "condition": "the harness can invoke the root loom CLI and consume its JSON output",
+            "does_not_imply": ["plugin integration", "session binding", "tool mapping", "native E2E"],
+        },
+        "unsupported_native_harnesses": ["claude", "cursor", "gemini", "opencode"],
+        "native_admission": {
+            "minimum_requirements": native_requirements,
+            "rule": "all requirements need an implemented consumer and real E2E evidence before a harness may be native",
+        },
+    }
 
 HELP_TASK_ROUTES: list[dict[str, Any]] = [
     {
@@ -1422,40 +1455,59 @@ def npm_latest_version(package_name: str = "@mc-and-his-agents/loom") -> dict[st
 def plugin_payload_refresh_guidance(plugin_readback: dict[str, Any]) -> dict[str, Any]:
     action = plugin_readback.get("action")
     freshness = plugin_readback.get("freshness")
-    readback_command = "loom host doctor --host codex --scope user --json"
-    install_command = "loom host install --host codex --scope user --apply --json"
-    register_command = "loom host register --host codex --scope user --apply --json"
+    readback_command = "loom doctor --target <repo> --json"
     reload_note = "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded."
 
-    apply_commands: list[str] = []
-    next_steps: list[str]
+    provider_actions: list[dict[str, Any]] = []
+    next_steps: list[str] = [readback_command]
     reload_required = False
     status = "required"
     summary = "Codex plugin payload refresh is required."
 
     if action == "install_cli":
-        apply_commands = [
-            "npm install -g @mc-and-his-agents/loom@latest",
-            install_command,
-            register_command,
+        provider_actions = [
+            {
+                "provider": "npm",
+                "operation": "upgrade_global_cli",
+                "command": "npm install -g @mc-and-his-agents/loom@latest",
+            },
+            {
+                "provider": "codex",
+                "operation": "refresh_marketplace_plugin",
+                "instruction": "Refresh the Loom marketplace source and plugin cache in Codex, then reload the Codex session.",
+            },
         ]
-        next_steps = [*apply_commands, readback_command]
-        summary = "Install the current root Loom CLI, then refresh and register the Codex user plugin payload."
+        summary = "Upgrade the root Loom CLI, then refresh the Codex-owned marketplace plugin payload."
     elif action == "install_plugin":
-        apply_commands = [install_command, register_command]
-        next_steps = [*apply_commands, readback_command]
-        summary = "Refresh the Codex user plugin source from the root Loom CLI, then register it."
+        provider_actions = [
+            {
+                "provider": "codex",
+                "operation": "refresh_marketplace_plugin",
+                "instruction": "Refresh the Loom marketplace source and plugin cache in Codex, then reload the Codex session.",
+            }
+        ]
+        summary = "Refresh the Codex-owned marketplace plugin payload."
     elif action == "reload_host":
         reload_required = True
-        next_steps = [reload_note, readback_command]
+        provider_actions = [
+            {
+                "provider": "codex",
+                "operation": "reload_runtime_cache",
+                "instruction": reload_note,
+            }
+        ]
         summary = "The Codex-owned runtime cache is stale; reload Codex, then read back host doctor."
     elif action == "already_current" or freshness == "already_current":
         status = "current"
-        next_steps = [readback_command]
         summary = "Codex plugin payload is already current."
     else:
-        command = plugin_readback.get("command") if isinstance(plugin_readback.get("command"), str) else readback_command
-        next_steps = [command, readback_command] if command != readback_command else [readback_command]
+        provider_actions = [
+            {
+                "provider": "codex",
+                "operation": "inspect_plugin_state",
+                "instruction": "Inspect the Codex marketplace source and runtime plugin cache before retrying Loom doctor.",
+            }
+        ]
 
     return {
         "schema": "loom-plugin-payload-refresh-guidance/v1",
@@ -1463,16 +1515,17 @@ def plugin_payload_refresh_guidance(plugin_readback: dict[str, Any]) -> dict[str
         "freshness": freshness,
         "action": action,
         "summary": summary,
-        "apply_commands": apply_commands,
+        "apply_commands": [],
+        "provider_actions": provider_actions,
         "readback_command": readback_command,
         "reload_required": reload_required,
         "reload_note": reload_note if reload_required else None,
         "next_steps": next_steps,
         "authority_boundary": {
             "provider": "codex-user-plugin",
-            "managed_by": "loom host doctor|install|register --host codex --scope user",
+            "managed_by": "Codex marketplace and runtime cache",
             "target_install_upgrade_scope": "repository installed-state only",
-            "legacy_installer": "not_primary_path",
+            "legacy_host_commands": "removed",
         },
     }
 
@@ -1504,7 +1557,7 @@ def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any
             "result": "block",
             "freshness": "host_api_unreadable",
             "action": "refresh_plugin",
-            "command": "loom host doctor --host codex --scope user --json",
+            "command": "loom doctor --target <repo> --json",
             "error": f"{type(exc).__name__}: {exc}",
             "layers": [],
         }
@@ -1529,7 +1582,7 @@ def version_freshness(source: Path | None = None, plugin_readback: dict[str, Any
         command = "npm install -g @mc-and-his-agents/loom@latest"
     elif plugin_action == "refresh_plugin":
         action = "refresh_plugin"
-        command = plugin_readback.get("command") or "loom host install --host codex --scope user --apply --json"
+        command = "loom doctor --target <repo> --json"
     elif cli_action == "check_cli_latest":
         action = "check_cli_latest"
         command = "npm view @mc-and-his-agents/loom version --json"
@@ -1587,7 +1640,11 @@ def emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
     command = payload.get("command")
     if command in PUBLIC_COMMAND_NAMES:
         payload["protocol_type"] = PUBLIC_COMMAND_PROTOCOL_TYPES[command]
-    failure_envelope = public_cli_failure_envelope(payload)
+    failure_envelope = enforce_public_remediation(
+        public_cli_failure_envelope(payload),
+        command=str(command or "loom"),
+        public_commands=PUBLIC_COMMAND_NAMES,
+    )
     if failure_envelope is not None:
         payload["failure_envelope"] = failure_envelope
         if "primary_cause" in payload:
@@ -2543,23 +2600,8 @@ def suite_validation_check(target: Path, item: str | None) -> dict[str, Any]:
 def print_usage(stream) -> None:
     stream.write(
         "usage: loom <command> [args ...]\n\n"
-        "CLI-first Loom control-plane entry.\n\n"
-        "core commands:\n"
-        "  version [--json]\n"
-        "  help [--json]\n"
-        "  installed-state show|validate|export --target <repo> [--json]\n\n"
-        "install, provider, and repair commands:\n"
-        "  install, doctor, verify, upgrade-plan, repair plan\n"
-        "  global-cli repos use the root loom provider and do not expect .loom/bin\n"
-        "  repo-local runtime, plugin, and skills payloads are unsupported legacy surfaces\n\n"
-        "scenario and gate commands:\n"
-        "  init, adopt, route, status, fact-chain, profile, checkpoint, gate\n"
-        "  resume, spec-review, review, merge-ready, check\n"
-        "  suite inspect --target <repo> --item <item> [--json]\n"
-        "  suite scaffold --target <repo> --item <item> [--suite minimal|full] [--apply] [--json]\n\n"
-        "  suite validate --target <repo> --item <item> [--json]\n\n"
-        "  suite evidence inspect|scaffold|validate --target <repo> --item <item> [--apply] [--json]\n\n"
-        "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
+        "CLI-first Loom control-plane entry.\n"
+        "Use `loom help --json` for the complete 30-command public surface.\n"
     )
 
 
@@ -3123,6 +3165,7 @@ def detect_payload(target: Path) -> dict[str, Any]:
         classification=classification,
         surface_count=len(surfaces),
         surfaces=surfaces,
+        harness_support=harness_support_contract(),
         installed_state_path=str(installed_state_path(target)) if installed_state_path(target) else None,
         fallback_to=None if surfaces else ["loom install"],
     )
@@ -3195,7 +3238,12 @@ def doctor_payload(target: Path) -> dict[str, Any]:
                 "summary": "Codex Desktop workstation registration is present." if codex_registration["result"] == "pass" else "Codex Desktop workstation registration is missing or incomplete.",
                 "workstation_registration": codex_registration,
                 "failed_layer": None if codex_registration["result"] == "pass" else "workstation-registration",
-                "fallback_to": None if codex_registration["result"] == "pass" else ["loom host install --host codex --scope user --apply --json", "loom host register --host codex --scope user --apply --json"],
+                "fallback_to": None if codex_registration["result"] == "pass" else ["loom doctor --target <repo> --json"],
+                "provider_action": None if codex_registration["result"] == "pass" else {
+                    "provider": "codex",
+                    "operation": "refresh_marketplace_plugin",
+                    "instruction": "Refresh or enable the Loom plugin through the Codex marketplace, then reload Codex.",
+                },
             }
         )
     legacy_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
@@ -3220,6 +3268,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
         target=str(target),
         detection=detection,
         version_freshness=freshness,
+        harness_support=harness_support_contract(),
         checks=checks,
         failed_layer=failed_layer,
         fail_closed_reason=None if result == "pass" else "doctor found blocking checks: " + ", ".join(check["name"] for check in blocking_checks),
@@ -3915,18 +3964,18 @@ def codex_plugin_payload_readback(source: Path, paths: dict[str, Path | str]) ->
     elif marketplace_payload["status"] != "present":
         freshness = "marketplace_source_missing"
         action = "install_plugin"
-        command = "loom host install --host codex --scope user --apply --json"
+        command = "loom doctor --target <repo> --json"
     elif not marketplace_payload["metadata_complete"]:
         freshness = "marketplace_source_metadata_missing"
         action = "install_plugin"
-        command = "loom host install --host codex --scope user --apply --json"
+        command = "loom doctor --target <repo> --json"
     elif (
         marketplace_payload.get("plugin_payload_version") != source_payload.get("plugin_payload_version")
         or marketplace_payload.get("plugin_payload_hash") != source_payload.get("plugin_payload_hash")
     ):
         freshness = "marketplace_source_stale"
         action = "install_plugin"
-        command = "loom host install --host codex --scope user --apply --json"
+        command = "loom doctor --target <repo> --json"
     elif runtime_payload["status"] != "present":
         freshness = "runtime_cache_missing"
         action = "reload_host"
@@ -3957,7 +4006,7 @@ def codex_plugin_payload_readback(source: Path, paths: dict[str, Path | str]) ->
         "missing_metadata": missing_metadata,
         "authority_boundary": {
             "source_payload": "Loom package payload selected by --source or the global Loom package",
-            "marketplace_source": "Codex local user marketplace source managed by `loom host install`",
+            "marketplace_source": "Codex-owned local marketplace source; Loom only reads its payload metadata",
             "runtime_cache": "Codex-owned loaded plugin cache; Loom only reads it and asks the user to reload Codex when stale",
         },
     }
@@ -4099,7 +4148,7 @@ def codex_workstation_registration_status(source: Path | None = None) -> dict[st
         "authority_boundary": {
             "kind": "developer-workstation-registration-state",
             "does_not_write_repo_truth": True,
-            "repo_payload_verify_command": "loom host verify --host codex --target <repo> --json",
+            "repo_payload_verify_command": "loom verify --target <repo> --json",
         },
     }
 
@@ -4207,8 +4256,12 @@ def workstation_registration_action(target: Path, source: Path | None = None) ->
             "kind": "workstation-registration",
             "status": "recommended",
             "reason": "repository adoption metadata is current, but Codex Desktop workstation registration is missing",
-            "command": "loom host register --host codex --scope user --dry-run --json",
-            "apply_command": "loom host register --host codex --scope user --apply --json",
+            "remediation_command": "loom doctor --target <repo> --json",
+            "provider_action": {
+                "provider": "codex",
+                "operation": "refresh_marketplace_plugin",
+                "instruction": "Refresh or enable the Loom plugin through the Codex marketplace, then reload Codex.",
+            },
             "mutates": False,
             "apply_mutates": True,
             "reload_required": registration["reload_required"],
@@ -4223,16 +4276,18 @@ def host_plugin_refresh_boundary_action(host: str = "codex") -> dict[str, Any] |
     return {
         "id": "host-plugin-refresh-boundary",
         "kind": "host-provider-guidance",
-        "status": "separate-command",
+        "status": "provider-action-required",
         "reason": (
             "target install/upgrade manages repository installed-state and adoption metadata only; "
             "it does not refresh the Codex workstation plugin cache"
         ),
-        "command": "loom host doctor --host codex --scope user --json",
-        "apply_commands": [
-            "loom host install --host codex --scope user --apply --json",
-            "loom host register --host codex --scope user --apply --json",
-        ],
+        "remediation_command": "loom doctor --target <repo> --json",
+        "provider_action": {
+            "provider": "codex",
+            "operation": "refresh_marketplace_plugin",
+            "instruction": "Refresh the Loom plugin through the Codex marketplace and reload the Codex runtime cache.",
+        },
+        "apply_commands": [],
     }
 
 
@@ -4324,7 +4379,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     command,
                     "block",
                     schema=DELIVERY_SCHEMA,
-                    summary="Valid installed-state already exists; use upgrade-plan or --force for reinstall.",
+                    summary="Valid installed-state already exists; use `loom upgrade` or --force for reinstall.",
                     target=str(target),
                     installed_state_path=str(path),
                     detection=detection,
@@ -4376,6 +4431,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 target=str(target),
                 mutates=False,
                 doctor=doctor,
+                harness_support=harness_support_contract(),
                 suite_validation_requirement=requirement,
                 suite_validation=suite_check,
                 installed_state_path=str(path) if path else None,
@@ -4497,10 +4553,10 @@ def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
     freshness = version_freshness()
     actions.append(version_freshness_action(freshness))
     return output(
-        "upgrade-plan",
+        "upgrade",
         "pass",
         schema=DELIVERY_SCHEMA,
-        summary="Target repository upgrade plan generated without mutating installed-state; host plugin refresh uses loom host commands.",
+        summary="Target repository upgrade plan generated without mutating installed-state; Codex plugin refresh remains a provider action.",
         target=str(target),
         host="codex",
         mutates=False,
@@ -4722,6 +4778,7 @@ def handle_installed_state(argv: list[str]) -> int:
     if args.action == "validate":
         payload.pop("installed_state")
         payload["validated_schema"] = INSTALLED_STATE_SCHEMA
+        payload["harness_support"] = harness_support_contract()
 
     if args.json or True:
         return emit(payload)
@@ -4731,20 +4788,215 @@ def handle_installed_state(argv: list[str]) -> int:
 def workspace_payload(action: str, args: argparse.Namespace) -> dict[str, Any]:
     command = f"workspace {action}"
     target = resolve_target(args.target)
-    item_args = ["--item", args.item] if getattr(args, "item", None) else []
-    if action in {"locate", "create", "retire"}:
-        operation = "retire" if action == "retire" else action
-        payload = flow_payload(command, ["workspace", operation, "--target", str(target), *item_args], fallback_to=["admission", "loom workspace check --target <repo> --json"])
-        if payload.get("command") and payload.get("command") != command:
-            payload["wrapped_command"] = payload.get("command")
-        payload["command"] = command
-        return payload
+    item = parse_typed_locator(getattr(args, "item", None), allowed_types={"work_item"}, allow_legacy=False)
+
+    def git_value(path: Path, *git_args: str) -> tuple[str | None, str | None]:
+        completed = subprocess.run(
+            ["git", "-C", str(path), *git_args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            return None, (completed.stderr or completed.stdout).strip() or "git readback failed"
+        return completed.stdout.strip(), None
+
+    def workspace_readback(path: Path) -> tuple[dict[str, Any], list[str]]:
+        errors: list[str] = []
+        top_level, top_error = git_value(path, "rev-parse", "--show-toplevel")
+        head, head_error = git_value(path, "rev-parse", "HEAD^{commit}")
+        branch, branch_error = git_value(path, "branch", "--show-current")
+        status, status_error = git_value(path, "status", "--porcelain=v1")
+        for label, error in (("top-level", top_error), ("head", head_error), ("branch", branch_error), ("status", status_error)):
+            if error:
+                errors.append(f"git {label} readback: {error}")
+        if top_level:
+            try:
+                if Path(top_level).resolve() != path.resolve():
+                    errors.append("workspace path must be the exact Git checkout top-level")
+            except OSError as exc:
+                errors.append(f"workspace path cannot be resolved: {exc}")
+        if head and re.fullmatch(r"[0-9a-f]{40}", head) is None:
+            errors.append("workspace HEAD is not a full Git commit SHA")
+        expected_branch = getattr(args, "branch", None)
+        if expected_branch and branch != expected_branch:
+            errors.append(f"checked-out branch `{branch or 'detached'}` does not match `{expected_branch}`")
+        if item is not None and branch and re.search(rf"(?:^|[/_-]){item['id']}(?:$|[/_-])", branch) is None:
+            errors.append("formal branch is not issue-scoped to the Work Item")
+        return {
+            "path": str(path),
+            "top_level": top_level,
+            "branch": branch,
+            "head_sha": head,
+            "dirty": bool(status),
+            "dirty_paths": status.splitlines() if status else [],
+            "work_item": item["locator"] if item else None,
+        }, errors
+
+    if action == "create":
+        path_value = getattr(args, "path", None)
+        branch = getattr(args, "branch", None)
+        missing = []
+        if item is None:
+            missing.append("--item must be one canonical owner/repo/work_item/id locator")
+        if not path_value:
+            missing.append("--path is required")
+        if not branch:
+            missing.append("--branch is required")
+        if item is not None and branch and re.search(rf"(?:^|[/_-]){item['id']}(?:$|[/_-])", branch) is None:
+            missing.append("--branch must be issue-scoped to the Work Item")
+        workspace_path = None
+        if path_value:
+            candidate = Path(path_value).expanduser()
+            workspace_path = candidate.resolve() if candidate.is_absolute() else (target.parent / candidate).resolve()
+            if workspace_path.exists():
+                missing.append("workspace path already exists")
+        if missing:
+            return output(
+                command,
+                "block",
+                schema=WORKSPACE_SCHEMA,
+                summary="Workspace creation requires an explicit typed Work Item, issue-scoped branch, and unused path.",
+                missing_inputs=missing,
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+                remediation_command="loom workspace create --target <repo> --path <path> --branch <issue-scoped-branch> --item <owner/repo/work_item/id> --apply --json",
+            )
+        if not getattr(args, "apply", False):
+            return output(
+                command,
+                "pass",
+                schema=WORKSPACE_SCHEMA,
+                summary="Host-native worktree creation plan is valid; no repository carrier was read or written.",
+                plan={"target": str(target), "path": str(workspace_path), "branch": branch, "item": item["locator"], "start_point": args.start_point},
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+            )
+        completed = subprocess.run(
+            ["git", "-C", str(target), "worktree", "add", "-b", str(branch), str(workspace_path), str(args.start_point)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            return output(
+                command,
+                "block",
+                schema=WORKSPACE_SCHEMA,
+                summary="Git could not create the formal worktree.",
+                failed_layer="git-worktree",
+                fail_closed_reason=(completed.stderr or completed.stdout).strip(),
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+                remediation_command="loom workspace create --target <repo> --path <path> --branch <issue-scoped-branch> --item <owner/repo/work_item/id> --apply --json",
+            )
+        readback, errors = workspace_readback(workspace_path)
+        return output(
+            command,
+            "pass" if not errors else "block",
+            schema=WORKSPACE_SCHEMA,
+            summary="Formal Git worktree was created and read back." if not errors else "Worktree creation completed but host readback is inconsistent.",
+            workspace=readback,
+            missing_inputs=errors,
+            repo_execution_carriers_consumed=False,
+            carrier_mutations=False,
+            mutates=True,
+        )
+
     if action == "check":
-        payload = flow_payload(command, ["purity-check", "--target", str(target), *item_args], fallback_to=["admission", "loom workspace locate --target <repo> --json"])
-        if payload.get("command") and payload.get("command") != command:
-            payload["wrapped_command"] = payload.get("command")
-        payload["command"] = command
-        return payload
+        path_value = getattr(args, "path", None)
+        workspace_path = Path(path_value).expanduser().resolve() if path_value else target
+        if not workspace_path.exists():
+            return output(
+                command,
+                "block",
+                schema=WORKSPACE_SCHEMA,
+                summary="Workspace path does not exist.",
+                failed_layer="workspace-path",
+                fail_closed_reason=str(workspace_path),
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+                remediation_command="loom workspace check --target <repo> --path <path> --json",
+            )
+        readback, errors = workspace_readback(workspace_path)
+        return output(
+            command,
+            "pass" if not errors else "block",
+            schema=WORKSPACE_SCHEMA,
+            summary="Workspace is bound from live Git and worktree facts without a repository current pointer." if not errors else "Workspace Git/worktree binding is inconsistent.",
+            workspace=readback,
+            missing_inputs=errors,
+            repo_execution_carriers_consumed=False,
+            carrier_mutations=False,
+            mutates=False,
+            remediation_command="loom workspace check --target <repo> --path <path> --json",
+        )
+
+    if action == "retire":
+        path_value = getattr(args, "path", None)
+        workspace_path = Path(path_value).expanduser().resolve() if path_value else target
+        readback, errors = workspace_readback(workspace_path) if workspace_path.exists() else ({"path": str(workspace_path)}, ["workspace path does not exist"])
+        if readback.get("dirty"):
+            errors.append("workspace has uncommitted changes")
+        worktrees, list_error = git_value(target, "worktree", "list", "--porcelain")
+        registered_paths = {
+            line.removeprefix("worktree ")
+            for line in (worktrees or "").splitlines()
+            if line.startswith("worktree ")
+        }
+        if list_error:
+            errors.append(f"git worktree list readback: {list_error}")
+        elif str(workspace_path) not in registered_paths:
+            errors.append("workspace is not a registered Git worktree")
+        primary_path = next(iter(registered_paths), None)
+        if primary_path and Path(primary_path).resolve() == workspace_path:
+            errors.append("primary repository worktree cannot be retired")
+        if errors:
+            return output(
+                command,
+                "block",
+                schema=WORKSPACE_SCHEMA,
+                summary="Workspace retirement is not safe.",
+                workspace=readback,
+                missing_inputs=errors,
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+                remediation_command="loom workspace check --target <repo> --path <path> --json",
+            )
+        if not getattr(args, "apply", False):
+            return output(
+                command,
+                "pass",
+                schema=WORKSPACE_SCHEMA,
+                summary="Local worktree retirement plan is safe; --apply was not requested.",
+                workspace=readback,
+                repo_execution_carriers_consumed=False,
+                carrier_mutations=False,
+                mutates=False,
+            )
+        completed = subprocess.run(
+            ["git", "-C", str(target), "worktree", "remove", str(workspace_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return output(
+            command,
+            "pass" if completed.returncode == 0 else "block",
+            schema=WORKSPACE_SCHEMA,
+            summary="Local worktree retired without changing host or repository truth." if completed.returncode == 0 else "Git could not retire the local worktree.",
+            workspace=readback,
+            failed_layer=None if completed.returncode == 0 else "git-worktree",
+            fail_closed_reason=None if completed.returncode == 0 else (completed.stderr or completed.stdout).strip(),
+            repo_execution_carriers_consumed=False,
+            carrier_mutations=False,
+            mutates=completed.returncode == 0,
+        )
     if action == "audit":
         payload = flow_payload(
             command,
@@ -5554,7 +5806,7 @@ SHIP_VALIDATION_SOURCE_SURFACES = {
     "carrier-only": None,
     "light": "contract-only",
     "standard": "source-self-fixture",
-    "full": "daily-execution-cli-full",
+    "full": "source-self-fixture",
     "release": "distribution-regression",
 }
 
@@ -6908,18 +7160,7 @@ def normalized_version(value: Any) -> str | None:
 
 def workstation_upgrade_machine_plan(target_version: str) -> dict[str, Any]:
     freshness = version_freshness()
-    freshness_action = version_freshness_action(freshness)
     cli_command = f"npm install -g @mc-and-his-agents/loom@{target_version}"
-    plugin_commands = [
-        command
-        for command in freshness_action.get("apply_commands", [])
-        if isinstance(command, str) and command != "npm install -g @mc-and-his-agents/loom@latest"
-    ]
-    if not plugin_commands:
-        plugin_commands = [
-            "loom host install --host codex --scope user --apply --json",
-            "loom host register --host codex --scope user --apply --json",
-        ]
     return {
         "schema": "loom-workstation-machine-upgrade-plan/v1",
         "classification": "machine_only",
@@ -6937,14 +7178,15 @@ def workstation_upgrade_machine_plan(target_version: str) -> dict[str, Any]:
             {
                 "id": "refresh-codex-plugin",
                 "kind": "codex-user-plugin",
-                "commands": plugin_commands,
+                "commands": [],
                 "marketplace_upgrade": {
                     "source": "MC-and-his-Agents/Loom",
-                    "summary": "If Codex installed Loom from the Loom marketplace source, refresh through Codex marketplace update; otherwise use loom host install/register.",
-                    "fallback_commands": [
-                        "loom host install --host codex --scope user --apply --json",
-                        "loom host register --host codex --scope user --apply --json",
-                    ],
+                    "summary": "Refresh the Loom plugin through the Codex marketplace, then reload the Codex runtime cache.",
+                    "provider_action": {
+                        "provider": "codex",
+                        "operation": "refresh_marketplace_plugin",
+                    },
+                    "fallback_commands": [],
                 },
                 "required": freshness.get("action") == "upgrade_cli" or freshness.get("plugin_payload", {}).get("action") != "already_current",
                 "mutates_when_applied": "user Codex marketplace/config/plugin cache",
@@ -6952,7 +7194,7 @@ def workstation_upgrade_machine_plan(target_version: str) -> dict[str, Any]:
             {
                 "id": "verify-host",
                 "kind": "host-doctor",
-                "command": "loom host doctor --host codex --scope user --json",
+                "command": "loom doctor --target <repo> --json",
                 "required": True,
                 "mutates_when_applied": False,
             },

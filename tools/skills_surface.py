@@ -24,6 +24,7 @@ TARGET_ROOT = REPO_ROOT / "skills"
 PLUGIN_SKILLS_ROOT = REPO_ROOT / "plugins" / "loom" / "skills"
 PRIVATE_RUNTIME_DIR = ".loom-runtime"
 IGNORED_NAMES = {"__pycache__", ".DS_Store"}
+CANONICAL_ONLY_SHARED_SCRIPTS = {"light_profile.py", "product_acceptance.py"}
 TEXT_SUFFIXES = {".json", ".md", ".py", ".txt", ".yaml", ".yml"}
 DOC_REFERENCE_SYNC = {
     "docs/methodology/templates/spec-suite.md": "shared/references/templates/spec-suite.md",
@@ -100,8 +101,11 @@ def copy_tree(source: Path, target: Path) -> None:
     if target.exists():
         shutil.rmtree(target)
 
-    def ignore(_directory: str, names: list[str]) -> set[str]:
-        return {name for name in names if should_ignore(Path(name))}
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = {name for name in names if should_ignore(Path(name))}
+        if Path(directory).resolve() == (source / "shared" / "scripts").resolve():
+            ignored.update(CANONICAL_ONLY_SHARED_SCRIPTS & set(names))
+        return ignored
 
     shutil.copytree(source, target, ignore=ignore)
 

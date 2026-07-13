@@ -42,8 +42,7 @@ GitHub native dependency 与 host binding inspector 的读取结果属于 host/c
 
 ```json
 {
-  "schema_version": "loom-repo-interop/v1",
-  "host_adapters": [],
+  "schema_version": "loom-repo-interop/v2",
   "repo_native_carriers": [],
   "shadow_surfaces": {
     "admission": {
@@ -72,15 +71,15 @@ GitHub native dependency 与 host binding inspector 的读取结果属于 host/c
 
 顶层字段约束：
 
-- `schema_version` 固定为 `loom-repo-interop/v1`
-- `host_adapters` 必须存在，可为空数组
+- `schema_version` 固定为 `loom-repo-interop/v2`
+- `external_result_sources` 可选；缺省表示没有外部结果来源，不写空 adapter 占位
 - `repo_native_carriers` 必须存在，可为空数组
 - `shadow_surfaces` 必须同时声明 `admission`、`review`、`merge_ready`、`closeout`
-- `external_orchestrators` 可存在；缺省等价于空数组，以保持既有 `loom-repo-interop/v1` 读面兼容
+- `external_orchestrators` 可存在；缺省等价于空数组，以保持既有 `loom-repo-interop/v2` 读面兼容
 
-## 3. `host_adapters`
+## 3. `external_result_sources`
 
-`host_adapters[*]` 固定字段：
+`external_result_sources[*]` 固定字段：
 
 - `id`
 - `summary`
@@ -102,20 +101,23 @@ GitHub native dependency 与 host binding inspector 的读取结果属于 host/c
 - locator 绝对路径、越界或非法路径对所有 requirement 都必须 fail closed
 - `required` locator 缺失或指向不可读路径必须 fail closed
 - `optional` / `advisory` locator 缺失或指向不可读路径只能进入 `missing_optional` 或 profile-local advisory evidence，不得污染 core pass/fail
-- `host_adapters` 不定义 attempt-time advertised / unavailable / unsupported / failed 结果，也不调用宿主动作
+- `external_result_sources` 不定义 attempt-time advertised / unavailable / unsupported / failed 结果，也不调用宿主动作
+- retained result envelope 必须提供非空 `schema_version` 与 `result` 或 `status`
+- `result` / `status` 只有 `allow | pass | passed | ready | success | succeeded` 可被消费为通过；failed、blocked、unsafe、unavailable 或未知值不得通过
+- `pre_review | review | merge_ready | closeout` 读面必须同时提供当前仓库 `head_sha` 与 `freshness: current | fresh`；缺失、stale 或 head mismatch 必须按 requirement 阻断或告警
 
-`python3 tools/loom_flow.py live-smoke host-adapter-drift --target <repo>` 只在 adopted repo 上读取这组 `host_adapters[*]` 声明及其 locator 指向的 retained result envelope，用来回答：
+`python3 tools/loom_flow.py live-smoke external-result-source-readback --target <repo>` 只在 adopted repo 上读取这组 `external_result_sources[*]` 声明及其 locator 指向的 retained result envelope，用来回答：
 
 - 该仓库是否声明了可消费的 retained host action 读面
 - locator 是否缺失、不可读、越界或 unsafe
-- envelope 是否暴露 `permission_unavailable` 或 `host_adapter_version` 漂移
+- envelope 是否暴露 `permission_unavailable` 或不可读结果
 
 它仍然属于 `orchestration-live` / profile-local evidence：
 
 - 不执行 host action
 - 不写宿主控制面
 - 不改写 `interop.json`
-- 不把 optional / advisory host adapter drift 升级成 `orchestration-core` blocker
+- 不把 optional / advisory external result source drift 升级成 `orchestration-core` blocker
 - `required` drift 只在该 live/profile-local 命令内返回 `block`
 
 典型对象包括：
@@ -126,7 +128,7 @@ GitHub native dependency 与 host binding inspector 的读取结果属于 host/c
 - repo-native merge readiness verdict
 - retained `pr-gate` / `merge-gate` result envelope
 
-当 `host_adapters[*]` 声明 retained `pr-gate` / `merge-gate` result 时，locator 仍然只表示“可读取 retained result”，不表示 Loom 可以调用宿主动作或接受第二个 approval truth。消费者必须重新判断 envelope freshness：Work Item、PR number、head SHA、review approval、validation summary、required check name 与 host enforcement readback 必须与当前 PR 一致。若任一字段 drift，消费结果只能 `block` 或回到 `pr-gate` / `merge-ready` / `review`。
+当 `external_result_sources[*]` 声明 retained `pr-gate` / `merge-gate` result 时，locator 仍然只表示“可读取 retained result”，不表示 Loom 可以调用宿主动作或接受第二个 approval truth。消费者必须重新判断 envelope freshness：Work Item、PR number、head SHA、review approval、validation summary、required check name 与 host enforcement readback 必须与当前 PR 一致。若任一字段 drift，消费结果只能 `block` 或回到 `pr-gate` / `merge-ready` / `review`。
 
 ### 3.1 retained host signal envelope
 
@@ -401,7 +403,7 @@ external-runtime 迁移只改变 Loom runtime 的执行来源，不改变 intero
 稳定约束：
 
 - `.loom/companion/interop.json` 在 vendored runtime 与 external runtime 下必须保持同一只读 locator 语义
-- `host_adapters`、`repo_native_carriers`、`shadow_surfaces` 不得因为 runtime locator 改变而改写 truth
+- `external_result_sources`、`repo_native_carriers`、`shadow_surfaces` 不得因为 runtime locator 改变而改写 truth
 - shadow evidence envelope 的 `source_files` 与 `source_sha256` 必须继续以仓内文件为 authority
 - external-runtime locator 必须落在 [external-runtime-companion-contract.md](./external-runtime-companion-contract.md)，不得写入 `interop.json`
 - de-vendor 后的失败回滚必须回到 vendored `.loom/bin` 或重新 bootstrap，不得通过篡改 interop 结果伪装通过
