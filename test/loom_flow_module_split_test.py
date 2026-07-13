@@ -21,8 +21,10 @@ sys.path.insert(0, str(RUNTIME))
 import companion_contract
 import closeout_flow
 import delivery_control
+import execution_attempts
 import execution_flow
 import flow_runtime
+import github_host
 import host_profile
 import live_smoke
 import loom_flow
@@ -30,6 +32,15 @@ import review_flow
 
 
 class LoomFlowModuleSplitTest(unittest.TestCase):
+    DOMAIN_MODULES = {
+        "closeout_flow",
+        "delivery_control",
+        "execution_flow",
+        "host_profile",
+        "live_smoke",
+        "review_flow",
+    }
+    RUNTIME_MODULES = DOMAIN_MODULES | {"execution_attempts", "flow_runtime", "github_host"}
     DISPATCH_ASSIGNMENTS = {
         "AUTHORITATIVE_REVIEW_ADAPTERS",
         "CLOSEOUT_GATE_PROFILES",
@@ -101,13 +112,99 @@ class LoomFlowModuleSplitTest(unittest.TestCase):
 
         self.assertEqual(assignments, self.DISPATCH_ASSIGNMENTS)
 
+    def test_parser_and_dispatch_are_thin_and_have_declared_domain_owners(self) -> None:
+        tree = ast.parse((RUNTIME / "loom_flow.py").read_text(encoding="utf-8"))
+        allowed_imports = self.RUNTIME_MODULES | {"__future__", "argparse", "pathlib", "re", "sys", "tomllib", "typing"}
+        imported_modules = {
+            imported
+            for node in ast.walk(tree)
+            for imported in (
+                [node.module] if isinstance(node, ast.ImportFrom) and node.module else
+                [alias.name for alias in node.names] if isinstance(node, ast.Import) else
+                []
+            )
+        }
+        self.assertLessEqual(imported_modules, allowed_imports)
+        expressions = [node for node in tree.body if isinstance(node, ast.Expr)]
+        self.assertEqual(len(expressions), 1)
+        self.assertIsInstance(expressions[0].value, ast.Constant)
+        self.assertIsInstance(expressions[0].value.value, str)
+
+        imported_handlers = {
+            alias.asname or alias.name: node.module
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+        }
+        parser = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "parse_args")
+        parser_variables = {
+            target.id
+            for node in ast.walk(parser)
+            if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == "subparsers"
+            and node.value.func.attr == "add_parser"
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        commands = {
+            node.args[0].value
+            for node in ast.walk(parser)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "subparsers"
+            and node.func.attr == "add_parser"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        }
+        for call in (node for node in ast.walk(parser) if isinstance(node, ast.Call)):
+            function = call.func
+            if isinstance(function, ast.Name):
+                self.assertIn(function.id, {"sorted", "tuple"})
+                continue
+            self.assertIsInstance(function, ast.Attribute)
+            self.assertIsInstance(function.value, ast.Name)
+            owner, operation = function.value.id, function.attr
+            allowed = (
+                (owner == "argparse" and operation == "ArgumentParser")
+                or (owner == "parser" and operation in {"add_subparsers", "parse_args"})
+                or (owner == "subparsers" and operation == "add_parser")
+                or (owner in parser_variables and operation == "add_argument")
+            )
+            self.assertTrue(allowed, f"parse_args owns non-parser call: {owner}.{operation}")
+
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        call_nodes = [node for node in ast.walk(main) if isinstance(node, ast.Call)]
+        for call in call_nodes:
+            self.assertIsInstance(call.func, ast.Name, "main may only call parse_args or a declared domain handler")
+        main_calls = [node.func.id for node in call_nodes]
+        self.assertEqual(main_calls.count("parse_args"), 1)
+        handlers = [name for name in main_calls if name != "parse_args"]
+        self.assertEqual(len(handlers), len(commands))
+        self.assertEqual(len(handlers), len(set(handlers)))
+        for handler in handlers:
+            self.assertIn(imported_handlers.get(handler), self.DOMAIN_MODULES, handler)
+
+        compat = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "__getattr__")
+        compat_call_nodes = [node for node in ast.walk(compat) if isinstance(node, ast.Call)]
+        for call in compat_call_nodes:
+            self.assertIsInstance(call.func, ast.Name, "__getattr__ may only perform direct compatibility lookups")
+        compat_calls = {node.func.id for node in compat_call_nodes}
+        self.assertLessEqual(compat_calls, {"AttributeError", "getattr", "hasattr"})
+
     def test_domain_modules_do_not_import_dispatch_module(self) -> None:
         modules = (
             companion_contract,
             closeout_flow,
             delivery_control,
+            execution_attempts,
             execution_flow,
             flow_runtime,
+            github_host,
             host_profile,
             live_smoke,
             review_flow,
@@ -115,9 +212,13 @@ class LoomFlowModuleSplitTest(unittest.TestCase):
         for module in modules:
             tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
             imports = {
-                node.module
-                for node in tree.body
-                if isinstance(node, ast.ImportFrom)
+                imported
+                for node in ast.walk(tree)
+                for imported in (
+                    [node.module] if isinstance(node, ast.ImportFrom) and node.module else
+                    [alias.name for alias in node.names] if isinstance(node, ast.Import) else
+                    []
+                )
             }
             self.assertNotIn("loom_flow", imports, module.__name__)
 
