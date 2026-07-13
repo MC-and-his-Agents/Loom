@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       story_issue:
-        description: 'FR issue number receiving this Stage A verdict.'
+        description: 'FR or Phase issue number receiving this Stage A verdict.'
         required: true
         type: choice
         options:
@@ -16,6 +16,7 @@ on:
           - '1984'
           - '1985'
           - '1986'
+          - '2037'
 
 permissions:
   contents: read
