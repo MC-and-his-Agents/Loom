@@ -20,9 +20,10 @@ from product_acceptance import resolve_acceptance
 
 SCHEMA = "loom-fr-phase-close-guard/v1"
 NON_COMPLETION_LABELS = {"duplicate", "invalid", "cancelled", "canceled", "superseded"}
-TYPE_LABELS = {"fr": "fr", "phase": "phase", "work-item": "work_item"}
+TYPE_LABELS = {"fr": "fr", "phase": "phase", "product-problem": "product_problem", "work-item": "work_item"}
 DEFERRED_LABEL = "deferred"
-EXPECTED_CHILD_TYPE = {"phase": "fr", "fr": "work_item"}
+EXPECTED_CHILD_TYPE = {"product_problem": "fr", "fr": "work_item"}
+PHASE_CHILD_TYPES = {"product_problem", "fr", "work_item"}
 WAIVER_POLICY_LABEL = "product_acceptance_waiver_allowed"
 PRODUCT_ARTIFACT_RE = re.compile(r"<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->", re.IGNORECASE)
 HOST_ACTION_ARTIFACT_RE = re.compile(r"<!--\s*loom:host-action-attestation\s+(\{.*?\})\s*-->", re.IGNORECASE | re.DOTALL)
@@ -52,7 +53,7 @@ def _labels(issue: dict[str, Any]) -> set[str]:
 
 def _type(issue: dict[str, Any]) -> str:
     declared = _text(issue.get("type"))
-    if declared in {"fr", "phase", "work_item"}:
+    if declared in {"fr", "phase", "product_problem", "work_item"}:
         return declared
     inferred = {TYPE_LABELS[label.replace("_", "-")] for label in _labels(issue) if label.replace("_", "-") in TYPE_LABELS}
     return inferred.pop() if len(inferred) == 1 else "unknown"
@@ -325,19 +326,22 @@ def _validate_completed(
             return
         reasons.append(_reason("missing_delivery_attestation", locator, "Work Item needs merged delivery checks, or an authenticated host-action attestation when explicitly labeled host-only-delivery"))
         return
-    expected = EXPECTED_CHILD_TYPE.get(kind)
     children = issue.get("children")
-    if expected is None or not isinstance(children, list) or not children:
-        reasons.append(_reason("missing_native_child", locator, "completed FR/Phase requires its native child tree"))
+    if not isinstance(children, list) or not children:
+        reasons.append(_reason("missing_native_child", locator, "completed Phase, Product Problem, or FR requires its native child tree"))
         return
+    expected = EXPECTED_CHILD_TYPE.get(kind)
+    allowed_types = PHASE_CHILD_TYPES if kind == "phase" else {expected} if expected else set()
     next_visiting = {*visiting, number}
     for child_number in children:
         child = issues.get(child_number) if isinstance(child_number, int) else None
         if not isinstance(child, dict):
             reasons.append(_reason("host_unreadable", locator, "a native child cannot be read from GitHub"))
             continue
-        if _type(child) != expected:
-            reasons.append(_reason("invalid_native_child_type", f"issue:{child_number}", f"{kind} requires native {expected} children"))
+        child_type = _type(child)
+        if child_type not in allowed_types:
+            expected_label = ", ".join(sorted(allowed_types)) or "no child"
+            reasons.append(_reason("invalid_native_child_type", f"issue:{child_number}", f"{kind} requires native children of type: {expected_label}"))
             continue
         _validate_completed(child, issues, repository, actor, default_branch, reasons, next_visiting)
 

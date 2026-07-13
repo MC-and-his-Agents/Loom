@@ -88,6 +88,12 @@ def main() -> int:
     valid = module.evaluate_closure(snapshot(1, [phase, fr, work_item]), host_resolved=True)
     if valid.get("verdict") != "allow_completed_close" or valid.get("completed") is not True:
         raise AssertionError(f"complete native tree should close: {valid}")
+    problem = issue(7, "product_problem", labels=["product-problem"], children=[2])
+    release_work_item = issue(8, "work_item", merged_prs=[pr])
+    phase_with_problem = issue(1, "phase", children=[7, 8])
+    nested = module.evaluate_closure(snapshot(1, [phase_with_problem, problem, fr, work_item, release_work_item]), host_resolved=True)
+    if nested.get("verdict") != "allow_completed_close":
+        raise AssertionError(f"Phase must accept a Product Problem subtree and a phase-scoped release WI: {nested}")
     host_marker = '<!-- loom:host-action-attestation {"schema_version":"loom-host-action-attestation/v1","action_locator":"github://o/r/host-action/branch-protection/main","observed_at":"2026-07-11T00:02:00Z","verdict":"passed"} -->'
     host_comment = {"body": host_marker, "created_at": "2026-07-11T00:02:00Z", "author_association": "NONE", "user": {"id": 1, "login": "maintainer"}}
     host_only = issue(3, "work_item", labels=["host-only-delivery"], comments=[host_comment])
