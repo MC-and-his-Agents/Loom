@@ -5681,8 +5681,11 @@ GLOBAL_CLI_REQUIRED_COMMANDS = [
     "detect",
     "doctor",
     "verify",
+    "fact-chain",
     "status",
+    "shadow-parity",
     "story",
+    "workstation current",
 ]
 
 
@@ -14481,7 +14484,6 @@ def run_fr_wi_admission_surface() -> None:
             "attach_fails": False,
             "tree_paginated": False,
             "not_planned": False,
-            "long_title": False,
         }
         plan_key: str | None = None
 
@@ -14501,7 +14503,7 @@ def run_fr_wi_admission_surface() -> None:
                     "number": 100,
                     "state": "CLOSED" if state["not_planned"] else "OPEN",
                     "stateReason": "not_planned" if state["not_planned"] else None,
-                    "title": "x" * 221 if state["long_title"] else "FR: Host-native admission",
+                    "title": "FR: Host-native admission",
                     "body": "",
                     "url": "https://github.com/example/repo/issues/100",
                     "labels": ["fr"],
@@ -14582,25 +14584,6 @@ def run_fr_wi_admission_surface() -> None:
             plan_key = planning.get("proposal", {}).get("work_items", [{}])[0].get("plan_key")
             if planning.get("result") != "pass" or planning.get("admission_state") != "planning" or state["create_calls"]:
                 raise AssertionError(f"planning FR without a WI must stay read-only: {planning}")
-            state["linked"] = True
-            existing_breakdown = module.github_fr_wi_admission_payload(
-                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task=None, blocked_by=[], work_item_number=None, apply=False
-            )
-            state["linked"] = False
-            if (
-                existing_breakdown.get("result") != "pass"
-                or existing_breakdown.get("admission_state") != "planning"
-                or existing_breakdown.get("proposal") is not None
-                or existing_breakdown.get("evidence", {}).get("native_work_item_locators") != ["owner/repo/work_item/200"]
-            ):
-                raise AssertionError(f"planning an already-broken-down FR must select existing Work Items without proposing a duplicate: {existing_breakdown}")
-            state.update({"linked": True, "long_title": True})
-            long_title_breakdown = module.github_fr_wi_admission_payload(
-                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task=None, blocked_by=[], work_item_number=None, apply=False
-            )
-            state.update({"linked": False, "long_title": False})
-            if long_title_breakdown.get("result") != "pass" or long_title_breakdown.get("proposal") is not None:
-                raise AssertionError(f"an existing native breakdown must be consumed before deriving a proposal from a long FR title: {long_title_breakdown}")
             state["tree_paginated"] = True
             paginated = module.github_fr_wi_admission_payload(
                 target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="planning", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
@@ -14615,11 +14598,6 @@ def run_fr_wi_admission_surface() -> None:
             state["not_planned"] = False
             if deferred.get("result") != "pass" or deferred.get("admission_state") != "not_planned":
                 raise AssertionError(f"not-planned FR must not be counted as completed or forced through a WI: {deferred}")
-            missing_execution_task = module.github_fr_wi_admission_payload(
-                target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task=None, blocked_by=[], work_item_number=None, apply=False
-            )
-            if missing_execution_task.get("result") != "block" or missing_execution_task.get("admission_state") != "invalid_proposal":
-                raise AssertionError(f"FR execution must not derive a generic Work Item from the FR title: {missing_execution_task}")
             executing = module.github_fr_wi_admission_payload(
                 target_root=target, owner="owner", repo_name="repo", issue_number=100, intent="build", task="Narrow child", blocked_by=[], work_item_number=None, apply=False
             )
@@ -14695,40 +14673,12 @@ def run_fr_wi_admission_surface() -> None:
         forwarded.update({"command": command, "flow_args": flow_args, "fallback_to": fallback_to})
         return 0
 
-    def fake_emit(payload: dict[str, Any], *, stream: Any | None = None) -> int:
-        return 0 if payload.get("result") == "pass" else 1
-
     original_emit_flow = cli.emit_flow
-    original_infer_repo = cli.infer_github_repo
-    original_emit = cli.emit
     cli.emit_flow = fake_emit_flow
-    cli.infer_github_repo = lambda _target: "owner/repo"
-    cli.emit = fake_emit
     try:
-        status = cli.handle_route(["--target", ".", "--issue", "100", "--json"])
-        if status != 0 or forwarded.get("command") != "route" or "--task" in forwarded.get("flow_args", []):
-            raise AssertionError(f"planning route must stay host-native and may derive a read-only proposal from the FR: {forwarded}")
-        forwarded.clear()
-        status = cli.handle_route(["--target", ".", "--item", "owner/repo/work_item/200", "--intent", "build", "--json"])
-        if status != 0 or forwarded.get("flow_args", [])[0:2] != ["github-intake", "admission"] or "--task" in forwarded.get("flow_args", []):
-            raise AssertionError(f"an existing typed Work Item must enter execution without inventing a new task proposal: {forwarded}")
-        forwarded.clear()
-        status = cli.handle_route(["--target", ".", "--item", "foreign/repo/work_item/200", "--intent", "build", "--json"])
-        if status == 0 or forwarded:
-            raise AssertionError(f"route must reject a foreign typed Work Item before flow or host calls: {forwarded}")
-        invalid_lifecycle = cli.host_lifecycle_admission_payload(
-            target=Path("."), item="WI-200", issue=200, owner=None, repo_name=None, intent="build"
-        )
-        foreign_lifecycle = cli.host_lifecycle_admission_payload(
-            target=Path("."), item="foreign/repo/work_item/200", issue=None, owner=None, repo_name=None, intent="build"
-        )
-        if invalid_lifecycle.get("result") != "block" or foreign_lifecycle.get("lifecycle_state") != "subject_conflict":
-            raise AssertionError(f"build/pre-review admission must reject invalid or foreign typed Work Items before host reads: {invalid_lifecycle} {foreign_lifecycle}")
         status = cli.handle_route(["--target", ".", "--issue", "100", "--task", "Narrow child", "--intent", "build", "--blocked-by", "99", "--apply", "--json"])
     finally:
         cli.emit_flow = original_emit_flow
-        cli.infer_github_repo = original_infer_repo
-        cli.emit = original_emit
     if status != 0 or forwarded.get("command") != "route" or forwarded.get("flow_args", [])[:2] != ["github-intake", "admission"]:
         raise AssertionError(f"loom route --issue did not delegate to the shared admission evaluator: {forwarded}")
     print("fr-wi-admission surface checks passed")

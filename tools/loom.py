@@ -12422,6 +12422,24 @@ def handle_route(argv: list[str]) -> int:
             return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route typed Work Item does not belong to the target repository.", missing_inputs=["typed Work Item matching target origin"], fallback_to="make --item and --target identify the same repository"))
     issue = args.issue or (int(parsed_item["id"]) if parsed_item else None)
     if issue is None:
+        if args.task and args.intent == "planning" and not args.apply and not args.blocked_by and args.work_item is None:
+            return emit(
+                output(
+                    "route",
+                    "pass",
+                    schema=SCENARIO_SCHEMA,
+                    summary="The task remains an unbound read-only planning input; execution is not admitted.",
+                    target=str(target),
+                    admission_state="planning_unbound",
+                    task=args.task,
+                    mutates=False,
+                    host_mutations=False,
+                    carrier_mutations=False,
+                    execution_admitted=False,
+                    next_action="select or provide one GitHub FR/Work Item subject before entering execution",
+                    fallback_to="loom route --target <repo> --issue <issue> --json",
+                )
+            )
         return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route requires one host subject.", missing_inputs=["host subject"], fallback_to="loom route --target <repo> --issue <issue> --json"))
     if args.issue is not None and parsed_item is not None and args.issue != parsed_item["id"]:
         return emit(output("route", "block", schema=SCENARIO_SCHEMA, summary="Route host subjects conflict.", missing_inputs=["consistent Work Item subject"], fallback_to="make --issue and --item identify the same Work Item"))
