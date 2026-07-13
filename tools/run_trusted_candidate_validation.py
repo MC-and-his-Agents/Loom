@@ -248,6 +248,36 @@ def trusted_overlay(
     return contract_transition
 
 
+def initialize_contract_transition_git_snapshot(transition_root: Path, environment: dict[str, str]) -> None:
+    git_commands = (
+        ("git", "init", "-b", "main"),
+        ("git", "add", "--all"),
+        (
+            "git",
+            "-c",
+            "user.name=Loom Contract Transition",
+            "-c",
+            "user.email=loom-transition@invalid.local",
+            "-c",
+            "commit.gpgSign=false",
+            "commit",
+            "-m",
+            "contract transition snapshot",
+        ),
+    )
+    for command in git_commands:
+        completed = subprocess.run(
+            command,
+            cwd=transition_root,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            raise ValueError(f"could not initialize isolated contract transition Git snapshot: {command[1]}")
+
+
 def run_contract_transition_check(
     candidate_root: Path,
     temporary_root: Path,
@@ -265,9 +295,12 @@ def run_contract_transition_check(
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
     isolated_home.mkdir()
-    environment = dict(safe_environment)
+    environment = {key: value for key, value in safe_environment.items() if not key.startswith("GIT_")}
     environment.update(
         {
+            "GIT_CONFIG_GLOBAL": str(isolated_home / ".gitconfig"),
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
             "HOME": str(isolated_home),
             "LOOM_CONTRACT_TRANSITION": "1",
             "PYTHONPATH": os.pathsep.join(
@@ -278,6 +311,7 @@ def run_contract_transition_check(
             ),
         }
     )
+    initialize_contract_transition_git_snapshot(transition_root, environment)
     checker = str(transition_root / CONTRACT_TRANSITION_CHECKER)
     targeted = subprocess.run(
         [sys.executable, checker, "--surface", CONTRACT_TRANSITION_SURFACE],
