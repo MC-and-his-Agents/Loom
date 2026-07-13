@@ -234,37 +234,45 @@ def _green_merged_pr(issue: dict[str, Any], default_branch: str) -> bool:
     return False
 
 
-def _valid_host_action_attestation(issue: dict[str, Any], repository: str) -> bool:
+def _host_action_attestation_errors(issue: dict[str, Any], repository: str) -> list[str]:
     comments = issue.get("comments")
     if issue.get("comments_complete") is not True or not isinstance(comments, list):
-        return False
+        return ["comments_unreadable"]
     matches: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for comment in comments:
         if not isinstance(comment, dict) or not isinstance(comment.get("body"), str):
-            return False
+            return ["comment_identity_unreadable"]
         for match in HOST_ACTION_ARTIFACT_RE.finditer(comment["body"]):
             try:
                 payload = json.loads(match.group(1))
             except json.JSONDecodeError:
-                return False
+                return ["marker_json_invalid"]
             if isinstance(payload, dict):
                 matches.append((comment, payload))
     if len(matches) != 1:
-        return False
+        return [f"marker_count:{len(matches)}"]
     comment, payload = matches[0]
     user = comment.get("user") if isinstance(comment.get("user"), dict) else {}
     observed_at = _parse_time(payload.get("observed_at"))
-    return (
-        set(payload) == {"schema_version", "action_locator", "observed_at", "verdict"}
-        and payload.get("schema_version") == "loom-host-action-attestation/v1"
-        and isinstance(payload.get("action_locator"), str)
-        and payload["action_locator"].casefold().startswith(f"github://{repository}/host-action/".casefold())
-        and observed_at is not None
-        and _text(payload.get("verdict")) == "passed"
-        and _text(comment.get("author_association")) in TRUSTED_AUTHOR_ASSOCIATIONS
-        and isinstance(user.get("login"), str)
-        and bool(user.get("login"))
-    )
+    errors: list[str] = []
+    if set(payload) != {"schema_version", "action_locator", "observed_at", "verdict"} or payload.get("schema_version") != "loom-host-action-attestation/v1":
+        errors.append("schema_invalid")
+    action_locator = payload.get("action_locator")
+    if not isinstance(action_locator, str) or not action_locator.casefold().startswith(f"github://{repository}/host-action/".casefold()):
+        errors.append("action_locator_invalid")
+    if observed_at is None:
+        errors.append("observed_at_invalid")
+    if _text(payload.get("verdict")) != "passed":
+        errors.append("verdict_not_passed")
+    if _text(comment.get("author_association")) not in TRUSTED_AUTHOR_ASSOCIATIONS:
+        errors.append("author_association_untrusted")
+    if not isinstance(user.get("login"), str) or not user.get("login"):
+        errors.append("author_login_unreadable")
+    return errors
+
+
+def _valid_host_action_attestation(issue: dict[str, Any], repository: str) -> bool:
+    return not _host_action_attestation_errors(issue, repository)
 
 
 def _validate_completed(
@@ -300,7 +308,11 @@ def _validate_completed(
     if kind == "work_item":
         if _green_merged_pr(issue, default_branch):
             return
-        if HOST_ONLY_DELIVERY_LABEL in _labels(issue) and _valid_host_action_attestation(issue, repository):
+        if HOST_ONLY_DELIVERY_LABEL in _labels(issue):
+            attestation_errors = _host_action_attestation_errors(issue, repository)
+            if not attestation_errors:
+                return
+            reasons.append(_reason("missing_delivery_attestation", locator, "host-only-delivery attestation is invalid: " + ", ".join(attestation_errors)))
             return
         reasons.append(_reason("missing_delivery_attestation", locator, "Work Item needs merged delivery checks, or an authenticated host-action attestation when explicitly labeled host-only-delivery"))
         return
