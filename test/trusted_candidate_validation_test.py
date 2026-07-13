@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "tools" / "run_trusted_candidate_validation.py"
+SHARED_SCRIPTS = ROOT / "src" / "skills" / "shared" / "scripts"
 
 
 def load_runner():
@@ -22,7 +25,26 @@ def load_runner():
     return module
 
 
+def load_loom_check():
+    sys.path.insert(0, str(SHARED_SCRIPTS))
+    import loom_check  # type: ignore[import-not-found]
+
+    return loom_check
+
+
 class TrustedCandidateValidationTest(unittest.TestCase):
+    def test_removed_state_rejects_force_tracked_runtime_residue(self) -> None:
+        loom_check = load_loom_check()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime_result = root / ".loom" / "runtime" / "result.json"
+            runtime_result.parent.mkdir(parents=True)
+            runtime_result.write_text("{}\n", encoding="utf-8")
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "-f", ".loom/runtime/result.json"], check=True)
+            failures = loom_check.check_root_self_adoption_carrier(root)
+        self.assertTrue(any("tracked root residue" in failure.detail for failure in failures))
+
     def test_candidate_environment_does_not_write_python_cache(self) -> None:
         runner = load_runner()
         with tempfile.TemporaryDirectory() as temporary:

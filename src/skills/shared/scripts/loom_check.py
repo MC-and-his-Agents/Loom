@@ -6208,6 +6208,20 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             ".loom/cache/",
             ".loom/local/",
         )
+        tracked_disallowed: set[str] = set()
+        if (root / ".git").exists():
+            tracked_result = run_command(root, ["git", "ls-files", "--", ".loom"], timeout_seconds=30)
+            if tracked_result.returncode != 0:
+                detail = tracked_result.stderr.strip() or tracked_result.stdout.strip() or "git ls-files failed"
+                failures.append(Failure("root-self-adoption", f"tracked root carrier readback failed: {detail}"))
+            else:
+                tracked_disallowed = {
+                    relative
+                    for relative in tracked_result.stdout.splitlines()
+                    if relative and relative not in allowed_stable_files
+                }
+                for relative in sorted(tracked_disallowed):
+                    failures.append(Failure("root-self-adoption", f"tracked root residue must stay absent: `{relative}`"))
         loom_root = root / ".loom"
         for path in sorted(loom_root.rglob("*")) if loom_root.is_dir() else ():
             if not path.is_file() and not path.is_symlink():
@@ -6218,6 +6232,7 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             )
             if (
                 relative not in allowed_stable_files
+                and relative not in tracked_disallowed
                 and not relative.startswith(ignored_runtime_prefixes)
                 and not ignored_attempt
             ):
