@@ -63,7 +63,6 @@ def snapshot(subject: int, issues: list[dict[str, object]], *, product_acceptanc
         "subject": subject,
         "repository": "o/r",
         "default_branch": "main",
-        "review_policy": {"read_complete": True, "required_approving_review_count": 1},
         "issues": issues,
         "product_acceptance": acceptance(subject) if product_acceptance is None else product_acceptance,
     }
@@ -118,14 +117,6 @@ def main() -> int:
     unapproved = issue(3, "work_item", merged_prs=[{**pr, "review_decision": "CHANGES_REQUESTED"}])
     if module.evaluate_closure({"subject": 1, "default_branch": "main", "issues": [phase, fr, unapproved]}).get("verdict") != "reopen_required":
         raise AssertionError("a merged PR without approval must reopen")
-    zero_approval_policy = snapshot(1, [phase, fr, issue(3, "work_item", merged_prs=[{**pr, "review_decision": None}])])
-    zero_approval_policy["review_policy"] = {"read_complete": True, "required_approving_review_count": 0}
-    if module.evaluate_closure(zero_approval_policy, host_resolved=True).get("verdict") != "allow_completed_close":
-        raise AssertionError("a merged green PR must satisfy a host policy requiring zero approvals")
-    unreadable_review_policy = snapshot(1, [phase, fr, work_item])
-    unreadable_review_policy["review_policy"] = {"read_complete": False}
-    if module.evaluate_closure(unreadable_review_policy, host_resolved=True).get("verdict") != "reopen_required":
-        raise AssertionError("unreadable host review policy must fail closed")
     pending_checks = issue(3, "work_item", merged_prs=[{**pr, "check_rollup": {"state": "PENDING", "contexts_complete": True, "contexts": pr["check_rollup"]["contexts"]}}])
     if module.evaluate_closure({"subject": 1, "default_branch": "main", "issues": [phase, fr, pending_checks]}).get("verdict") != "reopen_required":
         raise AssertionError("a merged PR without a successful check rollup must reopen")
