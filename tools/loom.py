@@ -2754,7 +2754,10 @@ def host_lifecycle_admission_payload(
     """Use the shared host admission evaluator before a lifecycle entrypoint."""
 
     parsed_item = parse_typed_locator(item, allowed_types={"work_item"}, allow_legacy=False) if item else None
-    if item and parsed_item is None:
+    legacy_item_match = re.fullmatch(r"WI-(\d+)", item or "")
+    legacy_item_issue = int(legacy_item_match.group(1)) if legacy_item_match is not None else None
+    legacy_item_compatibility = legacy_item_issue is not None and issue == legacy_item_issue
+    if item and parsed_item is None and not legacy_item_compatibility:
         return {
             "result": "block",
             "lifecycle_state": "missing_subject",
@@ -12432,6 +12435,7 @@ def handle_route(argv: list[str]) -> int:
                     target=str(target),
                     admission_state="planning_unbound",
                     task=args.task,
+                    selected_skill="loom-adopt",
                     mutates=False,
                     host_mutations=False,
                     carrier_mutations=False,
@@ -12718,6 +12722,34 @@ def handle_scenario(command: str, argv: list[str]) -> int:
     }
     if command in flow_operations:
         if command in {"build", "pre-review"}:
+            legacy_item_match = re.fullmatch(r"WI-(\d+)", args.item or "")
+            if legacy_item_match is not None and args.issue is not None and int(legacy_item_match.group(1)) != args.issue:
+                return emit(
+                    output(
+                        command,
+                        "block",
+                        schema=SCENARIO_SCHEMA,
+                        summary="Legacy Work Item locator conflicts with the explicit host subject; execution is not admitted.",
+                        wrapped_command="flow",
+                        fallback_to="admission",
+                        blocking_failures=[
+                            {
+                                "message": (
+                                    "current item mismatch: legacy locator "
+                                    f"{args.item} does not identify host Work Item {args.issue}; "
+                                    "no repository current pointer was read"
+                                )
+                            }
+                        ],
+                        carrier_mutations=False,
+                        repo_execution_carriers_consumed=False,
+                        compatibility_envelope={
+                            "synthetic": True,
+                            "delegated": False,
+                            "legacy_locator_accepted": False,
+                        },
+                    )
+                )
             lifecycle_admission = host_lifecycle_admission_payload(
                 target=target,
                 item=args.item,
