@@ -298,6 +298,8 @@ def selected_surface_checks(
     surfaces: list[str] | None,
     fixture_groups: list[str] | None,
 ) -> tuple[SurfaceCheck, ...]:
+    if not surfaces and not fixture_groups and legacy_surface_state() == "removed":
+        return tuple(check for check in checks if check.name == "aggregate")
     selected = checks
     if surfaces:
         wanted = set(surfaces)
