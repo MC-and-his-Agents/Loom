@@ -38,6 +38,7 @@ PROTECTED_HARNESS_FILES = (
 CONTRACT_TRANSITION_CHECKER = "tools/check_cli_contract.py"
 CONTRACT_TRANSITION_SURFACE = "legacy-command-eol"
 CONTRACT_TRANSITION_REQUIRED_TARGET = "cli-contract-check"
+CONTRACT_TRANSITION_ORIGIN = "https://github.com/MC-and-his-Agents/Loom.git"
 CONTRACT_TRANSITION_TRUSTED_SHA256 = "9570ae1384a389725cd140b954ccac79e29cbbc03e31851bf02e90154d5628b5"
 CONTRACT_TRANSITION_CANDIDATE_SHA256 = "ee43db533db23664ccf76163157ba602eaaf367ef8f8c8b2b4eaf7f1e5ba1bcd"
 
@@ -251,6 +252,7 @@ def trusted_overlay(
 def initialize_contract_transition_git_snapshot(transition_root: Path, environment: dict[str, str]) -> None:
     git_commands = (
         ("git", "init", "-b", "main"),
+        ("git", "remote", "add", "origin", CONTRACT_TRANSITION_ORIGIN),
         ("git", "add", "--all"),
         (
             "git",
