@@ -34,6 +34,89 @@ RELEASE_READBACK_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "rele
 WORKSTATION_REGISTRY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "workstation-registry-fixtures.json"
 RUNTIME_PATHS = REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "runtime_paths.py"
 CLI_CONTRACT_SUBPROCESS_TIMEOUT_SECONDS = 60
+LEGACY_TRANSITION_RUNTIME_SHA256 = "e8aae35f00e3eacf39f1251886b978f80bc5404255bf042e91cb316f227be7c9"
+LEGACY_COMMAND_INVENTORY = (
+    "acceptance validate",
+    "upgrade-plan",
+    "runtime-upgrade status", "runtime-upgrade prepare", "runtime-upgrade check", "runtime-upgrade pr", "runtime-upgrade closeout",
+    "migrate-global-cache plan", "migrate-global-cache apply", "rollback", "release resume", "release closeout-sync", "ship status", "ship preflight",
+    "checkpoint admission", "checkpoint build", "checkpoint merge", "gate pre-review", "gate spec-review", "gate review", "gate pr", "gate merge",
+    "gate freeze check", "gate freeze write", "gate closeout", "gate repair-pr",
+    "carrier closeout-sync", "fact-chain", "shadow-parity",
+    "host list", "host doctor", "host install", "host verify", "host register", "host upgrade", "host remove",
+    "closeout run", "closeout batch", "workspace locate", "workspace audit", "issue inspect", "issue bind", "issue reconcile",
+    "project status", "project reconcile", "pr inspect", "pr metadata-render", "pr metadata-readback", "pr metadata-update", "pr metadata-preflight",
+    "pr-intent prepare", "pr-intent check", "docs-pr prepare", "docs-pr check", "reconcile",
+    "installed-state show", "installed-state export",
+    "profile upgrade-plan", "profile upgrade", "profile light-migration-plan", "governance-profile status", "governance-profile upgrade-plan",
+    "governance-profile upgrade", "governance-profile binding", "repair apply",
+    "init", "adopt", "adopt adversarial-test", "spec", "plan", "spec-review", "closeout status", "closeout sync", "closeout queue status",
+    "resume", "handoff", "retire",
+    "skills list", "skills generate", "skills check", "skills doctor", "skills package", "skills release-check",
+    "suite inspect", "suite scaffold", "suite validate", "suite evidence inspect", "suite evidence scaffold", "suite evidence validate",
+    "suite carrier inspect", "suite carrier validate",
+    "workstation register", "workstation list", "workstation unregister", "workstation upgrade", "workstation current",
+)
+PUBLIC_COMMAND_PROTOCOLS = (
+    ("acceptance resolve", "product_acceptance"),
+    ("attestation closeout", "host_attestation"),
+    ("attestation readback", "host_attestation"),
+    ("build", "delivery_verdict"),
+    ("closeout", "reconciliation_verdict"),
+    ("detect", "observation"),
+    ("doctor", "observation"),
+    ("help", "manifest"),
+    ("install", "migration_plan"),
+    ("installed-state validate", "manifest"),
+    ("merge check", "delivery_verdict"),
+    ("merge run", "delivery_verdict"),
+    ("merge-ready", "delivery_verdict"),
+    ("pr gate", "delivery_verdict"),
+    ("pre-review", "delivery_verdict"),
+    ("profile light-migration-reconcile", "reconciliation_verdict"),
+    ("profile status", "observation"),
+    ("release readback", "release_judgment"),
+    ("repair plan", "migration_plan"),
+    ("review", "review_attestation"),
+    ("route", "locator"),
+    ("ship", "delivery_verdict"),
+    ("status", "observation"),
+    ("story", "locator"),
+    ("upgrade", "migration_plan"),
+    ("verify", "readback"),
+    ("version", "manifest"),
+    ("workspace check", "readback"),
+    ("workspace create", "locator"),
+    ("workspace retire", "reconciliation_verdict"),
+)
+PUBLIC_PROTOCOL_TYPES = (
+    "manifest",
+    "locator",
+    "observation",
+    "delivery_verdict",
+    "product_acceptance",
+    "reconciliation_verdict",
+    "review_attestation",
+    "host_attestation",
+    "failure_envelope",
+    "migration_plan",
+    "release_judgment",
+    "readback",
+)
+
+REMOVED_PUBLIC_AGGREGATE_SURFACES = (
+    "runtime-paths",
+    "merge-wrapper",
+    "ship-wrapper",
+    "closeout-wrapper",
+    "release-readback",
+    "pr-gate-target-readback",
+    "controlled-merge",
+    "host-planning-taxonomy",
+    "fr-wi-admission",
+    "failure-envelope",
+    "legacy-command-eol",
+)
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
     ".loom/work-items/WI-truth.md",
@@ -215,6 +298,8 @@ def selected_surface_checks(
     surfaces: list[str] | None,
     fixture_groups: list[str] | None,
 ) -> tuple[SurfaceCheck, ...]:
+    if not surfaces and not fixture_groups and legacy_surface_state() == "removed":
+        return tuple(check for check in checks if check.name == "aggregate")
     selected = checks
     if surfaces:
         wanted = set(surfaces)
@@ -348,6 +433,76 @@ def run_json(args: list[str], *, expect: int | None = None, env_overrides: dict[
         raise AssertionError(f"{args} did not emit JSON: {exc}\n{raw}") from exc
     annotate_contract_artifact_base(payload, args, cwd=REPO_ROOT)
     return completed.returncode, payload
+
+
+def legacy_surface_state() -> str:
+    module = load_loom_cli_module()
+    state = str(getattr(module, "LEGACY_SURFACE_STATE", "transition"))
+    if state not in {"transition", "removed"}:
+        raise AssertionError(f"unsupported legacy surface state: {state}")
+    return state
+
+
+def run_legacy_command_eol_surface() -> None:
+    if len(LEGACY_COMMAND_INVENTORY) != 96 or len(set(LEGACY_COMMAND_INVENTORY)) != 96:
+        raise AssertionError("legacy command inventory must contain exactly 96 unique commands")
+    state = legacy_surface_state()
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    command_protocols = tuple(
+        sorted(
+            (str(command.get("command")), str(command.get("protocol_type")))
+            for command in help_payload.get("commands", [])
+            if isinstance(command, dict)
+        )
+    )
+    if state == "transition":
+        module = load_loom_cli_module()
+        hidden_commands = tuple(sorted(set(module.COMMAND_INDEX) - set(module.PUBLIC_COMMAND_NAMES)))
+        if (
+            hashlib.sha256(LOOM.read_bytes()).hexdigest() != LEGACY_TRANSITION_RUNTIME_SHA256
+            or help_payload.get("hidden_compatibility_count") != 96
+            or help_payload.get("legacy_surface_remove_by") != "v0.31.0"
+            or hidden_commands != tuple(sorted(LEGACY_COMMAND_INVENTORY))
+            or command_protocols != PUBLIC_COMMAND_PROTOCOLS
+            or tuple(help_payload.get("protocol_types", [])) != PUBLIC_PROTOCOL_TYPES
+        ):
+            raise AssertionError("transition runtime must expose the frozen 96-command removal inventory")
+        print("legacy command EOL transition contract passed")
+        return
+    if (
+        help_payload.get("command_count") != 30
+        or help_payload.get("protocol_type_count") != 12
+        or help_payload.get("hidden_compatibility_count") != 0
+        or "legacy_surface_remove_by" in help_payload
+        or command_protocols != PUBLIC_COMMAND_PROTOCOLS
+        or tuple(help_payload.get("protocol_types", [])) != PUBLIC_PROTOCOL_TYPES
+    ):
+        raise AssertionError("removed runtime must expose the frozen 30-command/12-protocol mapping and zero hidden compatibility decoders")
+    for command in LEGACY_COMMAND_INVENTORY:
+        status, payload = run_json([*command.split(), "--target", "/loom-must-not-read-target", "--json"])
+        failure = payload.get("failure_envelope") if isinstance(payload.get("failure_envelope"), dict) else {}
+        primary = failure.get("primary_cause") if isinstance(failure.get("primary_cause"), dict) else {}
+        if (
+            status == 0
+            or payload.get("result") != "block"
+            or payload.get("command") != command
+            or payload.get("failed_layer") != "cli-command-router"
+            or payload.get("fallback_to") != ["loom help --json"]
+            or primary.get("failure_domain") != "toolchain"
+            or primary.get("code") != "unsupported_command_surface"
+            or primary.get("cause_class") != "unsupported_command_surface"
+            or primary.get("owner") != "loom"
+            or primary.get("retryable") is not False
+            or primary.get("remediation_command") != "loom help --json"
+            or failure.get("secondary_causes")
+            or payload.get("mutates") is not False
+            or payload.get("host_mutations") is not False
+            or payload.get("carrier_mutations") is not False
+            or "target" in payload
+            or "host" in payload
+        ):
+            raise AssertionError(f"legacy command did not fail before target/host/mutation reads: {command}: {payload}")
+    print("legacy command EOL surface checks passed")
 
 
 def contract_target_base_from_args(args: list[str], *, cwd: Path) -> Path | None:
@@ -3222,7 +3377,11 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
 def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
     suite_validation = payload.get("suite_validation")
     if not isinstance(suite_validation, dict):
-        raise AssertionError("build did not expose suite validation")
+        raise AssertionError(
+            "build did not expose suite validation: "
+            f"result={payload.get('result')!r} fallback_to={payload.get('fallback_to')!r} "
+            f"missing_inputs={payload.get('missing_inputs')!r} keys={sorted(payload)}"
+        )
     validator_mode = suite_validation.get("validator_mode")
     cli_json_consumed = (
         suite_validation.get("command") == "suite validate"
@@ -8587,6 +8746,7 @@ def governance_metadata_body(
     include_legacy_bindings: bool = True,
     fields_override: dict[str, Any] | None = None,
     surface: str = "merge_ready",
+    issue: int | None = None,
 ) -> str:
     fields: dict[str, Any] = {
         "work_item_locator": typed_work_item_locator(item, owner, repo),
@@ -8615,11 +8775,11 @@ def governance_metadata_body(
         "source": {"rendered_hash": "sha256:fixture"},
         "parser_version": "loom-pr-metadata-parser/v2",
     }
-    legacy_binding = (
-        f"Work Item: {typed_work_item_locator(item, owner, repo)}\n\n"
-        if include_legacy_bindings
-        else ""
-    )
+    legacy_binding = ""
+    if include_legacy_bindings:
+        legacy_binding = f"Work Item: {typed_work_item_locator(item, owner, repo)}\n\n"
+        if issue is not None:
+            legacy_binding += f"Issue: #{issue}\n\n"
     return legacy_binding + "<!-- loom:repo-pr-metadata\n" + f"{json.dumps(envelope, indent=2)}\n" + "-->\n"
 
 
@@ -13505,11 +13665,14 @@ def run_work_item_audit_surface() -> None:
 def run_release_readback_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = internal_cli_matrix()
-    for command in ("release readback", "release resume"):
-        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
-            raise AssertionError(f"{command} must be declared as an implemented delivery command")
-    if matrix["release closeout-sync"]["status"] != "compatibility" or matrix["release closeout-sync"]["domain"] != "delivery":
-        raise AssertionError("release closeout-sync must be declared as compatibility-only")
+    if matrix["release readback"]["status"] != "implemented" or matrix["release readback"]["domain"] != "delivery":
+        raise AssertionError("release readback must be declared as an implemented delivery command")
+    state = legacy_surface_state()
+    if state == "transition":
+        if matrix["release resume"]["status"] != "implemented" or matrix["release resume"]["domain"] != "delivery":
+            raise AssertionError("release resume must be declared as an implemented delivery command during transition")
+        if matrix["release closeout-sync"]["status"] != "compatibility" or matrix["release closeout-sync"]["domain"] != "delivery":
+            raise AssertionError("release closeout-sync must be declared as compatibility-only during transition")
 
     expected = {
         "published": ("release", "resume", "published"),
@@ -13522,6 +13685,8 @@ def run_release_readback_surface() -> None:
         "no-release-docs-only": ("release", "resume", "no_release"),
     }
     for fixture, (domain, operation, verdict) in expected.items():
+        if state == "removed" and operation != "readback":
+            continue
         args = [
             domain,
             operation,
@@ -14812,6 +14977,26 @@ def run_failure_envelope_surface() -> None:
 
 
 def run_aggregate_cli_contract() -> None:
+    if legacy_surface_state() == "removed":
+        removed_public_runners = {
+            "runtime-paths": run_runtime_paths_surface,
+            "merge-wrapper": run_merge_wrapper_surface,
+            "ship-wrapper": run_ship_wrapper_surface,
+            "closeout-wrapper": run_closeout_wrapper_surface,
+            "release-readback": run_release_readback_surface,
+            "pr-gate-target-readback": run_pr_gate_target_readback_surface,
+            "controlled-merge": run_controlled_merge_surface,
+            "host-planning-taxonomy": run_host_planning_taxonomy_surface,
+            "fr-wi-admission": run_fr_wi_admission_surface,
+            "failure-envelope": run_failure_envelope_surface,
+            "legacy-command-eol": run_legacy_command_eol_surface,
+        }
+        if tuple(removed_public_runners) != REMOVED_PUBLIC_AGGREGATE_SURFACES:
+            raise AssertionError("removed public aggregate runner inventory drifted")
+        for runner in removed_public_runners.values():
+            runner()
+        print("public-only aggregate CLI contract passed")
+        return
     run_host_default_lifecycle_contract()
     assert_workspace_audit_wrapper_contract()
     assert_pr_metadata_wrapper_argument_contract()
@@ -15010,6 +15195,7 @@ def run_aggregate_cli_contract() -> None:
     carrier_drift_body = runtime_pr_dir / "cli-contract-carrier-drift.md"
     try:
         freeze_item = active_work_item_id()
+        freeze_issue = typed_work_item_locator(freeze_item).rsplit("/", 1)[1]
         branch = "work/cli-contract-fixture"
         body = governance_metadata_body(
             item=freeze_item,
@@ -15017,6 +15203,7 @@ def run_aggregate_cli_contract() -> None:
             repo="Loom",
             branch=branch,
             head_sha=head_sha,
+            issue=int(freeze_issue),
         )
         rendered_pr_body.write_text(body, encoding="utf-8")
         readback_pr_body.write_text(body, encoding="utf-8")
@@ -15029,6 +15216,12 @@ def run_aggregate_cli_contract() -> None:
                 str(REPO_ROOT),
                 "--item",
                 freeze_item,
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--issue",
+                freeze_issue,
                 "--head-sha",
                 head_sha,
                 "--branch",
@@ -15077,6 +15270,7 @@ def run_aggregate_cli_contract() -> None:
                 fields_override={
                     "work_item_locator": f"MC-and-his-Agents/Loom/work_item/{int(typed_work_item_locator(freeze_item).rsplit('/', 1)[1]) + 1}"
                 },
+                issue=int(freeze_issue),
             ),
             encoding="utf-8",
         )
@@ -15089,6 +15283,12 @@ def run_aggregate_cli_contract() -> None:
                 str(REPO_ROOT),
                 "--item",
                 freeze_item,
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--issue",
+                freeze_issue,
                 "--head-sha",
                 head_sha,
                 "--branch",
@@ -15226,7 +15426,7 @@ def run_aggregate_cli_contract() -> None:
                 "--surface",
                 "closeout",
                 "--item",
-                "work_item:1541",
+                "MC-and-his-Agents/Loom/work_item/1541",
                 "--branch",
                 "work/1541-pr-metadata-update-v2",
                 "--head-sha",
@@ -17027,7 +17227,7 @@ def run_suite_contract_surface() -> None:
 
 
 def available_surface_checks() -> tuple[SurfaceCheck, ...]:
-    return (
+    checks = (
         SurfaceCheck(
             name="suite-contract",
             fixture_group="suite-contract",
@@ -17144,11 +17344,20 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             run=run_failure_envelope_surface,
         ),
         SurfaceCheck(
+            name="legacy-command-eol",
+            fixture_group="legacy-command-eol",
+            run=run_legacy_command_eol_surface,
+        ),
+        SurfaceCheck(
             name="aggregate",
             fixture_group="check-cli-contract",
             run=run_aggregate_cli_contract,
         ),
     )
+    if legacy_surface_state() == "removed":
+        public_only_surfaces = {*REMOVED_PUBLIC_AGGREGATE_SURFACES, "aggregate"}
+        return tuple(check for check in checks if check.name in public_only_surfaces)
+    return checks
 
 
 def main(argv: list[str] | None = None) -> int:
