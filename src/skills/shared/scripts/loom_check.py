@@ -3065,8 +3065,8 @@ def require_shadow_parity_payload(
         category=category,
         context=context,
         payload=payload.get("runtime_state"),
-        expected_scene="repo-local-demo",
-        expected_carrier="repo-local-wrapper",
+        expected_scene="installed-runtime",
+        expected_carrier="installed-skills-root",
         allowed_results={"pass"},
     )
     governance_surface = {"governance_surface": payload.get("governance_surface")}
@@ -3498,8 +3498,8 @@ def require_live_smoke_payload(
         category=category,
         context=context,
         payload=runtime_state,
-        expected_scene="repo-local-demo",
-        expected_carrier="repo-local-wrapper",
+        expected_scene="installed-runtime",
+        expected_carrier="installed-skills-root",
         allowed_results=allowed_runtime_results,
     )
     command_plan = payload.get("command_plan")
@@ -3601,8 +3601,8 @@ def require_external_result_source_readback_payload(
         category=category,
         context=context,
         payload=payload.get("runtime_state"),
-        expected_scene="repo-local-demo",
-        expected_carrier="repo-local-wrapper",
+        expected_scene="installed-runtime",
+        expected_carrier="installed-skills-root",
         allowed_results={"pass", "block"} if payload.get("result") == "block" else {"pass"},
     )
     target = payload.get("target")
@@ -3722,8 +3722,8 @@ def require_dynamic_tool_live_availability_payload(
         category=category,
         context=context,
         payload=payload.get("runtime_state"),
-        expected_scene="repo-local-demo",
-        expected_carrier="repo-local-wrapper",
+        expected_scene="installed-runtime",
+        expected_carrier="installed-skills-root",
         allowed_results={"pass", "block"} if payload.get("result") == "block" else {"pass"},
     )
     target = payload.get("target")
@@ -3825,8 +3825,8 @@ def require_hook_envelope_live_check_payload(
         category=category,
         context=context,
         payload=payload.get("runtime_state"),
-        expected_scene="repo-local-demo",
-        expected_carrier="repo-local-wrapper",
+        expected_scene="installed-runtime",
+        expected_carrier="installed-skills-root",
         allowed_results={"pass", "block"} if payload.get("result") == "block" else {"pass"},
     )
     target = payload.get("target")
@@ -6195,8 +6195,33 @@ def check_demo_repo_local_cli(root: Path) -> list[Failure]:
 
 def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
     failures: list[Failure] = []
-    carrier_root = root / ".loom"
-    if not carrier_root.exists():
+    if not (root / ".loom/bootstrap/manifest.json").exists():
+        allowed_stable_files = {
+            ".loom/companion/README.md",
+            ".loom/companion/manifest.json",
+            ".loom/companion/repo-interface.json",
+            ".loom/review-profiles.json",
+        }
+        ignored_runtime_prefixes = (
+            ".loom/runtime/",
+            ".loom/tmp/",
+            ".loom/cache/",
+            ".loom/local/",
+        )
+        loom_root = root / ".loom"
+        for path in sorted(loom_root.rglob("*")) if loom_root.is_dir() else ():
+            if not path.is_file() and not path.is_symlink():
+                continue
+            relative = path.relative_to(root).as_posix()
+            ignored_attempt = relative.startswith(".loom/attempts/") and (
+                "/raw-logs/" in relative or "/scratch/" in relative
+            )
+            if (
+                relative not in allowed_stable_files
+                and not relative.startswith(ignored_runtime_prefixes)
+                and not ignored_attempt
+            ):
+                failures.append(Failure("root-self-adoption", f"removed root carrier must stay absent: `{relative}`"))
         return failures
     active_item = "INIT-0001"
     init_result = load_json_file(root / ".loom/bootstrap/init-result.json")
@@ -14054,7 +14079,6 @@ PY_COMPILE_CACHE_HYGIENE_TARGETS = (
     "tools/loom_check.py",
     "tools/loom_status.py",
     "tools/py_compile_clean.py",
-    "skills/shared/scripts/*.py",
     "src/skills/shared/scripts/*.py",
 )
 
@@ -18680,17 +18704,17 @@ def check_live_smoke_foundation_contract(root: Path) -> list[Failure]:
         "fallback_to": "live-smoke-retry-or-record-unavailable",
         "runtime_state": {
             "result": "pass",
-            "summary": "runtime carrier `repo-local-wrapper` is executing as `repo-local-demo` with a consistent bundled runtime.",
+            "summary": "runtime carrier `installed-skills-root` is executing as `installed-runtime` with a consistent bundled runtime.",
             "missing_inputs": [],
             "fallback_to": None,
-            "scene": "repo-local-demo",
-            "carrier": "repo-local-wrapper",
+            "scene": "installed-runtime",
+            "carrier": "installed-skills-root",
             "entry_family": "loom-flow",
             "install_root": "/tmp/install-root",
             "runtime_root": "/tmp/runtime-root",
             "registry_path": "/tmp/registry.json",
             "layout_or_manifest_path": "/tmp/install-layout.json",
-            "source_repo_root": "/tmp/source-repo",
+            "source_repo_root": None,
             "target_root": "/tmp/missing-live-target",
             "checks": {
                 "scene_marker": {"status": "pass", "summary": "scene marker is consistent."},
@@ -18860,17 +18884,17 @@ def check_external_result_source_readback_contract(root: Path) -> list[Failure]:
         "fallback_to": "live-smoke-retry-or-record-unavailable",
         "runtime_state": {
             "result": "pass",
-            "summary": "runtime carrier `repo-local-wrapper` is executing as `repo-local-demo` with a consistent bundled runtime.",
+            "summary": "runtime carrier `installed-skills-root` is executing as `installed-runtime` with a consistent bundled runtime.",
             "missing_inputs": [],
             "fallback_to": None,
-            "scene": "repo-local-demo",
-            "carrier": "repo-local-wrapper",
+            "scene": "installed-runtime",
+            "carrier": "installed-skills-root",
             "entry_family": "loom-flow",
             "install_root": "/tmp/install-root",
             "runtime_root": "/tmp/runtime-root",
             "registry_path": "/tmp/registry.json",
             "layout_or_manifest_path": "/tmp/install-layout.json",
-            "source_repo_root": "/tmp/source-repo",
+            "source_repo_root": None,
             "target_root": "/tmp/absent-live-target",
             "checks": {
                 "scene_marker": {"status": "pass", "summary": "scene marker is consistent."},

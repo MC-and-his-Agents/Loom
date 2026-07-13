@@ -1,5 +1,0 @@
-# WI-1741 Task Carrier
-
-| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1741 | Issue #1741 open under milestone #17 / parent FR #1734; branch work/1741-validation-profile; PR pending | in_progress | primary | .loom/work-items/WI-1741.md | .loom/specs/WI-1741/plan.md#phases | .loom/specs/WI-1741/spec.md#key-scenarios | .loom/specs/WI-1741/plan.md#validation | .loom/specs/WI-1741/evidence-map.md | Milestone #17 child issue under FR #1734; branch work/1741-validation-profile; worktree /Users/mc/dev/Loom-WI-1741-validation-profile. | Recheck current head SHA, PR metadata, suite evidence, hosted checks, no_release judgment, and merge gate before merge-ready consumption. |

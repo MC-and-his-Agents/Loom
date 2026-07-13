@@ -78,7 +78,6 @@
             "cli_explicit_input",
             "pr_body_machine_carrier",
             "host_readback",
-            "repo_carrier",
             "human_pr_body_field",
             "issue_title_or_body"
           ],

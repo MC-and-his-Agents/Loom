@@ -1,5 +1,0 @@
-# WI-1541 Task Carrier
-
-| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1541 | Issue OPEN / branch work/1541-pr-metadata-update-v2 / PR metadata render-update-readback slice | in_progress | primary | .loom/work-items/WI-1541.md | .loom/specs/WI-1541/plan.md#implementation-steps | .loom/specs/WI-1541/spec.md#acceptance-scenarios | .loom/specs/WI-1541/plan.md#validation | .loom/specs/WI-1541/evidence-map.md | GitHub issue #1541; milestone/12 PR metadata render/update/readback dependency for #1514/#1534 | Recheck PR body/head, metadata-update host readback, targeted CLI contract validation, generated runtime parity, target branch, merge commit, and closeout evidence before merge-ready or milestone closeout. |

@@ -1,9 +1,0 @@
-# WI-1544 Evidence Map
-
-| Evidence ID | Evidence Type | Source Locator | Consumes | Binding | Freshness | Consumer Boundary | Remediation Direction |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EV-001 | protocol_contract | `docs/methodology/harness/lane-orchestration.md` | `.loom/specs/WI-1544/spec.md` S1 S2 S3 | WI-1544 / lane orchestration contract | current | #1514/#1534 docs and skill convergence; #1515 closeout evidence | Re-read if lane descriptor, shared carrier, stale result, or conflict policy changes. |
-| EV-002 | methodology_linkage | `docs/methodology/harness/README.md` | `.loom/specs/WI-1544/spec.md` S4 | WI-1544 / harness methodology index | current | reader discovery and documentation gate | Re-run diff/readback if harness README is edited. |
-| EV-003 | skill_reference | `src/skills/loom-build/SKILL.md`; `src/skills/loom-resume/SKILL.md`; `src/skills/loom-handoff/SKILL.md`; `src/skills/loom-merge-ready/SKILL.md`; `src/skills/shared/references/harness/lane-orchestration.md` | `.loom/specs/WI-1544/spec.md` S4 | WI-1544 / executable skill references | current | generated skills surface and runtime copies | Re-run `python3 tools/skills_surface.py generate` and skills surface checks. |
-| EV-004 | generated_surface | `skills/**/.loom-runtime/**/lane-orchestration.md`; `skills/shared/references/harness/lane-orchestration.md` | `.loom/specs/WI-1544/plan.md` step 4 | WI-1544 / generated skills distribution | current | package/runtime distribution parity | Re-run generated-tree-drift and package-metadata checks. |
-| EV-005 | validation | `.loom/progress/WI-1544.md` | EV-001 EV-002 EV-003 EV-004 | WI-1544 / latest validation summary / head 2257d8564494f4a80796541208de9372e114260d | current | review, PR gate, merge-ready | Refresh after any code, docs, PR body, review, or carrier change. |

@@ -23,6 +23,12 @@ def load_runner():
 
 
 class TrustedCandidateValidationTest(unittest.TestCase):
+    def test_candidate_environment_does_not_write_python_cache(self) -> None:
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as temporary:
+            environment = runner.candidate_environment(Path(temporary))
+        self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
+
     def test_candidate_cannot_inject_python_startup_or_stdlib_modules(self) -> None:
         runner = load_runner()
         for relative, expected in (

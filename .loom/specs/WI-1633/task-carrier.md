@@ -1,6 +1,0 @@
-# WI-1633 Task Carrier
-
-| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1633 | 删除 repo-local plugin、skills 与 runtime 写入路径。 | done | primary | .loom/work-items/WI-1633.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/evidence-map.md | PR #1652 merged into main with bc70f7517aa7919b9b84e9b43dafb6cde2711790; issue #1633 closed at 2026-06-20T08:54:17Z. | Terminal carrier retained as closeout evidence. |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1639 | 清理 CLI command matrix、安装参数与 single-skill 命令面。 | done | mirror | .loom/work-items/WI-1633.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/spec.md | .loom/specs/WI-1633/evidence-map.md | PR #1652 merged into main with bc70f7517aa7919b9b84e9b43dafb6cde2711790; issue #1639 closed at 2026-06-20T08:54:20Z. | Terminal carrier retained as closeout evidence. |

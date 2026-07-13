@@ -1,5 +1,0 @@
-# Task Carrier
-
-| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1252 | Issue OPEN / PR #1410 OPEN / branch work/1252-daily-cli-snapshot-bootstrap-cost active / scheduler-owned review pending | in_progress | primary | .loom/work-items/WI-1252.md | .loom/specs/WI-1252/plan.md#implementation-steps | .loom/specs/WI-1252/spec.md#wi-1252-suite-path-decision | .loom/specs/WI-1252/plan.md#implementation-steps | .loom/specs/WI-1252/plan.md#validation | branch work/1252-daily-cli-snapshot-bootstrap-cost; PR #1410; worktree /Users/mc/.codex/worktrees/edaa/Loom; carrier is tracking-only and does not replace Work Item, recovery, review, PR gate, or closeout truth | Recheck issue #1252, PR #1410 head/body metadata, hosted checks, current-head review record, PR gate, target branch, and closeout evidence before merge-ready or closeout. |

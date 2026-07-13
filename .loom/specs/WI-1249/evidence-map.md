@@ -1,7 +1,0 @@
-# Evidence Map
-
-| evidence_id | evidence_type | source_locator | consumes | binding | freshness | consumer_boundary | remediation_direction |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EV-001 | behavior_evidence | src/skills/shared/scripts/loom_check.py | .loom/specs/WI-1249/spec.md S1 S2 S3 S4 / AC-1 AC-2 AC-3 AC-4 AC-5 | WI-1249 / daily-execution-cli progress timing implementation | present | review / merge-ready / PR gate / hosted CI / closeout / status | Re-run source merge-gate and focused compile checks after changes to `daily-execution-cli` observability. |
-| EV-002 | test_evidence | PR #1409 validation details | .loom/specs/WI-1249/spec.md S1 S2 S3 S4 / AC-1 AC-2 AC-3 AC-4 AC-5 | WI-1249 / local and hosted validation | present | review / merge-ready / PR gate / hosted CI / closeout / status | Refresh PR validation and hosted check readback after every PR head change. |
-| EV-003 | fresh_verification_input | .loom/progress/WI-1249.md | EV-001 EV-002 plus `git diff --check`, focused `py_compile_clean`, `make skills-check`, source merge-gate run, synthetic failure metadata harness, demo fixture validation, PR metadata preflight/readback, and hosted checks | WI-1249 / latest validation summary / PR #1409 | present | merge-ready / PR gate / closeout / status | Update latest validation summary and rerun metadata/readback after carrier, code, PR body, or head changes. |

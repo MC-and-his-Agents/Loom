@@ -1,5 +1,0 @@
-# WI-1554 Task Carrier
-
-| Carrier Type | Carrier Locator | Source Value | Normalized Status | Relationship | Work Item Locator | Breakdown Unit Locator | Spec Scenario Locator | Plan Phase Locator | Validation Strategy Locator | Provenance | Freshness Rule |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1554 | Issue OPEN / branch work/1554-wrapper-closeout-contract / merge and closeout wrapper runtime argument contract slice | in_progress | primary | .loom/work-items/WI-1554.md | .loom/specs/WI-1554/plan.md#implementation-steps | .loom/specs/WI-1554/spec.md#acceptance-scenarios | .loom/specs/WI-1554/plan.md#validation | .loom/specs/WI-1554/evidence-map.md | GitHub issue #1554; milestone/12 CLI wrapper/runtime contract blocker; local branch work/1554-wrapper-closeout-contract; PR #1562 | Recheck PR body/head, current review, targeted CLI contract validation, target branch, merge commit, and closeout evidence before merge-ready or milestone closeout. |
