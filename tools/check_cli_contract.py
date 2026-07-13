@@ -104,6 +104,20 @@ PUBLIC_PROTOCOL_TYPES = (
     "readback",
 )
 
+REMOVED_PUBLIC_AGGREGATE_SURFACES = (
+    "runtime-paths",
+    "merge-wrapper",
+    "ship-wrapper",
+    "closeout-wrapper",
+    "release-readback",
+    "pr-gate-target-readback",
+    "controlled-merge",
+    "host-planning-taxonomy",
+    "fr-wi-admission",
+    "failure-envelope",
+    "legacy-command-eol",
+)
+
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
     ".loom/work-items/WI-truth.md",
     ".loom/progress/WI-truth.md",
@@ -465,17 +479,23 @@ def run_legacy_command_eol_surface() -> None:
     for command in LEGACY_COMMAND_INVENTORY:
         status, payload = run_json([*command.split(), "--target", "/loom-must-not-read-target", "--json"])
         failure = payload.get("failure_envelope") if isinstance(payload.get("failure_envelope"), dict) else {}
+        primary = failure.get("primary_cause") if isinstance(failure.get("primary_cause"), dict) else {}
         if (
             status == 0
             or payload.get("result") != "block"
             or payload.get("command") != command
             or payload.get("failed_layer") != "cli-command-router"
             or payload.get("fallback_to") != ["loom help --json"]
-            or not isinstance(failure.get("primary_cause"), dict)
+            or primary.get("failure_domain") != "toolchain"
+            or primary.get("code") != "unsupported_command_surface"
+            or primary.get("cause_class") != "unsupported_command_surface"
+            or primary.get("owner") != "loom"
+            or primary.get("retryable") is not False
+            or primary.get("remediation_command") != "loom help --json"
             or failure.get("secondary_causes")
-            or payload.get("mutates") is True
-            or payload.get("host_mutations") is True
-            or payload.get("carrier_mutations") is True
+            or payload.get("mutates") is not False
+            or payload.get("host_mutations") is not False
+            or payload.get("carrier_mutations") is not False
             or "target" in payload
             or "host" in payload
         ):
@@ -13643,11 +13663,14 @@ def run_work_item_audit_surface() -> None:
 def run_release_readback_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = internal_cli_matrix()
-    for command in ("release readback", "release resume"):
-        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "delivery":
-            raise AssertionError(f"{command} must be declared as an implemented delivery command")
-    if matrix["release closeout-sync"]["status"] != "compatibility" or matrix["release closeout-sync"]["domain"] != "delivery":
-        raise AssertionError("release closeout-sync must be declared as compatibility-only")
+    if matrix["release readback"]["status"] != "implemented" or matrix["release readback"]["domain"] != "delivery":
+        raise AssertionError("release readback must be declared as an implemented delivery command")
+    state = legacy_surface_state()
+    if state == "transition":
+        if matrix["release resume"]["status"] != "implemented" or matrix["release resume"]["domain"] != "delivery":
+            raise AssertionError("release resume must be declared as an implemented delivery command during transition")
+        if matrix["release closeout-sync"]["status"] != "compatibility" or matrix["release closeout-sync"]["domain"] != "delivery":
+            raise AssertionError("release closeout-sync must be declared as compatibility-only during transition")
 
     expected = {
         "published": ("release", "resume", "published"),
@@ -13660,6 +13683,8 @@ def run_release_readback_surface() -> None:
         "no-release-docs-only": ("release", "resume", "no_release"),
     }
     for fixture, (domain, operation, verdict) in expected.items():
+        if state == "removed" and operation != "readback":
+            continue
         args = [
             domain,
             operation,
@@ -14951,7 +14976,23 @@ def run_failure_envelope_surface() -> None:
 
 def run_aggregate_cli_contract() -> None:
     if legacy_surface_state() == "removed":
-        run_legacy_command_eol_surface()
+        removed_public_runners = {
+            "runtime-paths": run_runtime_paths_surface,
+            "merge-wrapper": run_merge_wrapper_surface,
+            "ship-wrapper": run_ship_wrapper_surface,
+            "closeout-wrapper": run_closeout_wrapper_surface,
+            "release-readback": run_release_readback_surface,
+            "pr-gate-target-readback": run_pr_gate_target_readback_surface,
+            "controlled-merge": run_controlled_merge_surface,
+            "host-planning-taxonomy": run_host_planning_taxonomy_surface,
+            "fr-wi-admission": run_fr_wi_admission_surface,
+            "failure-envelope": run_failure_envelope_surface,
+            "legacy-command-eol": run_legacy_command_eol_surface,
+        }
+        if tuple(removed_public_runners) != REMOVED_PUBLIC_AGGREGATE_SURFACES:
+            raise AssertionError("removed public aggregate runner inventory drifted")
+        for runner in removed_public_runners.values():
+            runner()
         print("public-only aggregate CLI contract passed")
         return
     run_host_default_lifecycle_contract()
@@ -17312,13 +17353,7 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
         ),
     )
     if legacy_surface_state() == "removed":
-        public_only_surfaces = {
-            "host-planning-taxonomy",
-            "fr-wi-admission",
-            "failure-envelope",
-            "legacy-command-eol",
-            "aggregate",
-        }
+        public_only_surfaces = {*REMOVED_PUBLIC_AGGREGATE_SURFACES, "aggregate"}
         return tuple(check for check in checks if check.name in public_only_surfaces)
     return checks
 
