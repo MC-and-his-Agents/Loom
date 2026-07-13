@@ -71,6 +71,22 @@ The former `host_adapters` field is removed. A v1 interop file receives one
 `legacy_repo_interop_host_adapters` migration diagnostic per invocation and is
 not silently consumed.
 
+## Removed v1 matrix vocabulary
+
+The v1 support matrix used these field identifiers:
+`default_install_path`, `install_surface`, `discovery_surface`,
+`bootstrap_or_session_start_surface`, `default_entry`,
+`tool_mapping_surface`, `upgrade_surface`, `verification_surface`,
+`fail_closed_conditions`, and `version_metadata_location`. They are retained
+here only as a migration inventory; they are not an active schema and Loom does
+not reconstruct a host adapter from them.
+
+For Codex, the current entry remains `loom-init` and the generated distribution
+path remains `plugins/loom/skills`. GitHub readback uses `gh api` through the
+authenticated CLI keyring. `host_api_unreadable` is the typed failure when that
+readback or its permission is unavailable; `CODEX_EXPORT_GH_TOKEN=1` remains an
+explicit opt-in for a subprocess that cannot otherwise use the keyring.
+
 ## Version authority
 
 The root package/release version, Codex plugin surface version, plugin payload
