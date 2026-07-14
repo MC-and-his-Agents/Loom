@@ -47,6 +47,20 @@ def main() -> int:
         "closedByPullRequestsReferences",
         "reviewDecision",
         "statusCheckRollup",
+        "v032RuntimeEolException",
+        'repository: "MC-and-his-Agents/Loom"',
+        "workItems: new Set([2125, 2126])",
+        "pullRequest(number:$number)",
+        "closingIssuesReferences(first:100)",
+        "detailsUrl",
+        "details_url: context.detailsUrl",
+        "lastEditedAt",
+        "createdAt",
+        "github.rest.issues.getComment",
+        "github.rest.actions.getWorkflowRun",
+        "html_url: run.html_url",
+        "historical_delivery_prs",
+        "workflow_path",
         "closedAt",
         "event_closed_at",
         "context.payload.sender?.id",
@@ -85,12 +99,25 @@ def main() -> int:
         "host_only_delivery",
         "failure_envelope",
         "missing_delivery_attestation",
+        "loom:repo-pr-metadata",
+        "V032_RUNTIME_EOL_EXCEPTION",
+        '"pr": 2127',
+        '"covered_issues": (2125, 2126)',
+        '"failed_run_id": 29288032023',
+        "pr_body_sha256",
+        "delivery_relation_invalid",
+        "bootstrap_authorization_invalid",
+        "bootstrap_run_mismatch",
         "product_problem",
         "PHASE_CHILD_TYPES",
     )
     evaluator_missing = [needle for needle in evaluator_required if needle not in evaluator]
-    if missing or present or evaluator_missing:
-        details = [*(f"missing `{needle}`" for needle in missing), *(f"forbidden `{needle}`" for needle in present), *(f"evaluator missing `{needle}`" for needle in evaluator_missing)]
+    generic_waiver_surface = [
+        needle for needle in ("loom:work-item-delivery-attestation", "BOOTSTRAP_EXCEPTION_POLICY", "attested_prs")
+        if needle in text or needle in evaluator
+    ]
+    if missing or present or evaluator_missing or generic_waiver_surface:
+        details = [*(f"missing `{needle}`" for needle in missing), *(f"forbidden `{needle}`" for needle in present), *(f"evaluator missing `{needle}`" for needle in evaluator_missing), *(f"generic waiver surface `{needle}`" for needle in generic_waiver_surface)]
         raise SystemExit("FR/Phase close guard workflow contract failed: " + "; ".join(details))
     print("FR/Phase close guard workflow contract: OK")
     return 0
