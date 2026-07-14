@@ -242,7 +242,6 @@ def check_native_surface_inventory() -> None:
         "light-profile-check",
         "authority-contract-check",
         "fr-wi-admission-check",
-        "pr-metadata-check",
         "failure-envelope-check",
         "npm-package-check",
         "release-surface-check",
@@ -252,6 +251,18 @@ def check_native_surface_inventory() -> None:
     available = set(evaluator.ALLOWED_MAKE_TARGETS)
     if not required_surfaces <= available:
         raise AssertionError("native target allowlist is incomplete: " + ", ".join(sorted(required_surfaces - available)))
+    if "pr-metadata-check" in make_targets:
+        raise AssertionError("removed pr-metadata-check remains executable as a Make target")
+    mapped_targets = {
+        target
+        for targets in (*evaluator.EXACT_NATIVE_SURFACES.values(), *evaluator.SCRIPT_NATIVE_SURFACES.values())
+        for target in targets
+    }
+    if "pr-metadata-check" in mapped_targets:
+        raise AssertionError("removed pr-metadata-check remains reachable from changed-path planning")
+    template_targets = evaluator._automatic_validation_targets([".github/PULL_REQUEST_TEMPLATE.md"], "standard")
+    if "pr-metadata-check" in template_targets or "skills-doc-reference-sync-check" not in template_targets:
+        raise AssertionError(f"PR template must use retained documentation validation only: {template_targets}")
 
     for path in sorted(workflows | checker_tools):
         selected = set(evaluator._automatic_validation_targets([path], "standard"))

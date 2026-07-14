@@ -50,7 +50,7 @@ EXACT_NATIVE_SURFACES = {
     "tools/check_light_profile.py": ("light-profile-check",),
     "tools/check_loom_check_runtime_regressions.py": ("loom-check-runtime-regression",),
     "tools/check_npm_package.py": ("npm-package-check",),
-    "tools/check_pr_binding_workflow.py": ("pr-binding-workflow-check", "pr-metadata-check"),
+    "tools/check_pr_binding_workflow.py": ("pr-binding-workflow-check",),
     "tools/check_product_acceptance_adapter.py": ("product-acceptance-adapter-check",),
     "tools/check_release_admission.py": ("release-surface-check",),
     "tools/check_release_surface.py": ("release-surface-check",),
@@ -73,7 +73,6 @@ SCRIPT_NATIVE_SURFACES = {
     "failure_envelope.py": ("failure-envelope-check",),
     "native_validation.py": ("delivery-gate-check", "light-profile-check"),
     "delivery_gate.py": ("delivery-gate-check",),
-    "governance_surface.py": ("pr-metadata-check",),
 }
 CAUSES = {
     "host_facts_unreadable": {
@@ -405,8 +404,6 @@ def _automatic_validation_targets(paths: list[str], profile: str) -> list[str]:
         if path.endswith(".md"):
             targets.add("skills-doc-reference-sync-check")
             matched = True
-        if path == ".github/PULL_REQUEST_TEMPLATE.md":
-            targets.add("pr-metadata-check")
         if path.startswith((".agents/", "plugins/")):
             targets.add("skills-check")
             matched = True

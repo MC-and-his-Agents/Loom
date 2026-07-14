@@ -192,6 +192,7 @@ def main() -> int:
         "product acceptance must bind the current default-branch tip",
         "loom-product-acceptance-${{ github.sha }}",
         "fetch-depth: 0",
+        "persist-credentials: false",
         "tools/write_product_acceptance.py",
         "name: loom-product-acceptance",
         "VERSION=$(tr -d '\\n' < VERSION)",

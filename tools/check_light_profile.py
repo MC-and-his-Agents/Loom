@@ -576,6 +576,7 @@ def main() -> int:
         "legacy-missing-state",
         "light-nonmetadata-state",
         "non-light",
+        "runtime-init-result-removed",
     }:
         raise AssertionError("light-profile fixture catalog is incomplete")
     evaluator = load_module()
