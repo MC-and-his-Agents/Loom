@@ -501,7 +501,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     controlled_merge.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
     controlled_merge.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
     controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
-    controlled_merge.add_argument("--pr-gate-result-file", help="Optional repo-relative retained pr-gate result JSON")
+    controlled_merge.add_argument("--pr-gate-result-file", help="Repo-relative ignored file containing the complete public `loom pr gate --full-output --json` readback")
     controlled_merge.add_argument("--merge-gate-result-file", help="Optional repo-relative retained merge-gate or merge-ready result JSON")
     controlled_merge.add_argument("--governance-mode", choices=GOVERNANCE_CAPABILITY_MODES, default="host-enforced")
     controlled_merge.add_argument("--allow-advisory-local-enforced", action="store_true")

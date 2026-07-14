@@ -27,6 +27,7 @@ jobs:
         with:
           script: |
             const fs = require("fs");
+            const crypto = require("crypto");
             const subjectNumber = context.payload.issue?.number;
             const eventLabels = context.payload.issue?.labels || [];
             const typeLabels = new Set(eventLabels.map((label) => String(label?.name || label || "").trim().toLowerCase()));
@@ -169,7 +170,7 @@ jobs:
                 ...normalized,
                 authorization_comment: {
                   id: comment.id,
-                  body: comment.body,
+                  body_sha256: crypto.createHash("sha256").update(String(comment.body || ""), "utf8").digest("hex"),
                   created_at: comment.created_at,
                   updated_at: comment.updated_at,
                   author_association: comment.author_association,

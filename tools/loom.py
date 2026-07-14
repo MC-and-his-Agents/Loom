@@ -5172,7 +5172,8 @@ def handle_public_pr_gate(argv: list[str]) -> int:
     payload = output(
         "pr gate",
         result,
-        schema="loom-delivery-gate-readback/v1",
+        schema_version="loom-delivery-gate-readback/v1",
+        protocol_type="delivery_verdict",
         summary=("The base-owned hosted delivery gate passed for the current PR head." if result == "pass" else "The hosted delivery gate is missing, stale, or non-passing."),
         lifecycle_admission=lifecycle,
         work_item={"locator": args.work_item, "issue": issue},
@@ -5473,7 +5474,7 @@ def handle_merge(argv: list[str]) -> int:
     if args.action == "run" and args.apply and unsafe_fixture_inputs:
         return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="A mutating merge must use fresh authenticated GitHub readback, not local host-fact fixtures.", missing_inputs=[f"remove {name}" for name in unsafe_fixture_inputs], primary_error_code="github_host_readback_failure", failure_domain="host_service", failure_owner="github", remediation_command="rerun without local PR/check/protection/ruleset fixture inputs", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     if not args.pr_gate_result_file:
-        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge requires the retained base-owned loom-delivery-gate readback for the current PR head.", missing_inputs=["--pr-gate-result-file"], remediation_command="run loom pr gate against the live PR and retain its JSON result", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge requires the retained public `loom pr gate` readback for the current PR head.", missing_inputs=["--pr-gate-result-file"], remediation_command="run `loom pr gate <pr> --work-item <owner/repo/work_item/id> --attestation-artifact-input <attestation-artifact.json> --full-output --json` and retain its complete JSON output in a repo-relative ignored workstation file", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     if args.merge_gate_result_file:
         return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="The legacy retained merge-gate input is not part of the public merge path.", missing_inputs=["remove --merge-gate-result-file"], primary_error_code="unsupported_command_surface", failure_domain="toolchain", failure_owner="loom", remediation_command="use the host-native loom-delivery-gate readback only", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     flow_args = [
@@ -6588,7 +6589,7 @@ def handle_ship(argv: list[str]) -> int:
     validation_profile = ship_validation_profile_payload(args, changed_paths, closeout_policy)
     review_attestation = ship_host_attestation(args, target, closeout=False)
     if not args.pr_gate_result_file:
-        merge_check = {"result": "block", "summary": "Ship requires the retained host-native delivery gate result.", "missing_inputs": ["--pr-gate-result-file"], "fallback_to": "loom pr gate <pr> --work-item <locator> --attestation-artifact-input <locator> --json"}
+        merge_check = {"result": "block", "summary": "Ship requires the retained public `loom pr gate` readback, not the raw hosted evaluator JSON.", "missing_inputs": ["--pr-gate-result-file"], "fallback_to": "run `loom pr gate <pr> --work-item <locator> --attestation-artifact-input <attestation-artifact.json> --full-output --json` and retain its complete JSON output in a repo-relative ignored workstation file"}
     else:
         merge_check = delivery_control_module.controlled_merge_payload(
             target_root=target,
@@ -8621,7 +8622,7 @@ def handle_scenario(command: str, argv: list[str]) -> int:
                 review_attestation=attestation,
                 missing_inputs=attestation.get("missing_inputs", []),
                 fallback_to=attestation.get("fallback_to"),
-                next_action="run loom merge-ready with the same current-head attestation and hosted PR-gate result" if result == "pass" else attestation.get("fallback_to"),
+                next_action="run `loom pr gate ... --full-output --json`, retain that complete public readback, then pass it to loom merge-ready with the same current-head attestation" if result == "pass" else attestation.get("fallback_to"),
                 repo_execution_carriers_consumed=False,
                 carrier_mutations=False,
                 mutates=False,
@@ -8633,12 +8634,12 @@ def handle_scenario(command: str, argv: list[str]) -> int:
                     command,
                     "block",
                     schema=SCENARIO_SCHEMA,
-                    summary="Merge readiness requires the hosted PR-gate result for this exact PR head.",
+                    summary="Merge readiness requires the retained public `loom pr gate` readback for this exact PR head.",
                     lifecycle_admission=lifecycle_admission,
                     host_binding=binding,
                     review_attestation=attestation,
                     missing_inputs=["--pr-gate-result-file"],
-                    fallback_to="download or save the hosted loom-delivery-gate result, then retry",
+                    fallback_to="run `loom pr gate <pr> --work-item <owner/repo/work_item/id> --attestation-artifact-input <attestation-artifact.json> --full-output --json` and retain its complete JSON output in a repo-relative ignored workstation file, then retry",
                     repo_execution_carriers_consumed=False,
                     carrier_mutations=False,
                     mutates=False,
@@ -8680,6 +8681,10 @@ def handle_scenario(command: str, argv: list[str]) -> int:
             merge_check=merge_check,
             missing_inputs=merge_check.get("missing_inputs", []),
             fallback_to=merge_check.get("fallback_to"),
+            primary_error_code=merge_check.get("primary_error_code"),
+            failure_domain=merge_check.get("failure_domain"),
+            failure_owner=merge_check.get("failure_owner"),
+            remediation_command=merge_check.get("remediation_command"),
             repo_execution_carriers_consumed=False,
             carrier_mutations=False,
             mutates=False,

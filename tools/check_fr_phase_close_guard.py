@@ -210,9 +210,17 @@ def main() -> int:
         raise AssertionError("#2127 bootstrap authorization comment fixture drifted")
     if hashlib.sha256(raw_frozen_pr["body"].encode("utf-8")).hexdigest() != "e6164372caa7d0f2de60b424336e913019576db6681799288bfeedbf709d86c2":
         raise AssertionError("#2127 PR metadata body fixture drifted")
+    normalized_authorization = {
+        "id": authorization["id"],
+        "body_sha256": hashlib.sha256(authorization["body"].encode("utf-8")).hexdigest(),
+        "created_at": authorization["created_at"],
+        "updated_at": authorization["updated_at"],
+        "author_association": authorization["author_association"],
+        "user": authorization["user"],
+    }
     frozen_pr = {
         **raw_frozen_pr,
-        "authorization_comment": authorization,
+        "authorization_comment": normalized_authorization,
         "failed_run": raw_frozen_pr["workflow_runs"][0],
         "closing_issues_complete": True,
         "closing_issues": [{"number": 2125, "repository": frozen["repository"]}],
@@ -251,10 +259,11 @@ def main() -> int:
         ("delivery_binding_invalid", {**frozen_pr, "last_edited_at": "2026-07-13T22:05:00Z"}),
         ("delivery_relation_invalid", {**frozen_pr, "closing_issues": []}),
         ("delivery_relation_invalid", {**frozen_pr, "closing_issues_complete": False}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "body": authorization["body"] + " edited"}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "id": 1}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "user": {"id": 1, "login": "outsider"}}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "updated_at": "2026-07-13T22:05:00Z"}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "body_sha256": "0" * 64}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "id": 1}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "user": {"id": 1, "login": "outsider"}}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "updated_at": "2026-07-13T22:05:00Z"}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "created_at": "2026-07-13T22:00:00Z", "updated_at": "2026-07-13T21:59:55Z"}}),
         ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "id": 1}}),
         ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "head_sha": "0" * 40}}),
         ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "workflow_path": ".github/workflows/other.yml"}}),

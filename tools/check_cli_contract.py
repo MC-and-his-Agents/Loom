@@ -2348,22 +2348,37 @@ def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
         encoding="utf-8",
     )
     retained_gate_file = fixture_dir / "pr-gate-host-pass.json"
+    retained_gate_payload = {
+        "command": "pr gate",
+        "schema_version": "loom-delivery-gate-readback/v1",
+        "protocol_type": "delivery_verdict",
+        "result": "pass",
+        "assurance": "limited",
+        "pr": {"number": 1288, "head_sha": head_sha},
+        "work_item": {"locator": item},
+        "hosted_check": {"name": "loom-delivery-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+        "review_attestation": {
+            "schema_version": "loom-host-attestation/v1",
+            "result": "pass",
+            "work_item_locator": item,
+            "host_facts": {"pr": {"number": 1288, "head_sha": head_sha}},
+        },
+    }
     retained_gate_file.write_text(
         json.dumps(
+            retained_gate_payload,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    raw_gate_file = fixture_dir / "raw-hosted-evaluator.json"
+    raw_gate_file.write_text(
+        json.dumps(
             {
-                "command": "pr gate",
-                "schema_version": "loom-delivery-gate-readback/v1",
-                "result": "pass",
-                "assurance": "limited",
-                "pr": {"number": 1288, "head_sha": head_sha},
-                "work_item": {"locator": item},
-                "hosted_check": {"name": "loom-delivery-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
-                "review_attestation": {
-                    "schema_version": "loom-host-attestation/v1",
-                    "result": "pass",
-                    "work_item_locator": item,
-                    "host_facts": {"pr": {"number": 1288, "head_sha": head_sha}},
-                },
+                **retained_gate_payload,
+                "command": "delivery-gate",
+                "schema_version": "loom-delivery-gate/v1",
             },
             indent=2,
         )
@@ -2419,6 +2434,7 @@ def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
     missing_inputs = payload.get("missing_inputs", [])
     if (
         payload.get("result") != "block"
+        or payload.get("retained_results", {}).get("pr_gate", {}).get("consumption", {}).get("result") != "pass"
         or required_checks.get("result") != "pass"
         or required_checks.get("missing") != []
         or required_checks.get("pending") != []
@@ -2431,6 +2447,45 @@ def assert_controlled_merge_triggered_check_rollup_contract(tmp: Path) -> None:
         or "triggered check `non-required-pending` is pending" not in missing_inputs
     ):
         raise AssertionError("controlled-merge did not fail closed on failed/pending triggered non-required checks")
+
+    raw_exit, raw_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--pr",
+            "1288",
+            "--head-sha",
+            head_sha,
+            "--pr-payload-file",
+            f".loom/fixtures/{item}/pr.json",
+            "--status-checks-file",
+            f".loom/fixtures/{item}/checks.json",
+            "--branch-protection-file",
+            f".loom/fixtures/{item}/branch-protection.json",
+            "--ruleset-file",
+            f".loom/fixtures/{item}/ruleset.json",
+            "--pr-gate-result-file",
+            f".loom/fixtures/{item}/raw-hosted-evaluator.json",
+        ]
+    )
+    raw_consumption = raw_payload.get("retained_results", {}).get("pr_gate", {}).get("consumption", {})
+    if (
+        raw_exit == 0
+        or raw_payload.get("result") != "block"
+        or raw_consumption.get("result") != "block"
+        or raw_consumption.get("schema_version") != "loom-delivery-gate/v1"
+        or raw_consumption.get("missing_inputs") != ["complete public `loom pr gate --full-output --json` readback"]
+        or "--full-output --json" not in str(raw_consumption.get("fallback_to") or "")
+        or raw_payload.get("primary_error_code") != "pr_gate_readback_required"
+        or raw_payload.get("failure_domain") != "toolchain"
+        or raw_payload.get("failure_owner") != "loom"
+        or "--full-output --json" not in str(raw_payload.get("remediation_command") or "")
+    ):
+        raise AssertionError("controlled-merge accepted raw hosted evaluator JSON as a public pr-gate readback")
 
 
 def assert_closeout_wrapper_argument_contract() -> None:
@@ -13722,6 +13777,18 @@ def run_public_default_path_surface() -> None:
             "--pr-gate-result-file", "gate.json", "--full-output", "--json",
         ]) != 0 or "--full-output" in flow_calls[-1]:
             raise AssertionError(f"public merge leaked outer --full-output into controlled-merge: {flow_calls[-1]}")
+        module.handle_scenario(
+            "merge-ready",
+            [*pr_common[:-1], "--attestation-artifact-input", "artifact.json", "--json"],
+        )
+        remediation = str(emitted.get("fallback_to") or "")
+        if (
+            "loom pr gate" not in remediation
+            or "--full-output --json" not in remediation
+            or "<attestation-artifact.json>" not in remediation
+            or "repo-relative ignored workstation file" not in remediation
+        ):
+            raise AssertionError(f"merge-ready did not provide a complete public pr-gate handoff: {emitted}")
         with tempfile.TemporaryDirectory(prefix="loom-public-pr-gate-") as raw_tmp:
             fixture_root = Path(raw_tmp)
             pr_fixture = fixture_root / "pr.json"
@@ -13747,6 +13814,57 @@ def run_public_default_path_surface() -> None:
                 raise AssertionError("public PR gate did not freeze limited host assurance and zero-carrier consumption")
             if admission_calls[-1].get("pr_role") != "release_pr":
                 raise AssertionError("public PR gate did not preserve release PR closing policy")
+            public_gate_readback = dict(emitted)
+            if public_gate_readback.get("schema_version") != "loom-delivery-gate-readback/v1":
+                raise AssertionError(f"public PR gate did not emit the consumable readback schema: {public_gate_readback}")
+            public_consumption = module.delivery_control_module.retained_pr_gate_consumption(
+                retained=public_gate_readback,
+                locator=".git/loom/pr-gate-7.json",
+                current_pr={"number": 7, "headRefOid": "a" * 40},
+                expected_item="owner/repo/work_item/2103",
+                pr_number=7,
+            )
+            if public_consumption.get("result") != "pass":
+                raise AssertionError(f"public PR gate readback was not consumable by merge-ready: {public_consumption}")
+            public_mutations: list[tuple[str, Callable[[dict[str, Any]], None]]] = [
+                ("command", lambda payload: payload.update({"command": "delivery-gate"})),
+                ("protocol type", lambda payload: payload.update({"protocol_type": "readback"})),
+                ("missing protocol type", lambda payload: payload.pop("protocol_type", None)),
+                ("PR number", lambda payload: payload["pr"].update({"number": 8})),
+                ("PR head", lambda payload: payload["pr"].update({"head_sha": "b" * 40})),
+                ("Work Item", lambda payload: payload["work_item"].update({"locator": "owner/repo/work_item/9999"})),
+                ("hosted check name", lambda payload: payload["hosted_check"].update({"name": "candidate-gate"})),
+                ("hosted check conclusion", lambda payload: payload["hosted_check"].update({"conclusion": "FAILURE"})),
+                ("review Work Item", lambda payload: payload["review_attestation"].update({"work_item_locator": "owner/repo/work_item/9999"})),
+                ("review schema", lambda payload: payload["review_attestation"].update({"schema_version": "attacker/v1"})),
+                ("missing review schema", lambda payload: payload["review_attestation"].pop("schema_version", None)),
+                ("review PR", lambda payload: payload["review_attestation"]["host_facts"]["pr"].update({"number": 8})),
+                ("review head", lambda payload: payload["review_attestation"]["host_facts"]["pr"].update({"head_sha": "b" * 40})),
+            ]
+            for label, mutate in public_mutations:
+                drifted = json.loads(json.dumps(public_gate_readback))
+                mutate(drifted)
+                drifted_consumption = module.delivery_control_module.retained_pr_gate_consumption(
+                    retained=drifted,
+                    locator=f".git/loom/pr-gate-7-{label.replace(' ', '-').lower()}.json",
+                    current_pr={"number": 7, "headRefOid": "a" * 40},
+                    expected_item="owner/repo/work_item/2103",
+                    pr_number=7,
+                )
+                if drifted_consumption.get("result") != "block":
+                    raise AssertionError(f"public PR gate accepted drifted {label}: {drifted_consumption}")
+            raw_consumption = module.delivery_control_module.retained_pr_gate_consumption(
+                retained={**public_gate_readback, "schema_version": "loom-delivery-gate/v1"},
+                locator=".git/loom/raw-hosted-evaluator.json",
+                current_pr={"number": 7, "headRefOid": "a" * 40},
+                expected_item="owner/repo/work_item/2103",
+                pr_number=7,
+            )
+            if (
+                raw_consumption.get("result") != "block"
+                or raw_consumption.get("missing_inputs") != ["complete public `loom pr gate --full-output --json` readback"]
+            ):
+                raise AssertionError(f"raw hosted evaluator JSON entered the public gate handoff: {raw_consumption}")
         role_calls: list[dict[str, Any]] = []
 
         def blocked_role_lifecycle(**kwargs: Any) -> dict[str, Any]:

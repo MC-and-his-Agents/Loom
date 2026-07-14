@@ -28,7 +28,7 @@ repaired into the PR body.
 
 Host enforcement is proven only by live branch protection or active ruleset readback requiring the stable check name `loom-pr-merge-gate`; workflow presence alone is not enough.
 
-The `loom-pr-merge-gate/v1` output may be retained as a pr-gate result locator. A consumer may reuse it only when the current PR still has the same Work Item, PR number, head SHA, authored review approval, reviewed validation summary, and passing merge checkpoint. Missing, unreadable, stale, or non-pass retained results must block or fall back to `pr-gate` / `review`.
+`loom-pr-merge-gate/v1` is an internal compatibility result, not the public retained handoff. The public path retains the complete `loom pr gate ... --full-output --json` output with schema `loom-delivery-gate-readback/v1`. A consumer may reuse it only when the current PR still has the same Work Item, PR number, head SHA, completed/success `loom-delivery-gate` check, and passing host review attestation. Raw `loom-delivery-gate/v1`, missing, unreadable, stale, or non-pass results must block and direct the caller back to `loom pr gate`.
 
 `controlled-merge` may consume a fresh retained pr-gate result, but it must still re-read current PR head, required checks, branch protection or active ruleset, mergeability, and merge method as drift-only readback. Retained results never replace host enforcement readback. GitHub `BLOCKED` mergeability is delegated host policy evidence after Loom approval and checks pass; GitHub review comments, including author `COMMENTED`, remain evidence-only and never satisfy approval truth.
 
