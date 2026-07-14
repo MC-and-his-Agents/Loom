@@ -27,6 +27,7 @@ jobs:
         with:
           script: |
             const fs = require("fs");
+            const crypto = require("crypto");
             const subjectNumber = context.payload.issue?.number;
             const eventLabels = context.payload.issue?.labels || [];
             const typeLabels = new Set(eventLabels.map((label) => String(label?.name || label || "").trim().toLowerCase()));
@@ -37,6 +38,13 @@ jobs:
             }
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const v032RuntimeEolException = {
+              repository: "MC-and-his-Agents/Loom",
+              pull: 2127,
+              workItems: new Set([2125, 2126]),
+              failedRun: 29288032023,
+              authorizationComment: 4963151713,
+            };
             const issueQuery = `
               query($owner:String!, $repo:String!, $number:Int!) {
                 repository(owner:$owner, name:$repo) {
@@ -74,7 +82,115 @@ jobs:
                 }
               }
             `;
+            const pullRequestQuery = `
+              query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  pullRequest(number:$number) {
+                    number body createdAt lastEditedAt merged mergedAt baseRefName headRefName headRefOid headRepository { nameWithOwner } mergeCommit { oid }
+                    closingIssuesReferences(first:100) {
+                      pageInfo { hasNextPage }
+                      nodes { number repository { nameWithOwner } }
+                    }
+                    commits(last:1) {
+                      nodes {
+                        commit {
+                          oid
+                          statusCheckRollup {
+                            state
+                            contexts(first:100) {
+                              pageInfo { hasNextPage }
+                              nodes {
+                                __typename
+                                ... on CheckRun { name status conclusion startedAt completedAt detailsUrl }
+                                ... on StatusContext { context state createdAt }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
             const pageComplete = (connection) => Boolean(connection && Array.isArray(connection.nodes) && connection.pageInfo && connection.pageInfo.hasNextPage === false);
+            const normalizePullRequest = (entry) => {
+              const commit = entry.commits?.nodes?.[0]?.commit;
+              const rollup = commit?.statusCheckRollup;
+              const contexts = rollup?.contexts;
+              return {
+                number: entry.number,
+                body: entry.body || "",
+                created_at: entry.createdAt,
+                last_edited_at: entry.lastEditedAt,
+                merged: entry.merged,
+                merged_at: entry.mergedAt,
+                base_ref: entry.baseRefName,
+                head_ref: entry.headRefName,
+                head_sha: entry.headRefOid,
+                head_repository: entry.headRepository?.nameWithOwner,
+                merge_commit: entry.mergeCommit?.oid,
+                closing_issues_complete: pageComplete(entry.closingIssuesReferences),
+                closing_issues: entry.closingIssuesReferences?.nodes?.map((issue) => ({
+                  number: issue.number,
+                  repository: issue.repository?.nameWithOwner,
+                })) || [],
+                check_rollup: {
+                  state: rollup?.state,
+                  contexts_complete: pageComplete(contexts),
+                  contexts: contexts?.nodes?.map((context) => ({
+                    type: context.__typename,
+                    name: context.name || context.context,
+                    status: context.status,
+                    conclusion: context.conclusion,
+                    state: context.state,
+                    started_at: context.startedAt,
+                    completed_at: context.completedAt,
+                    details_url: context.detailsUrl,
+                    created_at: context.createdAt,
+                  })) || [],
+                },
+                commit_sha: commit?.oid,
+              };
+            };
+            const fetchV032RuntimeEolPullRequest = async () => {
+              const number = v032RuntimeEolException.pull;
+              const data = await github.graphql(pullRequestQuery, { owner, repo, number });
+              const pull = data?.repository?.pullRequest;
+              if (!pull) throw new Error(`GitHub read for pull:${number} is incomplete`);
+              const normalized = normalizePullRequest(pull);
+              if (normalized.check_rollup.contexts_complete !== true || normalized.closing_issues_complete !== true) {
+                throw new Error(`GitHub pull/check/closing-reference read for pull:${number} is incomplete`);
+              }
+              const [{ data: comment }, { data: run }] = await Promise.all([
+                github.rest.issues.getComment({ owner, repo, comment_id: v032RuntimeEolException.authorizationComment }),
+                github.rest.actions.getWorkflowRun({ owner, repo, run_id: v032RuntimeEolException.failedRun }),
+              ]);
+              return {
+                ...normalized,
+                authorization_comment: {
+                  id: comment.id,
+                  body_sha256: crypto.createHash("sha256").update(String(comment.body || ""), "utf8").digest("hex"),
+                  created_at: comment.created_at,
+                  updated_at: comment.updated_at,
+                  author_association: comment.author_association,
+                  user: { id: comment.user?.id, login: comment.user?.login },
+                },
+                failed_run: {
+                  id: run.id,
+                  head_sha: run.head_sha,
+                  status: run.status,
+                  conclusion: run.conclusion,
+                  event: run.event,
+                  created_at: run.created_at,
+                  updated_at: run.updated_at,
+                  head_branch: run.head_branch,
+                  head_repository: run.head_repository?.full_name,
+                  workflow_path: run.path,
+                  html_url: run.html_url,
+                },
+              };
+            };
             const fetchIssue = async (number) => {
               const data = await github.graphql(issueQuery, { owner, repo, number });
               const repository = data?.repository;
@@ -82,6 +198,16 @@ jobs:
               if (!issue || !repository?.defaultBranchRef?.name) throw new Error(`GitHub read for issue:${number} is incomplete`);
               const connections = [issue.labels, issue.subIssues, issue.blockedBy, issue.closedByPullRequestsReferences];
               const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
+              let historicalDeliveryPrs = [];
+              let historicalDeliveryReadable = true;
+              if (`${owner}/${repo}` === v032RuntimeEolException.repository && v032RuntimeEolException.workItems.has(number)) {
+                try {
+                  historicalDeliveryPrs = [await fetchV032RuntimeEolPullRequest()];
+                } catch (error) {
+                  historicalDeliveryReadable = false;
+                  core.warning(`issue:${number} v0.32 runtime-EOL delivery read failed: ${error.message}`);
+                }
+              }
               return {
                 default_branch: repository.defaultBranchRef.name,
                 issue: {
@@ -122,6 +248,7 @@ jobs:
                       commit_sha: commit?.oid,
                     };
                   }) || [],
+                  historical_delivery_prs: historicalDeliveryPrs,
                   comment_bodies: comments
                     .filter((comment) => comment.user?.login === "github-actions[bot]")
                     .map((comment) => comment.body)
@@ -132,7 +259,7 @@ jobs:
                     author_association: comment.author_association,
                     user: { id: comment.user?.id, login: comment.user?.login },
                   })),
-                  read_complete: connections.every(pageComplete),
+                  read_complete: connections.every(pageComplete) && historicalDeliveryReadable,
                   comments_complete: true,
                 },
               };
