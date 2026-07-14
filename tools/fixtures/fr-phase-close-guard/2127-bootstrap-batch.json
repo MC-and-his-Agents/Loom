@@ -1,0 +1,130 @@
+{
+  "schema_version": "loom-fr-phase-close-guard-host-fixture/v1",
+  "repository": "MC-and-his-Agents/Loom",
+  "work_items": [
+    2125,
+    2126
+  ],
+  "pr": {
+    "number": 2127,
+    "body": "## Summary\n\n- Problem: v0.32 的 30 个公共命令仍有泛化 failure/remediation、旧 removed-state 正向断言，以及把非 Codex harness 冒充 native adapter 的边界问题。\n- Scope: 固化统一 failure/remediation registry；让 stale current、pre-PR build cycle、target、GitHub readback 与 artifact locator 输出单一根因；冻结 Codex-only native harness；将 repo interop 迁移为 external_result_sources/v2；删除旧 carrier/runtime-heavy 默认 aggregate 与对应正向测试。\n- Product result: 默认生命周期从显式 Work Item、正式 worktree 与 GitHub host facts 派生，不恢复 current/status/progress/review/shadow/closeout carrier。\n\n## Validation\n\n- [x] Verified locally\n- [x] Verified by automation\n- [ ] Not applicable\n\nValidation details:\n- `python3 src/skills/shared/scripts/loom_check.py --profile source --source-surface source-self-fixture .`: passed。\n- `make loom-check`: passed。\n- `python3 tools/check_cli_contract.py --surface failure-envelope`: passed。\n- `python3 tools/check_cli_contract.py --surface public-default-path`: passed。\n- external-result-source-readback contract：failed、stale、wrong-head negatives 均 fail closed。\n- `python3 tools/skills_surface.py check`: passed。\n- `python3 tools/check_npm_package.py --surface plugin-payload-hash`: 192 files，digest `80e3186b2a354c043c80cd58882b95480d74648f3bcf45500bcbd2ab3871ef0b` matched。\n- 基于 main 的 trusted runner + 当前 candidate：delivery-gate-check passed。\n- 独立最终语义复核：3 个 P1 finding 均 resolved，无残余 P0/P1 blocker。\n- `git diff --check`: passed。\n\n## Risks And Follow-ups\n\n- Risks: hosted gate assurance 仍明确为 `limited`；不宣称 GitHub App hardened identity。\n- Follow-ups: 合并后以同一 merge evidence 关闭 covered WI #2126，再 JIT 实施 #2117 residue cleanup，并由唯一 acceptance/release WI 完成 v0.32.0 产品验收、发布和本机升级；不扩大到 WebEnvoy、历史改写、archive registry 或继续拆分 loom_flow.py。\n\n## Related Work\n\n- Work Item: MC-and-his-Agents/Loom/work_item/2125\n- Covered Work Item: MC-and-his-Agents/Loom/work_item/2126\n- Issue: Fixes #2125\n- Covered Issue: #2126（merge 后消费同一 PR/merge evidence 关闭）\n- Parent FR: #2115, #2116\n- Milestone: #31\n\n## PR Metadata Machine Carrier\n\n<!-- loom:repo-pr-metadata\n{\n  \"schema_version\": \"loom-repo-pr-metadata/v1\",\n  \"metadata_contract_id\": \"loom-governance-intensity\",\n  \"surface\": \"merge_ready\",\n  \"fields\": {\n    \"work_item_locator\": \"MC-and-his-Agents/Loom/work_item/2125\",\n    \"governance_intensity\": \"standard\",\n    \"governance_mode\": \"host-enforced\",\n    \"governance_assurance\": \"limited\",\n    \"advisory_risk_label\": null,\n    \"host_enforcement_required\": true,\n    \"change_class\": \"runtime\",\n    \"suite_path\": \"minimal\",\n    \"suite_not_applicable\": null,\n    \"review_requirement\": \"current_head_review_required\",\n    \"fact_chain_required\": true,\n    \"pr_gate_required\": true,\n    \"release_judgment\": \"no_release\",\n    \"closeout_required\": true,\n    \"upgrade_triggers\": [\"public_default_surface\", \"external_result_source_contract\"],\n    \"anchor_issue\": 2125,\n    \"covered_issues\": [2125, 2126],\n    \"excluded_scope\": null\n  },\n  \"source\": {\"rendered_hash\": \"renderer:loom-pr-metadata-render/v2\"},\n  \"parser_version\": \"loom-pr-metadata-parser/v2\"\n}\n-->\n",
+    "created_at": "2026-07-13T21:50:15Z",
+    "last_edited_at": "2026-07-13T21:51:32Z",
+    "merged": true,
+    "merged_at": "2026-07-13T22:04:01Z",
+    "base_ref": "main",
+    "head_ref": "work/2125-runtime-default-path",
+    "head_sha": "78b79de68d963a0dca14823a050bd09838403a45",
+    "head_repository": "MC-and-his-Agents/Loom",
+    "merge_commit": "37a6fa55a6f0819d9f9a93f1bc102445c99b38db",
+    "commit_sha": "78b79de68d963a0dca14823a050bd09838403a45",
+    "check_rollup": {
+      "state": "FAILURE",
+      "contexts_complete": true,
+      "contexts": [
+        {
+          "type": "CheckRun",
+          "name": "py-compile",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "started_at": "2026-07-13T21:54:17Z",
+          "completed_at": "2026-07-13T21:54:23Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "release-judgment",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "started_at": "2026-07-13T21:54:10Z",
+          "completed_at": "2026-07-13T21:54:38Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "plan trusted delivery validation",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "started_at": "2026-07-13T21:54:09Z",
+          "completed_at": "2026-07-13T21:54:19Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "host-attestation-evidence",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "started_at": "2026-07-13T21:54:09Z",
+          "completed_at": "2026-07-13T21:54:13Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "loom-pr-merge-gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "started_at": "2026-07-13T21:54:10Z",
+          "completed_at": "2026-07-13T21:54:12Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "isolated candidate native validation",
+          "status": "COMPLETED",
+          "conclusion": "FAILURE",
+          "started_at": "2026-07-13T21:54:22Z",
+          "completed_at": "2026-07-13T21:54:44Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "host-native-lifecycle",
+          "status": "COMPLETED",
+          "conclusion": "SKIPPED",
+          "started_at": "2026-07-13T21:54:13Z",
+          "completed_at": "2026-07-13T21:54:13Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "release-publisher",
+          "status": "COMPLETED",
+          "conclusion": "SKIPPED",
+          "started_at": "2026-07-13T21:54:39Z",
+          "completed_at": "2026-07-13T21:54:38Z"
+        },
+        {
+          "type": "CheckRun",
+          "name": "loom-delivery-gate",
+          "status": "COMPLETED",
+          "conclusion": "FAILURE",
+          "started_at": "2026-07-13T21:54:46Z",
+          "completed_at": "2026-07-13T21:54:56Z",
+          "details_url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/29288032023/job/86945212246"
+        }
+      ]
+    },
+    "comments_complete": true,
+    "comments": [
+      {
+        "id": 4963151713,
+        "body": "Bootstrap exception evidence (current head `78b79de68d963a0dca14823a050bd09838403a45`): the only required failure is base-owned `loom-delivery-gate` run 29288032023. Its primary cause is the clean-main inconsistency `Makefile: pr-metadata-check -> tools/check_cli_contract.py --surface pr-metadata`, while the same clean-main checker reports `unknown surface(s): pr-metadata`. Candidate cannot repair a base-owned overlay. New source-self aggregate, py-compile, PR binding, release judgment, current-head single-maintainer host attestation, candidate agent-harness checker, and old base host-adapter checker all pass. This is a one-time runtime-EOL bootstrap exception; no carrier, hash refresh, transition mechanism, GitHub App, or branch-protection change is introduced.",
+        "created_at": "2026-07-13T21:59:55Z",
+        "updated_at": "2026-07-13T21:59:55Z",
+        "author_association": "MEMBER",
+        "user": {
+          "id": 9820018,
+          "login": "mcontheway"
+        }
+      }
+    ],
+    "workflow_runs": [
+      {
+        "id": 29288032023,
+        "head_sha": "78b79de68d963a0dca14823a050bd09838403a45",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request_target",
+        "created_at": "2026-07-13T21:54:07Z",
+        "updated_at": "2026-07-13T21:54:57Z",
+        "head_branch": "work/2125-runtime-default-path",
+        "head_repository": "MC-and-his-Agents/Loom",
+        "workflow_path": ".github/workflows/loom-delivery-gate.yml",
+        "html_url": "https://github.com/MC-and-his-Agents/Loom/actions/runs/29288032023"
+      }
+    ]
+  }
+}
