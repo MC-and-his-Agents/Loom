@@ -343,6 +343,9 @@ def _v032_runtime_eol_delivery_exception(
     comment = pr.get("authorization_comment")
     user = comment.get("user") if isinstance(comment, dict) and isinstance(comment.get("user"), dict) else {}
     comment_body_sha256 = comment.get("body_sha256") if isinstance(comment, dict) else None
+    legacy_comment_body = comment.get("body") if isinstance(comment, dict) else None
+    if comment_body_sha256 is None and isinstance(legacy_comment_body, str):
+        comment_body_sha256 = hashlib.sha256(legacy_comment_body.encode("utf-8")).hexdigest()
     comment_created_at = _parse_time(comment.get("created_at")) if isinstance(comment, dict) else None
     comment_updated_at = _parse_time(comment.get("updated_at")) if isinstance(comment, dict) else None
     if (

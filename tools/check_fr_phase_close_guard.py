@@ -245,6 +245,19 @@ def main() -> int:
         frozen_result = module.evaluate_closure(frozen_snapshot(subject, work_item), host_resolved=True)
         if frozen_result.get("verdict") != "allow_completed_close":
             raise AssertionError(f"real #2127 delivery fixture must close FR #{subject}: {frozen_result}")
+    legacy_raw_pr = {
+        **raw_frozen_pr,
+        "authorization_comment": authorization,
+        "failed_run": raw_frozen_pr["workflow_runs"][0],
+        "closing_issues_complete": True,
+        "closing_issues": [{"number": 2125, "repository": frozen["repository"]}],
+    }
+    legacy_raw_result = module.evaluate_closure(
+        frozen_snapshot(2115, 2125, delivery_pr=legacy_raw_pr),
+        host_resolved=True,
+    )
+    if legacy_raw_result.get("verdict") != "allow_completed_close":
+        raise AssertionError(f"base-owned raw authorization fixture must remain consumable: {legacy_raw_result}")
     def with_delivery_check(**updates: object) -> dict[str, object]:
         contexts = [
             {**context, **updates} if context.get("name") == "loom-delivery-gate" else context
