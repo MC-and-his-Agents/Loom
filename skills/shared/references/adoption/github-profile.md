@@ -96,7 +96,7 @@ Project `Status` 是宿主视图字段：
 - `In Progress`: 已有 active Work Item / owner / branch / worktree / PR，或明确处于执行中。
 - `Done`: 只能作为 closeout 完成后的宿主视图状态；不能仅因 PR merged、issue closed、task checked 或 Project workflow 自动移动而视为 completed truth。
 
-若 GitHub workflow 自动修改 Project `Status`，agent 必须重新核对 issue、PR、Work Item、recovery、review、merge-ready 和 closeout 证据。若 Project `Status` 与这些证据冲突，Loom truth carriers 与 closeout evidence 优先，Project item 需要回写或标记 drift。
+若 GitHub workflow 自动修改 Project `Status`，agent 必须重新读取 GitHub issue、PR、checks、merge facts、current-head host attestation 与产品验收 locator。若 Project `Status` 与权威字段冲突，应按字段 owner 回写或标记 drift；不得恢复 repo current、progress、review、shadow 或 closeout carrier。
 
 ## 5. strong governance 默认要求
 
@@ -122,7 +122,7 @@ GitHub host 下的 strong governance 默认要求：
 Light profile 从旧控制面迁移时使用两段式入口：
 
 ```bash
-loom profile light-migration-plan --target . --json
+loom repair plan --target . --json
 loom profile light-migration-reconcile \
   --target . --repository OWNER/REPO --branch main --work-item ISSUE \
   --gate-pr PR --migration-pr PR --context CHECK --app-id APP_ID \

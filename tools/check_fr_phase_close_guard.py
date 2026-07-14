@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import hashlib
-import json
 import sys
 from pathlib import Path
 
@@ -43,8 +41,8 @@ def issue(number: int, kind: str, **fields: object) -> dict[str, object]:
     }
 
 
-def acceptance(subject: int, verdict: str = "passed", *, trusted: bool = True, rationale: str | None = None, repository: str = "o/r") -> dict[str, object]:
-    locator = f"{repository}/issue/{subject}"
+def acceptance(subject: int, verdict: str = "passed", *, trusted: bool = True, rationale: str | None = None) -> dict[str, object]:
+    locator = f"o/r/issue/{subject}"
     return {
         "schema_version": "loom-product-acceptance/v1",
         "result": "pass",
@@ -203,101 +201,39 @@ def main() -> int:
     resolved_ambiguous = module.resolve_host_facts(ambiguous_snapshot, ROOT, acceptance_resolver=fake_acceptance)
     if module.evaluate_closure(resolved_ambiguous).get("verdict") != "reopen_required":
         raise AssertionError("ambiguous artifact locators must fail closed")
-    frozen = json.loads((ROOT / "tools" / "fixtures" / "fr-phase-close-guard" / "2127-bootstrap-batch.json").read_text(encoding="utf-8"))
-    raw_frozen_pr = frozen["pr"]
-    authorization = raw_frozen_pr["comments"][0]
-    if hashlib.sha256(authorization["body"].encode("utf-8")).hexdigest() != "486ca70bea8f4fe51eee2523629c907fdce82bdea57a7cc49b4f8c9bd29d37d9":
-        raise AssertionError("#2127 bootstrap authorization comment fixture drifted")
-    if hashlib.sha256(raw_frozen_pr["body"].encode("utf-8")).hexdigest() != "e6164372caa7d0f2de60b424336e913019576db6681799288bfeedbf709d86c2":
-        raise AssertionError("#2127 PR metadata body fixture drifted")
-    normalized_authorization = {
-        "id": authorization["id"],
-        "body_sha256": hashlib.sha256(authorization["body"].encode("utf-8")).hexdigest(),
-        "created_at": authorization["created_at"],
-        "updated_at": authorization["updated_at"],
-        "author_association": authorization["author_association"],
-        "user": authorization["user"],
+    # One trusted-checker cycle must accept both sides of the EOL transition:
+    # this head still carries the frozen runtime exception so the current base
+    # checker can validate it, while the next cleanup head removes every name.
+    # Partial states are never valid, and the historical fixture is already
+    # gone from the candidate/default product surface.
+    legacy_names = {
+        "V032_RUNTIME_EOL_EXCEPTION",
+        "DELIVERY_FAILURE_CODES",
+        "_pr_metadata_fields",
+        "_v032_runtime_eol_delivery_exception",
     }
-    frozen_pr = {
-        **raw_frozen_pr,
-        "authorization_comment": normalized_authorization,
-        "failed_run": raw_frozen_pr["workflow_runs"][0],
-        "closing_issues_complete": True,
-        "closing_issues": [{"number": 2125, "repository": frozen["repository"]}],
-    }
-    def frozen_snapshot(subject: int, work_item: int, *, delivery_pr: dict[str, object] = frozen_pr, repository: str = frozen["repository"]) -> dict[str, object]:
-        child = issue(
-            work_item,
-            "work_item",
-            merged_prs=[delivery_pr] if work_item == 2125 else [],
-            historical_delivery_prs=[delivery_pr],
-        )
-        return {
-            "subject": subject,
-            "repository": repository,
-            "actor": {"id": 1, "login": "closer"},
-            "default_branch": "main",
-            "host_readable": True,
-            "issues": [issue(subject, "fr", children=[work_item]), child],
-            "product_acceptance": acceptance(subject, repository=repository),
+    present_legacy_names = {name for name in legacy_names if hasattr(module, name)}
+    if present_legacy_names not in (set(), legacy_names):
+        raise AssertionError(f"runtime-EOL transition is partial: {sorted(present_legacy_names)}")
+    if present_legacy_names:
+        expected = {
+            "repository": "MC-and-his-Agents/Loom",
+            "pr": 2127,
+            "anchor_issue": 2125,
+            "covered_issues": (2125, 2126),
+            "head_sha": "78b79de68d963a0dca14823a050bd09838403a45",
+            "merge_commit": "37a6fa55a6f0819d9f9a93f1bc102445c99b38db",
+            "pr_body_sha256": "e6164372caa7d0f2de60b424336e913019576db6681799288bfeedbf709d86c2",
+            "authorization_comment_id": 4963151713,
+            "authorization_comment_sha256": "486ca70bea8f4fe51eee2523629c907fdce82bdea57a7cc49b4f8c9bd29d37d9",
+            "authorization_user_id": 9820018,
+            "authorization_login": "mcontheway",
+            "failed_run_id": 29288032023,
         }
-    for subject, work_item in ((2115, 2125), (2116, 2126)):
-        frozen_result = module.evaluate_closure(frozen_snapshot(subject, work_item), host_resolved=True)
-        if frozen_result.get("verdict") != "allow_completed_close":
-            raise AssertionError(f"real #2127 delivery fixture must close FR #{subject}: {frozen_result}")
-    legacy_raw_pr = {
-        **raw_frozen_pr,
-        "authorization_comment": authorization,
-        "failed_run": raw_frozen_pr["workflow_runs"][0],
-        "closing_issues_complete": True,
-        "closing_issues": [{"number": 2125, "repository": frozen["repository"]}],
-    }
-    legacy_raw_result = module.evaluate_closure(
-        frozen_snapshot(2115, 2125, delivery_pr=legacy_raw_pr),
-        host_resolved=True,
-    )
-    if legacy_raw_result.get("verdict") != "allow_completed_close":
-        raise AssertionError(f"base-owned raw authorization fixture must remain consumable: {legacy_raw_result}")
-    def with_delivery_check(**updates: object) -> dict[str, object]:
-        contexts = [
-            {**context, **updates} if context.get("name") == "loom-delivery-gate" else context
-            for context in frozen_pr["check_rollup"]["contexts"]
-        ]
-        return {**frozen_pr, "check_rollup": {**frozen_pr["check_rollup"], "contexts": contexts}}
-    negatives = (
-        ("delivery_binding_invalid", {**frozen_pr, "number": 2128}),
-        ("delivery_binding_invalid", {**frozen_pr, "head_sha": "0" * 40}),
-        ("delivery_binding_invalid", {**frozen_pr, "merge_commit": "0" * 40}),
-        ("delivery_binding_invalid", {**frozen_pr, "body": frozen_pr["body"] + "\n"}),
-        ("delivery_binding_invalid", {**frozen_pr, "last_edited_at": "2026-07-13T22:05:00Z"}),
-        ("delivery_relation_invalid", {**frozen_pr, "closing_issues": []}),
-        ("delivery_relation_invalid", {**frozen_pr, "closing_issues_complete": False}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "body_sha256": "0" * 64}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "id": 1}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "user": {"id": 1, "login": "outsider"}}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "updated_at": "2026-07-13T22:05:00Z"}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "created_at": "2026-07-13T22:00:00Z", "updated_at": "2026-07-13T21:59:55Z"}}),
-        ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "id": 1}}),
-        ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "head_sha": "0" * 40}}),
-        ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "workflow_path": ".github/workflows/other.yml"}}),
-        ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "updated_at": "2026-07-13T22:05:00Z"}}),
-        ("bootstrap_run_mismatch", with_delivery_check(name="other")),
-        ("bootstrap_run_mismatch", with_delivery_check(type="StatusContext")),
-        ("bootstrap_run_mismatch", with_delivery_check(status="IN_PROGRESS")),
-        ("bootstrap_run_mismatch", with_delivery_check(conclusion="SUCCESS")),
-        ("bootstrap_run_mismatch", with_delivery_check(started_at="2026-07-13T20:00:00Z", completed_at="2026-07-13T20:00:01Z")),
-        ("bootstrap_run_mismatch", with_delivery_check(started_at="2026-07-13T21:54:56Z", completed_at="2026-07-13T21:54:46Z")),
-        ("bootstrap_run_mismatch", with_delivery_check(details_url="https://github.com/MC-and-his-Agents/Loom/actions/runs/1/job/1")),
-    )
-    for expected_code, invalid_pr in negatives:
-        invalid_result = module.evaluate_closure(frozen_snapshot(2116, 2126, delivery_pr=invalid_pr), host_resolved=True)
-        primary = invalid_result.get("failure_envelope", {}).get("primary_cause", {})
-        if invalid_result.get("verdict") != "reopen_required" or primary.get("code") != expected_code or invalid_result.get("failure_envelope", {}).get("consequences") != []:
-            raise AssertionError(f"frozen delivery mutation must fail with {expected_code}: {invalid_result}")
-    for repository, work_item in (("other/repo", 2126), (frozen["repository"], 2124)):
-        unrelated = module.evaluate_closure(frozen_snapshot(2116, work_item, repository=repository), host_resolved=True)
-        if unrelated.get("verdict") != "reopen_required" or unrelated.get("failure_envelope", {}).get("primary_cause", {}).get("code") != "missing_delivery_attestation":
-            raise AssertionError("the historical exception must not apply to another repository or Work Item")
+        if module.V032_RUNTIME_EOL_EXCEPTION != expected:
+            raise AssertionError("runtime-EOL transition exception drifted")
+    if (ROOT / "tools" / "fixtures" / "fr-phase-close-guard" / "2127-bootstrap-batch.json").exists():
+        raise AssertionError("removed runtime-EOL host fixture must not return")
     print("fr/phase closure guard contract: OK")
     return 0
 

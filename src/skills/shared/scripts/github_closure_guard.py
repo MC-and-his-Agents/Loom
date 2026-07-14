@@ -301,7 +301,7 @@ def _v032_runtime_eol_delivery_exception(
     repository: str,
     default_branch: str,
 ) -> tuple[bool, str | None]:
-    """Consume one frozen historical exception without creating a reusable waiver."""
+    """Consume the frozen historical exception for one final transition head."""
     expected = V032_RUNTIME_EOL_EXCEPTION
     number = issue.get("number")
     if repository != expected["repository"] or number not in expected["covered_issues"]:

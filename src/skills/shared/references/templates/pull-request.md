@@ -52,14 +52,13 @@ Loom 支持结构化 PR 模板，但必须满足：
 稳定规则：
 
 - machine carrier 由 repo companion 声明 `schema_version`、`carrier_id`、`surface`、`repo_specific_field_set`、`authority_locator`、`applicability_locator`、`enforcement`、`parser_version` 与 `source_range_or_hash`
-- renderer 或 `gh pr edit` 后必须能通过 preflight 证明 carrier 未漂移
+- `gh pr edit` 后必须读取 live PR body，证明 machine carrier 未漂移
 - Markdown 展示层可以重排；machine carrier、artifact 或 host/project field locator 必须保持可解析
 - parser 或 CLI 输出只证明 carrier 可读性，不替代 Work Item、review、merge-ready、closeout 或 docs/source truth
 
 安全更新策略：
 
 - 优先把 PR body 渲染到独立文件，再用 `gh pr edit --body-file <file>` 更新；不要用 shell command substitution 拼接包含反引号、多行 JSON、中文标点或列表缩进的 body。
-- `loom pr metadata-update` 默认只做 dry-run render/preflight；只有显式 `--apply` 才允许写 host PR body。
-- 写入前对渲染文件运行 `loom pr metadata-preflight --body-file <rendered> --surface <surface>`。
-- 写入后读取 GitHub PR body 到独立文件，再运行 `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback> --surface <surface>`；该检查必须比较 machine block 的 locator/hash，并在 machine block 漂移时 fail closed。
-- `--body-file` / `--compare-body-file` 只是 render/edit preflight evidence，不能替代 Work Item、review、merge-ready、closeout 或 docs/source truth。
+- 写入后读取 GitHub PR body 到独立文件，比较 repo companion 声明的 machine block locator/hash；漂移必须在 review 前修复。
+- current-head review 后运行 `loom pr gate ... --full-output --json`，将完整 readback 保存到 repo-relative ignored 文件，再通过 `loom merge-ready --pr-gate-result-file <file>` 消费。
+- body readback 只是 PR 输入验证，不能替代 Work Item、review、merge-ready、closeout 或 docs/source truth。

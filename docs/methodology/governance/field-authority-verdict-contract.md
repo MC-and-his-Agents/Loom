@@ -54,9 +54,9 @@ independent `product_acceptance` failure domain.
 
 ## Product acceptance resolver
 
-`loom acceptance validate --input <record.json> --json` is a local structural
-check. A repository-authored JSON file cannot produce a trusted `passed`
-verdict. Trusted consumption uses:
+Repository-authored JSON may be inspected as untrusted structure, but no
+repository-local validation command can produce a trusted `passed` verdict.
+Trusted consumption uses:
 
 ```text
 loom acceptance resolve \

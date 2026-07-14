@@ -6974,7 +6974,7 @@ def hosted_freeze_admission_payload(
             "readiness": {
                 "result": "pass" if not blocking_inputs else "block",
                 "blocking_inputs": blocking_inputs,
-                "refresh_suggestions": ["loom pr metadata-update --apply --json"] if blocking_inputs else [],
+                "refresh_suggestions": ["loom help --json"] if blocking_inputs else [],
                 "next_action": "hosted_admission_allowed" if not blocking_inputs else "update_pr_body",
             },
         }

@@ -87,11 +87,10 @@ run. It classifies the release state as:
 - `partial_published`: at least one release artifact exists but the release evidence set is incomplete or mismatched.
 - `no_release`: the release judgment explicitly declares that no publish is required.
 
-`loom release resume` consumes the same readback classifier and only returns
-the next recovery action. It must not trigger `workflow_dispatch`, create tags,
-publish npm, create GitHub Releases, update PR metadata, or write closeout
-carriers. Host API or registry read failures are classified as readback
-blockers; auth and host-access diagnosis remains owned by #1597.
+`loom release readback` returns the current classification and next recovery
+action. It must not trigger `workflow_dispatch`, create tags, publish npm,
+create GitHub Releases, update PR metadata, or write closeout carriers. Host API
+or registry read failures are classified as readback blockers; auth and host-access diagnosis remains owned by #1597.
 
 The v0.14.2 manual recovery sample is retained in
 `docs/evidence/fixtures/release-readback-fixtures.json`: the first main-push

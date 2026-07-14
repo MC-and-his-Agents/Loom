@@ -1,209 +1,75 @@
 # Tiered Gate Consumption Contract
 
-本文件定义 Loom gate 如何消费治理强度字段。
+本文件定义 `light`、`standard` 与 `reinforced` 如何调整验证强度。强度只改变
+检查深度，不改变字段 owner，也不得恢复已退役 repo execution carrier。
 
-它承接 [loom-governance-intensity-mapping.md](../governance/loom-governance-intensity-mapping.md)
-的 Loom 映射，并保护 [gate-chain.md](./gate-chain.md) 中的 fail-closed 顺序。
+## 1. 最小 PR policy
 
-本文件只冻结合同，不实现 parser、CLI、fixture、runtime 或 `.loom/bin` 行为。
+PR machine block 只承载 GitHub 无法自行推导的 policy claim：
 
-## 1. 消费目标
+- typed `work_item_locator`；
+- `governance_intensity`、`governance_mode`、`governance_assurance`；
+- `change_class`、`suite_path`、`review_requirement`；
+- `pr_gate_required`、`release_judgment`、`closeout_required`；
+- `upgrade_triggers` 与明确 excluded scope。
 
-Gate 消费治理强度时必须回答：
+branch、head、checks、merge state 与 merge commit 始终由 GitHub live readback
+拥有。兼容字段 `fact_chain_required` 表示是否要求 host-native delivery binding，
+不授权读取 committed current/status/progress/review/shadow 文件。
 
-- 当前变更声明的治理强度是什么
-- formal suite 是 required、minimal 还是 `not_applicable`
-- `not_applicable` 跳过了什么，为什么可以跳过，谁可以消费，何时失效
-- review、fact-chain、CI/checks、PR gate、release / no-release 和 closeout 是否仍然必需
-- 是否出现必须升级治理强度的信号
+## 2. 分级语义
 
-任何字段缺失、枚举未知、PR body machine carrier 解析失败、host readback 不一致或
-carrier 冲突，都必须 fail closed。
+| Intensity | Typical change | Required validation |
+| --- | --- | --- |
+| `light` | 局部文档、低风险配置 | diff/static/targeted checks + current-head attestation + required host checks |
+| `standard` | 公共合同、跨模块行为 | targeted matrix + 一次稳定-head aggregate + host attestation/readback |
+| `reinforced` | security、permission、runtime、release、external action | specialized review、hosted negatives、runtime/release evidence 与受控 merge |
 
-## 2. 最小字段
+升级治理强度不得隐式改变仓库 profile。高风险 PR 可提高本 PR 的检查强度，但
+light 仓库仍禁止 committed current、status、progress、review、shadow、suite 与
+普通 closeout carrier。
 
-治理强度 machine carrier 至少需要以下字段。字段名是合同语义；具体载体由 #1321
-实现，不在本文件落地 parser。
+## 3. 绑定优先级
 
-| 字段 | 允许值 | 必填条件 | 消费语义 |
-| --- | --- | --- | --- |
-| `loom_work_item` | 当前 Work Item id | 所有 Loom-governed PR | 绑定 PR metadata carrier 与 Work Item / issue 事实链 |
-| `branch` | 当前 PR head branch | 所有 Loom-governed PR | 绑定 PR metadata carrier 与正式执行分支 / worktree |
-| `head_sha` | host readback observed PR head SHA | gate / readback 输出 | 不作为 PR body 作者输入；由 GitHub PR readback 或本地 checkout 观察 |
-| `governance_intensity` | `light` / `standard` / `reinforced` | 所有 Loom-governed PR | 决定最低证据、升级触发和 gate profile 期望 |
-| `change_class` | `docs_only` / `docs_governance` / `contract` / `runtime` / `fixture` / `release` / `workflow` / `metadata_schema` / `host_write` / `permissions` / `external_action` / `mixed` | 所有 Loom-governed PR | 解释为什么当前强度成立；高风险 class 不得降级 |
-| `suite_path` | `full` / `minimal` / `not_applicable` | 所有 Work Item | 决定 full suite artifacts 是否必须可读 |
-| `suite_not_applicable` | structured rationale object | `suite_path == not_applicable` | 证明 formal suite artifacts 仅对当前 scope 不适用 |
-| `review_requirement` | `current_head_review_required` / `specialized_review_required` / `host_readback_only` | 所有 Work Item / host-readback PR | 保护 review 不被轻量路径静默跳过；`host_readback_only` 必须显式声明 |
-| `fact_chain_required` | `true` / `false` | 所有 Work Item / host-readback PR | 默认保护 Work Item、recovery、status、review locator 可读；仅 `host_readback_only` 可声明 `false` |
-| `pr_gate_required` | `true` | 所有 PR | 保护 PR head / Work Item / review / validation 绑定 |
-| `release_judgment` | `release_required` / `no_release` / `deferred_release_judgment_blocking` | 所有 PR | 保护 release / no-release 判断 |
-| `closeout_required` | `true` | 所有 Work Item | 保护 post-merge carrier 和 host sync |
-| `upgrade_triggers` | list of trigger ids | 所有 Work Item | 记录当前已检查或已触发的升档信号 |
+字段 owner 固定为：
 
-字段缺失时，gate 不能用默认值猜测通过。
+1. GitHub Issue：goal、scope、dependency、closing condition；
+2. GitHub PR/Checks：branch、head、checks、mergeability、merge facts；
+3. Git worktree：当前正式执行路径与 checkout；
+4. host attestation：semantic review 与 delivery closeout；
+5. acceptance adapter：独立 product acceptance verdict；
+6. PR policy block：仅补充强度、change class、review/release policy。
 
-`fact_chain_required: false` 只能与 `review_requirement: host_readback_only` 同时出现。
-该组合表示当前 PR 的 merge gate 只消费 PR metadata、host PR readback、branch/head 对齐和
-适用 CI/checks，不读取 repo-local current pointer、Work Item carrier、progress 或 review
-artifact。`light` 强度不得使用该组合；高风险 change class 仍必须通过自己的 profile / hosted
-checks 证明。
+两个权威来源冲突时 fail closed。人类摘要缺失不能覆盖 host facts；机器不得把
+authoritative conflict 自动修成某一方。
 
-## 2.1 分类输入与输出
+## 4. Gate consumption
 
-治理强度分类是 gate 的读模型，不是新的完成真相源。
+所有强度都必须保留：
 
-分类器至少消费：
+- Work Item admission；
+- formal worktree / branch / PR / live head binding；
+- current-head semantic review；
+- repository-native targeted checks 与适用 required checks；
+- `loom pr gate`、retained result 与 `loom merge-ready` readback；
+- release/no-release judgment；
+- host-derived delivery closeout；
+- 适用时独立 product acceptance。
 
-- diff scope：当前 PR 实际触碰的路径和变更类型
-- Work Item scope：issue / Work Item 声明的目标、非目标和依赖
-- PR metadata：machine carrier 中的强度、class、suite、review、release 与 closeout 字段
-- repo profile：仓库治理成熟度、required checks、release surface 和 host policy
-- release/no-release evidence：本轮是否改变 CLI、skills、package、workflow、release validation、runtime provider 或其他用户可见行为
+`suite_path: not_applicable` 只说明正式规格工件对当前 scope 不适用。其 rationale、
+consumer boundary、recheck condition、scope proof 与 review requirement 保存在 PR
+policy 中；不得为此生成 repo-local spec、progress、review 或 closeout carrier。
 
-分类器至少输出：
+## 5. Failure semantics
 
-- `result`: `pass` / `block`
-- `effective_governance_intensity`: `light` / `standard` / `reinforced`
-- `effective_suite_path`: `full` / `minimal` / `not_applicable`
-- `upgrade_reasons`: 已触发或必须检查的升档原因
-- `consumed_locators`: diff、Work Item、PR metadata、repo profile、release/no-release evidence 的 locator
-- `non_skippable_gates`: review、fact-chain、PR gate、hosted checks、controlled merge、closeout 中仍必须执行的 gate
+分类器至少输出 effective intensity、upgrade reasons、consumed host locators 与一个
+primary cause。常见 domain 包括 governance metadata、git history、environment、
+permission、host service 与 product acceptance；不同 domain 不得折叠成不可执行的
+通用错误。
 
-`governance_intensity` 是声明值，`effective_governance_intensity` 是 gate 消费后的结果。两者不一致时必须记录 `upgrade_reasons`；若证据不足以解释差异，结果必须 `block`。
+`light` 声明与 runtime/release/permission/external-action diff 冲突、PR policy 不可
+解析、host head/readback 不一致或 required check 失败时必须 block。补救只能指向
+30 个公共命令、GitHub/Git 手工动作或 external provider action。
 
-分类结果不得替代 review、PR gate、hosted checks、controlled merge 或 closeout。它只能决定这些 gate 的最低证据面和下一个动作。
-
-## 2.2 绑定事实优先级
-
-Work Item / issue / PR / branch / head 绑定按以下顺序消费：
-
-1. CLI 显式输入，例如 `--item`、`--issue`、`--pr`、`--branch`、`--head-sha`
-2. PR body machine carrier 中的结构化字段
-3. host readback，例如 GitHub PR number、head ref、head SHA、base branch、merge commit、issue state
-4. repo carrier，例如 Work Item、progress、status、review、shadow evidence
-5. 人类 PR body 字段，例如 `Issue: #123`、`Loom Work Item: WI-123`
-6. issue title / body 中的弱文本引用
-
-强来源与强来源冲突必须 `block`。弱来源缺失不能覆盖强来源；当 CLI 输入、machine carrier 和 host readback 一致时，人类 PR body backlink 缺失应分类为 `repairable_missing_human_backlink` 或 advisory repair，而不是 `work_item_binding_conflict`。
-
-最小分类：
-
-- `missing`: 必需强来源不存在
-- `conflict`: 两个强来源声明不同事实
-- `stale`: locator 可读但不绑定当前 PR head 或当前 host state
-- `repairable`: 强来源一致，弱字段缺失、格式不完整或可机械补齐
-
-自动修复只允许写入或修正弱展示字段、缺失 backlink、非语义摘要和 machine carrier 的确定性重渲染。发现 Work Item、issue、PR number、branch、head SHA、release judgment 或 closeout policy 的强来源冲突时必须 fail closed，不得自动选择一方。
-
-## 3. `suite_path: not_applicable`
-
-`suite_path: not_applicable` 只表示 formal suite artifacts 对当前 scope 不适用。
-它不得跳过 review、fact-chain、CI/checks、PR gate、release / no-release 或 closeout；唯一例外是
-PR metadata 另行显式声明 `review_requirement: host_readback_only` 与
-`fact_chain_required: false`，此时 review / fact-chain 的 repo-local carrier 不属于当前 gate
-输入。
-
-`suite_not_applicable` 必须包含：
-
-- `rationale`
-- `consumer_boundary`
-- `recheck_condition`
-- `scope_proof`
-- `review_requirement`
-
-允许条件：
-
-- 变更是 docs-only、docs-governance 语义冻结或其他不需要 formal suite artifacts 的局部合同
-- scope proof 能证明 diff 未触碰 runtime、tools、fixtures、generated payload、skills 分发面、release mechanics、AGENTS 根规则或外部可见动作
-- review record 会在当前 head 上消费该 rationale
-- PR body 与 Work Item / recovery entry 指向同一 Work Item、branch、workspace 和 head SHA
-
-阻断条件：
-
-- rationale 为空或只写“文档变更”
-- consumer boundary 没有说明哪些 gate 可以消费该判断
-- recheck condition 没有说明 scope、risk、host state 或 evidence 变化如何使判断失效
-- scope proof 无法用当前 diff、branch、PR head 或 carrier 证明
-- review requirement 缺失或暗示无需 review
-- `host_readback_only` 缺少 `fact_chain_required: false`，或 `fact_chain_required: false`
-  未搭配 `host_readback_only`
-- 任何后续 gate 需要 formal suite evidence，但该 evidence 被静默省略
-
-## 4. 不得跳过的 gate
-
-所有强度都不得跳过：
-
-- Work Item admission
-- fact-chain / status-surface 消费
-- current-head review 或明确的 specialized review
-- PR metadata/readback 与 head binding
-- hosted required checks 中适用部分
-- PR gate
-- release / no-release 判断
-- controlled merge wrapper
-- post-merge closeout / reconciliation
-
-Gate 可以因为 `light` 或 `not_applicable` 缩小 suite artifact 面，但不能把
-`not_applicable` 当成 review、CI、PR gate 或 closeout 的 substitute evidence。
-`host_readback_only` 是独立的 host/readback profile；它不声称 repo-local review 已发生，
-而是把 review/fact-chain carrier 从当前 gate 输入中显式移除，并要求 PR metadata/readback
-本身通过。
-
-PR metadata 的 machine carrier 可以只声明 `surface: merge_ready`，同时通过
-`preflight.required_before` 被 `pre_review` / `review` 提前消费。提前消费只表示
-review 前已读取同一个将由 merge-ready 消费的 carrier；不得要求执行者另造一个
-`surface: review` 的第二 machine block，也不得因此跳过后续 merge-ready / PR gate
-readback。
-
-## 5. Fail-closed 分类
-
-Gate 至少要区分以下阻断原因：
-
-- `governance_intensity_missing`
-- `governance_intensity_invalid`
-- `change_class_intensity_conflict`
-- `suite_path_missing`
-- `suite_path_invalid`
-- `suite_not_applicable_missing`
-- `suite_not_applicable_invalid`
-- `review_requirement_missing`
-- `fact_chain_binding_missing`
-- `host_readback_only_invalid`
-- `pr_metadata_parse_failed`
-- `work_item_binding_conflict`
-- `head_sha_mismatch`
-- `release_judgment_missing`
-- `closeout_requirement_missing`
-- `upgrade_trigger_unresolved`
-
-这些分类可以由后续实现扩展，但不得合并成不会阻断的 warning。
-
-## 6. 升级规则
-
-Gate 发现以下信号时必须要求升级或返回前序修复：
-
-- `change_class` 是 `runtime`、`release`、`workflow`、`metadata_schema`、`host_write`、`permissions`、`external_action` 或 `mixed`，但强度声明为 `light`
-- docs-only 声明与 diff scope 不符
-- PR body machine carrier 与 Work Item / recovery / status / review locator 冲突
-- 当前 PR head 与 reviewed head 不一致，且漂移不是 gate 明确允许的 carrier-only drift
-- release 判断缺失或与 scope 冲突
-- downstream issue 依赖当前未冻结合同
-- required hosted check、PR gate、controlled merge 或 closeout evidence 不可读
-
-升级后的 gate 只能消费新的强度声明和对应证据；不能继续沿旧轻量路径放行。
-
-## 7. 与后续实现的关系
-
-本合同是 #1317 的冻结面。后续事项负责实现或验证：
-
-- #1321：治理强度元数据载体
-- #1322：docs-governance 轻量 gate 行为
-- #1323：升级与滥用防护 fixtures
-- #1324：文档与 release / no-release evidence 收口
-
-在这些事项完成前，gate 必须按现有规则 fail closed，不得因为本文档存在就假设机器消费已经实现。
-
-## 8. 一句话结论
-
-分级 gate 消费可以让 Loom 区分 full suite 与合法 `not_applicable`，但任何轻量路径都不能绕过 review、事实链、head 绑定、CI、release 判断或 closeout。
+强度映射见
+[loom-governance-intensity-mapping.md](../governance/loom-governance-intensity-mapping.md)。

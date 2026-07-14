@@ -186,7 +186,7 @@ Governance lint result 也只能作为 derived evidence 被第 4 层展示和映
 
 ### 3.6.2 `goal_execution_contract`
 
-`loom resume` 与 `loom status` 必须能展示从 Work Item 派生的 `/goal` execution contract：
+`loom status` 必须能展示从 Work Item 派生的 `/goal` execution contract：
 
 - `schema_version`: `loom-goal-execution-contract/v1`
 - `objective`

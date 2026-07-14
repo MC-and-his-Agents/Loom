@@ -6,7 +6,7 @@ truth or a merge gate input.
 
 ## Current contract
 
-- There is no public `loom workstation current` pointer.
+- There is no public repository current-pointer command.
 - Commands receive a typed Work Item and derive branch, worktree, PR, and head
   from explicit input plus host readback.
 - Codex owns marketplace registration, plugin cache, enablement, and task reload.

@@ -396,7 +396,13 @@ def materialize_case(root: Path, fixture: dict[str, Any]) -> Path:
     return target
 
 
-def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
+def assert_case(
+    evaluator: Any,
+    root: Path,
+    fixture: dict[str, Any],
+    *,
+    expected_command: str,
+) -> None:
     target = materialize_case(root, fixture)
     status_before = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target, check=True, text=True, stdout=subprocess.PIPE).stdout
     first = evaluator.plan_payload(target)
@@ -410,6 +416,8 @@ def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
         raise AssertionError(f"{fixture['id']} plan wrote to the target")
     if first != second:
         raise AssertionError(f"{fixture['id']} plan is not reentrant")
+    if first.get("command") != expected_command:
+        raise AssertionError(f"{fixture['id']} mixed light-profile command state: {first.get('command')}")
     expected = fixture["expected"]
     cause = first.get("primary_cause", {})
     if first.get("result") != expected["result"] or cause.get("id") != expected["primary_cause"]:
@@ -447,13 +455,115 @@ def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
             stderr=subprocess.PIPE,
         )
         payload = json.loads(completed.stdout or completed.stderr)
-        if payload.get("primary_error_code") == "unsupported_command_surface":
-            if completed.returncode == 0 or payload.get("mutates") is not False or payload.get("carrier_mutations") is not False:
-                raise AssertionError(f"removed light-migration-plan command did not fail before mutation: {payload}")
-        else:
-            assert_single_failure_envelope(payload)
-            if completed.returncode == 0 or payload.get("command") != "profile light-migration-plan" or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier":
-                raise AssertionError(f"CLI route did not preserve light-profile failure semantics: {payload}")
+        if (
+            completed.returncode == 0
+            or payload.get("primary_error_code") != "unsupported_command_surface"
+            or payload.get("mutates") is not False
+            or payload.get("carrier_mutations") is not False
+        ):
+            raise AssertionError(f"removed light-migration-plan command must stay unreachable before mutation: {payload}")
+
+
+def run_public(target: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
+    completed = subprocess.run(
+        [sys.executable, str(LOOM), *args, "--target", str(target), "--json"],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return completed, json.loads(completed.stdout or completed.stderr)
+
+
+def assert_public_light_owner(root: Path) -> None:
+    cases = (
+        ("public-clean-light", None, False),
+        ("public-heavy-light", ".loom/status/current.md", True),
+        ("public-bootstrap-manifest", ".loom/bootstrap/manifest.json", False),
+        ("public-runtime-init-result", ".loom/bootstrap/init-result.json", True),
+    )
+    for name, added_locator, forbidden in cases:
+        target = root / name
+        target.mkdir()
+        subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=target, check=True)
+        subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=target, check=True)
+        installed, installed_payload = run_public(target, "install", "--apply")
+        if installed.returncode != 0 or installed_payload.get("result") != "pass":
+            raise AssertionError(f"{name} install fixture is invalid: {installed_payload}")
+        if added_locator is not None:
+            path = target / added_locator
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = (
+                '{"schema_version":"loom-bootstrap-manifest/v2"}\n'
+                if added_locator == ".loom/bootstrap/manifest.json"
+                else '{"schema_version":"loom-init-output/v1"}\n'
+                if path.suffix == ".json"
+                else "# forbidden current pointer\n"
+            )
+            path.write_text(payload, encoding="utf-8")
+        commit_all(target)
+        detected, detected_payload = run_public(target, "detect")
+        if detected.returncode != 0 or detected_payload.get("result") != "pass":
+            raise AssertionError(f"{name} detect fixture is invalid: {detected_payload}")
+        detected_surfaces = {
+            entry.get("path"): entry
+            for entry in detected_payload.get("surfaces", [])
+            if isinstance(entry, dict)
+        }
+        if added_locator == ".loom/bootstrap/manifest.json":
+            manifest = detected_surfaces.get(added_locator)
+            if (
+                detected_payload.get("classification") != "current"
+                or not isinstance(manifest, dict)
+                or manifest.get("migration_status") != "current"
+                or manifest.get("layer") != "installation-metadata"
+            ):
+                raise AssertionError(f"light bootstrap manifest must remain current installation metadata: {detected_payload}")
+        if added_locator == ".loom/bootstrap/init-result.json":
+            init_result = detected_surfaces.get(added_locator)
+            if (
+                detected_payload.get("classification") != "mixed"
+                or not isinstance(init_result, dict)
+                or init_result.get("migration_status") != "legacy"
+                or init_result.get("layer") != "runtime"
+            ):
+                raise AssertionError(f"runtime init result must remain a legacy runtime surface: {detected_payload}")
+        status_before = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=target,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        state_path = target / ".loom" / "installed-state.json"
+        state_before = state_path.read_bytes()
+        expected = "block" if forbidden else "pass"
+        for command in (("repair", "plan"), ("doctor",), ("upgrade", "--apply")):
+            completed, payload = run_public(target, *command)
+            if payload.get("result") != expected or (completed.returncode == 0) != (expected == "pass"):
+                raise AssertionError(f"{name} {' '.join(command)} did not consume the light invariant: {payload}")
+            invariant = payload.get("light_profile_invariant")
+            if not isinstance(invariant, dict) or invariant.get("applicable") is not True:
+                raise AssertionError(f"{name} {' '.join(command)} omitted the public light invariant: {payload}")
+            if forbidden:
+                failure = payload.get("failure_envelope")
+                if (
+                    not isinstance(failure, dict)
+                    or failure.get("primary_cause") != payload.get("primary_cause")
+                    or failure.get("consequences") != []
+                    or payload.get("primary_cause", {}).get("id") != "light_profile_forbidden_carrier"
+                ):
+                    raise AssertionError(f"{name} {' '.join(command)} lost the precise primary cause: {payload}")
+        status_after = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=target,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        if forbidden and (state_path.read_bytes() != state_before or status_after != status_before):
+            raise AssertionError("blocked light-profile upgrade mutated repository state")
 
 
 def main() -> int:
@@ -461,7 +571,8 @@ def main() -> int:
     if catalog.get("schema_version") != "loom-light-profile-fixtures/v1":
         raise AssertionError("light-profile fixture schema drifted")
     fixtures = catalog.get("cases")
-    if not isinstance(fixtures, list) or {item.get("id") for item in fixtures if isinstance(item, dict)} != {
+    fixture_ids = {item.get("id") for item in fixtures if isinstance(item, dict)} if isinstance(fixtures, list) else set()
+    legacy_fixture_ids = {
         "heavy-tree",
         "absolute-workspace-entry",
         "absolute-private-workspace-entry",
@@ -473,9 +584,23 @@ def main() -> int:
         "legacy-missing-state",
         "light-nonmetadata-state",
         "non-light",
-    }:
-        raise AssertionError("light-profile fixture catalog is incomplete")
+    }
+    removed_fixture_ids = {*legacy_fixture_ids, "runtime-init-result-removed"}
     evaluator = load_module()
+    allowed_bootstrap = set(evaluator.ALLOWED_BOOTSTRAP_LOCATORS)
+    legacy_state = (
+        fixture_ids == legacy_fixture_ids
+        and allowed_bootstrap == {".loom/bootstrap/init-result.json"}
+    )
+    removed_state = (
+        fixture_ids == removed_fixture_ids
+        and allowed_bootstrap == {".loom/bootstrap/manifest.json"}
+    )
+    if legacy_state == removed_state:
+        raise AssertionError(
+            "light-profile consumer and fixtures must be a complete legacy classification or a complete removed-state classification"
+        )
+    expected_command = "profile light-migration-plan" if legacy_state else "repair plan"
     assert_paginated_host_readback()
     copies = [
         ROOT / "skills" / "shared" / "scripts" / "light_profile.py",
@@ -487,7 +612,9 @@ def main() -> int:
         raise AssertionError("light-profile evaluator must not become a repo-local runtime carrier")
     with tempfile.TemporaryDirectory(prefix="loom-light-profile-") as raw_tmp:
         for fixture in fixtures:
-            assert_case(evaluator, Path(raw_tmp), fixture)
+            assert_case(evaluator, Path(raw_tmp), fixture, expected_command=expected_command)
+        if removed_state:
+            assert_public_light_owner(Path(raw_tmp))
         assert_reconciliation(evaluator, Path(raw_tmp))
     print("light-profile migration contract: OK")
     return 0

@@ -1,349 +1,68 @@
 # Review Execution
 
-本文件定义 Loom 当前最小正式 review 执行层。
-
-## 1. 能力定位
-
-Loom 把 review 分成三层：
-
-- `pre-review`
-  - 机械预检，判断是否具备进入正式审查的最低条件
-- `review`
-  - 正式语义审查，输出 reviewer 结论
-- `merge-ready`
-  - merge 前统一放行聚合
-
-`review` 不替代前后两层，也不把语义判断硬编码成脚本。
-默认开箱即用路径固定为：
+本文件定义 Loom 当前公共 review 路径：语义审查发生在 reviewer/宿主中，Loom
+只编排并认证 exact PR head 的 host attestation。
 
-1. `flow review`
-   - 只读基线；确认是否具备进入 formal review 的条件
-2. `review run`
-   - 按宿主 proof 选择 authoritative adapter，产出结构化 review evidence 与 Loom-normalized findings
-3. `review record`
-   - 把 formal review 结论写入单一 authored review record
-
-正式 review 必须消费 BDD/TDD 双循环的当前证据：
-
-- BDD 外环
-  - 检查实现是否覆盖 spec 中的可观察场景
-- TDD 内环
-  - 检查 plan 中承诺的测试、检查或人工验证是否形成 test evidence
-- fresh verification evidence
-  - 检查 behavior evidence / test evidence 是否绑定当前 `reviewed_head` 与当前验证摘要
-
-在这条证据链里，Loom 对 merge 前语义审查结论冻结统一术语
-`semantic_review_disposition`。它不是第二份 artifact，也不是新的状态机；它只是
-单一 `review_entry` review record 内、可被后续 gate 消费的稳定处置边界。
-
-Full spec path 下，正式 review 还必须消费 pre-review 已暴露的 gate-chain
-输入：
-
-- suite path decision 与 full suite artifact locators
-- `spec.md` scenario / acceptance locators 到 `plan.md` validation / test
-  strategy 的映射
-- evidence-map 中 behavior evidence、test evidence、fresh verification
-  evidence 的 locator / freshness / scope / reviewed head 绑定
-- consistency-analysis 中 blocking / advisory / stale / missing / conflict /
-  `not_applicable` 分类与 remediation direction
-- execution breakdown / task carrier locator（若当前 suite path 声明适用）
+## 1. 默认路径
 
-这些输入进入 review record 的 `consumed_inputs` 或 findings backlink。它们不
-author 第二份 review truth；正式审查结论仍只能来自单一 review record。
+```text
+loom pre-review -> semantic review -> host attestation -> loom review
+```
 
-`pre-review` 必须在正式 review 前暴露 full suite、evidence-map 或
-consistency-analysis 的 blocking gap。若 review run 才第一次发现以下系统性
-缺口，review 必须 `fallback` 到 pre-review / build gate，而不是把缺口降为普通
-review finding：
+- `loom pre-review` 读取 GitHub PR、live head、typed Work Item、branch 与正式
+  worktree binding；
+- reviewer 检查当前 diff、behavior/test evidence、targeted validation 与风险；
+- trusted workflow 产生绑定 repository、PR、head、review kind、run、artifact
+  digest、verifier 和 policy 的 attestation；
+- `loom review` 只消费该 current-head attestation，不写 repo review carrier。
 
-- full path 必需工件缺失、不可读或 provenance 缺失
-- scenario -> validation 或 acceptance -> test evidence 映射缺失
-- evidence-map 表示当前 gate 必需 evidence 为 `missing`、`stale`、`conflict`
-  或 unreadable
-- consistency-analysis 存在 blocking consistency gap
-- minimal path 的 `not_applicable` rationale 缺少原因、consumer boundary、
-  recheck condition，或与 spec / plan / recovery 冲突
+`review_instruction_locators` 可由 repo companion 声明 spec/implementation review
+说明；locator 不可读或越界时 fail closed，Loom 不猜测仓库特定文件名。
 
-## 2. 唯一 review 载体
+## 2. Review truth
 
-正式 review 结论必须落在唯一 `review_entry` 指向的 review record。
+只有 current-head host attestation 可满足默认 semantic approval。以下内容只能
+作为输入或诊断：
 
-默认入口：
+- raw reviewer/model output；
+- PR body summary 或 GitHub comment；
+- CI green；
+- 本地 JSON、runtime cache 或历史 head 的 evidence；
+- subagent 结果。
 
-- `python3 tools/loom_flow.py flow review --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py review run --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
+subagent 输出只能作为 review 输入证据，由主 reviewer 复核后才能进入结论。
+attestation 中的 `findings[].disposition` 与 `disposition.status` 必须反映当前
+head；repeated blocker 必须升级 reasoning/review 强度，而不是反复试探 gate。
 
-其中：
+## 3. Review policy
 
-- `flow review` 固定保持只读，不触发 engine，也不产生副作用
-- `review run` 只负责选择安全的 authoritative adapter、落盘 evidence、生成 normalized findings，并显式 fail-closed
-- `review record` 仍只写入单一 `review_entry` 指向的 JSON
-- 结构化审查结论可通过 `--findings-file <path>` 写入同一 review record
-- `--blocking-issue` / `--follow-up` 只保留兼容 authored 入口，不得与 `--findings-file` 混用
+- 普通变更使用 current-head semantic review；
+- security、permission、runtime、shared contract 与 release 变更提高 review
+  强度并保留 specialized findings；
+- single-maintainer 仓库可声明 `single_maintainer` policy，但不能跳过可信
+  current-head attestation；
+- spec review 与 implementation review 可使用不同 `review_kind`，但共享 exact
+  head、run 与 artifact digest 绑定。
 
-默认 engine 按宿主 proof 选择：
+模型、reasoning effort 或 adapter 选择属于 reviewer/host 执行细节，不得成为
+第二份 approval truth。缺少 model proof 可以是风险诊断，但不能由 repo carrier
+伪造。
 
-- 已验证 Codex App host context 默认选择 `loom/codex-app-review`，不启动嵌套 `codex exec`
-- `CI` / `CODEX_CI` 只在缺少完整 Codex App host proof 时表示 headless fallback；若 app-server/session locator、thread id 与 thread cwd proof 已验证，真实 Codex App 主线程仍默认选择 `loom/codex-app-review`
-- headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec`，能力来源仍是 `codex exec --output-schema`
-- 显式 `--engine-adapter` 优先级最高，继续保留 Stage 2 authoritative opt-in / fallback 调试入口
+## 4. Findings contract
 
-若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 checkpoint fallback。
+finding 至少包含 id、severity、summary、location、disposition 与 owner。修复后先
+系统排查同类问题，再为新 head 生成新的 attestation。旧 head 的 approval 不能
+通过“carrier-only drift”声明跨越语义改动。
 
-Codex App review adapter 有三种入口：
+`allow` 表示当前审查没有未解决 blocker；`block` 表示仍有 P0/P1；`follow_up`
+只允许承接非阻断事项。delivery gate 消费 review verdict，但不产生 review verdict。
 
-- verified host default：不传 `--engine-adapter`，但必须能证明 app-server/session locator、thread id、thread cwd、target root 与 reviewed head 绑定一致
-- explicit authoritative：显式选择 `review run --engine-adapter loom/codex-app-review`，用于调试或非默认宿主
-- shadow comparison：显式选择 `review run --shadow-engine-adapter loom/codex-app-review`
-- shadow evidence 只能写入 `.loom/runtime/review/<item>/<head>/shadow/<adapter>/`
-- shadow 输出可以包含 raw review、normalized findings、metadata 与 parity diff
-- shadow 输出不得 author `review_entry`，不得替代 `review_record_input.engine_adapter`
-- shadow unavailable / failure 不得阻断 default review run，也不得被 merge-ready 直接消费
-- authoritative Codex App path 必须提供 app-server/session locator、thread id、thread cwd proof；live app-server unavailable 时默认 fallback 到 `loom/default-codex-exec`
-- thread cwd proof 必须等于 target root；cwd / target / reviewed head 绑定冲突或 schema proof 失败时必须 fail closed
-- host proof discovery 必须记录 proof 来源与缺失项；只有部分 proof 时输出 missing-proof diagnostic，说明缺哪个 locator、当前 fallback 原因与 discovery locator，不得仅用 `CODEX_CI=1` 遮蔽真实 App 主线程 proof
-- authoritative Codex App raw output 只作为 runtime evidence 保留；只有归一化后的 `review_record_input` 可被 `review record` 写入单一 authored truth
-- authoritative Codex App runtime files 使用与默认 engine 相同的 `.loom/runtime/review/<item>/<head>/engine-result.json`、`normalized-findings.json`、`engine-metadata.json` 和 `context-pack.json` 边界，保证历史 review context pack 可以继续读取 prior findings
-- `engine_metadata` 必须记录 selected adapter、selection source、fallback reason、thread/target binding summary、reviewed head 与 evidence locators
+## 5. 非目标
 
-成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
+- 不运行隐藏 review-record authoring 命令；
+- 不提交 `.loom/reviews/**` 或 `.loom/runtime/review/**`；
+- 不让 shadow evidence、CI 或 PR metadata 替代 approval；
+- 不从 review/merge 推导 product acceptance；
+- 不因 review wording 变化重复启动完整 aggregate。
 
-### 2.1 Review engine profile contract
-
-`review run` 在调用 Codex-backed reviewer 或 Codex App authoritative adapter 前必须解析稳定 profile，不得继承本机 `~/.codex/config.toml` 的默认 model 或 reasoning effort。
-
-Resolved profile 的 schema 为 `loom-review-engine-profile/v1`，至少包含：
-
-- `adapter`: `loom/default-codex-exec` 或 verified/explicit `loom/codex-app-review`
-- `engine`: `codex` 或 verified/explicit `codex-app-review`
-- `profile_id`: `default`、`high-risk`、`spec-review` 或 `repeated-blocker`
-- `model`: 显式传给 engine 的 model
-- `reasoning_effort`: `low`、`medium`、`high` 或 `xhigh`
-- `timeout_seconds`: engine 执行超时
-- `context_policy`: 本次 review 允许消费的上下文策略
-- `selection_reason`: 选择该 profile 的原因
-- `override_reason`: 若发生人工或 repo override，必须为非空；无 override 时为 `null`
-- `profile_source`: `loom-built-in`、`repo-owned-policy`、`explicit-cli-override` 或 `local-codex-config-opt-in`
-
-默认选择规则：
-
-- `default`: `model = gpt-5.5`，`reasoning_effort = medium`，普通 implementation review 使用
-- `high-risk`: `model = gpt-5.5`，`reasoning_effort = high`，active item 涉及 shared contract、security、permission、approval、sandbox、host adapter、runtime 或 release 边界时使用
-- `spec-review`: `model = gpt-5.5`，`reasoning_effort = high`，`kind = spec_review` 时使用
-- `repeated-blocker`: `model = gpt-5.5`，`reasoning_effort = high`，active item 已标记重复 blocker / root-cause review 时使用
-
-Profile source 解析顺序固定为：
-
-1. explicit CLI override：`review run --engine-profile`、`--engine-model` 或 `--engine-reasoning`
-2. repo-owned policy：`.loom/review-profiles.json`
-3. explicit local config opt-in：`--engine-use-local-codex-defaults`
-4. Loom built-in stable profile
-
-`.loom/review-profiles.json` 的 schema 为 `loom-review-profiles/v1`。`profiles` 只能覆盖 `default`、`high-risk`、`spec-review`、`repeated-blocker`，每个 profile 必须提供非空 `model`、合法 `reasoning_effort` 和非空 `selection_reason`，可选 `timeout_seconds`、`context_policy`。schema drift、未知 profile、空 model 或未知 reasoning 必须 fail closed。
-
-允许通过 `review run --engine-profile`、`--engine-model` 或 `--engine-reasoning` override，但必须同时提供 `--engine-override-reason`。override evidence 必须记录 previous profile、selected profile 和 reason。
-
-本机 `~/.codex/config.toml` 只能通过 `--engine-use-local-codex-defaults` 显式 opt in，且必须提供 `--engine-override-reason`。CI / headless / merge gate 默认拒绝本机 config opt-in；只有 repo-owned policy 明确允许时才可使用。默认 review run 不读取本机 config。
-
-Resolved profile 必须同时出现在：
-
-- `engine.profile`
-- `.loom/runtime/review/<item>/<head>/engine-metadata.json`
-- `review_record_input.engine_profile`
-
-Codex App authoritative adapter 还必须记录 actual model proof。`engine_metadata` 至少包含 `requested_model`、`requested_reasoning`、`actual_model`、`actual_reasoning`、`proof_source`、`enforcement_mode` 和 `model_proof`。raw-file 或 host 无法返回 actual proof 时必须结构化标记 `unverified`；`high-risk`、`spec-review`、`repeated-blocker` 在 actual proof 缺失或 mismatch 时 fail closed。raw App output 仍只是 runtime evidence，authored review truth 只能来自 normalized `review_record_input`。
-
-### 2.2 Review context pack
-
-`review run` 必须在调用 engine 前写入 MVP context pack，schema 为 `loom-review-context-pack/v1`。context pack 是输入证据，不是第二份 review truth。
-
-Context pack 至少包含：
-
-- `item_id`
-- `review_path`
-- `current_head`
-- `validation_summary`
-- `budget_risk`
-- `history_available`
-- `recent_findings`
-- `repeated_blocker_signal`
-
-`recent_findings` 从可读的历史 review record 与 `.loom/runtime/review/<item>/*/normalized-findings.json` 投影而来，只保留 finding id、summary、severity、disposition、reviewed head、validation summary 和 source locator。
-
-`budget_risk` 是从 `github_control_plane.api_snapshot.budget` 派生的 provider-neutral 风险摘要，schema 为 `loom-execution-budget-risk/v1`。它至少暴露：
-
-- `status`
-- `enforcement`
-- `highest_risk`
-- `risk_dimensions`
-- `summary`
-
-该字段在 v0.9.0 中只作为 advisory review input：
-
-- 高风险 budget 可以提示 reviewer 关注 retry / request / token 压力
-- 缺失或 unavailable budget 只说明预算读面不可用
-- 不得因为 budget risk 单独改变 review `decision`
-
-`repeated_blocker_signal` 的 schema 为 `loom-repeated-blocker-signal/v1`。它在 v0.8.0 中只作为 advisory evidence：
-
-- `result = present` 表示至少两个 block finding 共享 repeat key
-- `result = absent` 表示当前可用历史中未发现重复 blocker
-- `enforcement = advisory` 表示本批不把重复 blocker 自动升级成 merge gate blocker
-- `candidates[]` 必须列出 repeat key、count、source locators、summary 和 recommended action
-
-Prompt 必须消费 context pack，并要求 reviewer 将 finding 分类为 `new`、`unresolved` 或 `repeated/root-cause candidate`。历史不可用时，context pack 仍必须存在并标明 `history_available = false`，不得猜测历史结论。
-
-当 `review run` 正在生成替代 review evidence 时，既有 review record 的 `reviewed_head` 可能落后于当前 `HEAD`。这种 stale record 只能作为历史输入，不能单独构成当前 review blocker；只有未解决 finding、验证漂移或当前差异本身未被本轮审查覆盖时，reviewer 才应阻断。
-
-## 3. review record 最小字段
-
-review record 至少应包含：
-
-- `item_id`
-- `kind`
-- `reviewed_head`
-- `reviewed_validation_summary`
-- `decision`
-- `summary`
-- `reviewer`
-- `fallback_to`
-- `findings`
-- `blocking_issues`
-- `follow_ups`
-
-模板见 [../templates/review-record.md](../templates/review-record.md)。
-
-其中：
-
-- `findings` 是正式审查结论的权威数组
-- `semantic_review_disposition` 只能从同一 `review_entry` review record 派生读取，
-  不得由 PR body、CI、GitHub review comment、guardian、shadow review、runtime
-  review evidence 或 repo companion 直接 author
-- 每条 finding 至少应包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`
-- `severity` 当前稳定值为 `warn`、`block`
-- `rebuttal` 当前稳定值为 `null` 或非空字符串
-- `disposition` 当前稳定值为 `null` 或对象；对象内的 `status` 只允许 `accepted`、`rejected`、`deferred`
-- `disposition.status = accepted` 表示 finding 已确认需要处理，必须由后续实现、验证或 follow-up 承接
-- `disposition.status = rejected` 必须包含可审查理由，并且不得遮蔽仍然缺失的 behavior/test evidence
-- `disposition.status = deferred` 必须绑定后续事项或显式非当前范围理由，不得作为 merge-ready 默认放行
-- finding-level `disposition` 只表示单条 finding 的处理状态；它不得替代 review-level
-  `semantic_review_disposition`
-- `blocking_issues` / `follow_ups` 只是从 `findings` 投影出的兼容字段，不构成第二真相源
-- `consumed_inputs.engine_adapter`、`consumed_inputs.engine_evidence`、`consumed_inputs.normalized_findings`
-  - 只记录 evidence 来源，不构成第二 authored truth
-- `consumed_inputs.budget_risk`
-  - 只记录 review 消费的 budget risk 摘要，不构成第二 authored truth，也不覆盖 review decision
-- `consumed_inputs.behavior_evidence` 与 `consumed_inputs.test_evidence`
-  - 只记录 review 消费的证据 locator / 摘要 / fresh 绑定，不构成第二 authored truth
-- `consumed_inputs.full_suite`
-  - 只记录 suite path、artifact locators、minimal path `not_applicable`
-    rationale 与 provenance，不构成第二 authored truth
-- `consumed_inputs.evidence_map`
-  - 只记录 evidence-map locator、freshness、scope 与 `reviewed_head`
-    绑定，不构成第二 authored truth
-- `consumed_inputs.consistency_analysis`
-  - 只记录 classification、blocking/advisory 结论、remediation direction 与
-    source locator，不构成第二 authored truth
-
-### 3.1 `semantic_review_disposition` 稳定合同
-
-`semantic_review_disposition` 是 Loom merge 前消费的稳定语义审查处置合同。当前只允许：
-
-- `required`
-  - 当前变更必须先形成针对当前受审对象的 authored semantic review disposition；缺失时
-    后续 gate 必须 fail closed
-- `passed`
-  - 当前 PR head 已有 fresh authored semantic review approval，可继续被
-    `pr-gate`、`merge-ready` 与 `controlled merge` 消费
-- `not_applicable`
-  - 当前事项在明确 change class 下无需实现型语义 review，但必须留下原因、替代验证与
-    authority；缺任一字段都按 review 缺失处理
-- `waived`
-  - 当前事项经显式 authority 批准跳过默认语义 review；它不是隐式 bypass，必须留下
-    可审查 authority、原因和替代验证边界
-
-稳定约束：
-
-- `required`、`passed`、`not_applicable`、`waived` 是 merge 前可消费的唯一状态集合
-- `pending`、`commented`、`ci_passed`、`guardian_green`、`post_merge_recorded` 或其他
-  宿主/工具状态都不得映射成 `passed`
-- `not_applicable` 与 `waived` 至少必须绑定：
-  - `reason`
-  - `change_class`
-  - `substitute_validation`
-  - `authority`
-- `authority` 只说明谁批准了当前 disposition，不把 authority object 本身提升成第二真相源
-- `substitute_validation` 只说明替代验证为何足以覆盖当前 bypass；它不能把 CI success、
-  guardian 结果或 repo companion signal 升级成 authored semantic approval
-- 若 formal review 已要求实现型语义审查，则 `not_applicable` 与 `waived` 不得用来掩盖
-  缺失的 behavior evidence、test evidence、fresh verification evidence 或 stale review
-- `semantic_review_disposition` 只能存在于同一 review record 内；不得再创建第二份
-  `semantic_review_disposition` artifact、carrier 或状态机
-
-## 4. repeated blocker 与 root cause
-
-正式 review 不只看单个 finding 是否存在，也要识别同类阻断是否重复出现。
-
-若同一类 block finding、同一测试失败、同一行为证据缺口或同一 review disposition 在多轮中重复出现，review record 必须把它升级为 root-cause/repeated-blocker 处理：
-
-- finding 应标记重复阻断的证据来源
-- `summary` 应说明为什么单点修复不足
-- `fallback_to` 应指向需要重做的前序 gate、验证入口或计划修正点
-- merge-ready 不得在 repeated blocker 未被 accepted/rejected/deferred 且有证据支撑前放行
-
-subagent 输出只能作为 review 输入证据。主执行者必须先把它整合到实现、验证摘要、review record 或 recovery；未整合的 subagent 结论不得直接成为 reviewer 结论。
-
-## 5. 与 merge checkpoint 的边界
-
-`merge checkpoint` 固定只做机械消费：
-
-- 读取 `work item.review_entry`
-- 校验 `item_id` 是否匹配当前事项
-- 校验 `reviewed_head` 是否仍匹配当前 `HEAD`
-  - 若 `HEAD` 在 review 之后只新增了 Loom 自身的 review / recovery / status carriers 提交，允许继续消费
-  - 一旦 `HEAD` 还包含其他路径漂移，仍按 review stale 处理
-- 校验 `reviewed_validation_summary` 是否仍匹配当前 recovery 的 `latest_validation_summary`
-- 校验 review record 消费的 behavior evidence / test evidence 是否仍是 fresh
-- 校验 review record 消费的 full suite、evidence-map 与
-  consistency-analysis backlink 是否仍覆盖当前 `HEAD`、范围与恢复摘要
-- `decision: allow` 才算 review 已通过
-- `decision: block` 返回 `block`
-- `decision: fallback` 按 `fallback_to` 返回 `fallback`
-- 如需读取阻断或后续事项，只能优先消费同一 review record 内的 `findings`
-- 如需读取 review disposition，只能消费同一 review record 中的 `findings[].disposition`
-- 如需读取 merge 前语义审查处置，只能消费同一 review record 派生出的
-  `semantic_review_disposition`
-
-若 review record 中的 full suite / evidence-map / consistency-analysis
-backlink 缺失、stale、head mismatch，或指向的 blocking consistency gap 尚未被
-前序 gate 处理，merge checkpoint 必须 fail closed。后续 CI success、PR checks
-或 host merge readiness 不得覆盖这些前序缺口。
-
-它不得直接消费 engine raw output、prompt、日志或其他 evidence 文件。
-
-## 6. Complex-existing authority migration records
-
-成熟既有仓库迁移 review authority 时，`review run` 与 `flow review` 必须暴露以下机器合同：
-
-- `loom-adopted-review-engine-adapter/v1`
-  - 只证明 Loom review engine adapter 可以产出 normalized `review_record_input`
-  - 不在 Phase 2 单独成为 implementation review verdict authority
-- `loom-review-authority-migration/v1`
-  - 证明 implementation review 的唯一 verdict authority 已迁到 Loom review record
-  - host guardian comment、proof store 或 native JSON 只能作为 compatibility mirror 或 rollback-only
-- `loom-spec-review-authority-migration/v1`
-  - 证明 spec review 的唯一 verdict authority 已迁到 Loom spec review record
-  - repo-owned `spec_review` rules 继续作为 input locator，不复制进 Loom core
-
-这些记录至少保留 `authority_before`、`authority_after`、`unique_verdict_authority`、`no_dual_authority`、record locator、head binding、rollback 与 fail-closed condition。
-
-若 host verdict 仍作为独立 blocker 存在，或 Loom record 缺失、过期、malformed、target/head/spec locator mismatch，消费方必须 fail closed。
-
-## 7. 非目标
-
-- 不把 review 结论写回 recovery entry 或 status surface
-- 不让 PR 模板充当正式 review 真相
-- 不让 merge-ready 替代正式 review
-- 不为 rebuttal / disposition / `semantic_review_disposition` 再创建第二份 review artifact 或新状态机
-- 不把 Loom 扩写成 multi-engine marketplace
+PR gate 的消费边界见 [pr-merge-gate.md](./pr-merge-gate.md)。
