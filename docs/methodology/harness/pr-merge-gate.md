@@ -121,12 +121,12 @@ Required payload fields:
 - `approval_boundary`
 - `failure_taxonomy`
 
-The same payload is the retained `pr-gate` result envelope. A downstream consumer may read it from a repo-relative retained result locator only when the envelope remains bound to:
+This internal compatibility payload is not the public retained handoff. The public default path retains the complete `loom pr gate ... --full-output --json` output with schema `loom-delivery-gate-readback/v1`; raw `loom-delivery-gate/v1` workflow evaluator JSON is not consumable. A downstream consumer may read the public output from a repo-relative ignored workstation locator only when it remains bound to:
 
-- the same Work Item and `review_entry`
-- the same review record locator, `decision`, `kind`, `reviewed_head`, and reviewed validation summary
-- the same PR number, PR head SHA, base branch, and branch name
-- a passing merge checkpoint result for the same gate chain
+- the same typed Work Item
+- the same PR number and PR head SHA
+- a completed/success `loom-delivery-gate` hosted check
+- a passing host review attestation for the same Work Item, PR, and head
 
 The retained envelope is fresh only when the current PR readback still reports the same head SHA and Work Item binding. Missing, unreadable, non-`pass`, wrong-schema, wrong-PR, wrong-Work-Item, stale-head, stale-validation, or non-implementation-review envelopes must `block` or fall back to `pr-gate` / `review`; they must not be treated as approval truth.
 

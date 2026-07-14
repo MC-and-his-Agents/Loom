@@ -16,6 +16,20 @@ Merge-ready consumes:
 - GitHub required/triggered checks and mergeability;
 - the formal branch/worktree binding.
 
+Create the retained gate input from the public command, not from the raw
+workflow evaluator:
+
+```bash
+loom pr gate <pr> \
+  --work-item <owner/repo/work_item/id> \
+  --attestation-artifact-input <attestation-artifact.json> \
+  --full-output --json
+```
+
+Keep that complete `loom-delivery-gate-readback/v1` JSON in a repo-relative,
+ignored workstation file and pass it with `--pr-gate-result-file`. Raw
+`loom-delivery-gate/v1` JSON is not a merge-ready input.
+
 It performs zero mutations and does not read or write repo review, current,
 status, progress, shadow, freeze, or closeout carriers. Reinforced governance
 only strengthens host review/validation. Removed carrier backends cannot be

@@ -8543,6 +8543,27 @@ def retained_pr_gate_consumption(
 ) -> dict[str, Any]:
     missing_inputs: list[str] = []
     current_head = current_pr.get("headRefOid")
+    if isinstance(retained, dict) and retained.get("schema_version") == "loom-delivery-gate/v1":
+        return {
+            "source": "retained",
+            "locator": locator,
+            "schema_version": retained.get("schema_version"),
+            "result": "block",
+            "summary": "raw hosted evaluator JSON cannot satisfy the public PR-gate handoff.",
+            "missing_inputs": ["complete public `loom pr gate --full-output --json` readback"],
+            "fallback_to": "loom pr gate <pr> --work-item <owner/repo/work_item/id> --attestation-artifact-input <attestation-artifact.json> --full-output --json",
+            "primary_error_code": "pr_gate_readback_required",
+            "failure_domain": "toolchain",
+            "failure_owner": "loom",
+            "remediation_command": "loom pr gate <pr> --work-item <owner/repo/work_item/id> --attestation-artifact-input <attestation-artifact.json> --full-output --json",
+            "freshness": "invalid_contract",
+            "bindings": {
+                "pr": pr_number,
+                "work_item": None,
+                "retained_head_sha": None,
+                "current_head_sha": current_head,
+            },
+        }
     if isinstance(retained, dict) and retained.get("schema_version") == HOSTED_DELIVERY_GATE_READBACK_SCHEMA:
         retained_pr = retained.get("pr") if isinstance(retained.get("pr"), dict) else {}
         retained_work_item = retained.get("work_item") if isinstance(retained.get("work_item"), dict) else {}
@@ -8563,6 +8584,10 @@ def retained_pr_gate_consumption(
         check_name = str(hosted_check.get("name") or hosted_check.get("context") or "")
         check_status = str(hosted_check.get("status") or "").upper()
         check_conclusion = str(hosted_check.get("conclusion") or hosted_check.get("state") or "").upper()
+        if retained.get("command") != "pr gate":
+            missing_inputs.append("retained hosted delivery gate command must be `pr gate`")
+        if retained.get("protocol_type") != "delivery_verdict":
+            missing_inputs.append("retained hosted delivery gate protocol_type must be `delivery_verdict`")
         if retained.get("result") != "pass":
             missing_inputs.append("retained hosted delivery gate result must be pass")
         if retained.get("assurance") not in {"limited", "strong"}:
@@ -8581,6 +8606,8 @@ def retained_pr_gate_consumption(
             missing_inputs.append("retained hosted delivery gate check is not completed successfully")
         if review_attestation.get("result") != "pass":
             missing_inputs.append("retained host review attestation must be pass")
+        if review_attestation.get("schema_version") != "loom-host-attestation/v1":
+            missing_inputs.append("retained host review attestation schema_version must be `loom-host-attestation/v1`")
         if expected_item and review_attestation.get("work_item_locator") != expected_item:
             missing_inputs.append("retained host review attestation Work Item does not match expected item")
         if attested_pr.get("number") != pr_number:
@@ -8591,7 +8618,7 @@ def retained_pr_gate_consumption(
         return {
             "source": "retained",
             "locator": locator,
-            "schema_version": retained.get("schema_version"),
+            "schema_version": HOSTED_DELIVERY_GATE_READBACK_SCHEMA,
             "result": result,
             "summary": (
                 "retained hosted delivery gate is fresh for the current PR head."
@@ -9310,6 +9337,26 @@ def controlled_merge_payload(
         "host_enforcement": host_enforcement,
         "governance_capability_profile": governance_capability_profile,
         "controlled_merge_consumption": controlled_merge_consumption,
+        "primary_error_code": (
+            pr_gate_consumption.get("primary_error_code")
+            if isinstance(pr_gate_consumption, dict)
+            else None
+        ),
+        "failure_domain": (
+            pr_gate_consumption.get("failure_domain")
+            if isinstance(pr_gate_consumption, dict)
+            else None
+        ),
+        "failure_owner": (
+            pr_gate_consumption.get("failure_owner")
+            if isinstance(pr_gate_consumption, dict)
+            else None
+        ),
+        "remediation_command": (
+            pr_gate_consumption.get("remediation_command")
+            if isinstance(pr_gate_consumption, dict)
+            else None
+        ),
         "merge": merge_result,
     }
 

@@ -81,13 +81,22 @@ GitHub `mergeStateStatus == BLOCKED` 是粗粒度宿主策略信号，不自动�
 
 `controlled merge` 可以消费 retained `pr-gate` / `merge-gate` result locator，但只能把它们当作前序 gate 的 retained result，不得把它们提升为新的 approval truth。
 
-retained `pr-gate` result 必须满足：
+公共默认路径的 retained `pr-gate` result 必须由以下命令产生完整 JSON，并写入 repo-relative、ignored 的 workstation file：
 
-- schema 为 `loom-pr-merge-gate/v1`
+```bash
+loom pr gate <pr> \
+  --work-item <owner/repo/work_item/id> \
+  --attestation-artifact-input <attestation-artifact.json> \
+  --full-output --json
+```
+
+该 result 必须满足：
+
+- schema 为 `loom-delivery-gate-readback/v1`；raw `loom-delivery-gate/v1` workflow evaluator JSON 必须拒绝
 - `result == pass`
 - PR number、Work Item、PR head SHA 与当前 PR 读面一致
-- review approval 仍指向 authored implementation review：`decision == allow`，`kind` 为 `general_review` 或 `code_review`
-- retained merge checkpoint 为 pass
+- hosted check 名称为 `loom-delivery-gate` 且 completed/success
+- host review attestation 的 Work Item、PR number 与 head SHA 仍绑定当前 PR
 
 retained `merge-gate` result 必须满足：
 

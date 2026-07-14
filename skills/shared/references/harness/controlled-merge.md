@@ -71,7 +71,7 @@ GitHub profile 的 strong governance 默认要求：
 
 `DIRTY` 与 `DRAFT` mergeability 是 hard-block host gate failure。GitHub `BLOCKED` 是粗粒度 host policy signal，不自动等价于 Loom semantic readiness 失败；当 authored review approval、`loom-pr-merge-gate`、required checks、PR head binding 与 branch protection / ruleset readback 均通过时，`GitHub controlled merge` 可以把它作为 drift-only evidence 继续委托 `gh pr merge`。
 
-`GitHub controlled merge` 可以消费 fresh retained `pr-gate` / `merge-gate` result locator，但只把它们当作前序 gate result。retained `pr-gate` 必须是 `loom-pr-merge-gate/v1`、`result == pass`，并且 Work Item、PR number、PR head、authored review approval 与 validation summary 仍绑定当前 PR。retained `merge-gate` 必须来自 `flow merge-ready` 或 `checkpoint merge`，且 merge checkpoint 为 pass。
+`GitHub controlled merge` 可以消费 fresh retained `pr-gate` / `merge-gate` result locator，但只把它们当作前序 gate result。公共 retained `pr-gate` 必须是 `loom pr gate ... --full-output --json` 产生的完整 `loom-delivery-gate-readback/v1`，并且 `result == pass`、Work Item、PR number、PR head、`loom-delivery-gate` hosted check 与 host review attestation 仍绑定当前 PR。raw `loom-delivery-gate/v1` workflow evaluator JSON 必须拒绝。retained `merge-gate` 必须来自 `flow merge-ready` 或 `checkpoint merge`，且 merge checkpoint 为 pass。
 
 消费 retained result 后仍必须重新确认 current PR head、required checks、triggered checks、branch protection / ruleset、mergeability 与 merge method，并输出 drift-only readback。retained result 不能替代 host enforcement readback，也不能让 raw review / shadow evidence 成为 approval truth。
 

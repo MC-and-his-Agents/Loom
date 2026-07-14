@@ -210,9 +210,17 @@ def main() -> int:
         raise AssertionError("#2127 bootstrap authorization comment fixture drifted")
     if hashlib.sha256(raw_frozen_pr["body"].encode("utf-8")).hexdigest() != "e6164372caa7d0f2de60b424336e913019576db6681799288bfeedbf709d86c2":
         raise AssertionError("#2127 PR metadata body fixture drifted")
+    normalized_authorization = {
+        "id": authorization["id"],
+        "body_sha256": hashlib.sha256(authorization["body"].encode("utf-8")).hexdigest(),
+        "created_at": authorization["created_at"],
+        "updated_at": authorization["updated_at"],
+        "author_association": authorization["author_association"],
+        "user": authorization["user"],
+    }
     frozen_pr = {
         **raw_frozen_pr,
-        "authorization_comment": authorization,
+        "authorization_comment": normalized_authorization,
         "failed_run": raw_frozen_pr["workflow_runs"][0],
         "closing_issues_complete": True,
         "closing_issues": [{"number": 2125, "repository": frozen["repository"]}],
@@ -237,6 +245,19 @@ def main() -> int:
         frozen_result = module.evaluate_closure(frozen_snapshot(subject, work_item), host_resolved=True)
         if frozen_result.get("verdict") != "allow_completed_close":
             raise AssertionError(f"real #2127 delivery fixture must close FR #{subject}: {frozen_result}")
+    legacy_raw_pr = {
+        **raw_frozen_pr,
+        "authorization_comment": authorization,
+        "failed_run": raw_frozen_pr["workflow_runs"][0],
+        "closing_issues_complete": True,
+        "closing_issues": [{"number": 2125, "repository": frozen["repository"]}],
+    }
+    legacy_raw_result = module.evaluate_closure(
+        frozen_snapshot(2115, 2125, delivery_pr=legacy_raw_pr),
+        host_resolved=True,
+    )
+    if legacy_raw_result.get("verdict") != "allow_completed_close":
+        raise AssertionError(f"base-owned raw authorization fixture must remain consumable: {legacy_raw_result}")
     def with_delivery_check(**updates: object) -> dict[str, object]:
         contexts = [
             {**context, **updates} if context.get("name") == "loom-delivery-gate" else context
@@ -251,10 +272,11 @@ def main() -> int:
         ("delivery_binding_invalid", {**frozen_pr, "last_edited_at": "2026-07-13T22:05:00Z"}),
         ("delivery_relation_invalid", {**frozen_pr, "closing_issues": []}),
         ("delivery_relation_invalid", {**frozen_pr, "closing_issues_complete": False}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "body": authorization["body"] + " edited"}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "id": 1}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "user": {"id": 1, "login": "outsider"}}}),
-        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**authorization, "updated_at": "2026-07-13T22:05:00Z"}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "body_sha256": "0" * 64}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "id": 1}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "user": {"id": 1, "login": "outsider"}}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "updated_at": "2026-07-13T22:05:00Z"}}),
+        ("bootstrap_authorization_invalid", {**frozen_pr, "authorization_comment": {**normalized_authorization, "created_at": "2026-07-13T22:00:00Z", "updated_at": "2026-07-13T21:59:55Z"}}),
         ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "id": 1}}),
         ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "head_sha": "0" * 40}}),
         ("bootstrap_run_mismatch", {**frozen_pr, "failed_run": {**frozen_pr["failed_run"], "workflow_path": ".github/workflows/other.yml"}}),

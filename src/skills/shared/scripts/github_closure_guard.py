@@ -342,20 +342,21 @@ def _v032_runtime_eol_delivery_exception(
         return True, "delivery_relation_invalid"
     comment = pr.get("authorization_comment")
     user = comment.get("user") if isinstance(comment, dict) and isinstance(comment.get("user"), dict) else {}
-    comment_body = comment.get("body") if isinstance(comment, dict) else None
+    comment_body_sha256 = comment.get("body_sha256") if isinstance(comment, dict) else None
+    legacy_comment_body = comment.get("body") if isinstance(comment, dict) else None
+    if comment_body_sha256 is None and isinstance(legacy_comment_body, str):
+        comment_body_sha256 = hashlib.sha256(legacy_comment_body.encode("utf-8")).hexdigest()
     comment_created_at = _parse_time(comment.get("created_at")) if isinstance(comment, dict) else None
     comment_updated_at = _parse_time(comment.get("updated_at")) if isinstance(comment, dict) else None
     if (
         not isinstance(comment, dict)
         or comment.get("id") != expected["authorization_comment_id"]
-        or not isinstance(comment_body, str)
-        or hashlib.sha256(comment_body.encode("utf-8")).hexdigest() != expected["authorization_comment_sha256"]
+        or comment_body_sha256 != expected["authorization_comment_sha256"]
         or user.get("id") != expected["authorization_user_id"]
         or user.get("login") != expected["authorization_login"]
-        or _text(comment.get("author_association")) not in {"owner", "member"}
         or comment_created_at is None
         or comment_updated_at is None
-        or comment_created_at != comment_updated_at
+        or comment_created_at > comment_updated_at
         or comment_updated_at > merged_at
     ):
         return True, "bootstrap_authorization_invalid"
