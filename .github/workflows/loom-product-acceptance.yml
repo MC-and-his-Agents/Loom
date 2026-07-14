@@ -177,6 +177,15 @@ jobs:
             core.setOutput("verifier_id", String(verifier.data.id));
             core.notice(`consumed aggregate run ${aggregate.id} for ${context.sha}`);
 
+      - name: Stamp exact release plugin payload
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 tools/stamp_plugin_payload_metadata.py \
+            --source-git-sha "$GITHUB_SHA" \
+            --write \
+            --json
+
       - name: Verify current-head Codex E2E attestation
         uses: actions/github-script@v7
         env:
@@ -220,8 +229,12 @@ jobs:
               core.setFailed("Codex E2E attestation author does not have authenticated repository write permission");
               return;
             }
+            const releaseVersion = fs.readFileSync("VERSION", "utf8").trim().replace(/^v/, "");
             const manifest = JSON.parse(fs.readFileSync("plugins/loom/.codex-plugin/plugin.json", "utf8"));
-            const canonicalHash = manifest?.["x-loom"]?.plugin_payload_hash;
+            const pluginMetadata = manifest?.["x-loom"] || {};
+            const canonicalHash = pluginMetadata.plugin_payload_hash;
+            const pluginPayloadVersion = pluginMetadata.plugin_payload_version;
+            const sourcePackageVersion = pluginMetadata.source_package_version;
             const observedAt = Date.parse(String(payload?.observed_at || ""));
             const expectedSkills = Array.isArray(payload?.loaded_skills) &&
               payload.loaded_skills.length === 2 && payload.loaded_skills.includes("loom-init") && payload.loaded_skills.includes("loom-review");
@@ -231,8 +244,9 @@ jobs:
               payload?.source_head === context.sha && payload?.reviewed_head === context.sha &&
               /^019[0-9a-f-]{33}$/i.test(String(payload?.codex_thread_id || "")) &&
               payload?.candidate_cli_authority === "source-package" && payload?.plugin_loaded === true &&
-              typeof payload?.plugin_version === "string" && /^[0-9A-Za-z.+-]+$/.test(payload.plugin_version) &&
-              /^[0-9a-f]{64}$/.test(String(payload?.plugin_payload_hash || "")) &&
+              payload?.plugin_version === releaseVersion && pluginPayloadVersion === releaseVersion &&
+              sourcePackageVersion === releaseVersion && /^[0-9a-f]{64}$/.test(String(canonicalHash || "")) &&
+              payload?.plugin_payload_hash === canonicalHash &&
               payload?.canonical_plugin_payload_hash === canonicalHash && expectedSkills &&
               payload?.public_command_count === 30 && payload?.hidden_compatibility_command_count === 0 &&
               fixture.detect === "pass" && fixture.doctor === "pass" && fixture.verify === "pass" &&

@@ -423,8 +423,19 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
             "npm publish --access public --provenance",
             "npm view \"${NPM_PACKAGE_NAME}@${NPM_VERSION}\" version",
             "npm pack --dry-run --json --ignore-scripts",
+            "Prepare exact release npm payload",
+            "Read back published npm payload",
+            'npm pack "${NPM_PACKAGE_NAME}@${NPM_VERSION}" --json --ignore-scripts',
+            "EXPECTED_PLUGIN_PAYLOAD_HASH",
+            '.["x-loom"].source_git_sha',
+            '.["x-loom"].source_package_version',
+            '.["x-loom"].plugin_payload_version',
+            '.["x-loom"].plugin_payload_hash',
             "python3 tools/stamp_plugin_payload_metadata.py --source-git-sha \"${{ github.sha }}\" --write --json",
             "python3 tools/check_npm_package.py",
+            "python3 package/tools/check_npm_package.py",
+            "--surface plugin-payload-hash",
+            "--plugin-payload-root package/plugins/loom",
             "no-cli-behavior-change",
             "gh release create",
         ),
@@ -464,6 +475,35 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
     judgment = workflow[judgment_start:admission_start]
     admission = workflow[admission_start:publisher_start]
     publisher = workflow[publisher_start:]
+    ordered_steps = (
+        "Prepare exact release npm payload",
+        "Create git tag",
+        "Publish npm package",
+        "Read back published npm payload",
+        "Create GitHub release",
+    )
+    step_positions = tuple(publisher.find(step) for step in ordered_steps)
+    if min(step_positions) < 0 or tuple(sorted(step_positions)) != step_positions:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-publisher-step-order",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary="publisher must prepare, tag, publish, read back the npm payload, then create the GitHub Release",
+        )
+    readback_start = publisher.find("      - name: Read back published npm payload\n")
+    readback_end = publisher.find("\n      - name:", readback_start + 1)
+    readback_step = publisher[readback_start:readback_end] if readback_start >= 0 and readback_end >= 0 else ""
+    if not readback_step or "if:" in readback_step:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-conditional-npm-readback",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary="published npm payload readback must run unconditionally after the publisher reaches npm publication",
+        )
     pending_index = judgment.find('reason=release_pending')
     explicit_publish_index = judgment.find('if [ "$PUBLISH_REQUESTED" != "true" ]')
     collision_index = judgment.find('reason=version-already-published-on-different-commit')

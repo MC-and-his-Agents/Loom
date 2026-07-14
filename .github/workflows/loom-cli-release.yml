@@ -477,6 +477,15 @@ jobs:
               core.setFailed(`live milestone release scope changed after admission${incomplete ? ` at issue:${incomplete.number}` : ""}`);
             }
 
+      - name: Prepare exact release npm payload
+        run: |
+          set -euo pipefail
+          python3 tools/stamp_plugin_payload_metadata.py --source-git-sha "${{ github.sha }}" --write --json
+          python3 tools/check_npm_package.py
+          npm pack --dry-run --json --ignore-scripts
+          EXPECTED_PLUGIN_PAYLOAD_HASH=$(jq -er '.["x-loom"].plugin_payload_hash' plugins/loom/.codex-plugin/plugin.json)
+          echo "EXPECTED_PLUGIN_PAYLOAD_HASH=${EXPECTED_PLUGIN_PAYLOAD_HASH}" >> "$GITHUB_ENV"
+
       - name: Create git tag
         run: |
           git config user.name 'github-actions[bot]'
@@ -498,11 +507,41 @@ jobs:
             echo "NPM_TOKEN secret is required to publish ${{ needs.release-judgment.outputs.npm_package }}@${{ needs.release-judgment.outputs.npm_version }}" >&2
             exit 1
           fi
-          python3 tools/stamp_plugin_payload_metadata.py --source-git-sha "${{ github.sha }}" --write --json
-          python3 tools/check_npm_package.py
-          npm pack --dry-run --json --ignore-scripts
           npm whoami
           npm publish --access public --provenance
+
+      - name: Read back published npm payload
+        env:
+          NPM_PACKAGE_NAME: ${{ needs.release-judgment.outputs.npm_package }}
+          NPM_VERSION: ${{ needs.release-judgment.outputs.npm_version }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          READBACK_ROOT=$(mktemp -d)
+          trap 'rm -rf "$READBACK_ROOT"' EXIT
+          cd "$READBACK_ROOT"
+          PACK_JSON=""
+          for attempt in 1 2 3 4 5 6; do
+            if PACK_JSON=$(npm pack "${NPM_PACKAGE_NAME}@${NPM_VERSION}" --json --ignore-scripts); then
+              break
+            fi
+            if [ "$attempt" = 6 ]; then
+              echo "published npm payload was not readable after ${attempt} attempts" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          TARBALL=$(printf '%s' "$PACK_JSON" | jq -er '.[0].filename')
+          tar -xzf "$TARBALL"
+          MANIFEST=package/plugins/loom/.codex-plugin/plugin.json
+          test "$(jq -er '.["x-loom"].source_git_sha' "$MANIFEST")" = "$RELEASE_SHA"
+          test "$(jq -er '.["x-loom"].source_package_version' "$MANIFEST")" = "$NPM_VERSION"
+          test "$(jq -er '.["x-loom"].plugin_payload_version' "$MANIFEST")" = "$NPM_VERSION"
+          test "$(jq -er '.["x-loom"].plugin_payload_hash' "$MANIFEST")" = "$EXPECTED_PLUGIN_PAYLOAD_HASH"
+          PYTHONDONTWRITEBYTECODE=1 \
+            python3 package/tools/check_npm_package.py \
+              --surface plugin-payload-hash \
+              --plugin-payload-root package/plugins/loom
 
       - name: Create GitHub release
         if: needs.release-judgment.outputs.create_release == 'true'

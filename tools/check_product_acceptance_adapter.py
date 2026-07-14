@@ -225,6 +225,13 @@ def main() -> int:
         "getCollaboratorPermissionLevel",
         'new Set(["admin", "maintain", "write"])',
         "candidate_cli_authority",
+        "Stamp exact release plugin payload",
+        "tools/stamp_plugin_payload_metadata.py",
+        '--source-git-sha "$GITHUB_SHA"',
+        "payload?.plugin_version === releaseVersion",
+        "pluginPayloadVersion === releaseVersion",
+        "sourcePackageVersion === releaseVersion",
+        "payload?.plugin_payload_hash === canonicalHash",
         "canonical_plugin_payload_hash",
         "semantic_review_verdict",
         "retention-days: 30",
@@ -232,6 +239,14 @@ def main() -> int:
     ):
         if required not in workflow:
             raise AssertionError(f"trusted product acceptance workflow is missing {required}")
+    ordered_steps = (
+        "Stamp exact release plugin payload",
+        "Verify current-head Codex E2E attestation",
+        "Run umbrella product acceptance checks",
+    )
+    step_positions = tuple(workflow.find(step) for step in ordered_steps)
+    if min(step_positions) < 0 or tuple(sorted(step_positions)) != step_positions:
+        raise AssertionError("trusted product acceptance must stamp the exact payload before current-head attestation and umbrella checks")
     forbidden = ("story_issue", "issue_number: 2116", "inputs.story_issue", "--source-surface source-self-fixture", "--source-surface root-self-adoption", "v0.32.1-umbrella")
     if any(value in workflow for value in forbidden) or "pull_request:" in workflow or "secrets." in workflow or not WRITER.is_file():
         raise AssertionError("trusted product acceptance workflow must remain dispatch-only, credential-free, and writer-backed")
