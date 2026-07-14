@@ -796,6 +796,7 @@ def github_lifecycle_subject_readback(
     pr_number: int | None = None,
     branch_name: str | None = None,
     intent: str = "build",
+    closing_issue_policy: str = "required",
     target_owner: str | None = None,
     target_repo: str | None = None,
 ) -> dict[str, Any]:
@@ -883,10 +884,16 @@ def github_lifecycle_subject_readback(
             if page_info.get("hasNextPage") is not False:
                 errors.append("closing issue pagination is unreadable or incomplete")
             issues = [node for node in connection.get("nodes", []) if isinstance(node, dict) and isinstance(node.get("number"), int)]
-            if len(issues) != 1:
-                errors.append(f"pull request #{effective_pr} has {len(issues)} native closing issues; exactly one primary Work Item is required")
+            if closing_issue_policy == "required":
+                if len(issues) != 1:
+                    errors.append(f"pull request #{effective_pr} has {len(issues)} native closing issues; exactly one primary Work Item is required")
+                else:
+                    pr_subject = int(issues[0]["number"])
+            elif closing_issue_policy == "forbidden":
+                if issues:
+                    errors.append(f"release pull request #{effective_pr} must not natively close issues before release readback")
             else:
-                pr_subject = int(issues[0]["number"])
+                errors.append(f"unsupported closing issue policy `{closing_issue_policy}`")
 
     if explicit_subject is not None and pr_subject is not None and explicit_subject != pr_subject:
         errors.append(f"explicit issue #{explicit_subject} and PR #{effective_pr} closing issue #{pr_subject} disagree")

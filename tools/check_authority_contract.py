@@ -139,6 +139,28 @@ def check_host_subject_readback() -> None:
         if multiple_closing.get("result") != "block" or "exactly one primary Work Item" not in " ".join(multiple_closing.get("errors", [])):
             raise AssertionError("multiple native closing issues did not fail closed")
         closing_numbers = [42]
+        release_closing = host.github_lifecycle_subject_readback(
+            Path("."),
+            "owner",
+            "repo",
+            issue_number=41,
+            pr_number=7,
+            closing_issue_policy="forbidden",
+        )
+        if release_closing.get("result") != "block" or "must not natively close issues" not in " ".join(release_closing.get("errors", [])):
+            raise AssertionError("release PR native closing reference did not fail closed")
+        closing_numbers = []
+        release_unclosed = host.github_lifecycle_subject_readback(
+            Path("."),
+            "owner",
+            "repo",
+            issue_number=41,
+            pr_number=7,
+            closing_issue_policy="forbidden",
+        )
+        if release_unclosed.get("result") != "pass" or release_unclosed.get("issue_number") != 41 or release_unclosed.get("pr_number") != 7:
+            raise AssertionError("release PR could not retain an explicit Work Item without closing it")
+        closing_numbers = [42]
         closing_has_next = True
         truncated = host.github_lifecycle_subject_readback(Path("."), "owner", "repo", pr_number=7)
         if truncated.get("result") != "block" or "pagination is unreadable or incomplete" not in " ".join(truncated.get("errors", [])):
@@ -462,6 +484,19 @@ def check_entrypoint_authority_forwarding() -> None:
             "target_repo": "repo",
         }]:
             raise AssertionError(f"outer CLI did not reconcile every supplied authority: {cli_calls}")
+        cli_calls.clear()
+        release_result = cli.host_lifecycle_admission_payload(
+            target=target,
+            issue=41,
+            owner="owner",
+            repo_name="repo",
+            intent="pre-review",
+            pr=7,
+            branch="work/41",
+            pr_role="release_pr",
+        )
+        if release_result.get("result") != "pass" or cli_calls[0].get("closing_issue_policy") != "forbidden":
+            raise AssertionError(f"release PR admission did not forbid premature issue closure: {cli_calls}")
         cli.infer_github_repo = lambda _target: None
         unbound_cli = cli.host_lifecycle_admission_payload(
             target=target, issue=41, owner="owner", repo_name="repo", intent="ship",
