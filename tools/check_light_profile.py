@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -464,6 +465,23 @@ def assert_case(
             raise AssertionError(f"removed light-migration-plan command must stay unreachable before mutation: {payload}")
 
 
+def removed_candidate_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
+    """Map the base-owned transition catalog to removed bootstrap semantics."""
+    mapped = json.loads(json.dumps(fixture))
+    expected = mapped["expected"]
+    tracked = mapped.get("tracked_files", {})
+    if ".loom/bootstrap/init-result.json" in tracked:
+        expected["violation_count"] += 1
+        expected.update(
+            result="block",
+            primary_cause="light_profile_forbidden_carrier",
+            legacy_gate_blocker=True,
+        )
+    if mapped["id"] == "legacy-missing-state":
+        expected["violation_count"] = 1
+    return mapped
+
+
 def run_public(target: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
     completed = subprocess.run(
         [sys.executable, str(LOOM), *args, "--target", str(target), "--json"],
@@ -596,9 +614,14 @@ def main() -> int:
         fixture_ids == removed_fixture_ids
         and allowed_bootstrap == {".loom/bootstrap/manifest.json"}
     )
-    if legacy_state == removed_state:
+    candidate_removed_state = (
+        os.environ.get("LOOM_CANDIDATE_VALIDATION") == "1"
+        and fixture_ids == legacy_fixture_ids
+        and allowed_bootstrap == {".loom/bootstrap/manifest.json"}
+    )
+    if sum((legacy_state, removed_state, candidate_removed_state)) != 1:
         raise AssertionError(
-            "light-profile consumer and fixtures must be a complete legacy classification or a complete removed-state classification"
+            "light-profile consumer and fixtures must be a complete legacy classification, complete removed-state classification, or trusted candidate bridge"
         )
     expected_command = "profile light-migration-plan" if legacy_state else "repair plan"
     assert_paginated_host_readback()
@@ -612,8 +635,9 @@ def main() -> int:
         raise AssertionError("light-profile evaluator must not become a repo-local runtime carrier")
     with tempfile.TemporaryDirectory(prefix="loom-light-profile-") as raw_tmp:
         for fixture in fixtures:
-            assert_case(evaluator, Path(raw_tmp), fixture, expected_command=expected_command)
-        if removed_state:
+            checked_fixture = removed_candidate_fixture(fixture) if candidate_removed_state else fixture
+            assert_case(evaluator, Path(raw_tmp), checked_fixture, expected_command=expected_command)
+        if removed_state or candidate_removed_state:
             assert_public_light_owner(Path(raw_tmp))
         assert_reconciliation(evaluator, Path(raw_tmp))
     print("light-profile migration contract: OK")
