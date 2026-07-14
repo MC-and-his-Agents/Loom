@@ -13716,6 +13716,12 @@ def run_public_default_path_surface() -> None:
             "--owner", "owner", "--repo", "repo", "--pr-gate-result-file", "gate.json",
         ]]:
             raise AssertionError(f"merge-ready reached an unexpected flow: {flow_calls}")
+        if module.handle_merge([
+            "check", "7", "--target", str(REPO_ROOT), "--work-item", "owner/repo/work_item/2103", "--issue", "2103",
+            "--pr-role", "release_pr", "--release-pr", "7", "--attestation-artifact-input", "artifact.json",
+            "--pr-gate-result-file", "gate.json", "--full-output", "--json",
+        ]) != 0 or "--full-output" in flow_calls[-1]:
+            raise AssertionError(f"public merge leaked outer --full-output into controlled-merge: {flow_calls[-1]}")
         with tempfile.TemporaryDirectory(prefix="loom-public-pr-gate-") as raw_tmp:
             fixture_root = Path(raw_tmp)
             pr_fixture = fixture_root / "pr.json"

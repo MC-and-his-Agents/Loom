@@ -5516,7 +5516,6 @@ def handle_merge(argv: list[str]) -> int:
         flow_args.append("--allow-high-risk-advisory")
     if args.action == "run" and args.apply:
         flow_args.append("--execute")
-    append_full_output_flag(flow_args, args)
     if args.closeout_run:
         return handle_merge_closeout_run(command, args, flow_args)
     review_attestation = ship_host_attestation(args, target, closeout=False)
