@@ -13645,11 +13645,17 @@ def run_public_default_path_surface() -> None:
     module.git_branch_for_target = lambda _target: branch_state["value"]
     module.github_default_branch_for_target = lambda _target: ("main", None)
     module.infer_github_repo = lambda _target: "owner/repo"
-    module.host_lifecycle_admission_payload = lambda **_kwargs: {
-        "result": "pass",
-        "subject_readback": {"result": "pass", "issue_number": 2103, "pr_number": None if _kwargs.get("intent") == "build" else 7, "pre_pr": _kwargs.get("intent") == "build", "errors": []},
-        "missing_inputs": [],
-    }
+    admission_calls: list[dict[str, Any]] = []
+
+    def admitted_lifecycle(**kwargs: Any) -> dict[str, Any]:
+        admission_calls.append(kwargs)
+        return {
+            "result": "pass",
+            "subject_readback": {"result": "pass", "issue_number": 2103, "pr_number": None if kwargs.get("intent") == "build" else 7, "pre_pr": kwargs.get("intent") == "build", "errors": []},
+            "missing_inputs": [],
+        }
+
+    module.host_lifecycle_admission_payload = admitted_lifecycle
     module.public_pr_stage_binding = lambda **_kwargs: {
         "result": "pass",
         "summary": "bound",
@@ -13690,6 +13696,16 @@ def run_public_default_path_surface() -> None:
         if module.handle_scenario("review", [*pr_common[:-1], "--attestation-artifact-input", "artifact.json", "--json"]) != 0:
             raise AssertionError(f"public review did not consume host attestation: {emitted}")
         if module.handle_scenario(
+            "review",
+            [*pr_common[:-1], "--pr-role", "release_pr", "--release-pr", "7", "--attestation-artifact-input", "artifact.json", "--json"],
+        ) != 0 or admission_calls[-1].get("pr_role") != "release_pr":
+            raise AssertionError(f"public release review did not preserve the unclosed Work Item binding: {emitted}")
+        if module.handle_scenario(
+            "review",
+            [*pr_common[:-1], "--pr-role", "release_pr", "--release-pr", "8", "--attestation-artifact-input", "artifact.json", "--json"],
+        ) == 0 or emitted.get("primary_error_code") != "subject_conflict":
+            raise AssertionError(f"public review accepted conflicting PR role bindings: {emitted}")
+        if module.handle_scenario(
             "merge-ready",
             [*pr_common[:-1], "--attestation-artifact-input", "artifact.json", "--pr-gate-result-file", "gate.json", "--json"],
         ) != 0:
@@ -13712,7 +13728,8 @@ def run_public_default_path_surface() -> None:
                 if module.handle_public_pr_gate([
                     "7", "--target", str(REPO_ROOT), "--work-item", "owner/repo/work_item/2103",
                     "--head-sha", "a" * 40, "--pr-payload-file", str(pr_fixture),
-                    "--status-checks-file", str(checks_fixture), "--attestation-artifact-input", "artifact.json", "--json",
+                    "--status-checks-file", str(checks_fixture), "--attestation-artifact-input", "artifact.json",
+                    "--pr-role", "release_pr", "--json",
                 ]) != 0:
                     raise AssertionError(f"public PR gate did not consume the hosted gate result: {emitted}")
             finally:
@@ -13722,6 +13739,25 @@ def run_public_default_path_surface() -> None:
                     os.environ["LOOM_ALLOW_TEST_FIXTURES"] = previous_fixture_flag
             if emitted.get("assurance") != "limited" or emitted.get("repo_execution_carriers_consumed") is not False:
                 raise AssertionError("public PR gate did not freeze limited host assurance and zero-carrier consumption")
+            if admission_calls[-1].get("pr_role") != "release_pr":
+                raise AssertionError("public PR gate did not preserve release PR closing policy")
+        role_calls: list[dict[str, Any]] = []
+
+        def blocked_role_lifecycle(**kwargs: Any) -> dict[str, Any]:
+            role_calls.append(kwargs)
+            return {"result": "block", "missing_inputs": ["fixture stop"], "primary_remediation": "fixture stop"}
+
+        module.host_lifecycle_admission_payload = blocked_role_lifecycle
+        module.handle_ship([
+            "--target", str(REPO_ROOT), "--item", "owner/repo/work_item/2103", "--issue", "2103", "--pr", "7",
+            "--pr-role", "release_pr", "--release-pr", "7", "--json",
+        ])
+        module.handle_merge([
+            "check", "7", "--target", str(REPO_ROOT), "--work-item", "owner/repo/work_item/2103", "--issue", "2103",
+            "--pr-role", "release_pr", "--release-pr", "7", "--json",
+        ])
+        if [call.get("pr_role") for call in role_calls] != ["release_pr", "release_pr"]:
+            raise AssertionError(f"ship/merge did not preserve release PR closing policy: {role_calls}")
         for command in ("build", "pre-review", "review", "merge-ready"):
             if emitted.get("repo_execution_carriers_consumed") is not False or emitted.get("carrier_mutations") is not False:
                 raise AssertionError(f"{command} did not freeze the zero-carrier invariant")

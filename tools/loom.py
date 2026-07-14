@@ -2064,6 +2064,14 @@ def closeout_current_pr_input(args: argparse.Namespace) -> int | None:
     return getattr(args, "pr", None)
 
 
+def closeout_current_pr_binding(args: argparse.Namespace) -> tuple[int | None, str | None]:
+    current = closeout_current_pr_input(args)
+    explicit = getattr(args, "pr", None)
+    if isinstance(explicit, int) and isinstance(current, int) and explicit != current:
+        return None, f"--pr #{explicit} conflicts with the selected {getattr(args, 'pr_role', None) or 'PR role'} #{current}"
+    return current, None
+
+
 def normalize_subprocess_argv(args: list[object] | tuple[object, ...]) -> list[str]:
     """Normalize supported CLI argv scalars and reject ambiguous internal values."""
     normalized: list[str] = []
@@ -2147,6 +2155,7 @@ def host_lifecycle_admission_payload(
     intent: str,
     pr: int | None = None,
     branch: str | None = None,
+    pr_role: str | None = None,
 ) -> dict[str, Any]:
     """Use the shared host admission evaluator before a lifecycle entrypoint."""
 
@@ -2210,15 +2219,24 @@ def host_lifecycle_admission_payload(
         pr_number=pr,
         branch_name=branch or (git_branch_for_target(target) if issue is None and fr is None and pr is None else None),
         intent=intent,
+        closing_issue_policy="forbidden" if pr_role == "release_pr" else "required",
         target_owner=target_owner,
         target_repo=target_repo,
     )
     issue = subject_readback.get("issue_number") if isinstance(subject_readback.get("issue_number"), int) else None
     if subject_readback.get("result") != "pass" or issue is None:
+        release_closing_error = pr_role == "release_pr" and any(
+            "must not natively close issues" in str(error)
+            for error in subject_readback.get("errors", [])
+        )
         return {
             "result": "block",
-            "lifecycle_state": "missing_subject",
-            "primary_remediation": "provide --issue <work-item-or-fr> or bind the branch to one PR with exactly one native closing Work Item",
+            "lifecycle_state": "closing_policy_violation" if release_closing_error else "missing_subject",
+            "primary_remediation": (
+                "remove native closing references from the release PR and close the Work Item only after release readback"
+                if release_closing_error
+                else "provide --issue <work-item-or-fr> or bind the branch to one PR with exactly one native closing Work Item"
+            ),
             "carrier_mutations": False,
             "subject_readback": subject_readback,
             "missing_inputs": list(subject_readback.get("errors") or ["host lifecycle subject"]),
@@ -5046,6 +5064,7 @@ def handle_public_pr_gate(argv: list[str]) -> int:
     parser.add_argument("--status-checks-file")
     parser.add_argument("--attestation-artifact-input", type=Path, required=True)
     parser.add_argument("--review-policy", choices=("approved", "single_maintainer"), default="approved")
+    parser.add_argument("--pr-role", choices=CLOSEOUT_PR_ROLES, default="implementation_pr")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--full-output", action="store_true")
     args = parser.parse_args(argv)
@@ -5065,6 +5084,7 @@ def handle_public_pr_gate(argv: list[str]) -> int:
         intent="pre-review",
         pr=args.pr,
         branch=args.branch,
+        pr_role=args.pr_role,
     )
     if lifecycle.get("result") != "pass":
         return emit(output("pr gate", "block", schema=HOST_OBJECT_SCHEMA, summary="PR gate host binding is invalid.", lifecycle_admission=lifecycle, missing_inputs=lifecycle.get("missing_inputs", []), fallback_to=lifecycle.get("primary_remediation"), repo_execution_carriers_consumed=False, carrier_mutations=False))
@@ -5424,6 +5444,9 @@ def handle_merge(argv: list[str]) -> int:
     if args.issue is not None and args.issue != item_issue:
         return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge Work Item and issue bindings conflict.", missing_inputs=["consistent --work-item and --issue"], repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     args.issue = item_issue
+    effective_pr, pr_conflict = closeout_current_pr_binding(args)
+    if pr_conflict:
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge PR role binding is inconsistent.", missing_inputs=[pr_conflict], primary_error_code="subject_conflict", failure_domain="governance_metadata", failure_owner="operator", remediation_command="make --pr and the selected role-specific PR identify the same pull request", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     lifecycle = host_lifecycle_admission_payload(
         target=target,
         item=args.work_item,
@@ -5431,7 +5454,8 @@ def handle_merge(argv: list[str]) -> int:
         owner=str(parsed_item["owner"]),
         repo_name=str(parsed_item["repo"]),
         intent="ship",
-        pr=args.pr,
+        pr=effective_pr,
+        pr_role=args.pr_role,
     )
     if lifecycle.get("result") != "pass":
         return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Merge host binding is invalid.", lifecycle_admission=lifecycle, missing_inputs=lifecycle.get("missing_inputs", []), fallback_to=lifecycle.get("primary_remediation"), repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
@@ -6360,7 +6384,15 @@ def ship_host_attestation(args: argparse.Namespace, target: Path, *, closeout: b
     detected_repo = infer_github_repo(target)
     requested_repo = f"{args.owner}/{args.repo_name}" if args.owner and args.repo_name else None
     repo_slug = detected_repo
-    pr_number = closeout_current_pr_input(args) or getattr(args, "pr", None)
+    pr_number, pr_conflict = closeout_current_pr_binding(args)
+    if pr_conflict:
+        return {
+            "command": "attestation closeout" if closeout else "attestation readback",
+            "result": "block",
+            "summary": "Host attestation PR role binding is inconsistent.",
+            "missing_inputs": [pr_conflict],
+            "fallback_to": "make --pr and the selected role-specific PR identify the same pull request",
+        }
     missing: list[str] = []
     if not isinstance(detected_repo, str) or detected_repo.count("/") != 1:
         missing.append("target origin GitHub owner/repo")
@@ -6452,6 +6484,9 @@ def handle_ship(argv: list[str]) -> int:
     if args.issue is not None and args.issue != item_issue:
         return emit(output(command, "block", schema="loom-ship/v1", summary="Ship Work Item and issue bindings conflict.", missing_inputs=["consistent --item and --issue"], repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     args.issue = item_issue
+    effective_pr, pr_conflict = closeout_current_pr_binding(args)
+    if pr_conflict:
+        return emit(output(command, "block", schema="loom-ship/v1", summary="Ship PR role binding is inconsistent.", missing_inputs=[pr_conflict], primary_error_code="subject_conflict", failure_domain="governance_metadata", failure_owner="operator", remediation_command="make --pr and the selected role-specific PR identify the same pull request", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     if args.apply and any((args.pr_payload_file, args.status_checks_file, args.branch_protection_file, args.ruleset_file)):
         return emit(output(command, "block", schema="loom-ship/v1", summary="Mutating ship requires fresh authenticated GitHub readback, not local host-fact fixtures.", missing_inputs=["remove local PR/check/protection/ruleset fixture inputs"], primary_error_code="github_host_readback_failure", failure_domain="host_service", failure_owner="github", remediation_command="rerun ship --apply against live GitHub host facts", repo_execution_carriers_consumed=False, carrier_mutations=False, mutates=False))
     lifecycle_admission = host_lifecycle_admission_payload(
@@ -6462,8 +6497,9 @@ def handle_ship(argv: list[str]) -> int:
         owner=args.owner,
         repo_name=args.repo_name,
         intent="ship",
-        pr=args.pr,
+        pr=effective_pr,
         branch=args.branch,
+        pr_role=args.pr_role,
     )
     if lifecycle_admission["result"] != "pass":
         return emit(
@@ -8463,6 +8499,24 @@ def handle_scenario(command: str, argv: list[str]) -> int:
             )
         stage_intent = "build" if command == "build" else "pre-review"
         effective_branch = args.branch or git_branch_for_target(target)
+        effective_pr, pr_conflict = closeout_current_pr_binding(args)
+        if pr_conflict:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=SCENARIO_SCHEMA,
+                    summary="Lifecycle PR role binding is inconsistent.",
+                    missing_inputs=[pr_conflict],
+                    primary_error_code="subject_conflict",
+                    failure_domain="governance_metadata",
+                    failure_owner="operator",
+                    remediation_command="make --pr and the selected role-specific PR identify the same pull request",
+                    repo_execution_carriers_consumed=False,
+                    carrier_mutations=False,
+                    mutates=False,
+                )
+            )
         lifecycle_admission = host_lifecycle_admission_payload(
             target=target,
             item=args.item,
@@ -8471,8 +8525,9 @@ def handle_scenario(command: str, argv: list[str]) -> int:
             owner=args.owner,
             repo_name=args.repo_name,
             intent=stage_intent,
-            pr=args.pr,
+            pr=effective_pr,
             branch=effective_branch,
+            pr_role=args.pr_role,
         )
         if lifecycle_admission["result"] != "pass":
             return emit(
