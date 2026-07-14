@@ -108,6 +108,14 @@ def main() -> int:
         result = module.evaluate_closure(snapshot(1, [phase, fr, invalid_host_only]), host_resolved=True)
         if result.get("verdict") != "reopen_required" or not any(reason.get("code") == "missing_delivery_attestation" for reason in result.get("reasons", [])):
             raise AssertionError("untrusted, cross-repo, or ambiguous host-action attestation must fail closed")
+        primary = result.get("failure_envelope", {}).get("primary_cause", {})
+        if (
+            primary.get("id") != "fr_phase_delivery_attestation_invalid"
+            or primary.get("code") != "missing_delivery_attestation"
+            or primary.get("failure_domain") != "governance_metadata"
+            or result.get("failure_envelope", {}).get("consequences") != []
+        ):
+            raise AssertionError("missing delivery evidence must expose one precise governance_metadata primary cause")
     forged_comment = "<!-- loom:host-attestation {\"schema_version\":\"loom-host-attestation/v1\",\"verdict\":\"passed\"} -->"
     forged = issue(3, "work_item", merged_prs=[{key: value for key, value in pr.items() if key not in {"review_decision", "check_rollup"}}], comment_bodies=[forged_comment])
     if module.evaluate_closure({"subject": 3, "default_branch": "main", "issues": [forged]}).get("verdict") != "not_applicable":
@@ -201,37 +209,15 @@ def main() -> int:
     resolved_ambiguous = module.resolve_host_facts(ambiguous_snapshot, ROOT, acceptance_resolver=fake_acceptance)
     if module.evaluate_closure(resolved_ambiguous).get("verdict") != "reopen_required":
         raise AssertionError("ambiguous artifact locators must fail closed")
-    # One trusted-checker cycle must accept both sides of the EOL transition:
-    # this head still carries the frozen runtime exception so the current base
-    # checker can validate it, while the next cleanup head removes every name.
-    # Partial states are never valid, and the historical fixture is already
-    # gone from the candidate/default product surface.
-    legacy_names = {
+    removed_symbols = {
         "V032_RUNTIME_EOL_EXCEPTION",
         "DELIVERY_FAILURE_CODES",
         "_pr_metadata_fields",
         "_v032_runtime_eol_delivery_exception",
     }
-    present_legacy_names = {name for name in legacy_names if hasattr(module, name)}
-    if present_legacy_names not in (set(), legacy_names):
-        raise AssertionError(f"runtime-EOL transition is partial: {sorted(present_legacy_names)}")
-    if present_legacy_names:
-        expected = {
-            "repository": "MC-and-his-Agents/Loom",
-            "pr": 2127,
-            "anchor_issue": 2125,
-            "covered_issues": (2125, 2126),
-            "head_sha": "78b79de68d963a0dca14823a050bd09838403a45",
-            "merge_commit": "37a6fa55a6f0819d9f9a93f1bc102445c99b38db",
-            "pr_body_sha256": "e6164372caa7d0f2de60b424336e913019576db6681799288bfeedbf709d86c2",
-            "authorization_comment_id": 4963151713,
-            "authorization_comment_sha256": "486ca70bea8f4fe51eee2523629c907fdce82bdea57a7cc49b4f8c9bd29d37d9",
-            "authorization_user_id": 9820018,
-            "authorization_login": "mcontheway",
-            "failed_run_id": 29288032023,
-        }
-        if module.V032_RUNTIME_EOL_EXCEPTION != expected:
-            raise AssertionError("runtime-EOL transition exception drifted")
+    present_removed_symbols = sorted(name for name in removed_symbols if hasattr(module, name))
+    if present_removed_symbols:
+        raise AssertionError(f"removed runtime-EOL symbols returned: {present_removed_symbols}")
     if (ROOT / "tools" / "fixtures" / "fr-phase-close-guard" / "2127-bootstrap-batch.json").exists():
         raise AssertionError("removed runtime-EOL host fixture must not return")
     print("fr/phase closure guard contract: OK")

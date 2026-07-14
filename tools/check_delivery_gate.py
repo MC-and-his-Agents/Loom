@@ -1345,28 +1345,10 @@ def check_workflow_event_matrix() -> None:
     for protected_path in ("'Makefile'", "'.github/actions/**'", "'.github/workflows/**'", "'tools/check_*.py'", "'tools/fixtures/**'", "'test/**'", "'src/skills/**'", "'skills/**'", "'plugins/loom/skills/**'"):
         if protected_path not in release:
             raise AssertionError(f"release judgment PR fallback does not cover host-native aggregate input: {protected_path}")
-    legacy_step_name = "      - name: Check host-native lifecycle contracts"
-    npm_step_name = "      - name: Check npm package contract"
-    legacy_runtime = legacy_step_name in release and "  release-admission:\n" not in release
-    admitted_runtime = (
-        legacy_step_name not in release
-        and "  release-admission:\n" in release
-        and "needs: [release-judgment, release-admission]" in release
-    )
-    if legacy_runtime:
-        cli_step = release[release.index(legacy_step_name) : release.index(npm_step_name)]
-        if (
-            "if: ${{ github.event_name == 'pull_request' }}" not in cli_step
-            or "PYTHONDONTWRITEBYTECODE: '1'" not in cli_step
-            or "run: make loom-check" not in cli_step
-            or "check_cli_contract.py --surface aggregate" in cli_step
-        ):
-            raise AssertionError("legacy release transition is incomplete or internally inconsistent")
-    elif admitted_runtime:
-        if "make loom-check" in release or "check_cli_contract.py --surface aggregate" in release:
-            raise AssertionError("admitted release judgment must not repeat the aggregate owned by loom-check main push")
-    else:
-        raise AssertionError("release workflow must be either the complete legacy transition or the complete admitted runtime")
+    if "make loom-check" in release or "check_cli_contract.py --surface aggregate" in release:
+        raise AssertionError("release judgment must not repeat the aggregate owned by loom-check main push")
+    if "  release-admission:\n" not in release or "needs: [release-judgment, release-admission]" not in release:
+        raise AssertionError("release publisher must consume the fail-closed release-admission job")
     if "python3 tools/check_cli_contract.py --surface aggregate" not in text:
         raise AssertionError("main push must own the single complete public CLI aggregate")
     for workflow in (ROOT / ".github" / "workflows").glob("*.yml"):

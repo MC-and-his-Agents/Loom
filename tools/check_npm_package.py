@@ -685,6 +685,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="List targetable npm package validation surfaces and their evidence locators.",
     )
+    parser.add_argument(
+        "--plugin-payload-root",
+        type=Path,
+        help="Validate this existing plugin payload tree instead of rebuilding one from canonical source.",
+    )
     return parser.parse_args(argv)
 
 
@@ -695,6 +700,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     surface = SURFACE_ALIASES[args.surface]
+    if args.plugin_payload_root is not None and surface != SURFACE_PLUGIN_PAYLOAD_HASH:
+        raise SystemExit("--plugin-payload-root requires --surface plugin-payload-hash")
     if surface == SURFACE_MANIFEST:
         emit_manifest_pass(validate_manifest())
         return 0
@@ -702,7 +709,12 @@ def main(argv: list[str] | None = None) -> int:
         emit_payload_pass(validate_payload())
         return 0
     if surface == SURFACE_PLUGIN_PAYLOAD_HASH:
-        emit_plugin_payload_hash_pass(validate_plugin_payload_hash())
+        hash_payload = (
+            validate_generated_plugin_payload_hash(args.plugin_payload_root.resolve())
+            if args.plugin_payload_root is not None
+            else validate_plugin_payload_hash()
+        )
+        emit_plugin_payload_hash_pass(hash_payload)
         return 0
     if surface == SURFACE_RUNTIME_COPY_PARITY:
         emit_runtime_copy_parity_pass(validate_runtime_copy_parity())
