@@ -8,7 +8,6 @@ small reopen/comment recovery when this module returns ``reopen_required``.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -28,30 +27,9 @@ PHASE_CHILD_TYPES = {"product_problem", "fr", "work_item"}
 WAIVER_POLICY_LABEL = "product_acceptance_waiver_allowed"
 PRODUCT_ARTIFACT_RE = re.compile(r"<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->", re.IGNORECASE)
 HOST_ACTION_ARTIFACT_RE = re.compile(r"<!--\s*loom:host-action-attestation\s+(\{.*?\})\s*-->", re.IGNORECASE | re.DOTALL)
-PR_METADATA_RE = re.compile(r"<!--\s*loom:repo-pr-metadata\s*(\{.*?\})\s*-->", re.IGNORECASE | re.DOTALL)
 HOST_ONLY_DELIVERY_LABEL = "host_only_delivery"
 TRUSTED_AUTHOR_ASSOCIATIONS = {"owner", "member", "collaborator"}
 DELIVERY_CHECK_CONTEXTS = frozenset({"py-compile", "loom-delivery-gate", "loom-pr-merge-gate"})
-V032_RUNTIME_EOL_EXCEPTION = {
-    "repository": "MC-and-his-Agents/Loom",
-    "pr": 2127,
-    "anchor_issue": 2125,
-    "covered_issues": (2125, 2126),
-    "head_sha": "78b79de68d963a0dca14823a050bd09838403a45",
-    "merge_commit": "37a6fa55a6f0819d9f9a93f1bc102445c99b38db",
-    "pr_body_sha256": "e6164372caa7d0f2de60b424336e913019576db6681799288bfeedbf709d86c2",
-    "authorization_comment_id": 4963151713,
-    "authorization_comment_sha256": "486ca70bea8f4fe51eee2523629c907fdce82bdea57a7cc49b4f8c9bd29d37d9",
-    "authorization_user_id": 9820018,
-    "authorization_login": "mcontheway",
-    "failed_run_id": 29288032023,
-}
-DELIVERY_FAILURE_CODES = {
-    "delivery_relation_invalid",
-    "delivery_binding_invalid",
-    "bootstrap_authorization_invalid",
-    "bootstrap_run_mismatch",
-}
 
 
 def _text(value: object) -> str:
@@ -90,13 +68,10 @@ def _payload(subject: int, verdict: str, summary: str, reasons: list[dict[str, s
     failure = None
     if verdict == "reopen_required":
         acceptance_failure = any(reason.get("code", "").startswith("product_acceptance") for reason in reasons)
-        delivery_reason = next((reason for reason in reasons if reason.get("code") in DELIVERY_FAILURE_CODES or reason.get("code") == "missing_delivery_attestation"), None)
-        delivery_failure = not acceptance_failure and delivery_reason is not None
-        failure_code = str(delivery_reason.get("code")) if delivery_reason else "closure_invalid"
         cause = primary_cause(
-            cause_id="fr_phase_product_acceptance_invalid" if acceptance_failure else "fr_phase_delivery_attestation_invalid" if delivery_failure else "fr_phase_closure_invalid",
+            cause_id="fr_phase_product_acceptance_invalid" if acceptance_failure else "fr_phase_closure_invalid",
             failure_domain="product_acceptance" if acceptance_failure else "governance_metadata",
-            code="product_acceptance_invalid" if acceptance_failure else failure_code,
+            code="closure_invalid",
             locator=f"issue:{subject}",
             summary=summary,
             owner="operator",
@@ -260,156 +235,6 @@ def _green_merged_pr(issue: dict[str, Any], default_branch: str) -> bool:
     return False
 
 
-def _pr_metadata_fields(body: object, repository: str) -> dict[str, Any] | None:
-    if not isinstance(body, str):
-        return None
-    matches = list(PR_METADATA_RE.finditer(body))
-    if len(matches) != 1:
-        return None
-    try:
-        payload = json.loads(matches[0].group(1))
-    except json.JSONDecodeError:
-        return None
-    if (
-        not isinstance(payload, dict)
-        or payload.get("schema_version") != "loom-repo-pr-metadata/v1"
-        or payload.get("metadata_contract_id") != "loom-governance-intensity"
-        or payload.get("surface") != "merge_ready"
-        or payload.get("parser_version") != "loom-pr-metadata-parser/v2"
-    ):
-        return None
-    fields = payload.get("fields")
-    if not isinstance(fields, dict):
-        return None
-    anchor = fields.get("anchor_issue")
-    covered = fields.get("covered_issues")
-    if (
-        not isinstance(anchor, int)
-        or isinstance(anchor, bool)
-        or not isinstance(covered, list)
-        or any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in covered)
-        or len(set(covered)) != len(covered)
-        or anchor not in covered
-        or fields.get("work_item_locator") != f"{repository}/work_item/{anchor}"
-    ):
-        return None
-    return fields
-
-
-def _v032_runtime_eol_delivery_exception(
-    issue: dict[str, Any],
-    repository: str,
-    default_branch: str,
-) -> tuple[bool, str | None]:
-    """Consume one frozen historical exception without creating a reusable waiver."""
-    expected = V032_RUNTIME_EOL_EXCEPTION
-    number = issue.get("number")
-    if repository != expected["repository"] or number not in expected["covered_issues"]:
-        return False, None
-    pulls = issue.get("historical_delivery_prs")
-    if not isinstance(pulls, list) or len(pulls) != 1 or not isinstance(pulls[0], dict):
-        return True, "delivery_binding_invalid"
-    pr = pulls[0]
-    body = pr.get("body")
-    created_at = _parse_time(pr.get("created_at"))
-    edited_at = _parse_time(pr.get("last_edited_at"))
-    merged_at = _parse_time(pr.get("merged_at"))
-    if (
-        pr.get("number") != expected["pr"]
-        or pr.get("merged") is not True
-        or pr.get("base_ref") != default_branch
-        or pr.get("head_repository") != expected["repository"]
-        or pr.get("head_sha") != expected["head_sha"]
-        or pr.get("commit_sha") != expected["head_sha"]
-        or pr.get("merge_commit") != expected["merge_commit"]
-        or not isinstance(body, str)
-        or hashlib.sha256(body.encode("utf-8")).hexdigest() != expected["pr_body_sha256"]
-        or created_at is None
-        or edited_at is None
-        or merged_at is None
-        or created_at > edited_at
-        or edited_at > merged_at
-    ):
-        return True, "delivery_binding_invalid"
-    fields = _pr_metadata_fields(body, repository)
-    if (
-        fields is None
-        or fields.get("anchor_issue") != expected["anchor_issue"]
-        or tuple(fields.get("covered_issues", ())) != expected["covered_issues"]
-        or pr.get("closing_issues_complete") is not True
-        or pr.get("closing_issues") != [{"number": expected["anchor_issue"], "repository": expected["repository"]}]
-    ):
-        return True, "delivery_relation_invalid"
-    comment = pr.get("authorization_comment")
-    user = comment.get("user") if isinstance(comment, dict) and isinstance(comment.get("user"), dict) else {}
-    comment_body_sha256 = comment.get("body_sha256") if isinstance(comment, dict) else None
-    legacy_comment_body = comment.get("body") if isinstance(comment, dict) else None
-    if comment_body_sha256 is None and isinstance(legacy_comment_body, str):
-        comment_body_sha256 = hashlib.sha256(legacy_comment_body.encode("utf-8")).hexdigest()
-    comment_created_at = _parse_time(comment.get("created_at")) if isinstance(comment, dict) else None
-    comment_updated_at = _parse_time(comment.get("updated_at")) if isinstance(comment, dict) else None
-    if (
-        not isinstance(comment, dict)
-        or comment.get("id") != expected["authorization_comment_id"]
-        or comment_body_sha256 != expected["authorization_comment_sha256"]
-        or user.get("id") != expected["authorization_user_id"]
-        or user.get("login") != expected["authorization_login"]
-        or comment_created_at is None
-        or comment_updated_at is None
-        or comment_created_at > comment_updated_at
-        or comment_updated_at > merged_at
-    ):
-        return True, "bootstrap_authorization_invalid"
-    run = pr.get("failed_run")
-    run_created_at = _parse_time(run.get("created_at")) if isinstance(run, dict) else None
-    run_updated_at = _parse_time(run.get("updated_at")) if isinstance(run, dict) else None
-    if (
-        not isinstance(run, dict)
-        or run.get("id") != expected["failed_run_id"]
-        or run.get("head_sha") != expected["head_sha"]
-        or run.get("head_branch") != pr.get("head_ref")
-        or run.get("head_repository") != expected["repository"]
-        or _text(run.get("event")) != "pull_request_target"
-        or _text(run.get("status")) != "completed"
-        or _text(run.get("conclusion")) != "failure"
-        or run.get("workflow_path") != ".github/workflows/loom-delivery-gate.yml"
-        or run.get("html_url") != f"https://github.com/{expected['repository']}/actions/runs/{expected['failed_run_id']}"
-        or run_created_at is None
-        or run_updated_at is None
-        or run_created_at < edited_at
-        or run_updated_at < run_created_at
-        or comment_created_at < run_updated_at
-        or run_updated_at > merged_at
-    ):
-        return True, "bootstrap_run_mismatch"
-    rollup = pr.get("check_rollup")
-    contexts = rollup.get("contexts") if isinstance(rollup, dict) else None
-    delivery_gate = [
-        context for context in contexts
-        if isinstance(context, dict) and context.get("name") == "loom-delivery-gate"
-    ] if isinstance(contexts, list) else []
-    gate_started_at = _parse_time(delivery_gate[0].get("started_at")) if len(delivery_gate) == 1 else None
-    gate_completed_at = _parse_time(delivery_gate[0].get("completed_at")) if len(delivery_gate) == 1 else None
-    run_details_prefix = f"https://github.com/{expected['repository']}/actions/runs/{expected['failed_run_id']}/"
-    if (
-        not isinstance(rollup, dict)
-        or rollup.get("contexts_complete") is not True
-        or len(delivery_gate) != 1
-        or _text(delivery_gate[0].get("type")) != "checkrun"
-        or _text(delivery_gate[0].get("status")) != "completed"
-        or _text(delivery_gate[0].get("conclusion")) != "failure"
-        or not isinstance(delivery_gate[0].get("details_url"), str)
-        or not delivery_gate[0]["details_url"].startswith(run_details_prefix)
-        or gate_started_at is None
-        or gate_completed_at is None
-        or gate_started_at < run_created_at
-        or gate_completed_at < gate_started_at
-        or gate_completed_at > run_updated_at
-    ):
-        return True, "bootstrap_run_mismatch"
-    return True, None
-
-
 def _host_action_attestation_errors(issue: dict[str, Any], repository: str, actor: dict[str, Any]) -> list[str]:
     comments = issue.get("comments")
     if issue.get("comments_complete") is not True or not isinstance(comments, list):
@@ -492,12 +317,6 @@ def _validate_completed(
     kind = _type(issue)
     if kind == "work_item":
         if _green_merged_pr(issue, default_branch):
-            return
-        exception_applies, exception_error = _v032_runtime_eol_delivery_exception(issue, repository, default_branch)
-        if exception_applies:
-            if exception_error is None:
-                return
-            reasons.append(_reason(exception_error, locator, "the frozen v0.32 runtime-EOL delivery exception no longer matches authenticated GitHub facts"))
             return
         if HOST_ONLY_DELIVERY_LABEL in _labels(issue):
             attestation_errors = _host_action_attestation_errors(issue, repository, actor)

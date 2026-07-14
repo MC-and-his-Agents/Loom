@@ -59,13 +59,12 @@ Loom 支持结构化 PR 模板，但必须满足：
 安全更新策略：
 
 - 优先把 PR body 渲染到独立文件，再用 `gh pr edit --body-file <file>` 更新；不要用 shell command substitution 拼接包含反引号、多行 JSON、中文标点或列表缩进的 body。
-- `loom pr metadata-update` 默认只做 dry-run render/preflight；只有显式 `--apply` 才允许写 host PR body。
-- 写入前对渲染文件运行 `loom pr metadata-preflight --body-file <rendered> --surface <surface>`。
-- 写入后读取 GitHub PR body 到独立文件，再运行 `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback> --surface <surface>`；该检查必须比较 machine block 的 locator/hash，并在 machine block 漂移时 fail closed。
-- `--body-file` / `--compare-body-file` 只是 render/edit preflight evidence，不能替代 Work Item、review、merge-ready、closeout 或 docs/source truth。
+- 写入后用 `gh pr view --json body,headRefOid` 回读 GitHub host facts；不得把手写 head SHA 当作权威事实。
+- PR body 与真实 PR head 稳定后运行 `loom pre-review`，语义审查完成后由 `loom pr gate` 消费当前 host body、Work Item 绑定、current-head attestation 与 hosted checks。
+- 本地渲染文件只是安全编辑输入，不能替代 GitHub Work Item、current-head host attestation、merge-ready 或产品验收事实。
 
 若 PR machine carrier 承载治理强度字段，它只能作为 gate 消费的结构化输入。
 字段语义以
 [tiered-gate-consumption-contract.md](../harness/tiered-gate-consumption-contract.md)
 为准；PR 摘要、自由 Markdown、CI 状态或 GitHub review comment 都不得替代
-Work Item、review record、merge-ready、release / no-release 或 closeout truth。
+Work Item、current-head host attestation、merge-ready、release / no-release 或产品验收事实。

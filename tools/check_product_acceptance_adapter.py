@@ -186,15 +186,24 @@ def main() -> int:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     for required in (
         "workflow_dispatch:",
+        "release_issue:",
         "ref: ${{ github.sha }}",
         "product acceptance must run from the default branch",
+        "product acceptance must bind the current default-branch tip",
+        "loom-product-acceptance-${{ github.sha }}",
         "fetch-depth: 0",
         "tools/write_product_acceptance.py",
         "name: loom-product-acceptance",
-        "v0.32-product-acceptance",
-        "--source-surface source-self-fixture",
-        "--source-surface root-self-adoption",
-        "test/trusted_candidate_validation_test.py",
+        "VERSION=$(tr -d '\\n' < VERSION)",
+        '"${VERSION}-umbrella-release-acceptance"',
+        '"loom-${VERSION}-umbrella"',
+        "listWorkflowRuns",
+        'workflow_id: "loom-check.yml"',
+        "exactHeadRuns",
+        "right.run_number - left.run_number",
+        "latest current-head main-push loom-check aggregate",
+        "tools/check_light_profile.py",
+        "tools/check_release_admission.py",
         "--surface installed-global-cli-smoke",
         "--provider-profile",
         "EVIDENCE_CLASS: process_runtime",
@@ -203,6 +212,12 @@ def main() -> int:
         "steps.acceptance_upload.outputs.artifact-id",
         "issues: write",
         "loom:product-acceptance-artifact",
+        "already has current-head umbrella acceptance artifact",
+        'run.path === ".github/workflows/loom-product-acceptance.yml"',
+        'run.event === "workflow_dispatch"',
+        "entry.stateReason !== \"COMPLETED\"",
+        "milestone readback must contain the release Work Item exactly once",
+        "existing acceptance locator readback failed",
         "github-actions[bot]",
         "getArtifact",
         "getComment",
@@ -213,10 +228,12 @@ def main() -> int:
         "canonical_plugin_payload_hash",
         "semantic_review_verdict",
         "retention-days: 30",
+        "workflow success 不等于 lifecycle closure completed",
     ):
         if required not in workflow:
             raise AssertionError(f"trusted product acceptance workflow is missing {required}")
-    if "pull_request:" in workflow or "secrets." in workflow or not WRITER.is_file():
+    forbidden = ("story_issue", "issue_number: 2116", "inputs.story_issue", "--source-surface source-self-fixture", "--source-surface root-self-adoption", "v0.32.1-umbrella")
+    if any(value in workflow for value in forbidden) or "pull_request:" in workflow or "secrets." in workflow or not WRITER.is_file():
         raise AssertionError("trusted product acceptance workflow must remain dispatch-only, credential-free, and writer-backed")
     print("product acceptance adapter checks passed")
     return 0

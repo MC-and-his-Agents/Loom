@@ -5,7 +5,7 @@ contain Loom-era runtime, companion, skills, or installer residue but do not yet
 publish `loom-installed-state/v2`.
 
 The goal is not to mutate adopted repositories from Loom core. The CLI-first
-phase freezes the read, diagnosis, repair-plan, upgrade-plan, and verify
+phase freezes the read, diagnosis, repair-plan, upgrade, and verify
 semantics so each repository can consume the plan through its own authority
 model.
 
@@ -16,12 +16,11 @@ model.
 | 1 | `loom detect --target <repo> --json` | Read installed surfaces and classify `uninstalled`, `legacy`, `mixed-legacy`, `mixed`, or `current`. |
 | 2 | `loom doctor --target <repo> --json` | Fail closed for missing/invalid installed-state or legacy surfaces and fall back to `loom repair plan`. |
 | 3 | `loom repair plan --target <repo> --json` | Emit a non-mutating plan that separates installed-state repair from legacy surface classification. When `runtime_provider=global-cli` retains `.loom/bin`, the plan must emit runtime-carrier migration actions, exact repo-local gate blockers, and proposal-only deletion semantics. |
-| 4 | `loom upgrade-plan --target <repo> --json` | Emit a non-mutating delivery plan. Legacy or missing metadata keeps upgrade apply blocked; retained `.loom/bin` under `global-cli` must stay a runtime-carrier migration lane, not a skills/plugin payload migration. |
+| 4 | `loom upgrade --target <repo> --json` | Emit a non-mutating delivery plan. Legacy or missing metadata keeps upgrade apply blocked; retained `.loom/bin` under `global-cli` must stay a runtime-carrier migration lane, not a skills/plugin payload migration. |
 | 5 | `loom verify --target <repo> --json` | Pass only when `doctor` passes. Legacy or mixed surfaces remain blocking. |
 
-`loom repair apply`, `loom install --apply`, `loom upgrade --apply`, and rollback
-continue to require separate write ownership and rollback evidence. They are not
-approved by #897.
+`loom upgrade --apply` continues to require separate write ownership and rollback
+evidence. It is not approved by #897; `loom repair plan` remains read-only.
 
 ## Repository Patterns
 

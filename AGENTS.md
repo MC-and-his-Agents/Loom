@@ -96,16 +96,16 @@ Loom 当前冻结的 operating planes 是：
 
 ## Merge-ready 与 Closeout 纪律
 
-1. docs-only contract freeze 不得伪造 minimal `spec.md`、`plan.md` 或 `implementation-contract.md` 来通过 gate；若 formal suite 不适用，必须使用正式 `Suite path: not_applicable`，并说明 rationale、consumer boundary、recheck condition、scope proof 与 review requirement。
-2. `not_applicable` 只跳过 formal suite artifacts，不跳过 review、fact-chain、CI、PR gate、release/no-release 判断或 closeout evidence。
-3. review artifact 必须在代码、文档、carrier、shadow evidence 与 PR metadata 都稳定后再写；写入 review 后若继续改动 gate 输入面，必须重新 review 当前 head，除非 gate 明确接受该 drift 类型。
-4. merge-ready 前必须确认 `.loom/bootstrap/init-result.json`、`.loom/status/current.md`、`.loom/progress/WI-*.md`、review entry、PR body、branch 与 head sha 指向同一个 Work Item；不能把 GitHub PR 状态单独当作 Loom truth。
-5. PR body 的 machine carrier 是正式 gate 输入；更新 PR body 后必须 readback，并确认 `Loom Work Item`、`Branch`、`Head SHA` 与 `Workspace` 和当前 checkout / PR head 一致。
-6. PR merged 和 issue closed 不等于 Loom closeout 完成；merge 后必须做最小 closeout sync，把 repo carrier terminalize，并刷新 shadow / closeout evidence。
-7. closeout sync 只消费已完成事实，不得夹带新实现、后续 Work Item 或 scope 扩张。
+1. 普通生命周期默认使用 typed Work Item、正式 worktree/branch、GitHub PR/head/checks 与 host attestation；不得创建或修补 repo current、status、progress、review、shadow 或普通 closeout carrier。
+2. docs-only contract freeze 不得伪造 spec/plan 或其他治理文件来通过 gate；仅运行与实际变更匹配的 targeted validation 和 review。
+3. 语义 review 必须绑定当前 PR head；review 后若实现或机器可读 PR 输入改变，必须重新取得 current-head host attestation。
+4. merge-ready 前先运行公共 `loom pr gate ... --full-output --json`，把完整 readback 保存到 repo-relative ignored 文件，再由 `loom merge-ready ... --pr-gate-result-file <file>` 消费；raw workflow evaluator JSON 不可替代该 readback。
+5. merge-ready 必须证明 Work Item、正式 worktree、branch、PR 与 GitHub live head 一致；PR head/checks/merge 状态只从 GitHub readback 取得，不手写到 PR body 或仓库载体。
+6. PR merged 和 issue closed 不等于产品验收通过。普通 delivery closeout 从 GitHub merge、checks、issue 与 host attestation 派生，不创建 closeout/current-retire PR。
+7. release、版本声明及真正属于产品源码的变更可以进入独立 release PR；发布后只做 tag、Release、registry 与 main head readback。
 8. 当 blocker 属于共享 gate 或合同语义时，不得让多个 agent 并行各自写不同 PR；可以并行做只读分析、diff review 和日志分类，写入由主执行线统一策略后串行推进。
-9. `loom_check` 与 hosted long-running checks pending 时应等待同一个 run；失败后先分类为代码、carrier、metadata、环境、权限、宿主服务抖动或外部依赖问题，再决定是否修复或重跑。
-10. 外部宿主 API 或 CI 状态变更后必须 readback；不得仅凭命令返回或会话记忆判断 PR、issue、head sha、checks 或 merge 状态已经生效。
+9. 高成本 hosted checks pending 时应等待同一个 run；失败后先分类为代码、metadata、Git 历史、环境、权限、宿主服务或外部依赖问题，再决定是否修复或重跑。
+10. 外部宿主 API 或 CI 状态变更后必须 readback；不得仅凭命令返回或会话记忆判断 PR、issue、head sha、checks、merge 或 release 状态已经生效。
 
 ## 非目标
 

@@ -25,7 +25,6 @@ def main() -> int:
         "loom-fr-phase-close-guard-${{ github.repository }}-${{ github.event.issue.number }}",
         "cancel-in-progress: false",
         "actions/github-script@v7",
-        'const crypto = require("crypto")',
         "github.graphql",
         "github.paginate",
         "github_closure_guard.py",
@@ -40,7 +39,6 @@ def main() -> int:
         "github.rest.issues.createComment",
         "github.rest.issues.updateComment",
         "github.rest.issues.getComment",
-        'body_sha256: crypto.createHash("sha256")',
         "comment_id: written.id",
         "comment.id !== written.id",
         'String(comment.body || "") !== body',
@@ -49,20 +47,6 @@ def main() -> int:
         "closedByPullRequestsReferences",
         "reviewDecision",
         "statusCheckRollup",
-        "v032RuntimeEolException",
-        'repository: "MC-and-his-Agents/Loom"',
-        "workItems: new Set([2125, 2126])",
-        "pullRequest(number:$number)",
-        "closingIssuesReferences(first:100)",
-        "detailsUrl",
-        "details_url: context.detailsUrl",
-        "lastEditedAt",
-        "createdAt",
-        "github.rest.issues.getComment",
-        "github.rest.actions.getWorkflowRun",
-        "html_url: run.html_url",
-        "historical_delivery_prs",
-        "workflow_path",
         "closedAt",
         "event_closed_at",
         "context.payload.sender?.id",
@@ -80,6 +64,13 @@ def main() -> int:
     forbidden = (
         "pull_request:",
         "pull_request_target:",
+        "v032RuntimeEolException",
+        "V032_RUNTIME_EOL_EXCEPTION",
+        "historical_delivery_prs",
+        "2127-bootstrap-batch",
+        "BOOTSTRAP_EXCEPTION_POLICY",
+        "loom:work-item-delivery-attestation",
+        "attested_prs",
         "tools/loom_flow.py",
         "current.md",
         "head.sha",
@@ -101,25 +92,12 @@ def main() -> int:
         "host_only_delivery",
         "failure_envelope",
         "missing_delivery_attestation",
-        "loom:repo-pr-metadata",
-        "V032_RUNTIME_EOL_EXCEPTION",
-        '"pr": 2127',
-        '"covered_issues": (2125, 2126)',
-        '"failed_run_id": 29288032023',
-        "pr_body_sha256",
-        "delivery_relation_invalid",
-        "bootstrap_authorization_invalid",
-        "bootstrap_run_mismatch",
         "product_problem",
         "PHASE_CHILD_TYPES",
     )
     evaluator_missing = [needle for needle in evaluator_required if needle not in evaluator]
-    generic_waiver_surface = [
-        needle for needle in ("loom:work-item-delivery-attestation", "BOOTSTRAP_EXCEPTION_POLICY", "attested_prs")
-        if needle in text or needle in evaluator
-    ]
-    if missing or present or evaluator_missing or generic_waiver_surface:
-        details = [*(f"missing `{needle}`" for needle in missing), *(f"forbidden `{needle}`" for needle in present), *(f"evaluator missing `{needle}`" for needle in evaluator_missing), *(f"generic waiver surface `{needle}`" for needle in generic_waiver_surface)]
+    if missing or present or evaluator_missing:
+        details = [*(f"missing `{needle}`" for needle in missing), *(f"forbidden `{needle}`" for needle in present), *(f"evaluator missing `{needle}`" for needle in evaluator_missing)]
         raise SystemExit("FR/Phase close guard workflow contract failed: " + "; ".join(details))
     print("FR/Phase close guard workflow contract: OK")
     return 0

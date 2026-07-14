@@ -54,7 +54,7 @@
 
 ## 5. 既有重载体迁移
 
-先运行 `loom profile light-migration-plan --target <repo> --json`。该命令只读取 profile、Git tree 与旧 metadata，绝不 apply，也不修补 `current`、shadow、review、head 或 closeout。
+先运行 `loom repair plan --target <repo> --json`。该命令消费 light-profile invariant，只读取 profile、Git tree 与旧 metadata，绝不 apply，也不修补 current、shadow、review、head 或 closeout。
 
 若计划报告 `legacy_gate_blocker`，按固定顺序推进：gate-enabler PR → GitHub required-set readback → 单一 profile-migration PR。最后一个 PR 删除禁用的执行载体，并以 GitHub tree/readback 确认旧分支不会回流；不得另开 carrier 或 closeout PR。
 
@@ -70,7 +70,7 @@
 - 重 harness
 - formal spec suite
 
-如果目标仓库需要 Loom-owned `work item`、`progress`、`status`、`review`、`runtime cache` 或 `spec` carriers，必须把接入意图显式升级到 `execution-control`；此时才允许脚手架生成对应 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**` 和 `.loom/specs/**`。
+历史 `execution-control` 仓库中的 `work item`、`progress`、`status`、`review`、`runtime cache` 或 `spec` carriers 只作为迁移输入识别。30 个公共命令不得生成、恢复或重新启用这些 backend；需要更强治理时应提升 host checks、host attestation 与 acceptance policy，而不是回退 repo execution carriers。
 
 ## 7. checkpoint-lite
 

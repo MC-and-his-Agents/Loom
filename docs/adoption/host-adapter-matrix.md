@@ -53,8 +53,8 @@ loom verify --target <repo> --json
 ```
 
 Start a new Codex session, or restart Codex Desktop when the plugin list or
-runtime cache was already loaded. `loom host install/register/doctor/verify`
-are retired command surfaces and must not appear as current remediation.
+runtime cache was already loaded. The retired host command family must not
+appear as current remediation.
 
 Repository adoption remains metadata-only. The target repository does not own
 a repo-local runtime, plugin payload, current pointer, progress, review,

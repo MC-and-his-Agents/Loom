@@ -156,7 +156,7 @@ not make suite validation universally blocking.
 {"from": "skills", "to": "runtime", "relationship": "consumes"}
 ```
 
-The graph exists so `loom upgrade-plan`, `loom repair plan`, host adapters, source plugin payload generation, and installer shims can reason about layer ordering without reading unrelated governance files.
+The graph exists so `loom upgrade`, `loom repair plan`, host adapters, source plugin payload generation, and installer shims can reason about layer ordering without reading unrelated governance files.
 Every edge endpoint must reference a known layer id. Unknown edge endpoints fail closed because repair and upgrade ordering would otherwise be ambiguous.
 
 ## Codex Metadata-Only Mode
@@ -439,14 +439,14 @@ Compatibility mode must stay diagnosable:
 ## CLI Semantics
 
 ```bash
-loom installed-state show --target <repo> --json
 loom installed-state validate --target <repo> --json
-loom installed-state export --target <repo> --json
+loom detect --target <repo> --json
+loom doctor --target <repo> --json
 ```
 
-All three commands fail closed when metadata is missing, unreadable, or invalid. Missing metadata may include `legacy_surface_hints` such as `.loom/bin`, `.agents/skills`, `skills/registry.json`, plugin manifests, or old installer status files. Those hints are diagnostic input for `loom detect`, `loom doctor`, and `loom repair plan`; they are not treated as valid installed-state by themselves.
+These public commands fail closed when metadata is missing, unreadable, or invalid. Missing metadata may include `legacy_surface_hints` such as `.loom/bin`, `.agents/skills`, `skills/registry.json`, plugin manifests, or old installer status files. Those hints are diagnostic input for `loom detect`, `loom doctor`, and `loom repair plan`; they are not treated as valid installed-state by themselves.
 
-`loom detect --target <repo> --json` may report legacy or mixed surfaces even when installed-state is missing. This is a diagnostic pass, not an install-state pass. `loom doctor` turns missing, invalid, legacy, or mixed surfaces into `result: block` with `fallback_to: ["loom repair plan"]`. `loom repair plan` is non-mutating. `loom repair apply` remains fail-closed until a later Work Item approves write ownership and rollback semantics.
+`loom detect --target <repo> --json` may report legacy or mixed surfaces even when installed-state is missing. This is a diagnostic pass, not an install-state pass. `loom doctor` turns missing, invalid, legacy, or mixed surfaces into `result: block` with `fallback_to: ["loom repair plan"]`. `loom repair plan` is non-mutating; an admitted write path is `loom upgrade --apply`.
 
 When installed-state declares `runtime_provider: global-cli` but a repository
 still retains `.loom/bin`, repair and upgrade planning must treat that path as

@@ -107,6 +107,7 @@ PUBLIC_AGGREGATE_SURFACES = (
     "adoption-host-metadata",
     "runtime-paths",
     "public-default-path",
+    "public-command-reachability",
     "merge-wrapper",
     "ship-wrapper",
     "closeout-wrapper",
@@ -117,6 +118,81 @@ PUBLIC_AGGREGATE_SURFACES = (
     "fr-wi-admission",
     "failure-envelope",
     "legacy-command-eol",
+)
+
+ACTIVE_PUBLIC_GUIDANCE_ROOTS = (
+    REPO_ROOT / "docs" / "adoption",
+    REPO_ROOT / "docs" / "methodology",
+    REPO_ROOT / "src" / "skills",
+)
+ACTIVE_PUBLIC_GUIDANCE_FILES = (
+    REPO_ROOT / "AGENTS.md",
+    REPO_ROOT / "VISION.md",
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "README.zh-CN.md",
+    REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md",
+    REPO_ROOT / "tools" / "loom.py",
+    REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "delivery_control.py",
+    REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "execution_flow.py",
+)
+RELEASE_CRITICAL_REMOVED_COMMANDS = (
+    "pr metadata-render",
+    "pr metadata-readback",
+    "pr metadata-update",
+    "pr metadata-preflight",
+    "repair apply",
+    "profile light-migration-plan",
+)
+DEFAULT_PATH_GUIDANCE_FILES = (
+    REPO_ROOT / "docs" / "methodology" / "governance" / "docs-governance-lite-checklist.md",
+    REPO_ROOT / "docs" / "methodology" / "governance" / "loom-governance-intensity-mapping.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "automation-frontload.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "cli-first-control-plane.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "full-spec-suite-cli-surface.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "gate-freeze.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "README.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "pr-merge-gate.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "repo-global-artifact-classification.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "review-execution.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "tiered-gate-consumption-contract.md",
+    REPO_ROOT / "docs" / "methodology" / "harness" / "workspace-and-purity.md",
+    REPO_ROOT / "docs" / "methodology" / "templates" / "pull-request.md",
+)
+REMOVED_DEFAULT_PATH_PATTERNS = (
+    (
+        "legacy-executable",
+        re.compile(r"python3\s+(?:tools|\.loom/bin)/loom_(?:flow|init|status)\.py", re.IGNORECASE),
+    ),
+    (
+        "required-repo-carrier",
+        re.compile(
+            r"(?:must|required|requires?|authoritative|priority|必须|要求|优先|消费)"
+            r"[^\n]{0,120}(?:review record|status surface|fact-chain|repo carrier|"
+            r"carrier terminalization|current pointer|\.loom/(?:status/current\.md|progress|reviews|shadow))"
+            r"|(?:review record|status surface|fact-chain|repo carrier|carrier terminalization|"
+            r"current pointer|\.loom/(?:status/current\.md|progress|reviews|shadow))"
+            r"[^\n]{0,80}(?:must|required|requires?|authoritative|priority|必须|要求|优先|消费)",
+            re.IGNORECASE,
+        ),
+    ),
+)
+REMOVED_GUIDANCE_NEGATION_MARKERS = (
+    "must not",
+    "never ",
+    "does not",
+    "do not",
+    "not read",
+    "not write",
+    "retired",
+    "historical",
+    "已退役",
+    "历史",
+    "不得",
+    "不要求",
+    "不读取",
+    "不写",
+    "不生成",
+    "不能替代",
 )
 
 SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
@@ -5826,18 +5902,9 @@ def assert_global_runtime_path_resolver_contract(tmp: Path) -> None:
 def assert_cache_absent_gate_contract(tmp: Path) -> None:
     target = tmp / "cache-absent-gate"
     target.mkdir()
-    fixture = write_semantic_review_pr_gate_fixture(target, item="WI-1901")
+    init_git_fixture(target)
     write_state(target, valid_state(target))
-    subprocess.run(["git", "add", ".loom/installed-state.json"], cwd=target, check=True)
-    subprocess.run(["git", "commit", "-m", "fixture installed state"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
-    review_path = target / fixture["review_path"]
-    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
-    review_payload["reviewed_head"] = reviewed_head
-    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-    subprocess.run(["git", "add", fixture["review_path"]], cwd=target, check=True)
-    subprocess.run(["git", "commit", "-m", "fixture review refresh"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    update_fixture_pr_head(target, fixture)
+    commit_all(target, "fixture metadata-only install")
 
     workstation = tmp / "cache-absent-workstation"
     with isolated_loom_workstation(workstation):
@@ -5853,52 +5920,6 @@ def assert_cache_absent_gate_contract(tmp: Path) -> None:
             raise AssertionError("public detect must not depend on repo-local .loom/runtime or .loom/tmp")
         if (target / ".loom" / "runtime").exists() or (target / ".loom" / "tmp").exists():
             raise AssertionError("removed-state public diagnostics recreated repo-local runtime cache directories")
-        return
-
-        _, resume_payload = run_json(["resume", "--target", str(target), "--item", fixture["item"], "--json"], expect=0)
-        if resume_payload.get("result") != "pass":
-            raise AssertionError("resume must not depend on repo-local .loom/runtime or .loom/tmp")
-        full_output = resume_payload.get("full_output")
-        resume_locator = full_output.get("artifact_locator") if isinstance(full_output, dict) else None
-        if not isinstance(resume_locator, str):
-            raise AssertionError("resume did not expose an artifact locator for cache-absent diagnostics")
-        resume_artifact = runtime_locator_path(target, resume_locator)
-        if resume_artifact is None or not resume_artifact.exists():
-            raise AssertionError("resume artifact was not written to the global runtime cache")
-        if (target / resume_locator).exists():
-            raise AssertionError("resume wrote diagnostics to repo-local .loom/tmp")
-        runtime_payload_from_agent_safe_output(resume_payload)
-
-        _, review_payload = run_flow_json(["review", "read", "--target", str(target), "--item", fixture["item"]], expect=0)
-        if review_payload.get("result") != "pass":
-            raise AssertionError("review read must not depend on repo-local .loom/runtime or .loom/tmp")
-
-        pr_gate_payload = semantic_pr_gate_fixture_payload(target, fixture)
-        if pr_gate_payload.get("result") != "pass":
-            raise AssertionError("pr gate must not depend on repo-local .loom/runtime or .loom/tmp")
-
-        _, merge_ready_payload = run_json(
-            [
-                "merge-ready",
-                "--target",
-                str(target),
-                "--item",
-                fixture["item"],
-                "--pr",
-                "1288",
-                "--branch",
-                fixture["branch"],
-                "--pr-payload-file",
-                fixture["pr_file"],
-                "--json",
-            ],
-            expect=0,
-        )
-        if merge_ready_payload.get("result") != "pass":
-            raise AssertionError("merge-ready must not depend on repo-local .loom/runtime or .loom/tmp")
-
-        if (target / ".loom" / "runtime").exists() or (target / ".loom" / "tmp").exists():
-            raise AssertionError("cache-absent gate checks recreated repo-local runtime cache directories")
 
 
 def valid_state(target: Path) -> dict[str, Any]:
@@ -13478,9 +13499,11 @@ def run_adoption_host_metadata_surface() -> None:
         tmp = Path(raw_tmp)
         target = tmp / "public-metadata-only-adoption"
         target.mkdir()
+        init_git_fixture(target)
         _, installed = run_json(["install", "--target", str(target), "--apply", "--json"], expect=0)
         if set(installed.get("managed_writes", [])) != {".loom/installed-state.json", "AGENTS.md"}:
             raise AssertionError("public install wrote outside the metadata-only adoption boundary")
+        commit_all(target, "fixture metadata-only install")
         for args in (
             ["installed-state", "validate", "--target", str(target), "--json"],
             ["detect", "--target", str(target), "--json"],
@@ -13627,6 +13650,110 @@ def run_runtime_paths_surface() -> None:
         assert_global_runtime_path_resolver_contract(tmp)
         assert_cache_absent_gate_contract(tmp)
     print("runtime path resolver checks passed")
+
+
+def removed_default_path_guidance(line: str) -> list[str]:
+    lowered = line.lower()
+    if any(marker in lowered for marker in REMOVED_GUIDANCE_NEGATION_MARKERS):
+        return []
+    return [label for label, pattern in REMOVED_DEFAULT_PATH_PATTERNS if pattern.search(line)]
+
+
+def run_public_command_reachability_surface() -> None:
+    module = load_loom_cli_module()
+    public_commands = set(module.PUBLIC_COMMAND_NAMES)
+    if len(public_commands) != 30:
+        raise AssertionError(f"public command reachability expected 30 commands, got {len(public_commands)}")
+    for command in sorted(public_commands):
+        resolved = module.resolve_command(command.split())
+        if resolved != (command, []):
+            raise AssertionError(f"public command does not resolve to itself: {command}: {resolved}")
+
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    routes = {entry.get("task"): entry for entry in help_payload.get("task_routes", []) if isinstance(entry, dict)}
+    merge_route = routes.get("merge-ready") or {}
+    first = str(merge_route.get("first_command") or "")
+    next_step = str(merge_route.get("next_step") or "")
+    handoff = f"{first}\n{next_step}"
+    required_handoff = (
+        "loom pr gate",
+        "--full-output --json",
+        "repo-relative ignored file",
+        "loom merge-ready",
+        "--pr-gate-result-file <file>",
+    )
+    positions = [handoff.find(value) for value in required_handoff]
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        raise AssertionError(f"merge-ready help must preserve public gate -> retained file -> merge-ready order: {merge_route}")
+    if "--attestation-artifact-input <artifact>" not in next_step:
+        raise AssertionError(f"merge-ready help must reuse the current-head attestation: {merge_route}")
+
+    removed_guidance_fixtures = (
+        "python3 tools/loom_flow.py review record --target <repo>",
+        "fact-chain / status-surface consumption is required before merge",
+        "repo carrier priority includes progress, status, review, and shadow evidence",
+    )
+    for fixture in removed_guidance_fixtures:
+        if not removed_default_path_guidance(fixture):
+            raise AssertionError(f"public guidance guard failed to reject removed default path: {fixture}")
+    for fixture in (
+        "The public path must not read a committed current pointer.",
+        "已退役历史合同只保留 fact-chain carrier locator。",
+    ):
+        if removed_default_path_guidance(fixture):
+            raise AssertionError(f"public guidance guard rejected an explicit retirement statement: {fixture}")
+
+    guidance_paths = list(ACTIVE_PUBLIC_GUIDANCE_FILES)
+    for root in ACTIVE_PUBLIC_GUIDANCE_ROOTS:
+        guidance_paths.extend(sorted(root.rglob("*.md")))
+    for path in guidance_paths:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            inventory = RELEASE_CRITICAL_REMOVED_COMMANDS if path.suffix == ".py" else LEGACY_COMMAND_INVENTORY
+            matches = [command for command in inventory if f"loom {command}" in line]
+            if not matches:
+                continue
+            raise AssertionError(
+                f"active guidance recommends removed command(s) {matches}: "
+                f"{path.relative_to(REPO_ROOT)}:{index + 1}"
+            )
+
+    for path in DEFAULT_PATH_GUIDANCE_FILES:
+        for index, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
+            matches = removed_default_path_guidance(line)
+            if matches:
+                raise AssertionError(
+                    f"default-path guidance requires removed behavior {matches}: "
+                    f"{path.relative_to(REPO_ROOT)}:{index + 1}"
+                )
+
+    removed_carrier_guidance = (
+        "Loom truth carriers 与 closeout evidence 优先",
+        "authored Loom review record",
+        "Repo-owned carriers such as Work Items, PRs, review records, and closeout evidence remain authoritative",
+        "must not replace repo companion status, Work Item state, review evidence, or closeout records",
+        "此时才允许脚手架生成对应",
+    )
+    for path in guidance_paths:
+        text = path.read_text(encoding="utf-8")
+        for obsolete in removed_carrier_guidance:
+            if obsolete in text:
+                raise AssertionError(
+                    f"active guidance still recommends removed execution-carrier behavior: "
+                    f"{path.relative_to(REPO_ROOT)}: {obsolete}"
+                )
+
+    agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    for obsolete in (
+        "必须确认 `.loom/bootstrap/init-result.json`",
+        "closeout sync 只消费",
+        "repo carrier terminalize",
+        "刷新 shadow / closeout evidence",
+        "`Loom Work Item`、`Branch`、`Head SHA` 与 `Workspace`",
+    ):
+        if obsolete in agents:
+            raise AssertionError(f"AGENTS.md still requires removed execution-carrier behavior: {obsolete}")
+    print("public command reachability checks passed")
 
 
 def run_public_default_path_surface() -> None:
@@ -14671,6 +14798,7 @@ def run_aggregate_cli_contract() -> None:
         "adoption-host-metadata": run_adoption_host_metadata_surface,
         "runtime-paths": run_runtime_paths_surface,
         "public-default-path": run_public_default_path_surface,
+        "public-command-reachability": run_public_command_reachability_surface,
         "merge-wrapper": run_merge_wrapper_surface,
         "ship-wrapper": run_ship_wrapper_surface,
         "closeout-wrapper": run_closeout_wrapper_surface,
@@ -15255,6 +15383,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="public-default-path",
             fixture_group="public-default-path",
             run=run_public_default_path_surface,
+        ),
+        SurfaceCheck(
+            name="public-command-reachability",
+            fixture_group="public-command-reachability",
+            run=run_public_command_reachability_surface,
         ),
         SurfaceCheck(
             name="merge-wrapper",

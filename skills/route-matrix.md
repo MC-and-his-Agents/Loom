@@ -12,7 +12,7 @@ interaction entrypoints; they do not expand the CLI surface.
 | Start implementation | `loom-build` | `loom build --issue <WI> --branch <branch>` |
 | Pre-review binding check | `loom-pre-review` | `loom pre-review --issue <WI> --pr <PR> --branch <branch>` |
 | Semantic or spec review | `loom-review` / `loom-spec-review` | `loom review` plus `loom attestation readback` |
-| Merge readiness | `loom-merge-ready` | `loom merge-ready` or `loom merge check` |
+| Merge readiness | `loom-merge-ready` | `loom pr gate --attestation-artifact-input --full-output --json`, retained ignored readback, then `loom merge-ready --attestation-artifact-input --pr-gate-result-file` |
 | Deliver a PR | root route | `loom ship` or `loom merge run --apply` |
 | Handoff | `loom-handoff` | `loom status` plus `loom workspace check`; session summary only |
 | Retire a worksite | `loom-retire` | `loom workspace retire` |

@@ -2365,7 +2365,7 @@ def carrier_repair_payload(
             if versioned_carrier_updates
             else "no host-complete active carrier repair was detected."
         ),
-        "command": "loom repair apply --target <repo> --json" if versioned_carrier_updates else "loom repair plan --target <repo> --json",
+        "command": "loom repair plan --target <repo> --json",
     }
     actions = [action] if versioned_carrier_updates or missing_inputs else []
     result = "block" if missing_inputs else "pass"
@@ -2697,8 +2697,8 @@ def pr_metadata_render_payload(
         "envelope": envelope,
         "preflight": preflight,
         "next_actions": [
-            f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(relative_output)} --json",
-            f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(relative_output)} --apply --json",
+            f"gh pr edit <pr> --body-file {shlex.quote(relative_output)}",
+            "loom help --json",
         ],
     }
 
@@ -2827,7 +2827,7 @@ def pr_metadata_readback_payload(
         "preflight": preflight,
         "inferences": inferences,
         "next_actions": [
-            f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(effective_compare_file or effective_body_file or '<body-file>')} --json",
+            "loom help --json",
         ],
     }
 
@@ -2931,8 +2931,8 @@ def pr_metadata_update_payload(
             "render": render_payload,
             "readback": None,
             "next_actions": [
-                f"loom pr metadata-preflight --surface {surface} --body-file {shlex.quote(rendered_relative)} --json",
-                f"loom pr metadata-update --surface {surface} --output-file {shlex.quote(rendered_relative)} --apply --json",
+                f"gh pr edit <pr> --body-file {shlex.quote(rendered_relative)}",
+                "loom help --json",
             ],
         }
 
@@ -3061,7 +3061,7 @@ def pr_metadata_update_payload(
         "readback": readback_payload,
         "inferences": inferences,
         "next_actions": [
-            f"loom pr metadata-readback {effective_pr} --surface {surface} --body-file {shlex.quote(rendered_relative)} --readback-file {shlex.quote(readback_file)} --json",
+            "loom help --json",
         ],
     }
 

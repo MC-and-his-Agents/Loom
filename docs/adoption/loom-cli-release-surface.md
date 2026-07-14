@@ -71,7 +71,9 @@ The judgment may be:
 - `release-judgment-only`: CLI publish behavior changed on an event that is not allowed to publish; the workflow records the judgment and must not create tags, publish npm, or create releases.
 - `no-cli-behavior-change`: the merge did not touch CLI publish behavior.
 
-For pull requests, the read-only `release-judgment` job records judgment and runs npm package dry-run checks but must not create tags, publish npm, or create releases. It has only `contents: read`, no `id-token`, and no persisted checkout credential. The separate `release-publisher` job is never scheduled for pull requests. For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release only when the root `VERSION` is a new, unoccupied candidate. A later CLI source merge with an already published version returns `release_pending` and never republishes that version. `workflow_dispatch` with `publish=true` remains a repair path for missing tag, npm, or release evidence bound to the current release commit, not the only publish path.
+For pull requests, the read-only `release-judgment` job records judgment and runs npm package dry-run checks but must not create tags, publish npm, or create releases. It has only `contents: read`, no `id-token`, and no persisted checkout credential. A `push` event on `main` is judgment-only and never publishes. A later CLI source merge with an already published version returns `release_pending` and never republishes that version.
+
+Only an explicit `workflow_dispatch` with `publish=true` may publish. Before the publisher receives write or OIDC permissions, the separate `release-admission` job must read the current default-branch tip, the live release Work Item, its native dependencies and milestone FR/Work Item state, then resolve one trusted umbrella acceptance artifact bound to that same release head. Missing, stale, ambiguous, incomplete, or untrusted host facts fail closed. The release Work Item and acceptance artifact ID are explicit dispatch inputs; neither a green workflow nor a merged PR implies product acceptance or release admission.
 
 An explicit publish request must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit, when `package.json` does not match `VERSION`, or when the `NPM_TOKEN` secret is missing for an npm publish. A normal `main` push with an earlier published version returns `release_pending` instead. The workflow must never overwrite an existing tag, npm version, or release. Installer npm state is never publish evidence for this judgment.
 
@@ -87,11 +89,10 @@ run. It classifies the release state as:
 - `partial_published`: at least one release artifact exists but the release evidence set is incomplete or mismatched.
 - `no_release`: the release judgment explicitly declares that no publish is required.
 
-`loom release resume` consumes the same readback classifier and only returns
-the next recovery action. It must not trigger `workflow_dispatch`, create tags,
-publish npm, create GitHub Releases, update PR metadata, or write closeout
-carriers. Host API or registry read failures are classified as readback
-blockers; auth and host-access diagnosis remains owned by #1597.
+`loom release readback` returns the current classification and next recovery
+action. It must not trigger `workflow_dispatch`, create tags, publish npm,
+create GitHub Releases, update PR metadata, or write closeout carriers. Host API
+or registry read failures are classified as readback blockers; auth and host-access diagnosis remains owned by #1597.
 
 The v0.14.2 manual recovery sample is retained in
 `docs/evidence/fixtures/release-readback-fixtures.json`: the first main-push
@@ -108,7 +109,7 @@ The labels below are stable evidence labels. Named release/package checks are ta
 | Evidence label | Current compatible check | Required role |
 | --- | --- | --- |
 | `release-doc-contract` | `python3 tools/check_release_surface.py --surface release-doc-contract` | Proves release authority docs keep the `loom` CLI line, GitHub `v*` tag/Release, npm package, and deprecated installer boundary separated. |
-| `release-workflow-contract` | `python3 tools/check_release_surface.py --surface release-workflow-contract` | Proves `loom-cli-release` keeps PR judgment read-only, main-push publishing, `workflow_dispatch` repair, fail-closed duplicate version handling, and `NPM_TOKEN` checks. |
+| `release-workflow-contract` | `python3 tools/check_release_surface.py --surface release-workflow-contract` | Proves `loom-cli-release` keeps PR/main judgment read-only, requires live release scope plus trusted current-head acceptance, and exposes publishing only to an explicit admitted dispatch. |
 | `installer-sunset-guard` | `python3 tools/check_release_surface.py --surface installer-sunset-guard` | Proves `loom-installer` remains deprecated legacy evidence and does not regain npm publish, installer tag, installer GitHub Release, or active CLI release authority. |
 | `forbidden-release-surface-patterns` | `python3 tools/check_release_surface.py --surface forbidden-release-surface-patterns` | Proves active install/release docs do not present `loom-installer`, direct `SKILLS`, or host plugins as separate primary install or release evidence. |
 | `npm-package-manifest` | `python3 tools/check_npm_package.py --surface npm-package-manifest` | Proves root `package.json` keeps `@mc-and-his-agents/loom`, the `loom` bin, version alignment with `VERSION`, public publish config, and required managed payload declarations. |
@@ -148,7 +149,7 @@ When release-required work publishes a Loom CLI release, pre-merge evidence must
 Post-merge release closeout evidence must show:
 
 - PR number, PR head, merge commit, target branch, and target branch readback;
-- `loom-cli-release` run id or URL, event `push`, ref `main`, conclusion, and checked-out SHA bound to the merge commit;
+- `loom-cli-release` publish run id or URL, event `workflow_dispatch`, ref `main`, release Work Item, acceptance artifact, admission conclusion, and checked-out SHA bound to the merge commit;
 - GitHub `vX.Y.Z` tag resolves to the merge commit;
 - GitHub Release URL/state for the same tag;
 - npm registry readback for `@mc-and-his-agents/loom@X.Y.Z`, including relevant dist-tag state;

@@ -1334,14 +1334,10 @@ def check_workflow_event_matrix() -> None:
     for protected_path in ("'Makefile'", "'.github/actions/**'", "'.github/workflows/**'", "'tools/check_*.py'", "'tools/fixtures/**'", "'test/**'", "'src/skills/**'", "'skills/**'", "'plugins/loom/skills/**'"):
         if protected_path not in release:
             raise AssertionError(f"release judgment PR fallback does not cover host-native aggregate input: {protected_path}")
-    cli_step = release[release.index("      - name: Check host-native lifecycle contracts") : release.index("      - name: Check npm package contract")]
-    if (
-        "if: ${{ github.event_name == 'pull_request' }}" not in cli_step
-        or "PYTHONDONTWRITEBYTECODE: '1'" not in cli_step
-        or "run: make loom-check" not in cli_step
-        or "check_cli_contract.py --surface aggregate" in cli_step
-    ):
-        raise AssertionError("feature pull requests must not repeat the full CLI aggregate in release judgment")
+    if "make loom-check" in release or "check_cli_contract.py --surface aggregate" in release:
+        raise AssertionError("release judgment must not repeat the aggregate owned by loom-check main push")
+    if "  release-admission:\n" not in release or "needs: [release-judgment, release-admission]" not in release:
+        raise AssertionError("release publisher must consume the fail-closed release-admission job")
     if "python3 tools/check_cli_contract.py --surface aggregate" not in text:
         raise AssertionError("main push must own the single complete public CLI aggregate")
     for workflow in (ROOT / ".github" / "workflows").glob("*.yml"):

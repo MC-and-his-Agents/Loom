@@ -21,7 +21,7 @@
         "result": "block",
         "primary_cause": "light_profile_forbidden_carrier",
         "legacy_gate_blocker": true,
-        "violation_count": 11
+        "violation_count": 12
       }
     },
     {
@@ -34,7 +34,7 @@
         "result": "block",
         "primary_cause": "light_profile_forbidden_carrier",
         "legacy_gate_blocker": true,
-        "violation_count": 1
+        "violation_count": 2
       }
     },
     {
@@ -47,7 +47,7 @@
         "result": "block",
         "primary_cause": "light_profile_forbidden_carrier",
         "legacy_gate_blocker": true,
-        "violation_count": 1
+        "violation_count": 2
       }
     },
     {
@@ -60,14 +60,14 @@
         "result": "block",
         "primary_cause": "light_profile_forbidden_carrier",
         "legacy_gate_blocker": true,
-        "violation_count": 1
+        "violation_count": 2
       }
     },
     {
       "id": "clean-light",
       "adoption_mode": "light-governance",
       "tracked_files": {
-        ".loom/bootstrap/init-result.json": "{\"schema_version\":\"loom-init-output/v1\"}\n",
+        ".loom/bootstrap/manifest.json": "{\"schema_version\":\"loom-bootstrap-manifest/v1\"}\n",
         ".loom/companion/repo-interface.json": "{}\n",
         ".github/workflows/loom-delivery-gate.yml": "name: Loom\n"
       },
@@ -76,6 +76,19 @@
         "primary_cause": "passed",
         "legacy_gate_blocker": false,
         "violation_count": 0
+      }
+    },
+    {
+      "id": "runtime-init-result-removed",
+      "adoption_mode": "light-governance",
+      "tracked_files": {
+        ".loom/bootstrap/init-result.json": "{\"schema_version\":\"loom-init-output/v1\"}\n"
+      },
+      "expected": {
+        "result": "block",
+        "primary_cause": "light_profile_forbidden_carrier",
+        "legacy_gate_blocker": true,
+        "violation_count": 1
       }
     },
     {
@@ -120,7 +133,7 @@
         "result": "block",
         "primary_cause": "light_profile_forbidden_carrier",
         "legacy_gate_blocker": true,
-        "violation_count": 2
+        "violation_count": 3
       }
     },
     {
@@ -133,7 +146,7 @@
         "result": "block",
         "primary_cause": "light_profile_forbidden_carrier",
         "legacy_gate_blocker": true,
-        "violation_count": 2
+        "violation_count": 1
       }
     },
     {

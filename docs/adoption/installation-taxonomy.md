@@ -109,8 +109,8 @@ Required semantics:
   migration inputs only.
 - `plugins/loom/.codex-plugin/plugin.json` and `plugins/loom/skills/` are legacy
   repository payload artifacts.
-- `loom host verify --host codex --mode plugin` is legacy verification and must
-  not be presented as the current adoption path.
+- The retired host verification command is legacy evidence and must not be
+  presented as the current adoption path.
 - Workstation registration remains separate and does not become repository
   truth.
 

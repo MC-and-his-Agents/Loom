@@ -39,7 +39,7 @@ closeout 推导产品完成。
 
 安装与诊断路径由 `detect`、`doctor`、`repair plan`、`install`、`upgrade`、
 `verify` 和 `release readback` 承担。Codex plugin 安装与缓存属于 Codex host，
-Loom 只返回 `provider_action`，不提供 `loom host install/register`。
+Loom 只返回 `provider_action`，不暴露额外的 host 安装或注册命令。
 
 ## 失败合同
 

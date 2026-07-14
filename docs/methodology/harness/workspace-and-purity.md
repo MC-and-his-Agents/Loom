@@ -1,89 +1,55 @@
 # Workspace And Purity
 
-本文件定义 Loom 当前最小纯度与范围控制规则。
+本文件定义 Loom 当前的正式执行现场与范围纯度规则。
 
-本文件当前承接：
+## 1. 权威绑定
 
-- `EXT-0029`
+正式执行现场必须能证明：
 
-## 1. 能力定位
+```text
+GitHub Work Item -> issue-scoped branch -> formal worktree -> PR -> live head
+```
 
-纯度与范围控制用于约束正式执行现场、分支和 PR 不发生职责漂移。
+绑定来自显式 typed locator、Git worktree 与 GitHub live readback。会话记忆、临时
+目录、committed current pointer、status、progress、review 或 shadow 文件都不能
+替代该绑定。
 
-它服务的是执行边界，不替代需求分流或方案判断。
+## 2. 最小纯度
 
-## 2. 最小纯度目标
+- 一个正式 branch/worktree 服务一个主要 Work Item 或明确声明的同 FR batch；
+- 一个 PR 只承载声明范围内的改动；
+- 无关改动、临时产物与另一事项的现场不得混入；
+- PR 建立后不扩大 scope，后续缺口回到 GitHub issue tree。
 
-Loom 当前至少要求以下纯度：
+## 3. 公共入口
 
-- 分支目标纯度
-  - 一个正式分支服务一个主要事项
-- PR 范围纯度
-  - 一个 PR 只承载同一语义目标下的改动
-- 工作现场职责纯度
-  - 当前现场不混入无关事项的执行残留
+- `loom workspace create` 创建或绑定 issue-scoped 正式 worktree；
+- `loom workspace check` 从 Git 与 GitHub facts 验证 item、branch、worktree、PR
+  和 head；
+- `loom build` 在真实 PR 之前也可通过显式 Work Item 与 branch admission；
+- `loom workspace retire` 只清理本地已完成现场，不关闭 issue、不修改 PR，
+  也不写 repo closeout carrier。
 
-## 3. 范围控制边界
+## 4. 失败语义
 
-以下情况视为范围越界信号：
+以下情况 fail closed，并只返回一个 primary cause：
 
-- 为完成当前事项，顺手推进无关目标
-- 在同一分支或 PR 中并入另一事项的正式改动
-- 为规避拆分成本，把多个目标包装成一个执行单元
+- 正式 worktree 不存在或未绑定目标 branch；
+- checkout branch 与显式 Work Item / PR head branch 不一致；
+- PR head 与当前 checkout head 不一致；
+- 工作区存在未分流的越界改动；
+- GitHub、Git 或 worktree facts 不可读。
 
-纯度机制只判断是否越界，不直接判断新增目标本身是否合理。
-新增目标是否成立，应回到 work item 或治理分流处理。
+remediation 应直接指向 Git/worktree、GitHub host action 或上述公共命令。不得要求
+恢复 stale current pointer、同步 versioned carrier、创建空提交或空 PR。
 
-## 4. 默认处理
+`active_workspace_diagnostics` 只能是上述 Git/worktree/host facts 的派生读面，
+不得重新引入 repo current 或 recovery carrier。
 
-发现纯度异常时，默认动作应是：
+## 5. Closeout 边界
 
-- 停止继续叠加改动
-- 先拆分、清理或重新分流
-- 再进入后续审查或提交流程
+普通 delivery closeout 由 GitHub merge、checks、issue 与 host attestation 派生。
+本地 worktree retirement 是独立清理动作；它既不证明产品验收，也不产生第二个
+closeout PR。
 
-## 5. 与自动化前置的关系
-
-纯度和明显范围越界信号应尽量前置暴露。
-但是否需要新建事项、拆分 PR 或调整目标，仍属于执行与治理决策，不由纯度脚本单独裁决。
-
-## 6. `purity-check` 最小输出语义
-
-`python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` 的输出至少包含：
-
-- `runtime_state`
-  - 当前 Loom 入口自己的 scene / carrier 判定
-  - install layout / shared runtime / shared references 漂移时必须直接 `block`
-
-- `hard_failures`
-  - 第一版硬失败项，包含事实链断裂、现场冲突、残留未分流、明显多事项共享现场等
-- `report_only`
-  - 第一版只报告不阻断项，当前包含 branch purity 与 PR purity
-- `scope_assessment`
-  - `mode: constrained | unconstrained`
-  - `declared_paths`
-  - `out_of_scope_changes`
-- `active_workspace_diagnostics`
-  - `item_id`
-  - `workspace_entry`
-  - `checkpoint`
-  - `binding_locator`
-  - `classification: stale_carrier | carrier_closeout_required | shared_workspace_conflict | unknown`
-  - `host_truth`（当 issue / PR host readback 可用时）
-  - `recommended_remediation`
-  - `next_command`（当可给出明确修复入口时）
-
-当 `scope_assessment.mode` 为 `constrained` 且出现 `out_of_scope_changes` 时，应视为范围越界阻断信号。
-
-active carrier 判定规则：
-
-- `stale_carrier` 表示同一 `workspace_entry` 下的其他 carrier 已处于 terminal checkpoint；它只进入 `report_only`，不得阻断当前 Work Item
-- `carrier_closeout_required` 表示 host issue 已 closed 或 PR 已 merged/completed，但 repo recovery carrier 仍非 terminal；它只进入 `report_only`，补救路径必须指向 versioned carrier closeout sync，不得指向 workspace retire
-- `shared_workspace_conflict` 表示同一 `workspace_entry` 下仍有另一个非 terminal carrier；它必须 fail closed
-- `unknown` 表示候选 carrier 缺失、不可读或无法证明是否 terminal；它必须 fail closed，并给出修复 locator
-
-`python3 tools/loom_flow.py state-check --target <repo> [--item <id>]` 会复用同一纯度结果，并额外检查活跃状态与 checkpoint 完整性。
-
-`python3 tools/loom_flow.py workspace cleanup|retire --target <repo> [--item <id>]` 同样必须先消费 `runtime-state`；若当前 carrier 不再可执行，不得继续清理或退休现场。
-
-branch / PR purity 的宿主生命周期边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)。
+宿主生命周期边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)。

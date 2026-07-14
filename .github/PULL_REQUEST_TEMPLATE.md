@@ -25,7 +25,7 @@ Validation details:
 
 ## PR Metadata Machine Carrier
 
-If this repository declares repo-specific PR metadata in `.loom/companion/repo-interface.json`, preserve the declared machine block exactly. Prefer `loom pr metadata-update` for the end-to-end render/update/readback flow, or `loom pr metadata-render` when you need a repo-relative artifact without host mutation. Re-run `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback>` before review, merge-ready, or closeout.
+If this repository declares repo-specific PR metadata in `.loom/companion/repo-interface.json`, preserve the declared machine block exactly. Render the body to a file, update it with `gh pr edit --body-file <file>`, and read the live PR body back before review. After current-head review, run public `loom pr gate ... --attestation-artifact-input <artifact> --full-output --json`, save the complete readback to a repo-relative ignored file, then pass the same artifact and that file to `loom merge-ready --attestation-artifact-input <artifact> --pr-gate-result-file <file>`.
 
 <!-- loom:repo-pr-metadata
 {

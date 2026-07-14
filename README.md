@@ -173,7 +173,7 @@ status, progress, review, shadow, or closeout carriers:
 | Start implementation before a PR exists | `loom build --target . --issue <work-item> --branch <branch> --json` |
 | Enter review | `loom pre-review ...`, then `loom review ...` |
 | Read host review proof | `loom attestation readback ...` |
-| Check merge readiness | `loom merge-ready ...` or `loom merge check <pr> ...` |
+| Check merge readiness | `loom pr gate ... --attestation-artifact-input <artifact> --full-output --json`, retain the complete ignored readback, then `loom merge-ready ... --attestation-artifact-input <artifact> --pr-gate-result-file <file>` |
 | Deliver and close out | `loom ship ...` or `loom merge run <pr> --apply --closeout-run ...` |
 | Read host closeout proof | `loom attestation closeout ...` |
 | Retire the local worktree | `loom workspace retire --target . --json` |

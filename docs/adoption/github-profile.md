@@ -144,7 +144,7 @@ Project `Status` 是宿主视图字段：
 - `In Progress`: 已有 active Work Item / owner / branch / worktree / PR，或明确处于执行中。
 - `Done`: 只能作为 closeout 完成后的宿主视图状态；不能仅因 PR merged、issue closed、task checked 或 Project workflow 自动移动而视为 completed truth。
 
-Host agent 读取或更新 Project `Status` 时必须先消费同一 Work Item 的 issue、PR、merge commit、recovery、review、merge-ready 和 closeout locators。若 GitHub workflow 自动修改 Project `Status`，agent 必须重新核对 issue、PR、Work Item、recovery、review、merge-ready、closeout 和 evidence-map freshness。若 Project `Status` 与这些证据冲突，Loom truth carriers 与 closeout evidence 优先，Project item 需要回写或标记 drift；冲突不得被下游 review、merge-ready 或 closeout 当作 advisory-only 状态展示。
+Host agent 读取或更新 Project `Status` 时必须按字段 owner 消费同一 Work Item 的 GitHub issue、PR、merge commit、required checks、current-head host attestation 与产品验收 locator。若 GitHub workflow 自动修改 Project `Status`，agent 必须重新读取这些宿主事实。若 Project `Status` 与权威字段冲突，应按 GitHub delivery truth、host attestation 和 acceptance adapter 的边界回写或标记 drift；不得恢复 repo current、progress、review、shadow 或 closeout carrier 来解决冲突。
 
 ## 5. strong governance 默认要求
 
@@ -173,7 +173,7 @@ PR metadata、merge evidence、release evidence 与 closeout evidence 必须记�
 
 ### Semantic review 与 checks 边界
 
-GitHub required checks、非 required triggered checks、guardian、integration、advisory verdict、GitHub review comment 和 CI-only signal 都不能替代 Loom semantic review。strong governance 的合并放行必须消费同一 PR head 上的 authored Loom review record、`pr gate`、`merge check` 和 host readback；checks 只能证明执行/宿主状态，不能自行成为 approval truth。
+GitHub required checks、非 required triggered checks、guardian、integration、advisory verdict、普通 review comment 和 CI-only signal 都不能单独替代 semantic review。strong governance 的合并放行必须消费绑定同一 PR head、semantic tree、run 与 artifact digest 的 host attestation，以及 `pr gate`、`merge check` 和 live host readback；不得回退到 repo-authored review record。
 
 `SKIPPED` / `NEUTRAL` triggered checks 可以作为 allowed non-success readback 进入 controlled merge JSON；failed、cancelled、timed out、action required、startup failure、unknown、pending、queued、in progress 或 unreadable triggered checks 必须 fail closed。
 
@@ -187,7 +187,7 @@ GitHub required checks、非 required triggered checks、guardian、integration�
 Light profile 从旧控制面迁移时使用两段式入口：
 
 ```bash
-loom profile light-migration-plan --target . --json
+loom repair plan --target . --json
 loom profile light-migration-reconcile \
   --target . --repository OWNER/REPO --branch main --work-item ISSUE \
   --gate-pr PR --migration-pr PR --context CHECK --app-id APP_ID \

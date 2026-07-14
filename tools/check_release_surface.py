@@ -386,7 +386,11 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
     require_needles(
         CLI_RELEASE_DOC,
         (
-            "For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release",
+            "A `push` event on `main` is judgment-only and never publishes",
+            "Only an explicit `workflow_dispatch` with `publish=true` may publish",
+            "live release Work Item",
+            "trusted umbrella acceptance artifact",
+            "event `workflow_dispatch`, ref `main`, release Work Item, acceptance artifact, admission conclusion",
             "when the `NPM_TOKEN` secret is missing for an npm publish",
             "A later CLI source merge with an already published version returns `release_pending` and never republishes that version.",
             "an explicit `workflow_dispatch` publish request names a `VERSION` tag that points at another commit",
@@ -401,13 +405,20 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
             "name: loom-cli-release",
             "workflow_dispatch",
             "publish",
+            "release_issue",
+            "acceptance_artifact_id",
             "push",
-            "AUTO_PUBLISH_ALLOWED",
+            "release-admission",
+            "python3 tools/release_admission.py",
+            "python3 tools/loom.py acceptance resolve",
+            "default_branch_tip",
+            "inputs.publish == true",
             "cli_publish_behavior_changed",
             "reason=release_pending",
             "version-already-published-on-different-commit",
             "PACKAGE_TAG_PREFIX: 'v'",
             "NPM_PACKAGE_NAME: '@mc-and-his-agents/loom'",
+            "PYTHONDONTWRITEBYTECODE: '1'",
             "secrets.NPM_TOKEN",
             "npm publish --access public --provenance",
             "npm view \"${NPM_PACKAGE_NAME}@${NPM_VERSION}\" version",
@@ -421,19 +432,37 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
         surface_label=surface_label,
         evidence_locator=locator,
     )
+    workflow_env = re.search(
+        r"(?m)^env:\n  PYTHONDONTWRITEBYTECODE: '1'\n",
+        workflow,
+    )
+    jobs = re.search(r"(?m)^jobs:\n", workflow)
+    if workflow_env is None or jobs is None or workflow_env.start() >= jobs.start():
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-bytecode-env-scope",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary="PYTHONDONTWRITEBYTECODE must be a workflow-level env before jobs so every release job excludes bytecode from package payloads",
+        )
     judgment_start = workflow.find("  release-judgment:\n")
+    admission_start = workflow.find("  release-admission:\n")
     publisher_start = workflow.find("  release-publisher:\n")
-    if judgment_start < 0 or publisher_start < 0 or publisher_start <= judgment_start:
+    if judgment_start < 0 or admission_start < 0 or publisher_start < 0 or not (
+        judgment_start < admission_start < publisher_start
+    ):
         add_error(
             errors,
             surface_label=surface_label,
             failure_label=f"{surface_label}-missing-permission-split",
             evidence_locator=locator,
             source_locator=relative_to_root(CLI_RELEASE),
-            summary="release workflow must separate release-judgment from release-publisher",
+            summary="release workflow must separate judgment, fail-closed admission, and publisher jobs",
         )
         return
-    judgment = workflow[judgment_start:publisher_start]
+    judgment = workflow[judgment_start:admission_start]
+    admission = workflow[admission_start:publisher_start]
     publisher = workflow[publisher_start:]
     pending_index = judgment.find('reason=release_pending')
     explicit_publish_index = judgment.find('if [ "$PUBLISH_REQUESTED" != "true" ]')
@@ -462,6 +491,25 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
                 source_locator=relative_to_root(CLI_RELEASE),
                 summary=f"release-judgment must contain `{needle}`",
             )
+    for needle in (
+        "github.event_name == 'workflow_dispatch' && inputs.publish == true",
+        "actions: read",
+        "contents: read",
+        "issues: read",
+        "default_branch_tip",
+        "blockedBy(first:100)",
+        "python3 tools/loom.py acceptance resolve",
+        "python3 tools/release_admission.py",
+    ):
+        if needle not in admission:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-admission-contract",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary=f"release-admission must contain `{needle}`",
+            )
     for needle in ("contents: write", "id-token: write", "secrets.NPM_TOKEN", "npm publish", "git tag -a", "gh release create"):
         if needle in judgment:
             add_error(
@@ -473,10 +521,13 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
                 summary=f"release-judgment must not contain `{needle}`",
             )
     for needle in (
-        "needs: release-judgment",
-        "github.event_name == 'push'",
+        "needs: [release-judgment, release-admission]",
         "github.event_name == 'workflow_dispatch'",
+        "inputs.publish == true",
         "needs.release-judgment.outputs.publish_allowed == 'true'",
+        "Reconfirm live release scope before publishing",
+        "live release head, Work Item, dependencies, or acceptance locator changed after admission",
+        "live milestone release scope changed after admission",
         "contents: write",
         "id-token: write",
         "secrets.NPM_TOKEN",
@@ -493,6 +544,31 @@ def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
                 source_locator=relative_to_root(CLI_RELEASE),
                 summary=f"release-publisher must contain `{needle}`",
             )
+    if "github.event_name == 'push'" in publisher:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-publisher-auto-publish",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary="release-publisher must remain explicit-dispatch-only",
+        )
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "check_release_admission.py")],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-release-admission-check",
+            evidence_locator=locator,
+            source_locator="tools/check_release_admission.py",
+            summary=(completed.stderr or completed.stdout or "release admission checker failed").strip(),
+        )
 
 
 def check_installer_sunset_guard(errors: list[SurfaceError]) -> None:
@@ -768,7 +844,7 @@ SURFACES = (
     ),
     SurfaceDefinition(
         label=RELEASE_WORKFLOW_CONTRACT,
-        description="loom-cli-release keeps PR judgment read-only, main-push publishing, workflow_dispatch repair, duplicate-version fail-closed handling, and NPM_TOKEN checks.",
+        description="loom-cli-release keeps PR/main judgment read-only and admits explicit publication only from live release scope plus trusted current-head acceptance.",
         evidence_locator=evidence_locator(RELEASE_WORKFLOW_CONTRACT),
         run=check_release_workflow_contract,
     ),

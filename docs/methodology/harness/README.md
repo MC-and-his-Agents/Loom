@@ -14,6 +14,7 @@
 - [cli-command-matrix.md](./cli-command-matrix.md)
   - 冻结 CLI-first phase 的命令命名、状态分类与机器可读矩阵入口
 - [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md)
+  - 保留已退役 full-spec suite CLI 计划的 locator；当前公共产品面不得推荐该旧控制面
   - 规划 full spec suite 相关 CLI 自动化入口、JSON 输出、failure taxonomy 与后续 implementation backlog；不实现命令
 - [fact-chain-contract.md](./fact-chain-contract.md)
   - 定义静态真相、动态真相、host/control-plane mirror、retained result 与派生读面的读取优先级和 provenance 纪律
@@ -52,7 +53,7 @@
 - [gate-chain.md](./gate-chain.md)
   - 定义 implementation review、`merge-ready`、`controlled merge`、`closeout` 的强前置消费链
 - [gate-freeze.md](./gate-freeze.md)
-  - 定义 `loom-gate-freeze/v1` 门禁输入冻结快照合同、字段、词表、failure classifier 与 hosted admission 消费边界；本合同不实现 CLI 或 workflow
+  - 保留已退役 gate-freeze snapshot 的 locator，并指向 current-head host attestation 与 retained PR gate result 的当前交接路径
 - [tiered-gate-consumption-contract.md](./tiered-gate-consumption-contract.md)
   - 定义治理强度字段、`suite_path: not_applicable` 与 fail-closed gate 消费合同
   - Final closeout and release/no-release convergence for #1314 is indexed at [../../evidence/governance-intensity-final-closeout.md](../../evidence/governance-intensity-final-closeout.md)
@@ -92,7 +93,7 @@
 - [repo-global-artifact-classification.md](./repo-global-artifact-classification.md)
   - 定义 repo truth、workstation registry、global runtime cache、diagnostic artifact 与 repo carrier 摘要/locator 的分类边界
 - [review-execution.md](./review-execution.md)
-  - 定义正式 review 执行层、review record 与 merge checkpoint 的对接边界
+  - 定义正式 review、current-head host attestation 与 merge-ready 的对接边界
 - [automation-frontload.md](./automation-frontload.md)
   - 定义适合机械化前置的检查矩阵与覆盖边界
 - [loom-check-runtime-purity.md](./loom-check-runtime-purity.md)
@@ -104,15 +105,17 @@
 - [workspace-and-purity.md](./workspace-and-purity.md)
   - 定义现场职责纯度、分支纯度与范围控制边界
 
-这些文件共同表达的不是零散脚本集合，而是从 `Work Item` / fact-chain 到 review / merge / closeout 的统一编排链路。
+这些文件共同表达的不是零散脚本集合，而是从 typed Work Item、正式 worktree、
+GitHub PR/head 到 review、merge 与 host-derived closeout 的统一编排链路。
 当 Loom 需要调用 GitHub、CI、review engine、`git worktree` 或其他宿主能力时，也应先通过 [host-action-contract.md](./host-action-contract.md) 收口结果与去向，再由各专题文件承接细节，而不是在外部再复制一套真相。
 
 读取纪律：
 
-- authored truth 只由 `Work Item`、恢复主入口、review record、merge / closeout basis 等主载体承接
-- host/control-plane mirror 只能提供 issue、PR、project、checks、ruleset 等宿主控制面的只读 provenance
+- goal、scope 与 dependency 由 GitHub Issue / Work Item 拥有
+- PR、branch、head、checks 与 merge facts 由 GitHub live readback 拥有
+- semantic review 与 delivery closeout 由 current-head host attestation 拥有
 - retained result 只能作为已发生宿主动作或 repo-native verdict 的证据 provenance，必须绑定当前消费对象
-- repo-native carrier 通过 interop 只提供只读 locator 或 retained result 来源，不自动成为 Loom authored truth 或 host mirror
+- repo companion 只声明 policy 与 interop locator，不承接 execution truth
 - derived surface 只汇总、展示 taxonomy 与阻断原因；不得反向覆盖 authored truth
 - provenance 缺失、绑定过期、parallel truth 或 stale derived surface 在放行路径上必须阻断
 
@@ -126,7 +129,9 @@ Loom 的默认执行层以 BDD 外环和 TDD 内环组合运行：
 - `fresh verification evidence` 表示证据覆盖当前 `HEAD`、当前范围与当前恢复摘要，不得复用 stale 结果放行
 
 这些语义不要求纯文档事项强制写测试，但要求每个 gate 能读到行为证据、测试证据或明确的 `not_applicable`。
-当 execution 由多个 subagent 分工推进时，主执行者必须把各 subagent 的 owned output、验证结果、阻断项和偏离范围情况整合回单一恢复入口、review record 或对应 gate 输入；subagent 输出本身不构成第二真相源。
+当 execution 由多个 subagent 分工推进时，主执行者必须复核 owned output、验证
+结果、阻断项与 scope，再由 reviewer 或 GitHub host facts 进入 gate；subagent 输出
+本身不构成第二真相源。
 
 ## 目录约束
 

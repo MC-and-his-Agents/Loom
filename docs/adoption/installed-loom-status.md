@@ -1,6 +1,6 @@
 # Installed Loom Status And Upgrade Rehearsal
 
-Installed Loom surfaces must expose status as evidence, not as a second governance truth source. Repo-owned carriers such as Work Items, PRs, review records, and closeout evidence remain authoritative for project state.
+Installed Loom surfaces must expose status as evidence, not as a second governance truth source. GitHub issues, PRs, checks and merge facts own delivery state; current-head host attestation owns review proof; the product acceptance adapter owns product verdicts.
 
 ## Installed Surface Status
 
@@ -45,4 +45,4 @@ or install and report:
 - `blocked` when metadata is missing, inconsistent, or payload files drift from the recorded context
 - the failed layer and rollback path needed by an operator to keep or restore the last known-good install
 
-These commands are status and rehearsal surfaces only. They must not replace repo companion status, Work Item state, review evidence, or closeout records.
+These commands are status and rehearsal surfaces only. They must not replace GitHub Work Item/PR state, current-head host attestation, release readback, or product acceptance evidence.
