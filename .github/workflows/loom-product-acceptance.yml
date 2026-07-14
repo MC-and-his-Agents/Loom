@@ -3,10 +3,15 @@ name: loom-product-acceptance
 on:
   workflow_dispatch:
     inputs:
-      release_issue:
-        description: 'Open release Work Item receiving the umbrella acceptance verdict.'
+      story_issue:
+        description: 'v0.32 FR receiving this product acceptance verdict.'
         required: true
-        type: string
+        type: choice
+        options:
+          - '2114'
+          - '2115'
+          - '2116'
+          - '2117'
 
 permissions:
   actions: read
@@ -14,7 +19,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: loom-product-acceptance-${{ github.sha }}
+  group: loom-product-acceptance-${{ inputs.story_issue }}
   cancel-in-progress: false
 
 jobs:
@@ -39,171 +44,48 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Bind current release scope, aggregate, and verifier
+      - name: Bind default branch and verifier
         id: authority
         uses: actions/github-script@v7
-        env:
-          RELEASE_ISSUE: ${{ inputs.release_issue }}
         with:
           script: |
-            const issueNumber = Number(process.env.RELEASE_ISSUE);
-            const defaultBranch = context.payload.repository.default_branch;
-            if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-              core.setFailed("release_issue must be a positive GitHub issue number");
-              return;
-            }
-            if (context.ref !== `refs/heads/${defaultBranch}`) {
+            if (context.ref !== `refs/heads/${context.payload.repository.default_branch}`) {
               core.setFailed("product acceptance must run from the default branch");
               return;
             }
-            const { data: branch } = await github.rest.repos.getBranch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              branch: defaultBranch,
+            const verifier = await github.rest.users.getByUsername({
+              username: process.env.GITHUB_TRIGGERING_ACTOR,
             });
-            if (branch.commit?.sha !== context.sha) {
-              core.setFailed("product acceptance must bind the current default-branch tip");
-              return;
-            }
-            const query = `
-              query($owner:String!, $repo:String!, $number:Int!) {
-                repository(owner:$owner, name:$repo) {
-                  issue(number:$number) {
-                    number state stateReason
-                    labels(first:100) { pageInfo { hasNextPage } nodes { name } }
-                    milestone { number }
-                    blockedBy(first:100) { pageInfo { hasNextPage } nodes { number state stateReason } }
-                  }
-                }
-              }
-            `;
-            const data = await github.graphql(query, { owner: context.repo.owner, repo: context.repo.repo, number: issueNumber });
-            const issue = data?.repository?.issue;
-            const labels = issue?.labels?.nodes?.map((entry) => String(entry.name || "").toLowerCase()) || [];
-            const blockers = issue?.blockedBy?.nodes || [];
-            if (
-              !issue || issue.state !== "OPEN" || !labels.includes("work-item") ||
-              issue.labels?.pageInfo?.hasNextPage || issue.blockedBy?.pageInfo?.hasNextPage ||
-              !Number.isInteger(issue.milestone?.number) ||
-              blockers.some((entry) => entry.state !== "CLOSED" || entry.stateReason !== "COMPLETED")
-            ) {
-              core.setFailed("release Work Item, labels, milestone, or native dependencies are not ready");
-              return;
-            }
-            const acceptanceMarker = /<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->/i;
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              per_page: 100,
-            });
-            const markerIds = comments
-              .filter((comment) => comment.user?.login === "github-actions[bot]")
-              .map((comment) => String(comment.body || "").match(acceptanceMarker))
-              .filter(Boolean)
-              .map((match) => Number(match[1]));
-            if (markerIds.length > 1) {
-              core.setFailed(`issue:${issueNumber} has ambiguous workflow-owned product acceptance locators`);
-              return;
-            }
-            if (markerIds.length === 1) {
-              try {
-                const { data: artifact } = await github.rest.actions.getArtifact({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  artifact_id: markerIds[0],
-                });
-                const runId = artifact.workflow_run?.id;
-                const { data: run } = await github.rest.actions.getWorkflowRun({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  run_id: runId,
-                });
-                if (
-                  !artifact.expired && artifact.name === "loom-product-acceptance" &&
-                  run.path === ".github/workflows/loom-product-acceptance.yml" && run.event === "workflow_dispatch" &&
-                  run.head_sha === context.sha && run.conclusion === "success"
-                ) {
-                  core.setFailed(`issue:${issueNumber} already has current-head umbrella acceptance artifact:${artifact.id}`);
-                  return;
-                }
-              } catch (error) {
-                if (error.status === 404) {
-                  core.notice(`existing acceptance locator no longer exists and will be replaced: ${error.message}`);
-                } else {
-                  core.setFailed(`existing acceptance locator readback failed: ${error.message}`);
-                  return;
-                }
-              }
-            }
-            const milestoneIssues = await github.paginate(github.rest.issues.listForRepo, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              milestone: String(issue.milestone.number),
-              state: "all",
-              per_page: 100,
-            });
-            const incomplete = milestoneIssues.find((entry) => {
-              if (entry.number === issueNumber || entry.pull_request) return false;
-              const names = new Set((entry.labels || []).map((label) => String(label.name || label).toLowerCase()));
-              return (names.has("fr") || names.has("work-item")) && (entry.state !== "closed" || entry.state_reason !== "completed");
-            });
-            if (incomplete) {
-              core.setFailed(`milestone release scope is incomplete at issue:${incomplete.number}`);
-              return;
-            }
-            if (milestoneIssues.filter((entry) => !entry.pull_request && entry.number === issueNumber).length !== 1) {
-              core.setFailed("milestone readback must contain the release Work Item exactly once");
-              return;
-            }
-            const aggregateRuns = await github.paginate(github.rest.actions.listWorkflowRuns, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: "loom-check.yml",
-              branch: defaultBranch,
-              event: "push",
-              head_sha: context.sha,
-              per_page: 100,
-            });
-            const exactHeadRuns = aggregateRuns
-              .filter((run) => run.head_sha === context.sha)
-              .sort((left, right) => (right.run_number - left.run_number) || (right.id - left.id));
-            const aggregate = exactHeadRuns[0];
-            if (!aggregate || aggregate.status !== "completed" || aggregate.conclusion !== "success") {
-              core.setFailed("latest current-head main-push loom-check aggregate is not completed successfully");
-              return;
-            }
-            const verifier = await github.rest.users.getByUsername({ username: process.env.GITHUB_TRIGGERING_ACTOR });
             core.setOutput("verifier_id", String(verifier.data.id));
-            core.notice(`consumed aggregate run ${aggregate.id} for ${context.sha}`);
 
       - name: Verify current-head Codex E2E attestation
+        if: ${{ inputs.story_issue == '2116' }}
         uses: actions/github-script@v7
-        env:
-          RELEASE_ISSUE: ${{ inputs.release_issue }}
         with:
           script: |
             const fs = require("fs");
-            const issueNumber = Number(process.env.RELEASE_ISSUE);
             const marker = /^<!-- loom:codex-e2e-attestation (\{.*\}) -->$/m;
             const trustedPermissions = new Set(["admin", "maintain", "write"]);
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: issueNumber,
+              issue_number: 2116,
               per_page: 100,
             });
             const matching = [];
             for (const comment of comments) {
               const match = String(comment.body || "").match(marker);
               if (!match) continue;
+              let payload;
               try {
-                const payload = JSON.parse(match[1]);
-                if (payload?.source_head === context.sha) matching.push({ comment, payload });
-              } catch (error) {}
+                payload = JSON.parse(match[1]);
+              } catch (error) {
+                continue;
+              }
+              if (payload?.source_head === context.sha) matching.push({ comment, payload });
             }
             if (matching.length !== 1) {
-              core.setFailed(`issue:${issueNumber} requires exactly one current-head Codex E2E attestation; found ${matching.length}`);
+              core.setFailed(`issue:2116 requires exactly one current-head Codex E2E attestation; found ${matching.length}`);
               return;
             }
             const { comment, payload } = matching[0];
@@ -224,19 +106,27 @@ jobs:
             const canonicalHash = manifest?.["x-loom"]?.plugin_payload_hash;
             const observedAt = Date.parse(String(payload?.observed_at || ""));
             const expectedSkills = Array.isArray(payload?.loaded_skills) &&
-              payload.loaded_skills.length === 2 && payload.loaded_skills.includes("loom-init") && payload.loaded_skills.includes("loom-review");
+              payload.loaded_skills.length === 2 &&
+              payload.loaded_skills.includes("loom-init") &&
+              payload.loaded_skills.includes("loom-review");
             const fixture = payload?.clean_fixture || {};
             const valid =
               payload?.schema_version === "loom-codex-e2e-attestation/v1" &&
-              payload?.source_head === context.sha && payload?.reviewed_head === context.sha &&
+              payload?.source_head === context.sha &&
+              payload?.reviewed_head === context.sha &&
               /^019[0-9a-f-]{33}$/i.test(String(payload?.codex_thread_id || "")) &&
-              payload?.candidate_cli_authority === "source-package" && payload?.plugin_loaded === true &&
-              typeof payload?.plugin_version === "string" && /^[0-9A-Za-z.+-]+$/.test(payload.plugin_version) &&
+              payload?.candidate_cli_authority === "source-package" &&
+              payload?.plugin_loaded === true &&
+              typeof payload?.plugin_version === "string" &&
+              /^[0-9A-Za-z.+-]+$/.test(payload.plugin_version) &&
               /^[0-9a-f]{64}$/.test(String(payload?.plugin_payload_hash || "")) &&
-              payload?.canonical_plugin_payload_hash === canonicalHash && expectedSkills &&
-              payload?.public_command_count === 30 && payload?.hidden_compatibility_command_count === 0 &&
+              payload?.canonical_plugin_payload_hash === canonicalHash &&
+              expectedSkills &&
+              payload?.public_command_count === 30 &&
+              payload?.hidden_compatibility_command_count === 0 &&
               fixture.detect === "pass" && fixture.doctor === "pass" && fixture.verify === "pass" &&
-              payload?.semantic_review_verdict === "passed" && payload?.mutates === false &&
+              payload?.semantic_review_verdict === "passed" &&
+              payload?.mutates === false &&
               Number.isFinite(observedAt) && observedAt <= Date.now() && Date.now() - observedAt <= 86400000;
             if (!valid) {
               core.setFailed("current-head Codex E2E attestation is stale, incomplete, or did not pass the candidate product surface");
@@ -244,38 +134,42 @@ jobs:
             }
             core.notice(`consumed Codex E2E attestation comment ${comment.id} for ${context.sha}`);
 
-      - name: Run umbrella product acceptance checks
+      - name: Run v0.32 product acceptance matrix
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          python3 tools/check_light_profile.py
-          python3 tools/check_release_admission.py
+          python3 src/skills/shared/scripts/loom_check.py --profile source --source-surface source-self-fixture .
+          python3 src/skills/shared/scripts/loom_check.py --profile source --source-surface root-self-adoption .
+          python3 test/trusted_candidate_validation_test.py
           python3 tools/check_product_acceptance_adapter.py
           python3 tools/check_npm_package.py --surface aggregate
           python3 tools/check_release_surface.py --surface installed-global-cli-smoke
 
-      - name: Write host-bound umbrella acceptance record
+      - name: Write host-bound acceptance record
         env:
-          STORY: ${{ github.repository }}/issue/${{ inputs.release_issue }}
+          STORY: MC-and-his-Agents/Loom/issue/${{ inputs.story_issue }}
+          SCENARIO: v0.32-product-acceptance-${{ inputs.story_issue }}
           EVIDENCE_CLASS: process_runtime
+          PROVIDER_PROFILE: loom-v0.32-product-acceptance
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
           VERIFIER_LOGIN: ${{ github.triggering_actor }}
           VERIFIER_ID: ${{ steps.authority.outputs.verifier_id }}
         run: |
-          VERSION=$(tr -d '\n' < VERSION)
-          python3 tools/write_product_acceptance.py \
-            --story "$STORY" \
-            --scenario "${VERSION}-umbrella-release-acceptance" \
-            --evidence-class "$EVIDENCE_CLASS" \
-            --provider-profile "loom-${VERSION}-umbrella" \
-            --repository "$REPOSITORY" \
-            --head-sha "$HEAD_SHA" \
-            --run-id "$RUN_ID" \
-            --verifier-login "$VERIFIER_LOGIN" \
-            --verifier-id "$VERIFIER_ID" \
+          writer_args=(
+            --story "$STORY"
+            --scenario "$SCENARIO"
+            --evidence-class "$EVIDENCE_CLASS"
+            --provider-profile "$PROVIDER_PROFILE"
+            --repository "$REPOSITORY"
+            --head-sha "$HEAD_SHA"
+            --run-id "$RUN_ID"
+            --verifier-login "$VERIFIER_LOGIN"
+            --verifier-id "$VERIFIER_ID"
             --output acceptance.json
+          )
+          python3 tools/write_product_acceptance.py "${writer_args[@]}"
 
       - name: Upload product acceptance
         id: acceptance_upload
@@ -286,20 +180,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish release Work Item artifact locator
+      - name: Publish issue artifact locator
         uses: actions/github-script@v7
         env:
-          RELEASE_ISSUE: ${{ inputs.release_issue }}
+          STORY_ISSUE: ${{ inputs.story_issue }}
           ARTIFACT_ID: ${{ steps.acceptance_upload.outputs.artifact-id }}
           HEAD_SHA: ${{ github.sha }}
         with:
           script: |
-            const fs = require("fs");
-            const issueNumber = Number(process.env.RELEASE_ISSUE);
+            const issueNumber = Number(process.env.STORY_ISSUE);
             const artifactId = Number(process.env.ARTIFACT_ID);
-            const version = fs.readFileSync("VERSION", "utf8").trim();
             if (!Number.isInteger(issueNumber) || !Number.isInteger(artifactId) || artifactId <= 0) {
-              core.setFailed("acceptance upload did not return a valid release issue/artifact binding");
+              core.setFailed("acceptance upload did not return a valid issue/artifact binding");
               return;
             }
             const { data: artifact } = await github.rest.actions.getArtifact({
@@ -312,7 +204,7 @@ jobs:
               return;
             }
             const marker = `<!-- loom:product-acceptance-artifact id:${artifactId} -->`;
-            const body = `${marker}\n\n${version} umbrella 产品验收已绑定 GitHub host artifact。workflow success 不等于 lifecycle closure completed。\n\n- Head: \`${process.env.HEAD_SHA}\`\n- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${marker}\n\nv0.32 Stage A 产品验收已绑定 GitHub host artifact。\n\n- Head: \`${process.env.HEAD_SHA}\`\n- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const markerPattern = /<!--\s*loom:product-acceptance-artifact\s+id:\d+\s*-->/i;
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
@@ -320,7 +212,9 @@ jobs:
               issue_number: issueNumber,
               per_page: 100,
             });
-            const markerComments = comments.filter((comment) => comment.user?.login === "github-actions[bot]" && markerPattern.test(String(comment.body || "")));
+            const markerComments = comments.filter((comment) =>
+              comment.user?.login === "github-actions[bot]" && markerPattern.test(String(comment.body || ""))
+            );
             if (markerComments.length > 1) {
               core.setFailed(`issue:${issueNumber} has ambiguous workflow-owned product acceptance locators`);
               return;
@@ -352,7 +246,9 @@ jobs:
               issue_number: issueNumber,
               per_page: 100,
             });
-            const finalMarkers = finalComments.filter((comment) => comment.user?.login === "github-actions[bot]" && markerPattern.test(String(comment.body || "")));
+            const finalMarkers = finalComments.filter((comment) =>
+              comment.user?.login === "github-actions[bot]" && markerPattern.test(String(comment.body || ""))
+            );
             if (readback.user?.login !== "github-actions[bot]" || readback.body !== body || finalMarkers.length !== 1 || finalMarkers[0].id !== readback.id) {
               core.setFailed(`issue:${issueNumber} product acceptance locator readback is incomplete or ambiguous`);
             }

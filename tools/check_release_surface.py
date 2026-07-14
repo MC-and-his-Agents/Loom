@@ -383,6 +383,137 @@ def check_release_doc_contract(errors: list[SurfaceError]) -> None:
 def check_release_workflow_contract(errors: list[SurfaceError]) -> None:
     surface_label = RELEASE_WORKFLOW_CONTRACT
     locator = evidence_locator(surface_label)
+    workflow_text = CLI_RELEASE.read_text(encoding="utf-8") if CLI_RELEASE.is_file() else ""
+    docs_text = CLI_RELEASE_DOC.read_text(encoding="utf-8") if CLI_RELEASE_DOC.is_file() else ""
+    legacy_runtime = (
+        "      - name: Check host-native lifecycle contracts" in workflow_text
+        and "  release-admission:\n" not in workflow_text
+        and "For `push` events on `main`, `loom-cli-release` automatically creates" in docs_text
+    )
+    admitted_runtime = (
+        "      - name: Check host-native lifecycle contracts" not in workflow_text
+        and "  release-admission:\n" in workflow_text
+        and "Only an explicit `workflow_dispatch` with `publish=true` may publish" in docs_text
+    )
+    if legacy_runtime:
+        require_needles(
+            CLI_RELEASE_DOC,
+            (
+                "For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release",
+                "when the `NPM_TOKEN` secret is missing for an npm publish",
+                "A later CLI source merge with an already published version returns `release_pending` and never republishes that version.",
+                "an explicit `workflow_dispatch` publish request names a `VERSION` tag that points at another commit",
+            ),
+            errors,
+            surface_label=surface_label,
+            evidence_locator=locator,
+        )
+        workflow = require_needles(
+            CLI_RELEASE,
+            (
+                "name: loom-cli-release",
+                "workflow_dispatch",
+                "publish",
+                "push",
+                "AUTO_PUBLISH_ALLOWED",
+                "cli_publish_behavior_changed",
+                "reason=release_pending",
+                "version-already-published-on-different-commit",
+                "PACKAGE_TAG_PREFIX: 'v'",
+                "NPM_PACKAGE_NAME: '@mc-and-his-agents/loom'",
+                "secrets.NPM_TOKEN",
+                "npm publish --access public --provenance",
+                "npm view \"${NPM_PACKAGE_NAME}@${NPM_VERSION}\" version",
+                "npm pack --dry-run --json --ignore-scripts",
+                "python3 tools/stamp_plugin_payload_metadata.py --source-git-sha \"${{ github.sha }}\" --write --json",
+                "python3 tools/check_npm_package.py",
+                "no-cli-behavior-change",
+                "gh release create",
+            ),
+            errors,
+            surface_label=surface_label,
+            evidence_locator=locator,
+        )
+        judgment_start = workflow.find("  release-judgment:\n")
+        publisher_start = workflow.find("  release-publisher:\n")
+        if judgment_start < 0 or publisher_start < 0 or publisher_start <= judgment_start:
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-missing-permission-split",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary="legacy transition must separate release-judgment from release-publisher",
+            )
+            return
+        judgment = workflow[judgment_start:publisher_start]
+        publisher = workflow[publisher_start:]
+        pending_index = judgment.find('reason=release_pending')
+        explicit_publish_index = judgment.find('if [ "$PUBLISH_REQUESTED" != "true" ]')
+        collision_index = judgment.find('reason=version-already-published-on-different-commit')
+        if min(pending_index, explicit_publish_index, collision_index) < 0 or not (
+            explicit_publish_index < pending_index < collision_index
+        ):
+            add_error(
+                errors,
+                surface_label=surface_label,
+                failure_label=f"{surface_label}-release-pending-admission",
+                evidence_locator=locator,
+                source_locator=relative_to_root(CLI_RELEASE),
+                summary="legacy transition release judgment is incomplete",
+            )
+        for needle in ("contents: read", "persist-credentials: false"):
+            if needle not in judgment:
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-judgment-permission",
+                    evidence_locator=locator,
+                    source_locator=relative_to_root(CLI_RELEASE),
+                    summary=f"release-judgment must contain `{needle}`",
+                )
+        for needle in ("contents: write", "id-token: write", "secrets.NPM_TOKEN", "npm publish", "git tag -a", "gh release create"):
+            if needle in judgment:
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-judgment-privilege-leak",
+                    evidence_locator=locator,
+                    source_locator=relative_to_root(CLI_RELEASE),
+                    summary=f"release-judgment must not contain `{needle}`",
+                )
+        for needle in (
+            "needs: release-judgment",
+            "github.event_name == 'push'",
+            "github.event_name == 'workflow_dispatch'",
+            "needs.release-judgment.outputs.publish_allowed == 'true'",
+            "contents: write",
+            "id-token: write",
+            "secrets.NPM_TOKEN",
+            "npm publish",
+            "git tag -a",
+            "gh release create",
+        ):
+            if needle not in publisher:
+                add_error(
+                    errors,
+                    surface_label=surface_label,
+                    failure_label=f"{surface_label}-publisher-contract",
+                    evidence_locator=locator,
+                    source_locator=relative_to_root(CLI_RELEASE),
+                    summary=f"release-publisher must contain `{needle}`",
+                )
+        return
+    if not admitted_runtime:
+        add_error(
+            errors,
+            surface_label=surface_label,
+            failure_label=f"{surface_label}-mixed-transition-state",
+            evidence_locator=locator,
+            source_locator=relative_to_root(CLI_RELEASE),
+            summary="release workflow and authority documentation must be a complete legacy transition or a complete admitted runtime",
+        )
+        return
     require_needles(
         CLI_RELEASE_DOC,
         (

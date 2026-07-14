@@ -82,7 +82,6 @@ from host_attestation import main as host_attestation_main
 from host_attestation import readback as host_attestation_readback
 from product_acceptance import main as product_acceptance_main
 from loom_init import host_derived_manifest
-import light_profile as light_profile_module
 
 
 class _GitHubAdmissionHost:
@@ -423,9 +422,9 @@ HELP_TASK_ROUTES: list[dict[str, Any]] = [
     },
     {
         "task": "merge-ready",
-        "summary": "Retain the current-head public gate readback, then check final readiness before host merge.",
-        "first_command": "loom pr gate <pr> --target <repo> --work-item <WI> --attestation-artifact-input <artifact> --full-output --json",
-        "next_step": "Save the complete JSON to a repo-relative ignored file, then run loom merge-ready --target <repo> --item <WI> --pr <pr> --attestation-artifact-input <artifact> --pr-gate-result-file <file> --json.",
+        "summary": "Check final readiness before host merge.",
+        "first_command": "loom merge-ready --target <repo> --item <WI> --json",
+        "next_step": "Run pr gate and merge check against the same PR head.",
     },
     {
         "task": "post-merge-closeout",
@@ -1208,7 +1207,7 @@ def release_closeout_readback_allows_sync(readback: dict[str, Any]) -> tuple[boo
 
 
 RELEASE_CLOSEOUT_PR_READBACK_FALLBACK = [
-    "gh pr view <pr> --json number,state,mergeCommit",
+    "loom pr inspect <pr> --json --full-output",
     "pass --pr-payload-file <path> with a saved PR readback payload",
 ]
 
@@ -1321,9 +1320,9 @@ def release_closeout_next_commands(args: argparse.Namespace, target: Path, head_
     stable_head = head_sha or "<post-commit-head-sha>"
     pr = args.closeout_pr or "<closeout-sync-pr>"
     return {
-        "metadata_render": "render the declared PR body to a repo-relative ignored file",
-        "metadata_update": f"gh pr edit {pr} --body-file <repo-relative-pr-body-file>",
-        "gate": f"loom pr gate {pr} --target {target} --surface closeout --work-item {args.item} --head-sha {stable_head} --full-output --json",
+        "metadata_render": f"loom pr metadata-render --target {target} --surface closeout --item {args.item} --branch {branch} --head-sha {stable_head} --release-judgment no_release --json",
+        "metadata_update": f"loom pr metadata-update {pr} --target {target} --surface closeout --item {args.item} --branch {branch} --head-sha {stable_head} --release-judgment no_release --apply --json",
+        "gate": f"loom pr gate {pr} --target {target} --surface closeout --work-item {args.item} --head-sha {stable_head} --json",
         "merge": f"loom merge check {pr} --target {target} --work-item {args.item} --head-sha {stable_head} --json",
         "post_merge_readback": f"loom release readback --target {target} --version {args.version or '<version>'} --commit {args.commit or '<release-commit>'} --release-judgment release_required --json",
     }
@@ -2984,25 +2983,6 @@ def is_managed_path(relative: str, managed_paths: set[str]) -> bool:
     return False
 
 
-def repository_role(target: Path) -> str:
-    try:
-        package = read_optional_json(target / "package.json")
-    except (OSError, json.JSONDecodeError):
-        package = None
-    source_markers = (
-        isinstance(package, dict) and package.get("name") == "@mc-and-his-agents/loom",
-        (target / "tools" / "loom.py").is_file(),
-        (target / "src" / "skills" / "shared" / "scripts").is_dir(),
-        (target / "plugins" / "loom" / ".codex-plugin" / "plugin.json").is_file(),
-        (target / "skills" / "registry.json").is_file(),
-    )
-    if all(source_markers):
-        return "source_distribution"
-    if installed_state_path(target) is not None:
-        return "adopted"
-    return "unadopted"
-
-
 def legacy_surface_hints(target: Path) -> list[dict[str, str]]:
     candidates = [
         (".loom/bin", "repo-local-runtime-bin"),
@@ -3013,12 +2993,8 @@ def legacy_surface_hints(target: Path) -> list[dict[str, str]]:
         ("plugins/loom/.loom-install-status.json", "legacy-installed-surface-status"),
         ("packages/loom-installer/package.json", "legacy-installer-package"),
     ]
-    role = repository_role(target)
-    source_paths = {"skills/registry.json", "plugins/loom/.codex-plugin/plugin.json"}
     hints = []
     for relative, kind in candidates:
-        if role == "source_distribution" and relative in source_paths:
-            continue
         if (target / relative).exists():
             hints.append({"kind": kind, "path": relative})
     return hints
@@ -3045,8 +3021,6 @@ def surface(path: Path, target: Path, *, kind: str, layer: str, authority: str, 
 
 def detect_surfaces(target: Path) -> list[dict[str, Any]]:
     surfaces: list[dict[str, Any]] = []
-    role = repository_role(target)
-    light_profile = target_uses_light_governance(target)
     state_path = installed_state_path(target)
     managed_paths = installed_layer_paths(target)
     runtime_provider = target_runtime_provider(target)
@@ -3075,22 +3049,10 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
         (
             ".loom/bootstrap/manifest.json",
             "bootstrap-manifest",
-            "installation-metadata" if light_profile else "runtime",
-            "repository-adoption-metadata" if light_profile else "repo-local-runtime",
-            "current" if light_profile else "legacy",
-            (
-                "Light-profile bootstrap metadata is present."
-                if light_profile
-                else "Bootstrap manifest is present without being authoritative installed-state metadata."
-            ),
-        ),
-        (
-            ".loom/bootstrap/init-result.json",
-            "runtime-init-result",
             "runtime",
             "repo-local-runtime",
             "legacy",
-            "Runtime bootstrap output is present in the repository and must not become installation metadata.",
+            "Bootstrap manifest is present without being authoritative installed-state metadata.",
         ),
         (
             ".loom/companion/manifest.json",
@@ -3152,11 +3114,7 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
     for relative, kind, layer, authority, migration, summary in candidates:
         path = target / relative
         if path.exists():
-            if role == "source_distribution" and relative in {"skills/registry.json", "plugins/loom/.codex-plugin/plugin.json"}:
-                migration = "current"
-                authority = "source-distribution"
-                summary = f"Canonical Loom source-distribution {summary[0].lower()}{summary[1:]}"
-            elif relative != ".loom/bootstrap/init-result.json" and is_managed_path(relative, managed_paths):
+            if is_managed_path(relative, managed_paths):
                 migration = "current"
                 authority = "loom-cli"
                 summary = f"CLI-managed {summary[0].lower()}{summary[1:]}"
@@ -3167,16 +3125,15 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
         for skill_path in sorted(skill_dirs.glob("*/SKILL.md")):
             relative = relative_to_target(skill_path, target)
             managed = is_managed_path(relative, managed_paths)
-            source_owned = role == "source_distribution"
             surfaces.append(
                 surface(
                     skill_path,
                     target,
                     kind="single-skill",
                     layer="skills",
-                    authority="source-distribution" if source_owned else "loom-cli" if managed else "skill-package",
-                    migration="current" if source_owned or managed else "legacy",
-                    summary="Canonical Loom source-distribution skill is present." if source_owned else "CLI-managed skill package is present under skills/." if managed else "Standalone skill package is present under skills/.",
+                    authority="loom-cli" if managed else "skill-package",
+                    migration="current" if managed else "legacy",
+                    summary="CLI-managed skill package is present under skills/." if managed else "Standalone skill package is present under skills/.",
                 )
             )
 
@@ -3188,9 +3145,7 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
     return surfaces
 
 
-def classify_installation(surfaces: list[dict[str, Any]], *, role: str = "unadopted") -> tuple[str, str]:
-    if role == "source_distribution":
-        return "source-distribution", "Canonical Loom source-distribution surfaces are present."
+def classify_installation(surfaces: list[dict[str, Any]]) -> tuple[str, str]:
     if not surfaces:
         return "uninstalled", "No Loom installation surfaces were detected."
     has_current = any(item["kind"] == "installed-state-v2" for item in surfaces)
@@ -3218,16 +3173,14 @@ def block_target(command: str, target: Path, reason: str) -> dict[str, Any]:
 
 
 def detect_payload(target: Path) -> dict[str, Any]:
-    role = repository_role(target)
     surfaces = detect_surfaces(target)
-    classification, summary = classify_installation(surfaces, role=role)
+    classification, summary = classify_installation(surfaces)
     return output(
         "detect",
         "pass",
         schema=DETECT_SCHEMA,
         summary=summary,
         target=str(target),
-        repository_role=role,
         classification=classification,
         surface_count=len(surfaces),
         surfaces=surfaces,
@@ -3248,29 +3201,8 @@ def handle_detect(argv: list[str]) -> int:
     return emit(detect_payload(target))
 
 
-def light_profile_invariant(target: Path) -> dict[str, Any] | None:
-    if not any((target / locator).exists() for locator in light_profile_module.STATE_FILENAMES):
-        return None
-    return light_profile_module.plan_payload(target)
-
-
-def light_profile_failure_fields(evaluation: dict[str, Any], *, remediation: str) -> dict[str, Any]:
-    cause = evaluation.get("primary_cause") if isinstance(evaluation.get("primary_cause"), dict) else {}
-    asserted_cause = {**cause, "remediation_command": remediation} if cause else None
-    return {
-        "primary_cause": asserted_cause,
-        "failure_domain": cause.get("failure_domain", "carrier"),
-        "primary_error_code": cause.get("id", "light_profile_invariant_failed"),
-        "cause_class": cause.get("cause_class", "forbidden_carrier"),
-        "failure_owner": cause.get("owner", "repository"),
-        "retryable": bool(cause.get("retryable", False)),
-        "remediation_command": remediation,
-    }
-
-
 def doctor_payload(target: Path) -> dict[str, Any]:
     detection = detect_payload(target)
-    role = detection["repository_role"]
     path, state, installed_error = load_installed_state(target)
     validation_errors = validate_installed_state(state) if installed_error is None else []
     freshness = version_freshness()
@@ -3281,16 +3213,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
             "summary": detection["summary"],
         }
     ]
-    if role == "source_distribution":
-        checks.append(
-            {
-                "name": "installed-state",
-                "result": "pass",
-                "summary": "Source-distribution repositories do not require adopted-repository installed-state.",
-                "status": "not_required",
-            }
-        )
-    elif installed_error is not None:
+    if installed_error is not None:
         checks.append(
             {
                 "name": "installed-state",
@@ -3324,7 +3247,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
         checks.append(suite_command_surface_check(state))
     has_codex_plugin_payload = (target / "plugins" / "loom" / ".codex-plugin" / "plugin.json").exists()
     declares_host_adapter = any(isinstance(layer, dict) and layer.get("layer_type") == "host-adapter-plugin" for layer in (state or {}).get("layers", [])) if isinstance(state, dict) else False
-    if role != "source_distribution" and (has_codex_plugin_payload or declares_host_adapter):
+    if has_codex_plugin_payload or declares_host_adapter:
         provider_source = global_codex_plugin_source()
         codex_registration = codex_workstation_registration_status(provider_source)
         checks.append(
@@ -3353,28 +3276,9 @@ def doctor_payload(target: Path) -> dict[str, Any]:
                 "fallback_to": ["docs/adoption/codex-install.md", "loom install --target <repo> --apply --json"],
             }
         )
-    light_invariant = light_profile_invariant(target)
-    if light_invariant is not None:
-        checks.append(
-            {
-                "name": "light-profile-invariant",
-                "result": light_invariant.get("result"),
-                "summary": light_invariant.get("primary_cause", {}).get("summary"),
-                "applicable": light_invariant.get("applicable"),
-                "violations": light_invariant.get("violations", []),
-                "migration": light_invariant.get("migration"),
-                "failed_layer": None if light_invariant.get("result") == "pass" else "light-profile-invariant",
-                "fallback_to": None if light_invariant.get("result") == "pass" else ["loom repair plan --target <repo> --json"],
-            }
-        )
     blocking_checks = [check for check in checks if check["result"] != "pass"]
     result = "pass" if not blocking_checks else "block"
     failed_layer = None if result == "pass" else next((check.get("failed_layer") for check in blocking_checks if check.get("failed_layer")), "installed-surface")
-    failure_fields = (
-        light_profile_failure_fields(light_invariant, remediation="loom repair plan --target <repo> --json")
-        if light_invariant is not None and light_invariant.get("result") != "pass"
-        else {}
-    )
     return output(
         "doctor",
         result,
@@ -3385,11 +3289,9 @@ def doctor_payload(target: Path) -> dict[str, Any]:
         version_freshness=freshness,
         harness_support=harness_support_contract(),
         checks=checks,
-        light_profile_invariant=light_invariant,
         failed_layer=failed_layer,
         fail_closed_reason=None if result == "pass" else "doctor found blocking checks: " + ", ".join(check["name"] for check in blocking_checks),
         fallback_to=None if result == "pass" else ["loom repair plan"],
-        **failure_fields,
     )
 
 
@@ -3595,45 +3497,21 @@ def repair_plan_payload(target: Path) -> dict[str, Any]:
     registration_action = workstation_registration_action(target)
     if registration_action:
         actions.append(registration_action)
-    light_invariant = light_profile_invariant(target)
-    light_actions = (
-        light_invariant.get("migration", {}).get("actions", [])
-        if isinstance(light_invariant, dict) and isinstance(light_invariant.get("migration"), dict)
-        else []
-    )
-    actions.extend(action for action in light_actions if isinstance(action, dict))
-    light_blocked = light_invariant is not None and light_invariant.get("result") != "pass"
-    result = "block" if light_blocked else "pass" if detection["surface_count"] or actions else "block"
-    failure_fields = (
-        light_profile_failure_fields(
-            light_invariant,
-            remediation="review and apply the emitted light-profile migration actions; do not restore repository carriers",
-        )
-        if light_blocked
-        else {}
-    )
+    result = "pass" if detection["surface_count"] or actions else "block"
     return output(
         "repair plan",
         result,
         schema=REPAIR_PLAN_SCHEMA,
-        summary=(
-            "Repair plan generated without reading or mutating repository execution carriers."
-            if result == "pass"
-            else "Light-profile migration is required before the repository can use the default path."
-            if light_blocked
-            else "No installed surface exists to repair."
-        ),
+        summary="Repair plan generated without reading or mutating repository execution carriers." if result == "pass" else "No installed surface exists to repair.",
         target=str(target),
         mutates=False,
         detection=detection,
-        light_profile_invariant=light_invariant,
         repo_execution_carriers_consumed=False,
         carrier_mutations=False,
         actions=actions,
-        failed_layer=None if result == "pass" else "light-profile-invariant" if light_blocked else "installed-surface",
-        fail_closed_reason=None if result == "pass" else light_invariant.get("primary_cause", {}).get("summary") if light_blocked else "target has no detectable Loom surface",
-        fallback_to=None if result == "pass" else ["loom help --json"] if light_blocked else ["loom install"],
-        **failure_fields,
+        failed_layer=None if result == "pass" else "installed-surface",
+        fail_closed_reason=None if result == "pass" else "target has no detectable Loom surface",
+        fallback_to=None if result == "pass" else ["loom install"],
     )
 
 
@@ -4505,7 +4383,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     target=str(target),
                     host=args.host,
                     mode=mode,
-                    mutates=False,
+                    mutates=True,
                     planned_writes=[relative_to_target(state_path, target), "AGENTS.md"],
                     host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                     detection=detection,
@@ -4583,7 +4461,6 @@ def handle_delivery(command: str, argv: list[str]) -> int:
         )
 
     if command == "upgrade":
-        light_invariant = light_profile_invariant(target)
         if not args.apply:
             return emit(
                 output(
@@ -4593,30 +4470,12 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     summary="Target repository upgrade plan generated without mutation; rerun with --apply after resolving required actions.",
                     target=str(target),
                     host=args.host,
-                    mutates=False,
+                    mutates=True,
                     plan=handle_delivery_payload_for_upgrade_plan(target),
-                    light_profile_invariant=light_invariant,
                     host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                     failed_layer=None,
                     fail_closed_reason=None,
                     fallback_to=["loom upgrade --target <repo> --apply --json", "loom verify --target <repo> --json"],
-                )
-            )
-        if light_invariant is not None and light_invariant.get("result") != "pass":
-            return emit(
-                output(
-                    command,
-                    "block",
-                    schema=DELIVERY_SCHEMA,
-                    summary="Upgrade cannot apply while the declared light profile violates its carrier invariant.",
-                    target=str(target),
-                    mutates=False,
-                    detection=detection,
-                    light_profile_invariant=light_invariant,
-                    failed_layer="light-profile-invariant",
-                    fail_closed_reason=light_invariant.get("primary_cause", {}).get("summary"),
-                    fallback_to=["loom repair plan --target <repo> --json"],
-                    **light_profile_failure_fields(light_invariant, remediation="loom repair plan --target <repo> --json"),
                 )
             )
         if not installed_ready or legacy_surfaces:
@@ -4627,7 +4486,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     schema=DELIVERY_SCHEMA,
                     summary="Upgrade cannot apply while installed-state is invalid or legacy surfaces remain unclassified.",
                     target=str(target),
-                    mutates=False,
+                    mutates=True,
                     detection=detection,
                     installed_state_errors=validation_errors,
                     failed_layer="upgrade-preflight",
@@ -4660,7 +4519,6 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 mutates=changed,
                 installed_state_path=str(path),
                 installed_state=refreshed_state,
-                light_profile_invariant=light_invariant,
                 removed_workstation_fields=removed_workstation_fields,
                 host_plugin_refresh=host_plugin_refresh_boundary_action(args.host),
                 fallback_to=None,
@@ -5426,7 +5284,7 @@ def handle_pr(argv: list[str]) -> int:
         if args.suite_na_review_requirement:
             flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
         append_full_output_flag(flow_args, args)
-        return emit_flow(command, flow_args, fallback_to=["loom help --json"])
+        return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
     if args.action == "metadata-readback":
         flow_args = ["pr-metadata", "readback", "--target", target, "--surface", args.surface]
         if args.pr:
@@ -5448,7 +5306,7 @@ def handle_pr(argv: list[str]) -> int:
         if args.pr_payload_file:
             flow_args.extend(["--pr-payload-file", args.pr_payload_file])
         append_full_output_flag(flow_args, args)
-        return emit_flow(command, flow_args, fallback_to=["loom help --json"])
+        return emit_flow(command, flow_args, fallback_to=["loom pr metadata-preflight --surface merge_ready --body-file <rendered-pr-body.md> --json"])
     if args.action == "metadata-update":
         flow_args = ["pr-metadata", "update", "--target", target, "--surface", args.surface]
         if args.pr:
@@ -5495,7 +5353,7 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--suite-na-review-requirement", args.suite_na_review_requirement])
         flow_args.append("--apply" if not args.dry_run else "--dry-run")
         append_full_output_flag(flow_args, args)
-        return emit_flow(command, flow_args, fallback_to=["loom help --json"])
+        return emit_flow(command, flow_args, fallback_to=["loom pr metadata-render --surface merge_ready --json", "loom pr metadata-readback --surface merge_ready --pr <number> --json"])
     if args.action == "metadata-preflight":
         flow_args = ["pr-metadata", "preflight", "--target", target, "--surface", args.surface]
         if args.pr:
@@ -8902,7 +8760,7 @@ def reject_unsupported_command_surface(command: str) -> int:
         output(
             command,
             "block",
-            summary="This command is not part of the supported Loom public surface.",
+            summary="This command is not part of the Loom v0.31 public surface.",
             failed_layer="cli-command-router",
             fail_closed_reason="unsupported legacy command surface",
             fallback_to=["loom help --json"],

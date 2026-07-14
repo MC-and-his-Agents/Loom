@@ -49,7 +49,7 @@ FORBIDDEN_CARRIERS = (
     (".loom/runtime/", "runtime_cache"),
     (".loom/tmp/", "runtime_cache"),
 )
-ALLOWED_BOOTSTRAP_LOCATORS = {".loom/bootstrap/manifest.json"}
+ALLOWED_BOOTSTRAP_LOCATORS = {".loom/bootstrap/init-result.json"}
 DECLARATION_LOCATORS = (".loom/bootstrap/init-result.json", ".loom/bootstrap/manifest.json")
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 DELIVERY_WORKFLOW = ".github/workflows/loom-delivery-gate.yml"
@@ -295,7 +295,7 @@ def plan_payload(target: Path) -> dict[str, Any]:
         cause = _primary("not_applicable", "target does not declare a light-profile adoption")
         return {
             "schema_version": SCHEMA,
-            "command": "repair plan",
+            "command": "profile light-migration-plan",
             "operation": "plan",
             "result": "pass",
             "mutates": False,
@@ -313,7 +313,7 @@ def plan_payload(target: Path) -> dict[str, Any]:
         cause = _primary("light_profile_tree_unreadable", git_error)
         return {
             "schema_version": SCHEMA,
-            "command": "repair plan",
+            "command": "profile light-migration-plan",
             "operation": "plan",
             "result": "block",
             "mutates": False,
@@ -345,7 +345,7 @@ def plan_payload(target: Path) -> dict[str, Any]:
     cause = _primary(primary_id, summary, details={"violation_count": len(violations)})
     return {
         "schema_version": SCHEMA,
-        "command": "repair plan",
+        "command": "profile light-migration-plan",
         "operation": "plan",
         "result": "pass" if passed else "block",
         "mutates": False,

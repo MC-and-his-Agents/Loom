@@ -396,7 +396,13 @@ def materialize_case(root: Path, fixture: dict[str, Any]) -> Path:
     return target
 
 
-def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
+def assert_case(
+    evaluator: Any,
+    root: Path,
+    fixture: dict[str, Any],
+    *,
+    expected_command: str,
+) -> None:
     target = materialize_case(root, fixture)
     status_before = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target, check=True, text=True, stdout=subprocess.PIPE).stdout
     first = evaluator.plan_payload(target)
@@ -410,6 +416,8 @@ def assert_case(evaluator: Any, root: Path, fixture: dict[str, Any]) -> None:
         raise AssertionError(f"{fixture['id']} plan wrote to the target")
     if first != second:
         raise AssertionError(f"{fixture['id']} plan is not reentrant")
+    if first.get("command") != expected_command:
+        raise AssertionError(f"{fixture['id']} mixed light-profile command state: {first.get('command')}")
     expected = fixture["expected"]
     cause = first.get("primary_cause", {})
     if first.get("result") != expected["result"] or cause.get("id") != expected["primary_cause"]:
@@ -563,22 +571,36 @@ def main() -> int:
     if catalog.get("schema_version") != "loom-light-profile-fixtures/v1":
         raise AssertionError("light-profile fixture schema drifted")
     fixtures = catalog.get("cases")
-    if not isinstance(fixtures, list) or {item.get("id") for item in fixtures if isinstance(item, dict)} != {
+    fixture_ids = {item.get("id") for item in fixtures if isinstance(item, dict)} if isinstance(fixtures, list) else set()
+    legacy_fixture_ids = {
         "heavy-tree",
         "absolute-workspace-entry",
         "absolute-private-workspace-entry",
         "absolute-windows-workspace-entry",
         "clean-light",
-        "runtime-init-result-removed",
         "attach-only-forbidden-carrier",
         "old-branch-reintroduction",
         "untracked-and-ignored",
         "legacy-missing-state",
         "light-nonmetadata-state",
         "non-light",
-    }:
-        raise AssertionError("light-profile fixture catalog is incomplete")
+    }
+    removed_fixture_ids = {*legacy_fixture_ids, "runtime-init-result-removed"}
     evaluator = load_module()
+    allowed_bootstrap = set(evaluator.ALLOWED_BOOTSTRAP_LOCATORS)
+    legacy_state = (
+        fixture_ids == legacy_fixture_ids
+        and allowed_bootstrap == {".loom/bootstrap/init-result.json"}
+    )
+    removed_state = (
+        fixture_ids == removed_fixture_ids
+        and allowed_bootstrap == {".loom/bootstrap/manifest.json"}
+    )
+    if legacy_state == removed_state:
+        raise AssertionError(
+            "light-profile consumer and fixtures must be a complete legacy classification or a complete removed-state classification"
+        )
+    expected_command = "profile light-migration-plan" if legacy_state else "repair plan"
     assert_paginated_host_readback()
     copies = [
         ROOT / "skills" / "shared" / "scripts" / "light_profile.py",
@@ -590,8 +612,9 @@ def main() -> int:
         raise AssertionError("light-profile evaluator must not become a repo-local runtime carrier")
     with tempfile.TemporaryDirectory(prefix="loom-light-profile-") as raw_tmp:
         for fixture in fixtures:
-            assert_case(evaluator, Path(raw_tmp), fixture)
-        assert_public_light_owner(Path(raw_tmp))
+            assert_case(evaluator, Path(raw_tmp), fixture, expected_command=expected_command)
+        if removed_state:
+            assert_public_light_owner(Path(raw_tmp))
         assert_reconciliation(evaluator, Path(raw_tmp))
     print("light-profile migration contract: OK")
     return 0

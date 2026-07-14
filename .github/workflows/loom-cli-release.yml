@@ -8,14 +8,6 @@ on:
         required: true
         type: boolean
         default: false
-      release_issue:
-        description: 'Open release Work Item used by host-native release admission.'
-        required: false
-        type: string
-      acceptance_artifact_id:
-        description: 'Trusted umbrella acceptance artifact bound to the release head.'
-        required: false
-        type: string
   pull_request:
     paths:
       - 'Makefile'
@@ -70,9 +62,6 @@ concurrency:
   group: loom-cli-release
   cancel-in-progress: false
 
-env:
-  PYTHONDONTWRITEBYTECODE: '1'
-
 jobs:
   release-judgment:
     runs-on: ubuntu-latest
@@ -91,6 +80,7 @@ jobs:
       PACKAGE_TAG_PREFIX: 'v'
       NPM_PACKAGE_NAME: '@mc-and-his-agents/loom'
       PUBLISH_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.publish == true }}
+      AUTO_PUBLISH_ALLOWED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,6 +105,12 @@ jobs:
       - name: Check version surfaces
         run: python3 tools/version_surface_check.py
 
+      - name: Check host-native lifecycle contracts
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: make loom-check
+
       - name: Check npm package contract
         run: python3 tools/check_npm_package.py
 
@@ -132,7 +128,7 @@ jobs:
           NPM_VERSION="${VERSION#v}"
           RELEASE_TITLE="Loom CLI ${VERSION}"
           PUBLISH_ALLOWED=false
-          if [ "$PUBLISH_REQUESTED" = "true" ]; then
+          if [ "$AUTO_PUBLISH_ALLOWED" = "true" ] || [ "$PUBLISH_REQUESTED" = "true" ]; then
             PUBLISH_ALLOWED=true
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -246,154 +242,17 @@ jobs:
             echo "reason=npm-version-missing" >> "$GITHUB_OUTPUT"
           fi
 
-  release-admission:
-    needs: release-judgment
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish == true }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      issues: read
-    steps:
-      - name: Checkout current release head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Read live release scope
-        id: snapshot
-        uses: actions/github-script@v7
-        env:
-          RELEASE_ISSUE: ${{ inputs.release_issue }}
-        with:
-          script: |
-            const fs = require("fs");
-            const issueNumber = Number(process.env.RELEASE_ISSUE);
-            const defaultBranch = context.payload.repository.default_branch;
-            const query = `
-              query($owner:String!, $repo:String!, $number:Int!) {
-                repository(owner:$owner, name:$repo) {
-                  issue(number:$number) {
-                    number state stateReason
-                    labels(first:100) { pageInfo { hasNextPage } nodes { name } }
-                    milestone { number }
-                    blockedBy(first:100) { pageInfo { hasNextPage } nodes { number state stateReason } }
-                  }
-                }
-              }
-            `;
-            let readComplete = Number.isInteger(issueNumber) && issueNumber > 0;
-            let issue = null;
-            let milestoneIssues = [];
-            let acceptanceArtifactId = null;
-            let branch = null;
-            if (readComplete) {
-              try {
-                const [data, branchResponse] = await Promise.all([
-                  github.graphql(query, { owner: context.repo.owner, repo: context.repo.repo, number: issueNumber }),
-                  github.rest.repos.getBranch({ owner: context.repo.owner, repo: context.repo.repo, branch: defaultBranch }),
-                ]);
-                issue = data?.repository?.issue;
-                branch = branchResponse.data;
-                readComplete = Boolean(issue && !issue.labels?.pageInfo?.hasNextPage && !issue.blockedBy?.pageInfo?.hasNextPage && Number.isInteger(issue.milestone?.number));
-                if (readComplete) {
-                  const [issues, comments] = await Promise.all([
-                    github.paginate(github.rest.issues.listForRepo, {
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      milestone: String(issue.milestone.number),
-                      state: "all",
-                      per_page: 100,
-                    }),
-                    github.paginate(github.rest.issues.listComments, {
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      issue_number: issueNumber,
-                      per_page: 100,
-                    }),
-                  ]);
-                  milestoneIssues = issues;
-                  const marker = /<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->/i;
-                  const locators = comments
-                    .filter((comment) => comment.user?.login === "github-actions[bot]")
-                    .map((comment) => String(comment.body || "").match(marker))
-                    .filter(Boolean)
-                    .map((match) => Number(match[1]));
-                  acceptanceArtifactId = locators.length === 1 && Number.isInteger(locators[0]) && locators[0] > 0
-                    ? locators[0]
-                    : null;
-                }
-              } catch (error) {
-                readComplete = false;
-                core.warning(`release scope read failed: ${error.message}`);
-              }
-            }
-            const snapshot = {
-              repository: `${context.repo.owner}/${context.repo.repo}`,
-              ref: context.ref,
-              head_sha: context.sha,
-              default_branch: defaultBranch,
-              default_branch_tip: branch?.commit?.sha || null,
-              read_complete: readComplete,
-              release_issue: issue ? {
-                number: issue.number,
-                state: issue.state,
-                state_reason: issue.stateReason,
-                labels: issue.labels.nodes.map((entry) => entry.name),
-                milestone_number: issue.milestone.number,
-                blocked_by: issue.blockedBy.nodes.map((entry) => ({ number: entry.number, state: entry.state, state_reason: entry.stateReason })),
-              } : null,
-              acceptance_artifact_id: acceptanceArtifactId,
-              milestone_issues: milestoneIssues
-                .filter((entry) => !entry.pull_request)
-                .map((entry) => ({
-                  number: entry.number,
-                  state: String(entry.state || "").toUpperCase(),
-                  state_reason: String(entry.state_reason || "").toUpperCase(),
-                  labels: (entry.labels || []).map((label) => label.name || label),
-                })),
-            };
-            const path = `${process.env.RUNNER_TEMP}/loom-release-snapshot.json`;
-            fs.writeFileSync(path, JSON.stringify(snapshot));
-            core.setOutput("path", path);
-
-      - name: Resolve trusted umbrella acceptance
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_ISSUE: ${{ inputs.release_issue }}
-          ARTIFACT_ID: ${{ inputs.acceptance_artifact_id }}
-          SNAPSHOT_PATH: ${{ steps.snapshot.outputs.path }}
-        run: |
-          set -euo pipefail
-          [[ "$RELEASE_ISSUE" =~ ^[1-9][0-9]*$ ]]
-          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
-          python3 tools/loom.py acceptance resolve \
-            --story "${{ github.repository }}/issue/${RELEASE_ISSUE}" \
-            --artifact-id "$ARTIFACT_ID" \
-            --json > "${RUNNER_TEMP}/loom-release-acceptance.json"
-          python3 tools/release_admission.py \
-            --snapshot "$SNAPSHOT_PATH" \
-            --acceptance "${RUNNER_TEMP}/loom-release-acceptance.json" \
-            --output "${RUNNER_TEMP}/loom-release-admission.json"
-
   release-publisher:
-    needs: [release-judgment, release-admission]
+    needs: release-judgment
     if: >-
-      github.event_name == 'workflow_dispatch' && inputs.publish == true &&
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch' && inputs.publish == true) &&
       needs.release-judgment.outputs.publish_allowed == 'true' &&
       needs.release-judgment.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
-      issues: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -410,72 +269,6 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Reconfirm live release scope before publishing
-        uses: actions/github-script@v7
-        env:
-          RELEASE_ISSUE: ${{ inputs.release_issue }}
-          ARTIFACT_ID: ${{ inputs.acceptance_artifact_id }}
-        with:
-          script: |
-            const issueNumber = Number(process.env.RELEASE_ISSUE);
-            const artifactId = Number(process.env.ARTIFACT_ID);
-            const defaultBranch = context.payload.repository.default_branch;
-            if (!Number.isInteger(issueNumber) || !Number.isInteger(artifactId) || artifactId <= 0) {
-              core.setFailed("release publication requires valid release issue and acceptance artifact inputs");
-              return;
-            }
-            const query = `
-              query($owner:String!, $repo:String!, $number:Int!) {
-                repository(owner:$owner, name:$repo) {
-                  issue(number:$number) {
-                    number state
-                    labels(first:100) { pageInfo { hasNextPage } nodes { name } }
-                    milestone { number }
-                    blockedBy(first:100) { pageInfo { hasNextPage } nodes { state stateReason } }
-                  }
-                }
-              }
-            `;
-            const [data, branch, comments] = await Promise.all([
-              github.graphql(query, { owner: context.repo.owner, repo: context.repo.repo, number: issueNumber }),
-              github.rest.repos.getBranch({ owner: context.repo.owner, repo: context.repo.repo, branch: defaultBranch }),
-              github.paginate(github.rest.issues.listComments, {
-                owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber, per_page: 100,
-              }),
-            ]);
-            const issue = data?.repository?.issue;
-            const labels = issue?.labels?.nodes?.map((entry) => String(entry.name || "").toLowerCase()) || [];
-            const blockers = issue?.blockedBy?.nodes || [];
-            const marker = /<!--\s*loom:product-acceptance-artifact\s+id:(\d+)\s*-->/i;
-            const markerIds = comments
-              .filter((comment) => comment.user?.login === "github-actions[bot]")
-              .map((comment) => String(comment.body || "").match(marker))
-              .filter(Boolean)
-              .map((match) => Number(match[1]));
-            if (
-              branch.data.commit?.sha !== context.sha || !issue || issue.state !== "OPEN" ||
-              !labels.includes("work-item") || issue.labels?.pageInfo?.hasNextPage ||
-              issue.blockedBy?.pageInfo?.hasNextPage || !Number.isInteger(issue.milestone?.number) ||
-              blockers.some((entry) => entry.state !== "CLOSED" || entry.stateReason !== "COMPLETED") ||
-              markerIds.length !== 1 || markerIds[0] !== artifactId
-            ) {
-              core.setFailed("live release head, Work Item, dependencies, or acceptance locator changed after admission");
-              return;
-            }
-            const milestoneIssues = await github.paginate(github.rest.issues.listForRepo, {
-              owner: context.repo.owner, repo: context.repo.repo,
-              milestone: String(issue.milestone.number), state: "all", per_page: 100,
-            });
-            const releaseRows = milestoneIssues.filter((entry) => !entry.pull_request && entry.number === issueNumber);
-            const incomplete = milestoneIssues.find((entry) => {
-              if (entry.number === issueNumber || entry.pull_request) return false;
-              const names = new Set((entry.labels || []).map((label) => String(label.name || label).toLowerCase()));
-              return (names.has("fr") || names.has("work-item")) && (entry.state !== "closed" || entry.state_reason !== "completed");
-            });
-            if (releaseRows.length !== 1 || incomplete) {
-              core.setFailed(`live milestone release scope changed after admission${incomplete ? ` at issue:${incomplete.number}` : ""}`);
-            }
 
       - name: Create git tag
         run: |
