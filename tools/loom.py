@@ -2210,6 +2210,7 @@ def host_lifecycle_admission_payload(
 
     effective_owner = owner or target_owner
     effective_repo = repo_name or target_repo
+    closing_policy = {"closing_issue_policy": "forbidden"} if pr_role == "release_pr" else {}
     subject_readback = github_lifecycle_subject_readback(
         target,
         effective_owner,
@@ -2219,9 +2220,9 @@ def host_lifecycle_admission_payload(
         pr_number=pr,
         branch_name=branch or (git_branch_for_target(target) if issue is None and fr is None and pr is None else None),
         intent=intent,
-        closing_issue_policy="forbidden" if pr_role == "release_pr" else "required",
         target_owner=target_owner,
         target_repo=target_repo,
+        **closing_policy,
     )
     issue = subject_readback.get("issue_number") if isinstance(subject_readback.get("issue_number"), int) else None
     if subject_readback.get("result") != "pass" or issue is None:

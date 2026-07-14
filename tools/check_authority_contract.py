@@ -480,7 +480,6 @@ def check_entrypoint_authority_forwarding() -> None:
             "pr_number": 7,
             "branch_name": "work/41",
             "intent": "ship",
-            "closing_issue_policy": "required",
             "target_owner": "owner",
             "target_repo": "repo",
         }]:
